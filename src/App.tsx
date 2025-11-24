@@ -14,6 +14,10 @@ import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminTournaments from "./pages/admin/Tournaments";
+import AdminAthletes from "./pages/admin/Athletes";
+import AdminMarkets from "./pages/admin/Markets";
+import AdminRewards from "./pages/admin/Rewards";
+import AdminSettlement from "./pages/admin/Settlement";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +38,10 @@ const App = () => (
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/tournaments" element={<AdminTournaments />} />
+            <Route path="/admin/athletes" element={<AdminAthletes />} />
+            <Route path="/admin/markets" element={<AdminMarkets />} />
+            <Route path="/admin/rewards" element={<AdminRewards />} />
+            <Route path="/admin/settlement" element={<AdminSettlement />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

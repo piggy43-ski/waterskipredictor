@@ -268,6 +268,7 @@ export type Database = {
           description: string
           id: string
           market_id: string
+          result: string | null
           updated_at: string
         }
         Insert: {
@@ -277,6 +278,7 @@ export type Database = {
           description: string
           id?: string
           market_id: string
+          result?: string | null
           updated_at?: string
         }
         Update: {
@@ -286,6 +288,7 @@ export type Database = {
           description?: string
           id?: string
           market_id?: string
+          result?: string | null
           updated_at?: string
         }
         Relationships: [
