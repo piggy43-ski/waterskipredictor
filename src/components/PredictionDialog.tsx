@@ -12,6 +12,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Coins, TrendingUp } from 'lucide-react';
+import { decimalToAmerican } from '@/utils/oddsConverter';
 
 interface PredictionDialogProps {
   selection: Selection | null;
@@ -61,7 +62,7 @@ export const PredictionDialog = ({
               <span className="text-muted-foreground">Odds</span>
               <span className="font-semibold text-primary flex items-center gap-1">
                 <TrendingUp className="w-4 h-4" />
-                {selection.decimal_odds.toFixed(2)}
+                {decimalToAmerican(selection.decimal_odds)}
               </span>
             </div>
             <div className="flex justify-between text-sm">

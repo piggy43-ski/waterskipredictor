@@ -17,6 +17,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import AdminTournaments from "./pages/admin/Tournaments";
 import AdminAthletes from "./pages/admin/Athletes";
 import AdminMarkets from "./pages/admin/Markets";
+import AdminSelections from "./pages/admin/Selections";
 import AdminRewards from "./pages/admin/Rewards";
 import AdminSettlement from "./pages/admin/Settlement";
 
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/admin/tournaments" element={<AdminTournaments />} />
             <Route path="/admin/athletes" element={<AdminAthletes />} />
             <Route path="/admin/markets" element={<AdminMarkets />} />
+            <Route path="/admin/selections" element={<AdminSelections />} />
             <Route path="/admin/rewards" element={<AdminRewards />} />
             <Route path="/admin/settlement" element={<AdminSettlement />} />
             <Route path="*" element={<NotFound />} />
