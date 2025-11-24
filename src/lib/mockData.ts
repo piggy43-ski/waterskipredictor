@@ -8,7 +8,6 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'USA',
     federation: 'USA-WSWS',
-    year_of_birth: 1996,
     disciplines: ['slalom']
   },
   {
@@ -17,7 +16,6 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'CAN',
     federation: 'WS Canada',
-    year_of_birth: 1997,
     disciplines: ['slalom']
   },
   {
@@ -26,7 +24,6 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'AUS',
     federation: 'AWWF',
-    year_of_birth: 1994,
     disciplines: ['slalom']
   },
   {
@@ -35,7 +32,6 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'USA',
     federation: 'USA-WSWS',
-    year_of_birth: 1993,
     disciplines: ['slalom']
   },
   {
@@ -44,7 +40,6 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'USA',
     federation: 'USA-WSWS',
-    year_of_birth: 1998,
     disciplines: ['slalom']
   },
   {
@@ -53,7 +48,6 @@ export const mockAthletes: Athlete[] = [
     gender: 'female',
     country: 'USA',
     federation: 'USA-WSWS',
-    year_of_birth: 1996,
     disciplines: ['slalom']
   },
   {
@@ -62,7 +56,6 @@ export const mockAthletes: Athlete[] = [
     gender: 'female',
     country: 'CAN',
     federation: 'WS Canada',
-    year_of_birth: 1998,
     disciplines: ['slalom']
   },
   {
@@ -71,7 +64,6 @@ export const mockAthletes: Athlete[] = [
     gender: 'female',
     country: 'ARG',
     federation: 'Argentina',
-    year_of_birth: 1999,
     disciplines: ['slalom']
   }
 ];
