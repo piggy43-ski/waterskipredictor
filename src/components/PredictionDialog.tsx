@@ -11,7 +11,6 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { mockTokenWallet } from '@/lib/mockData';
 import { Coins, TrendingUp } from 'lucide-react';
 
 interface PredictionDialogProps {
@@ -19,6 +18,7 @@ interface PredictionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (stakeAmount: number) => void;
+  walletBalance: number;
 }
 
 export const PredictionDialog = ({
@@ -26,6 +26,7 @@ export const PredictionDialog = ({
   open,
   onOpenChange,
   onConfirm,
+  walletBalance,
 }: PredictionDialogProps) => {
   const [stakeAmount, setStakeAmount] = useState('100');
   
@@ -36,7 +37,7 @@ export const PredictionDialog = ({
   const potentialProfit = potentialPayout - stake;
 
   const handleConfirm = () => {
-    if (stake > 0 && stake <= mockTokenWallet.balance) {
+    if (stake > 0 && stake <= walletBalance) {
       onConfirm(stake);
       setStakeAmount('100');
     }
@@ -67,7 +68,7 @@ export const PredictionDialog = ({
               <span className="text-muted-foreground">Your Balance</span>
               <span className="font-semibold flex items-center gap-1">
                 <Coins className="w-4 h-4" />
-                {mockTokenWallet.balance.toLocaleString()}
+                {walletBalance.toLocaleString()}
               </span>
             </div>
           </div>
@@ -81,7 +82,7 @@ export const PredictionDialog = ({
               onChange={(e) => setStakeAmount(e.target.value)}
               placeholder="Enter stake amount"
               min="1"
-              max={mockTokenWallet.balance}
+              max={walletBalance}
             />
             <div className="flex gap-2">
               {quickAmounts.map((amount) => (
@@ -123,7 +124,7 @@ export const PredictionDialog = ({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={stake === 0 || stake > mockTokenWallet.balance}
+            disabled={stake === 0 || stake > walletBalance}
             className="bg-primary hover:bg-primary/90"
           >
             Confirm Prediction

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { SelectionCard } from '@/components/SelectionCard';
@@ -9,12 +9,45 @@ import { mockTournaments, mockSelections, mockMarkets } from '@/lib/mockData';
 import { Selection } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar, MapPin } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 const TournamentDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [selectedSelection, setSelectedSelection] = useState<Selection | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+    
+    fetchWalletBalance();
+  }, [user, navigate]);
+
+  const fetchWalletBalance = async () => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from('token_wallets')
+      .select('purchased_tokens, earned_tokens')
+      .eq('user_id', user.id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching wallet:', error);
+      return;
+    }
+
+    if (data) {
+      setWalletBalance(data.purchased_tokens + data.earned_tokens);
+    }
+  };
 
   const tournament = mockTournaments.find(t => t.id === id);
   
@@ -31,13 +64,73 @@ const TournamentDetail = () => {
     setDialogOpen(true);
   };
 
-  const handleConfirmPrediction = (stakeAmount: number) => {
-    toast({
-      title: "Prediction Placed!",
-      description: `You've staked ${stakeAmount} tokens on ${selectedSelection?.athlete.name}`,
-    });
-    setDialogOpen(false);
-    setSelectedSelection(null);
+  const handleConfirmPrediction = async (stakeAmount: number) => {
+    if (!user || !selectedSelection) return;
+
+    const market = mockMarkets.find(m => m.id === selectedSelection.market_id);
+    if (!market) return;
+
+    const potentialPayout = Math.floor(stakeAmount * selectedSelection.decimal_odds);
+
+    try {
+      // Insert prediction
+      const { error: predictionError } = await supabase
+        .from('predictions')
+        .insert({
+          user_id: user.id,
+          selection_id: selectedSelection.id,
+          athlete_name: selectedSelection.athlete.name,
+          tournament_name: tournament.name,
+          discipline: market.discipline,
+          category: market.category,
+          market_type: market.market_type,
+          staked_tokens: stakeAmount,
+          decimal_odds: selectedSelection.decimal_odds,
+          potential_payout: potentialPayout,
+          status: 'PENDING'
+        });
+
+      if (predictionError) throw predictionError;
+
+      // Update wallet - deduct from purchased_tokens first
+      const { data: walletData, error: walletFetchError } = await supabase
+        .from('token_wallets')
+        .select('purchased_tokens, earned_tokens')
+        .eq('user_id', user.id)
+        .single();
+
+      if (walletFetchError) throw walletFetchError;
+
+      const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - stakeAmount);
+      const remaining = stakeAmount - walletData.purchased_tokens;
+      const newEarnedTokens = remaining > 0 ? walletData.earned_tokens - remaining : walletData.earned_tokens;
+
+      const { error: walletUpdateError } = await supabase
+        .from('token_wallets')
+        .update({
+          purchased_tokens: newPurchasedTokens,
+          earned_tokens: Math.max(0, newEarnedTokens)
+        })
+        .eq('user_id', user.id);
+
+      if (walletUpdateError) throw walletUpdateError;
+
+      toast({
+        title: "Prediction Placed!",
+        description: `You've staked ${stakeAmount} tokens on ${selectedSelection?.athlete.name}`,
+      });
+
+      await fetchWalletBalance();
+      setDialogOpen(false);
+      setSelectedSelection(null);
+    } catch (error) {
+      console.error('Error placing prediction:', error);
+      toast({
+        title: "Error",
+        description: "Failed to place prediction. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const formatDate = (dateStr: string) => {
@@ -135,6 +228,7 @@ const TournamentDetail = () => {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onConfirm={handleConfirmPrediction}
+        walletBalance={walletBalance}
       />
 
       <BottomNav />
