@@ -17,6 +17,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import AdminTournaments from "./pages/admin/Tournaments";
 import AdminAthletes from "./pages/admin/Athletes";
 import AdminAthleteDetail from "./pages/admin/AthleteDetail";
+import AdminRankingsSync from "./pages/admin/RankingsSync";
 import AdminRankingsImport from "./pages/admin/RankingsImport";
 import AdminResults from "./pages/admin/Results";
 import AdminMarkets from "./pages/admin/Markets";
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/athletes" element={<AdminAthletes />} />
             <Route path="/admin/athletes/:id" element={<AdminAthleteDetail />} />
+            <Route path="/admin/rankings-sync" element={<AdminRankingsSync />} />
             <Route path="/admin/rankings-import" element={<AdminRankingsImport />} />
             <Route path="/admin/results" element={<AdminResults />} />
             <Route path="/admin/tournaments" element={<AdminTournaments />} />
