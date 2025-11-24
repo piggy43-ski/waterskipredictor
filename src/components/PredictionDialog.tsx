@@ -20,6 +20,7 @@ interface PredictionDialogProps {
   onOpenChange: (open: boolean) => void;
   onConfirm: (stakeAmount: number) => void;
   walletBalance: number;
+  parlaySelections?: Selection[];
 }
 
 export const PredictionDialog = ({
@@ -28,13 +29,19 @@ export const PredictionDialog = ({
   onOpenChange,
   onConfirm,
   walletBalance,
+  parlaySelections = [],
 }: PredictionDialogProps) => {
   const [stakeAmount, setStakeAmount] = useState('100');
   
-  if (!selection) return null;
+  const isParlay = parlaySelections.length >= 2;
+  
+  // For parlay, calculate combined odds
+  const combinedOdds = isParlay 
+    ? parlaySelections.reduce((acc, sel) => acc * sel.decimal_odds, 1)
+    : selection?.decimal_odds || 1;
 
   const stake = parseInt(stakeAmount) || 0;
-  const potentialPayout = Math.floor(stake * selection.decimal_odds);
+  const potentialPayout = Math.floor(stake * combinedOdds);
   const potentialProfit = potentialPayout - stake;
 
   const handleConfirm = () => {
@@ -46,23 +53,46 @@ export const PredictionDialog = ({
 
   const quickAmounts = [50, 100, 250, 500];
 
+  if (!selection && !isParlay) return null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
-          <DialogTitle>Place Prediction</DialogTitle>
+          <DialogTitle>
+            {isParlay ? `Place Parlay Bet (${parlaySelections.length} Legs)` : 'Place Prediction'}
+          </DialogTitle>
           <DialogDescription>
-            {selection.description}
+            {isParlay 
+              ? 'All selections must win for the parlay to pay out'
+              : selection?.description}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Show parlay legs if it's a parlay */}
+          {isParlay && (
+            <div className="space-y-2 mb-4">
+              <Label className="text-sm font-semibold">Parlay Legs:</Label>
+              {parlaySelections.map((sel, idx) => (
+                <div key={sel.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                  <span className="text-sm">{idx + 1}. {sel.athlete.name}</span>
+                  <span className="text-sm font-semibold text-primary">
+                    {decimalToAmerican(sel.decimal_odds)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="bg-muted/30 rounded-lg p-4 space-y-3">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Odds</span>
+              <span className="text-muted-foreground">
+                {isParlay ? 'Combined Odds' : 'Odds'}
+              </span>
               <span className="font-semibold text-primary flex items-center gap-1">
                 <TrendingUp className="w-4 h-4" />
-                {decimalToAmerican(selection.decimal_odds)}
+                {decimalToAmerican(combinedOdds)}
               </span>
             </div>
             <div className="flex justify-between text-sm">
