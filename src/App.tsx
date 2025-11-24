@@ -16,10 +16,14 @@ import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminTournaments from "./pages/admin/Tournaments";
 import AdminAthletes from "./pages/admin/Athletes";
+import AdminAthleteDetail from "./pages/admin/AthleteDetail";
+import AdminRankingsImport from "./pages/admin/RankingsImport";
+import AdminResults from "./pages/admin/Results";
 import AdminMarkets from "./pages/admin/Markets";
 import AdminSelections from "./pages/admin/Selections";
 import AdminRewards from "./pages/admin/Rewards";
 import AdminSettlement from "./pages/admin/Settlement";
+import AthleteProfile from "./pages/AthleteProfile";
 
 const queryClient = new QueryClient();
 
@@ -39,9 +43,13 @@ const App = () => (
             <Route path="/wallet" element={<Wallet />} />
             <Route path="/predictions" element={<Predictions />} />
             <Route path="/rewards" element={<Rewards />} />
+            <Route path="/athletes/:id" element={<AthleteProfile />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/tournaments" element={<AdminTournaments />} />
             <Route path="/admin/athletes" element={<AdminAthletes />} />
+            <Route path="/admin/athletes/:id" element={<AdminAthleteDetail />} />
+            <Route path="/admin/rankings-import" element={<AdminRankingsImport />} />
+            <Route path="/admin/results" element={<AdminResults />} />
+            <Route path="/admin/tournaments" element={<AdminTournaments />} />
             <Route path="/admin/markets" element={<AdminMarkets />} />
             <Route path="/admin/selections" element={<AdminSelections />} />
             <Route path="/admin/rewards" element={<AdminRewards />} />

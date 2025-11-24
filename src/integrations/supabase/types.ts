@@ -14,37 +14,201 @@ export type Database = {
   }
   public: {
     Tables: {
-      athletes: {
+      athlete_rankings: {
         Row: {
-          country: string
+          athlete_id: string
           created_at: string
-          disciplines: string[]
-          federation: string
+          discipline: string
           gender: string
           id: string
+          list_date: string
+          points: number
+          rank: number
+          source: string | null
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string
+          discipline: string
+          gender: string
+          id?: string
+          list_date?: string
+          points: number
+          rank: number
+          source?: string | null
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string
+          discipline?: string
+          gender?: string
+          id?: string
+          list_date?: string
+          points?: number
+          rank?: number
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "athlete_rankings_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      athlete_results: {
+        Row: {
+          athlete_id: string
+          created_at: string
+          discipline: string
+          gender: string
+          id: string
+          made_finals: boolean | null
+          missed_first_pass: boolean | null
+          missed_gate: boolean | null
+          position: number | null
+          score_raw: number | null
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string
+          discipline: string
+          gender: string
+          id?: string
+          made_finals?: boolean | null
+          missed_first_pass?: boolean | null
+          missed_gate?: boolean | null
+          position?: number | null
+          score_raw?: number | null
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string
+          discipline?: string
+          gender?: string
+          id?: string
+          made_finals?: boolean | null
+          missed_first_pass?: boolean | null
+          missed_gate?: boolean | null
+          position?: number | null
+          score_raw?: number | null
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "athlete_results_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "athlete_results_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      athletes: {
+        Row: {
+          bio: string | null
+          country: string
+          country_code: string | null
+          created_at: string
+          current_points_jump: number | null
+          current_points_slalom: number | null
+          current_points_trick: number | null
+          current_rank_jump: number | null
+          current_rank_slalom: number | null
+          current_rank_trick: number | null
+          disciplines: string[]
+          fantasy_price_jump: number | null
+          fantasy_price_slalom: number | null
+          fantasy_price_trick: number | null
+          federation: string
+          full_name: string | null
+          gender: string
+          id: string
+          injury_flag: boolean | null
+          iwwf_athlete_id: string | null
+          manual_boost_factor: number | null
           name: string
+          performance_index_jump: number | null
+          performance_index_slalom: number | null
+          performance_index_trick: number | null
+          popularity_index: number | null
+          profile_image_url: string | null
           updated_at: string
           year_of_birth: number
         }
         Insert: {
+          bio?: string | null
           country: string
+          country_code?: string | null
           created_at?: string
+          current_points_jump?: number | null
+          current_points_slalom?: number | null
+          current_points_trick?: number | null
+          current_rank_jump?: number | null
+          current_rank_slalom?: number | null
+          current_rank_trick?: number | null
           disciplines?: string[]
+          fantasy_price_jump?: number | null
+          fantasy_price_slalom?: number | null
+          fantasy_price_trick?: number | null
           federation: string
+          full_name?: string | null
           gender: string
           id?: string
+          injury_flag?: boolean | null
+          iwwf_athlete_id?: string | null
+          manual_boost_factor?: number | null
           name: string
+          performance_index_jump?: number | null
+          performance_index_slalom?: number | null
+          performance_index_trick?: number | null
+          popularity_index?: number | null
+          profile_image_url?: string | null
           updated_at?: string
           year_of_birth: number
         }
         Update: {
+          bio?: string | null
           country?: string
+          country_code?: string | null
           created_at?: string
+          current_points_jump?: number | null
+          current_points_slalom?: number | null
+          current_points_trick?: number | null
+          current_rank_jump?: number | null
+          current_rank_slalom?: number | null
+          current_rank_trick?: number | null
           disciplines?: string[]
+          fantasy_price_jump?: number | null
+          fantasy_price_slalom?: number | null
+          fantasy_price_trick?: number | null
           federation?: string
+          full_name?: string | null
           gender?: string
           id?: string
+          injury_flag?: boolean | null
+          iwwf_athlete_id?: string | null
+          manual_boost_factor?: number | null
           name?: string
+          performance_index_jump?: number | null
+          performance_index_slalom?: number | null
+          performance_index_trick?: number | null
+          popularity_index?: number | null
+          profile_image_url?: string | null
           updated_at?: string
           year_of_birth?: number
         }
