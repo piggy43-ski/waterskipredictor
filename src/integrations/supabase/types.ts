@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      athletes: {
+        Row: {
+          country: string
+          created_at: string
+          disciplines: string[]
+          federation: string
+          gender: string
+          id: string
+          name: string
+          updated_at: string
+          year_of_birth: number
+        }
+        Insert: {
+          country: string
+          created_at?: string
+          disciplines?: string[]
+          federation: string
+          gender: string
+          id?: string
+          name: string
+          updated_at?: string
+          year_of_birth: number
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          disciplines?: string[]
+          federation?: string
+          gender?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          year_of_birth?: number
+        }
+        Relationships: []
+      }
+      markets: {
+        Row: {
+          category: string
+          created_at: string
+          discipline: string
+          id: string
+          market_type: string
+          name: string
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          discipline: string
+          id?: string
+          market_type: string
+          name: string
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          discipline?: string
+          id?: string
+          market_type?: string
+          name?: string
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "markets_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       predictions: {
         Row: {
           athlete_name: string
@@ -106,6 +183,128 @@ export type Database = {
         }
         Relationships: []
       }
+      redemptions: {
+        Row: {
+          created_at: string
+          id: string
+          reward_id: string
+          status: string
+          tokens_spent: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reward_id: string
+          status?: string
+          tokens_spent: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reward_id?: string
+          status?: string
+          tokens_spent?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "redemptions_reward_id_fkey"
+            columns: ["reward_id"]
+            isOneToOne: false
+            referencedRelation: "rewards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rewards: {
+        Row: {
+          available: boolean
+          category: string
+          created_at: string
+          description: string
+          id: string
+          image_url: string | null
+          name: string
+          partner: string
+          required_tokens: number
+          updated_at: string
+        }
+        Insert: {
+          available?: boolean
+          category: string
+          created_at?: string
+          description: string
+          id?: string
+          image_url?: string | null
+          name: string
+          partner: string
+          required_tokens: number
+          updated_at?: string
+        }
+        Update: {
+          available?: boolean
+          category?: string
+          created_at?: string
+          description?: string
+          id?: string
+          image_url?: string | null
+          name?: string
+          partner?: string
+          required_tokens?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      selections: {
+        Row: {
+          athlete_id: string
+          created_at: string
+          decimal_odds: number
+          description: string
+          id: string
+          market_id: string
+          updated_at: string
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string
+          decimal_odds: number
+          description: string
+          id?: string
+          market_id: string
+          updated_at?: string
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string
+          decimal_odds?: number
+          description?: string
+          id?: string
+          market_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selections_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selections_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       token_wallets: {
         Row: {
           created_at: string
@@ -140,6 +339,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tournaments: {
+        Row: {
+          created_at: string
+          disciplines: string[]
+          end_date: string
+          id: string
+          location: string
+          name: string
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          disciplines?: string[]
+          end_date: string
+          id?: string
+          location: string
+          name: string
+          start_date: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          disciplines?: string[]
+          end_date?: string
+          id?: string
+          location?: string
+          name?: string
+          start_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {
