@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Pencil } from 'lucide-react';
 
 type Athlete = {
   id: string;
@@ -23,6 +23,8 @@ type Athlete = {
 
 export default function AdminAthletes() {
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -63,6 +65,25 @@ export default function AdminAthletes() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Athlete> }) => {
+      const { error } = await supabase
+        .from('athletes')
+        .update(updates)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-athletes'] });
+      setEditOpen(false);
+      setEditingAthlete(null);
+      toast({ title: 'Athlete updated successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error updating athlete', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('athletes').delete().eq('id', id);
@@ -81,6 +102,28 @@ export default function AdminAthletes() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     createMutation.mutate(formData);
+  };
+
+  const handleEdit = (athlete: Athlete) => {
+    setEditingAthlete(athlete);
+    setEditOpen(true);
+  };
+
+  const handleEditSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingAthlete) return;
+
+    const formData = new FormData(e.currentTarget);
+    const updates = {
+      name: formData.get('name') as string,
+      country: formData.get('country') as string,
+      gender: formData.get('gender') as string,
+      year_of_birth: parseInt(formData.get('year_of_birth') as string),
+      disciplines: [formData.get('discipline') as string],
+      federation: formData.get('federation') as string,
+    };
+
+    updateMutation.mutate({ id: editingAthlete.id, updates });
   };
 
   return (
@@ -171,14 +214,23 @@ export default function AdminAthletes() {
                         {athlete.country} • {athlete.federation}
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => deleteMutation.mutate(athlete.id)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleEdit(athlete)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => deleteMutation.mutate(athlete.id)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -204,6 +256,84 @@ export default function AdminAthletes() {
             </CardContent>
           </Card>
         )}
+
+        {/* Edit Dialog */}
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Athlete</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-name">Name</Label>
+                <Input 
+                  id="edit-name" 
+                  name="name" 
+                  defaultValue={editingAthlete?.name} 
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-country">Country</Label>
+                <Input 
+                  id="edit-country" 
+                  name="country" 
+                  defaultValue={editingAthlete?.country} 
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-federation">Federation</Label>
+                <Input 
+                  id="edit-federation" 
+                  name="federation" 
+                  defaultValue={editingAthlete?.federation} 
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-gender">Gender</Label>
+                <Select name="gender" defaultValue={editingAthlete?.gender} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-year">Year of Birth</Label>
+                <Input 
+                  id="edit-year" 
+                  name="year_of_birth" 
+                  type="number" 
+                  min="1950" 
+                  max="2010" 
+                  defaultValue={editingAthlete?.year_of_birth} 
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-discipline">Discipline</Label>
+                <Select name="discipline" defaultValue={editingAthlete?.disciplines[0]} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select discipline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="slalom">Slalom</SelectItem>
+                    <SelectItem value="trick">Trick</SelectItem>
+                    <SelectItem value="jump">Jump</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'Updating...' : 'Update Athlete'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );

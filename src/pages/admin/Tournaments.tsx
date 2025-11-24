@@ -24,6 +24,7 @@ type Tournament = {
 
 export default function AdminTournaments() {
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -65,6 +66,25 @@ export default function AdminTournaments() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Tournament> }) => {
+      const { error } = await supabase
+        .from('tournaments')
+        .update(updates)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-tournaments'] });
+      setEditOpen(false);
+      setEditingTournament(null);
+      toast({ title: 'Tournament updated successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error updating tournament', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('tournaments').delete().eq('id', id);
@@ -83,6 +103,28 @@ export default function AdminTournaments() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     createMutation.mutate(formData);
+  };
+
+  const handleEdit = (tournament: Tournament) => {
+    setEditingTournament(tournament);
+    setEditOpen(true);
+  };
+
+  const handleEditSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingTournament) return;
+
+    const formData = new FormData(e.currentTarget);
+    const updates = {
+      name: formData.get('name') as string,
+      location: formData.get('location') as string,
+      start_date: formData.get('start_date') as string,
+      end_date: formData.get('end_date') as string,
+      status: formData.get('status') as string,
+      disciplines: [formData.get('discipline') as string],
+    };
+
+    updateMutation.mutate({ id: editingTournament.id, updates });
   };
 
   return (
@@ -175,7 +217,11 @@ export default function AdminTournaments() {
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="icon">
+                      <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={() => handleEdit(tournament)}
+                      >
                         <Pencil className="w-4 h-4" />
                       </Button>
                       <Button
@@ -209,6 +255,84 @@ export default function AdminTournaments() {
             </CardContent>
           </Card>
         )}
+
+        {/* Edit Dialog */}
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Tournament</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-name">Tournament Name</Label>
+                <Input 
+                  id="edit-name" 
+                  name="name" 
+                  defaultValue={editingTournament?.name}
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-location">Location</Label>
+                <Input 
+                  id="edit-location" 
+                  name="location" 
+                  defaultValue={editingTournament?.location}
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-start">Start Date</Label>
+                <Input 
+                  id="edit-start" 
+                  name="start_date" 
+                  type="date" 
+                  defaultValue={editingTournament?.start_date}
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-end">End Date</Label>
+                <Input 
+                  id="edit-end" 
+                  name="end_date" 
+                  type="date" 
+                  defaultValue={editingTournament?.end_date}
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-status">Status</Label>
+                <Select name="status" defaultValue={editingTournament?.status} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="upcoming">Upcoming</SelectItem>
+                    <SelectItem value="live">Live</SelectItem>
+                    <SelectItem value="finished">Finished</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-discipline">Discipline</Label>
+                <Select name="discipline" defaultValue={editingTournament?.disciplines[0]} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select discipline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="slalom">Slalom</SelectItem>
+                    <SelectItem value="trick">Trick</SelectItem>
+                    <SelectItem value="jump">Jump</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'Updating...' : 'Update Tournament'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );

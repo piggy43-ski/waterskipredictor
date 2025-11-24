@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Pencil } from 'lucide-react';
 
 type Market = {
   id: string;
@@ -27,6 +27,8 @@ type Tournament = {
 
 export default function AdminMarkets() {
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingMarket, setEditingMarket] = useState<Market | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -79,6 +81,25 @@ export default function AdminMarkets() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Market> }) => {
+      const { error } = await supabase
+        .from('markets')
+        .update(updates)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-markets'] });
+      setEditOpen(false);
+      setEditingMarket(null);
+      toast({ title: 'Market updated successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error updating market', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('markets').delete().eq('id', id);
@@ -97,6 +118,27 @@ export default function AdminMarkets() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     createMutation.mutate(formData);
+  };
+
+  const handleEdit = (market: Market) => {
+    setEditingMarket(market);
+    setEditOpen(true);
+  };
+
+  const handleEditSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingMarket) return;
+
+    const formData = new FormData(e.currentTarget);
+    const updates = {
+      name: formData.get('name') as string,
+      tournament_id: formData.get('tournament_id') as string,
+      category: formData.get('category') as string,
+      discipline: formData.get('discipline') as string,
+      market_type: formData.get('market_type') as string,
+    };
+
+    updateMutation.mutate({ id: editingMarket.id, updates });
   };
 
   return (
@@ -201,14 +243,23 @@ export default function AdminMarkets() {
                         {market.category} • {market.discipline}
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => deleteMutation.mutate(market.id)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleEdit(market)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => deleteMutation.mutate(market.id)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -226,6 +277,81 @@ export default function AdminMarkets() {
             </CardContent>
           </Card>
         )}
+
+        {/* Edit Dialog */}
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Market</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-name">Market Name</Label>
+                <Input 
+                  id="edit-name" 
+                  name="name" 
+                  placeholder="e.g., Winner - Men's Slalom" 
+                  defaultValue={editingMarket?.name}
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-tournament">Tournament</Label>
+                <Select name="tournament_id" defaultValue={editingMarket?.tournament_id} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select tournament" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tournaments?.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-category">Category</Label>
+                <Select name="category" defaultValue={editingMarket?.category} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="men">Men</SelectItem>
+                    <SelectItem value="women">Women</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-discipline">Discipline</Label>
+                <Select name="discipline" defaultValue={editingMarket?.discipline} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select discipline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="slalom">Slalom</SelectItem>
+                    <SelectItem value="trick">Trick</SelectItem>
+                    <SelectItem value="jump">Jump</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-type">Market Type</Label>
+                <Select name="market_type" defaultValue={editingMarket?.market_type} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="winner">Winner</SelectItem>
+                    <SelectItem value="top3">Top 3</SelectItem>
+                    <SelectItem value="podium">Podium Finish</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'Updating...' : 'Update Market'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );
