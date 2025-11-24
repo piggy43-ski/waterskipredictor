@@ -11,6 +11,7 @@ import Wallet from "./pages/Wallet";
 import Rewards from "./pages/Rewards";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
+import Predictions from "./pages/Predictions";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminTournaments from "./pages/admin/Tournaments";
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/tournaments" element={<Tournaments />} />
             <Route path="/tournaments/:id" element={<TournamentDetail />} />
             <Route path="/wallet" element={<Wallet />} />
+            <Route path="/predictions" element={<Predictions />} />
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/tournaments" element={<AdminTournaments />} />
