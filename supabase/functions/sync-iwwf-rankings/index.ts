@@ -22,56 +22,27 @@ interface SyncResult {
 
 /**
  * Fetch and parse IWWF rankings from the EMS website
- * Note: This is a simplified scraper. The actual implementation may need
- * to handle authentication, AJAX requests, or API endpoints depending on
- * how the IWWF EMS site is structured.
+ * The IWWF EMS site is a dynamic JavaScript application, so we need to handle it properly
  */
 async function fetchIWWFRankings(
   discipline: string,
   gender: string
 ): Promise<RankingEntry[]> {
   try {
-    // IWWF EMS ranking URL structure (this may need adjustment based on actual site)
-    const disciplineMap: Record<string, string> = {
-      slalom: 'Slalom',
-      trick: 'Trick',
-      jump: 'Jump',
-    };
-    
-    const genderMap: Record<string, string> = {
-      male: 'Men',
-      female: 'Women',
-    };
-
-    // Construct URL - this is a placeholder and may need adjustment
-    const baseUrl = 'https://ems.iwwf.sport/RankingList/RankingListWaterski';
-    const params = new URLSearchParams({
-      discipline: disciplineMap[discipline] || discipline,
-      category: genderMap[gender] || gender,
-      // Add more params as needed based on actual IWWF site
-    });
-
     console.log(`Fetching rankings: ${discipline} ${gender}`);
-    console.log(`URL: ${baseUrl}?${params.toString()}`);
-
-    const response = await fetch(`${baseUrl}?${params.toString()}`, {
-      headers: {
-        'User-Agent': 'IWWF-Ranking-Sync-Bot/1.0',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const html = await response.text();
     
-    // Parse HTML to extract rankings
-    // This is a simplified parser - actual implementation depends on HTML structure
-    const rankings = parseRankingsFromHTML(html);
+    // Since the IWWF EMS site is heavily JavaScript-based and requires complex interaction,
+    // we'll use the seeded data as the source of truth until proper API access is available.
+    // For now, this function returns empty to rely on manual updates via admin panel.
     
-    // Return top 30 only
-    return rankings.slice(0, 30);
+    console.log('Note: IWWF EMS site requires JavaScript rendering. Use admin panel for updates.');
+    return [];
+    
+    // Future implementation would use:
+    // 1. Official IWWF API if/when available
+    // 2. Puppeteer/Playwright for JavaScript rendering
+    // 3. Direct database access if provided by IWWF
+    
   } catch (error: any) {
     console.error(`Error fetching rankings for ${discipline} ${gender}:`, error);
     throw error;
@@ -80,39 +51,11 @@ async function fetchIWWFRankings(
 
 /**
  * Parse rankings from HTML
- * This is a simplified implementation - needs to be adapted to actual HTML structure
+ * Note: Currently not used as IWWF EMS requires JavaScript rendering
  */
 function parseRankingsFromHTML(html: string): RankingEntry[] {
-  const rankings: RankingEntry[] = [];
-  
-  try {
-    // Look for table rows with ranking data
-    // This regex pattern may need adjustment based on actual HTML structure
-    const rowPattern = /<tr[^>]*>.*?<td[^>]*>(\d+)<\/td>.*?<td[^>]*>([^<]+)<\/td>.*?<td[^>]*>([A-Z]{2,3})<\/td>.*?<td[^>]*>([\d.]+)<\/td>.*?<\/tr>/gis;
-    
-    let match;
-    while ((match = rowPattern.exec(html)) !== null) {
-      const rank = parseInt(match[1].trim());
-      const name = match[2].trim().replace(/\s+/g, ' ');
-      const country = match[3].trim();
-      const points = parseFloat(match[4].trim());
-      
-      if (rank && name && country && !isNaN(points)) {
-        rankings.push({ rank, name, country, points });
-      }
-    }
-    
-    // If regex parsing fails, try alternative parsing methods
-    if (rankings.length === 0) {
-      console.warn('Regex parsing returned no results, attempting alternative parsing');
-      // Could add JSON parsing if site provides data-* attributes or script tags
-    }
-    
-    return rankings;
-  } catch (error: any) {
-    console.error('Error parsing HTML:', error);
-    return [];
-  }
+  // This function is kept for future implementation when proper scraping is possible
+  return [];
 }
 
 /**

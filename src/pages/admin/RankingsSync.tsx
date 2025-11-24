@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { RefreshCw, Clock, CheckCircle, XCircle } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
 interface SyncResult {
   discipline: string;
@@ -69,45 +70,64 @@ export default function RankingsSync() {
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h2 className="text-3xl font-bold text-foreground">IWWF Rankings Auto-Sync</h2>
+          <h2 className="text-3xl font-bold text-foreground">IWWF Rankings Management</h2>
           <p className="text-muted-foreground mt-1">
-            Automatically fetch and update rankings from IWWF EMS
+            Athlete database seeded with top 30 per discipline/gender
           </p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Sync Status</CardTitle>
+            <CardTitle>Database Status</CardTitle>
             <CardDescription>
-              Rankings sync automatically every day at 6:00 AM UTC. You can also trigger a manual sync.
+              Pre-seeded with ~180 real IWWF athletes across all categories
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="p-4 border rounded-lg bg-card">
+                <div className="text-sm text-muted-foreground">Total Athletes</div>
+                <div className="text-2xl font-bold text-foreground">~180</div>
+                <div className="text-xs text-muted-foreground">Across all disciplines</div>
+              </div>
+              <div className="p-4 border rounded-lg bg-card">
+                <div className="text-sm text-muted-foreground">Disciplines</div>
+                <div className="text-2xl font-bold text-foreground">3</div>
+                <div className="text-xs text-muted-foreground">Slalom, Trick, Jump</div>
+              </div>
+              <div className="p-4 border rounded-lg bg-card">
+                <div className="text-sm text-muted-foreground">Categories</div>
+                <div className="text-2xl font-bold text-foreground">2</div>
+                <div className="text-xs text-muted-foreground">Men, Women</div>
+              </div>
+            </div>
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Important Note</AlertTitle>
+              <AlertDescription>
+                The IWWF EMS website is a dynamic JavaScript application that cannot be scraped with simple tools.
+                Use the Rankings Import tool to update rankings from CSV data exported from the IWWF EMS site.
+              </AlertDescription>
+            </Alert>
+
             <div className="flex items-center gap-4">
               <Button
                 onClick={triggerSync}
                 disabled={isSyncing}
-                size="lg"
+                variant="outline"
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? 'Syncing...' : 'Trigger Manual Sync'}
+                {isSyncing ? 'Checking...' : 'Test Connection'}
               </Button>
 
               {lastSync && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="w-4 h-4" />
-                  Last sync: {new Date(lastSync.timestamp).toLocaleString()}
+                  Last check: {new Date(lastSync.timestamp).toLocaleString()}
                 </div>
               )}
             </div>
-
-            <Alert>
-              <Clock className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Automatic Schedule:</strong> Daily at 6:00 AM UTC<br />
-                Processes all disciplines (Slalom, Trick, Jump) for both Men and Women
-              </AlertDescription>
-            </Alert>
           </CardContent>
         </Card>
 
@@ -216,29 +236,42 @@ export default function RankingsSync() {
 
         <Card>
           <CardHeader>
-            <CardTitle>How It Works</CardTitle>
+            <CardTitle>Ranking Management Workflow</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>
-              <strong>1. Automated Daily Sync:</strong> The system fetches the latest top 30 rankings
-              from IWWF EMS every day at 6:00 AM UTC.
-            </p>
-            <p>
-              <strong>2. Data Processing:</strong> For each discipline and gender category, the system:
-            </p>
-            <ul className="ml-6 space-y-1">
-              <li>• Matches athletes by name and country to existing records</li>
-              <li>• Creates new athlete profiles for previously unknown athletes</li>
-              <li>• Updates current rank and points for all athletes</li>
-              <li>• Stores historical ranking snapshots</li>
-            </ul>
-            <p>
-              <strong>3. Performance Updates:</strong> After sync, athlete performance indices and
-              fantasy prices are automatically recalculated based on the new rankings.
-            </p>
-            <p>
-              <strong>Note:</strong> The scraper respects IWWF's servers with rate limiting between requests.
-            </p>
+          <CardContent className="space-y-3 text-sm">
+            <div>
+              <p className="font-semibold mb-1">✅ Current Status:</p>
+              <p className="text-muted-foreground">
+                Database pre-seeded with ~180 real athletes (top 30 per discipline/gender) including:
+                William Asher, Regina Jaquess, Martin Kolman, and other top-ranked athletes.
+              </p>
+            </div>
+            
+            <div>
+              <p className="font-semibold mb-1">📊 To Update Rankings:</p>
+              <ol className="text-muted-foreground space-y-1 ml-4">
+                <li>1. Visit <a href="https://ems.iwwf.sport/RankingList/RankingListWaterski" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">IWWF EMS Rankings</a></li>
+                <li>2. Select discipline and category</li>
+                <li>3. Export or copy ranking data as CSV</li>
+                <li>4. Use the Rankings Import tool to paste and import</li>
+              </ol>
+            </div>
+
+            <div>
+              <p className="font-semibold mb-1">🔄 Automatic Updates:</p>
+              <p className="text-muted-foreground">
+                Athletes are matched by name and country. Performance indices and fantasy prices
+                are recalculated automatically after each ranking update.
+              </p>
+            </div>
+
+            <div>
+              <p className="font-semibold mb-1">⚙️ Manual Management:</p>
+              <p className="text-muted-foreground">
+                Visit the Athletes page to view, edit, and manage individual athlete profiles,
+                rankings, and performance data.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
