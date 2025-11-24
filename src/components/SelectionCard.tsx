@@ -2,42 +2,58 @@ import { Selection } from '@/types';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { TrendingUp } from 'lucide-react';
+import { decimalToAmerican } from '@/utils/oddsConverter';
 
 interface SelectionCardProps {
   selection: Selection;
   onSelect: (selection: Selection) => void;
 }
 
+const getFlagEmoji = (countryCode: string): string => {
+  // Map common country names to flag emojis
+  const countryFlags: { [key: string]: string } = {
+    'USA': '🇺🇸',
+    'CAN': '🇨🇦',
+    'FRA': '🇫🇷',
+    'GBR': '🇬🇧',
+    'AUS': '🇦🇺',
+    'ITA': '🇮🇹',
+    'ESP': '🇪🇸',
+    'GER': '🇩🇪',
+    'BRA': '🇧🇷',
+    'ARG': '🇦🇷',
+    'MEX': '🇲🇽',
+    'JPN': '🇯🇵',
+    'CHN': '🇨🇳',
+    'RUS': '🇷🇺',
+    'NZL': '🇳🇿',
+  };
+  
+  return countryFlags[countryCode] || '🏴';
+};
+
 export const SelectionCard = ({ selection, onSelect }: SelectionCardProps) => {
+  const americanOdds = decimalToAmerican(selection.decimal_odds);
+  
   return (
-    <Card className="p-4 hover:shadow-glow transition-all duration-300 bg-gradient-card border-border/50">
-      <div className="flex items-center justify-between">
+    <Card className="p-4 hover:shadow-glow hover:border-primary/50 transition-all cursor-pointer group" onClick={() => onSelect(selection)}>
+      <div className="flex justify-between items-center">
         <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <div>
-              <h4 className="font-semibold">{selection.athlete.name}</h4>
-              <p className="text-xs text-muted-foreground">
-                {selection.athlete.country} • {selection.athlete.federation}
-              </p>
-            </div>
-          </div>
+          <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">{selection.athlete.name}</h3>
+          <p className="text-sm text-muted-foreground flex items-center gap-1">
+            <span className="text-xl">{getFlagEmoji(selection.athlete.country)}</span>
+            {selection.athlete.country}
+          </p>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="flex items-center gap-1 text-primary">
-              <TrendingUp className="w-4 h-4" />
-              <span className="text-2xl font-bold">{selection.decimal_odds.toFixed(2)}</span>
-            </div>
-            <p className="text-xs text-muted-foreground">Decimal Odds</p>
+        <div className="text-right flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            <span className="text-2xl font-bold text-primary">
+              {americanOdds}
+            </span>
           </div>
-          
-          <Button
-            onClick={() => onSelect(selection)}
-            size="sm"
-            className="bg-primary hover:bg-primary/90 text-primary-foreground"
-          >
-            Bet
+          <Button size="sm" variant="default" className="min-w-[80px]">
+            Place Bet
           </Button>
         </div>
       </div>

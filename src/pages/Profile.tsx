@@ -24,6 +24,7 @@ const Profile = () => {
   const [earnedTokens, setEarnedTokens] = useState(0);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -33,7 +34,21 @@ const Profile = () => {
     
     fetchProfile();
     fetchWallet();
+    checkAdminStatus();
   }, [user, navigate]);
+
+  const checkAdminStatus = async () => {
+    if (!user) return;
+    
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+    
+    setIsAdmin(!!data);
+  };
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -259,6 +274,17 @@ const Profile = () => {
             </Button>
           </form>
         </Card>
+
+        {/* Admin Panel Link */}
+        {isAdmin && (
+          <Button 
+            variant="default"
+            className="w-full bg-gradient-water"
+            onClick={() => navigate('/admin/dashboard')}
+          >
+            Admin Panel
+          </Button>
+        )}
 
         {/* Sign Out */}
         <Button 
