@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 
@@ -35,7 +35,17 @@ export const PageHeader = ({ title, subtitle, showBack = false, action }: PageHe
               )}
             </div>
           </div>
-          {action && <div className="ml-4 shrink-0">{action}</div>}
+          <div className="flex items-center gap-2 ml-4 shrink-0">
+            {action}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/profile')}
+              className="shrink-0"
+            >
+              <User className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
       </div>
     </header>
