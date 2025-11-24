@@ -160,6 +160,9 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          lifetime_deposited: number | null
+          lifetime_losses: number | null
+          lifetime_winnings: number | null
           updated_at: string
           username: string
         }
@@ -169,6 +172,9 @@ export type Database = {
           created_at?: string
           email: string
           id: string
+          lifetime_deposited?: number | null
+          lifetime_losses?: number | null
+          lifetime_winnings?: number | null
           updated_at?: string
           username: string
         }
@@ -178,6 +184,9 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          lifetime_deposited?: number | null
+          lifetime_losses?: number | null
+          lifetime_winnings?: number | null
           updated_at?: string
           username?: string
         }

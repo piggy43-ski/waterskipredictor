@@ -22,6 +22,9 @@ const Profile = () => {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [purchasedTokens, setPurchasedTokens] = useState(0);
   const [earnedTokens, setEarnedTokens] = useState(0);
+  const [lifetimeDeposited, setLifetimeDeposited] = useState(0);
+  const [lifetimeWinnings, setLifetimeWinnings] = useState(0);
+  const [lifetimeLosses, setLifetimeLosses] = useState(0);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -55,7 +58,7 @@ const Profile = () => {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('username, country, avatar_url')
+      .select('username, country, avatar_url, lifetime_deposited, lifetime_winnings, lifetime_losses')
       .eq('id', user.id)
       .single();
 
@@ -68,6 +71,9 @@ const Profile = () => {
       setUsername(data.username || '');
       setCountry(data.country || '');
       setAvatarUrl(data.avatar_url || '');
+      setLifetimeDeposited(data.lifetime_deposited || 0);
+      setLifetimeWinnings(data.lifetime_winnings || 0);
+      setLifetimeLosses(data.lifetime_losses || 0);
     }
   };
 
@@ -232,6 +238,40 @@ const Profile = () => {
                   {(purchasedTokens + earnedTokens).toLocaleString()}
                 </span>
               </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Lifetime Stats */}
+        <Card className="p-6">
+          <h2 className="text-lg font-bold mb-4">Lifetime Stats</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Deposited</p>
+              <p className="text-2xl font-bold text-foreground">
+                {lifetimeDeposited.toLocaleString()}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Winnings</p>
+              <p className="text-2xl font-bold text-success">
+                +{lifetimeWinnings.toLocaleString()}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Losses</p>
+              <p className="text-2xl font-bold text-destructive">
+                -{lifetimeLosses.toLocaleString()}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Net Profit</p>
+              <p className={`text-2xl font-bold ${
+                lifetimeWinnings - lifetimeLosses >= 0 ? 'text-success' : 'text-destructive'
+              }`}>
+                {lifetimeWinnings - lifetimeLosses >= 0 ? '+' : ''}
+                {(lifetimeWinnings - lifetimeLosses).toLocaleString()}
+              </p>
             </div>
           </div>
         </Card>
