@@ -1,8 +1,10 @@
 import { Tournament } from '@/types';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { Calendar, MapPin } from 'lucide-react';
+import { Calendar, MapPin, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getBettingWindowStatus } from '@/utils/bettingWindows';
+import { useState, useEffect } from 'react';
 
 interface TournamentCardProps {
   tournament: Tournament;
@@ -10,6 +12,15 @@ interface TournamentCardProps {
 
 export const TournamentCard = ({ tournament }: TournamentCardProps) => {
   const navigate = useNavigate();
+  const [bettingWindow, setBettingWindow] = useState(getBettingWindowStatus(tournament.start_date, tournament.end_date));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBettingWindow(getBettingWindowStatus(tournament.start_date, tournament.end_date));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [tournament.start_date, tournament.end_date]);
   
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', { 
@@ -62,6 +73,22 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
             {disc}
           </Badge>
         ))}
+      </div>
+
+      {/* Betting Window Status */}
+      <div className="mt-4 pt-3 border-t border-border/50">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-muted-foreground" />
+          <span className={`text-sm font-medium ${
+            bettingWindow.canBet 
+              ? 'text-primary' 
+              : bettingWindow.status === 'upcoming' 
+                ? 'text-muted-foreground' 
+                : 'text-destructive'
+          }`}>
+            {bettingWindow.message}
+          </span>
+        </div>
       </div>
     </Card>
   );
