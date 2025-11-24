@@ -1,13 +1,55 @@
+import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { TournamentCard } from '@/components/TournamentCard';
-import { mockTournaments } from '@/lib/mockData';
+import { supabase } from '@/integrations/supabase/client';
+import { Tournament } from '@/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 
 const Tournaments = () => {
-  const upcomingTournaments = mockTournaments.filter(t => t.status === 'upcoming');
-  const liveTournaments = mockTournaments.filter(t => t.status === 'live');
-  const finishedTournaments = mockTournaments.filter(t => t.status === 'finished');
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchTournaments();
+  }, []);
+
+  const fetchTournaments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('*')
+        .order('start_date', { ascending: true });
+
+      if (error) throw error;
+
+      const mappedTournaments: Tournament[] = (data || []).map(t => ({
+        id: t.id,
+        name: t.name,
+        location: t.location,
+        start_date: t.start_date,
+        end_date: t.end_date,
+        disciplines: t.disciplines as Array<'slalom' | 'trick' | 'jump'>,
+        status: t.status as 'upcoming' | 'live' | 'finished'
+      }));
+
+      setTournaments(mappedTournaments);
+    } catch (error) {
+      toast({
+        title: "Error loading tournaments",
+        description: "Please try again later",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const upcomingTournaments = tournaments.filter(t => t.status === 'upcoming');
+  const liveTournaments = tournaments.filter(t => t.status === 'live');
+  const finishedTournaments = tournaments.filter(t => t.status === 'finished');
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -22,13 +64,23 @@ const Tournaments = () => {
           </TabsList>
           
           <TabsContent value="upcoming" className="space-y-3">
-            {upcomingTournaments.map((tournament) => (
-              <TournamentCard key={tournament.id} tournament={tournament} />
-            ))}
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">Loading...</div>
+            ) : upcomingTournaments.length > 0 ? (
+              upcomingTournaments.map((tournament) => (
+                <TournamentCard key={tournament.id} tournament={tournament} />
+              ))
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                No upcoming tournaments
+              </div>
+            )}
           </TabsContent>
           
           <TabsContent value="live" className="space-y-3">
-            {liveTournaments.length > 0 ? (
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">Loading...</div>
+            ) : liveTournaments.length > 0 ? (
               liveTournaments.map((tournament) => (
                 <TournamentCard key={tournament.id} tournament={tournament} />
               ))
@@ -40,7 +92,9 @@ const Tournaments = () => {
           </TabsContent>
           
           <TabsContent value="finished" className="space-y-3">
-            {finishedTournaments.length > 0 ? (
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">Loading...</div>
+            ) : finishedTournaments.length > 0 ? (
               finishedTournaments.map((tournament) => (
                 <TournamentCard key={tournament.id} tournament={tournament} />
               ))
