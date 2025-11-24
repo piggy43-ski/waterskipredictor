@@ -1,10 +1,13 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { mockTokenWallet } from '@/lib/mockData';
 import { Coins, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 const tokenPacks = [
   { name: 'Starter', price: 5, tokens: 500, popular: false },
@@ -14,7 +17,38 @@ const tokenPacks = [
 ];
 
 const Wallet = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const { toast } = useToast();
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+    
+    fetchWalletBalance();
+  }, [user, navigate]);
+
+  const fetchWalletBalance = async () => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from('token_wallets')
+      .select('purchased_tokens, earned_tokens')
+      .eq('user_id', user.id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching wallet:', error);
+      return;
+    }
+
+    if (data) {
+      setWalletBalance(data.purchased_tokens + data.earned_tokens);
+    }
+  };
 
   const handlePurchase = (pack: typeof tokenPacks[0]) => {
     toast({
@@ -34,7 +68,7 @@ const Wallet = () => {
           <div className="flex items-center gap-3">
             <Coins className="w-10 h-10" />
             <span className="text-4xl font-bold">
-              {mockTokenWallet.balance.toLocaleString()}
+              {walletBalance.toLocaleString()}
             </span>
           </div>
         </Card>
