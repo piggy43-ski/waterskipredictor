@@ -14,7 +14,133 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      predictions: {
+        Row: {
+          athlete_name: string
+          category: string
+          created_at: string
+          decimal_odds: number
+          discipline: string
+          id: string
+          market_type: string
+          payout_tokens: number | null
+          potential_payout: number
+          selection_id: string
+          settled_at: string | null
+          staked_tokens: number
+          status: string
+          tournament_name: string
+          user_id: string
+        }
+        Insert: {
+          athlete_name: string
+          category: string
+          created_at?: string
+          decimal_odds: number
+          discipline: string
+          id?: string
+          market_type: string
+          payout_tokens?: number | null
+          potential_payout: number
+          selection_id: string
+          settled_at?: string | null
+          staked_tokens: number
+          status?: string
+          tournament_name: string
+          user_id: string
+        }
+        Update: {
+          athlete_name?: string
+          category?: string
+          created_at?: string
+          decimal_odds?: number
+          discipline?: string
+          id?: string
+          market_type?: string
+          payout_tokens?: number | null
+          potential_payout?: number
+          selection_id?: string
+          settled_at?: string | null
+          staked_tokens?: number
+          status?: string
+          tournament_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          country: string | null
+          created_at: string
+          email: string
+          id: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          country?: string | null
+          created_at?: string
+          email: string
+          id: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          avatar_url?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      token_wallets: {
+        Row: {
+          created_at: string
+          earned_tokens: number
+          id: string
+          purchased_tokens: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          earned_tokens?: number
+          id?: string
+          purchased_tokens?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          earned_tokens?: number
+          id?: string
+          purchased_tokens?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_wallets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
