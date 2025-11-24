@@ -49,29 +49,38 @@ export default function RankingsImport() {
           continue;
         }
 
-        // Try to find existing athlete
+        // Try to find existing athlete - improved matching
+        const nameTrimmed = name.trim();
+        const countryTrimmed = country.trim();
+        
         const { data: existingAthletes } = await supabase
           .from('athletes')
           .select('*')
-          .ilike('name', name)
-          .eq('country_code', country)
-          .limit(1);
+          .or(`name.ilike.%${nameTrimmed}%,country.ilike.%${countryTrimmed}%`)
+          .limit(10);
+
+        // Find best match
+        let bestMatch = existingAthletes?.find(a => 
+          a.name.toLowerCase().trim() === nameTrimmed.toLowerCase() &&
+          (a.country.toLowerCase().trim() === countryTrimmed.toLowerCase() || 
+           a.country_code?.toLowerCase().trim() === countryTrimmed.toLowerCase())
+        );
 
         let athleteId: string;
 
-        if (existingAthletes && existingAthletes.length > 0) {
-          // Update existing athlete
-          athleteId = existingAthletes[0].id;
+        if (bestMatch) {
+          // Update existing athlete - consolidate disciplines
+          athleteId = bestMatch.id;
           
           const updateData: any = {
             [`current_rank_${discipline}`]: rank,
             [`current_points_${discipline}`]: points,
-            full_name: name,
-            country_code: country,
+            full_name: nameTrimmed,
+            country_code: countryTrimmed,
           };
 
           // Add discipline if not already present
-          const currentDisciplines = existingAthletes[0].disciplines || [];
+          const currentDisciplines = bestMatch.disciplines || [];
           if (!currentDisciplines.includes(discipline)) {
             updateData.disciplines = [...currentDisciplines, discipline];
           }
@@ -87,14 +96,14 @@ export default function RankingsImport() {
           const { data: newAthlete, error } = await supabase
             .from('athletes')
             .insert({
-              name,
-              full_name: name,
-              country: country,
-              country_code: country,
+              name: nameTrimmed,
+              full_name: nameTrimmed,
+              country: countryTrimmed,
+              country_code: countryTrimmed,
               gender,
               disciplines: [discipline],
               federation: 'IWWF',
-              year_of_birth: 1990, // placeholder
+              year_of_birth: 1990, // Default value - not displayed in UI
               [`current_rank_${discipline}`]: rank,
               [`current_points_${discipline}`]: points,
             })
@@ -102,7 +111,7 @@ export default function RankingsImport() {
             .single();
 
           if (error || !newAthlete) {
-            errors.push(`Failed to create athlete ${name}: ${error?.message}`);
+            errors.push(`Failed to create athlete ${nameTrimmed}: ${error?.message}`);
             continue;
           }
 
