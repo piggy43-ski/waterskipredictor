@@ -255,6 +255,45 @@ export type Database = {
           },
         ]
       }
+      podium_selections: {
+        Row: {
+          athlete_id: string
+          created_at: string | null
+          id: string
+          position_predicted: number
+          prediction_id: string
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string | null
+          id?: string
+          position_predicted: number
+          prediction_id: string
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string | null
+          id?: string
+          position_predicted?: number
+          prediction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "podium_selections_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "podium_selections_prediction_id_fkey"
+            columns: ["prediction_id"]
+            isOneToOne: false
+            referencedRelation: "predictions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       predictions: {
         Row: {
           athlete_name: string
@@ -263,7 +302,10 @@ export type Database = {
           decimal_odds: number
           discipline: string
           id: string
+          is_parlay_parent: boolean | null
           market_type: string
+          parlay_id: string | null
+          parlay_leg_count: number | null
           payout_tokens: number | null
           potential_payout: number
           selection_id: string
@@ -280,7 +322,10 @@ export type Database = {
           decimal_odds: number
           discipline: string
           id?: string
+          is_parlay_parent?: boolean | null
           market_type: string
+          parlay_id?: string | null
+          parlay_leg_count?: number | null
           payout_tokens?: number | null
           potential_payout: number
           selection_id: string
@@ -297,7 +342,10 @@ export type Database = {
           decimal_odds?: number
           discipline?: string
           id?: string
+          is_parlay_parent?: boolean | null
           market_type?: string
+          parlay_id?: string | null
+          parlay_leg_count?: number | null
           payout_tokens?: number | null
           potential_payout?: number
           selection_id?: string
@@ -308,6 +356,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "predictions_parlay_id_fkey"
+            columns: ["parlay_id"]
+            isOneToOne: false
+            referencedRelation: "predictions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "predictions_user_id_fkey"
             columns: ["user_id"]

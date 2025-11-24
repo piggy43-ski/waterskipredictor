@@ -1,6 +1,6 @@
 export type Discipline = 'slalom' | 'trick' | 'jump';
 export type Category = 'open_men' | 'open_women';
-export type MarketType = 'WINNER' | 'PODIUM' | 'HEAD_TO_HEAD' | 'OVER_UNDER';
+export type MarketType = 'WINNER' | 'PODIUM' | 'HEAD_TO_HEAD' | 'OVER_UNDER' | 'HIGHEST_SCORE';
 export type PredictionStatus = 'PENDING' | 'WON' | 'LOST' | 'VOID';
 
 export interface Athlete {
