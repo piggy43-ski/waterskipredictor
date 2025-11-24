@@ -7,9 +7,11 @@ import { PredictionDialog } from '@/components/PredictionDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Selection, Tournament, Market } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, MapPin } from 'lucide-react';
+import { Calendar, MapPin, Clock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { getBettingWindowStatus } from '@/utils/bettingWindows';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const TournamentDetail = () => {
   const { id } = useParams();
@@ -23,6 +25,7 @@ const TournamentDetail = () => {
   const [markets, setMarkets] = useState<Market[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bettingWindow, setBettingWindow] = useState<ReturnType<typeof getBettingWindowStatus> | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -33,6 +36,19 @@ const TournamentDetail = () => {
     fetchTournamentData();
     fetchWalletBalance();
   }, [user, navigate, id]);
+
+  useEffect(() => {
+    if (!tournament) return;
+
+    const updateBettingWindow = () => {
+      setBettingWindow(getBettingWindowStatus(tournament.start_date, tournament.end_date));
+    };
+
+    updateBettingWindow();
+    const interval = setInterval(updateBettingWindow, 1000);
+
+    return () => clearInterval(interval);
+  }, [tournament]);
 
   const fetchTournamentData = async () => {
     try {
@@ -178,6 +194,15 @@ const TournamentDetail = () => {
   const womenMarkets = markets.filter(m => m.category === 'open_women');
 
   const handleSelectSelection = (selection: Selection) => {
+    if (!bettingWindow?.canBet) {
+      toast({
+        title: "Betting Closed",
+        description: bettingWindow?.message || "Betting is not available for this tournament",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setSelectedSelection(selection);
     setDialogOpen(true);
   };
@@ -269,7 +294,7 @@ const TournamentDetail = () => {
       
       <div className="max-w-lg mx-auto px-4 py-6">
         {/* Tournament Info */}
-        <div className="mb-6 space-y-2">
+        <div className="mb-6 space-y-3">
           <div className="flex items-center gap-2 text-muted-foreground">
             <MapPin className="w-4 h-4" />
             <span>{tournament.location}</span>
@@ -280,6 +305,25 @@ const TournamentDetail = () => {
               {formatDate(tournament.start_date)} - {formatDate(tournament.end_date)}
             </span>
           </div>
+          
+          {/* Betting Window Status */}
+          {bettingWindow && (
+            <Alert className={
+              bettingWindow.canBet 
+                ? 'border-primary/50 bg-primary/10' 
+                : bettingWindow.status === 'upcoming'
+                  ? 'border-border bg-muted/30'
+                  : 'border-destructive/50 bg-destructive/10'
+            }>
+              <Clock className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span className="font-medium">{bettingWindow.message}</span>
+                {!bettingWindow.canBet && bettingWindow.status !== 'upcoming' && (
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
         {/* Markets by Discipline */}
@@ -309,14 +353,15 @@ const TournamentDetail = () => {
                       const market = markets.find(m => m.id === s.market_id);
                       return market?.discipline === discipline && market?.category === 'open_men';
                     })
-                    .map((selection) => (
-                      <SelectionCard
-                        key={selection.id}
-                        selection={selection}
-                        onSelect={handleSelectSelection}
-                      />
-                    ))}
-                </TabsContent>
+                     .map((selection) => (
+                       <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                         <SelectionCard
+                           selection={selection}
+                           onSelect={handleSelectSelection}
+                         />
+                       </div>
+                     ))}
+                 </TabsContent>
 
                 <TabsContent value="women" className="space-y-3">
                   <h3 className="font-semibold text-sm text-muted-foreground mb-3">
@@ -327,19 +372,20 @@ const TournamentDetail = () => {
                       const market = markets.find(m => m.id === s.market_id);
                       return market?.discipline === discipline && market?.category === 'open_women';
                     })
-                    .map((selection) => (
-                      <SelectionCard
-                        key={selection.id}
-                        selection={selection}
-                        onSelect={handleSelectSelection}
-                      />
-                    ))}
-                </TabsContent>
-              </Tabs>
-            </TabsContent>
-          ))}
-        </Tabs>
-      </div>
+                     .map((selection) => (
+                       <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                         <SelectionCard
+                           selection={selection}
+                           onSelect={handleSelectSelection}
+                         />
+                       </div>
+                     ))}
+                 </TabsContent>
+               </Tabs>
+             </TabsContent>
+           ))}
+         </Tabs>
+       </div>
 
       <PredictionDialog
         selection={selectedSelection}
