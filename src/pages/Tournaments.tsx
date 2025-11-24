@@ -49,7 +49,6 @@ const Tournaments = () => {
 
   const upcomingTournaments = tournaments.filter(t => t.status === 'upcoming');
   const liveTournaments = tournaments.filter(t => t.status === 'live');
-  const finishedTournaments = tournaments.filter(t => t.status === 'finished');
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -57,10 +56,9 @@ const Tournaments = () => {
       
       <div className="max-w-lg mx-auto px-4 py-6">
         <Tabs defaultValue="upcoming" className="w-full">
-          <TabsList className="w-full grid grid-cols-3 mb-6">
+          <TabsList className="w-full grid grid-cols-2 mb-6">
             <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
             <TabsTrigger value="live">Live</TabsTrigger>
-            <TabsTrigger value="finished">Finished</TabsTrigger>
           </TabsList>
           
           <TabsContent value="upcoming" className="space-y-3">
@@ -87,20 +85,6 @@ const Tournaments = () => {
             ) : (
               <div className="text-center py-12 text-muted-foreground">
                 No live tournaments at the moment
-              </div>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="finished" className="space-y-3">
-            {loading ? (
-              <div className="text-center py-12 text-muted-foreground">Loading...</div>
-            ) : finishedTournaments.length > 0 ? (
-              finishedTournaments.map((tournament) => (
-                <TournamentCard key={tournament.id} tournament={tournament} />
-              ))
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                No finished tournaments yet
               </div>
             )}
           </TabsContent>
