@@ -5,8 +5,7 @@ import { BottomNav } from '@/components/BottomNav';
 import { SelectionCard } from '@/components/SelectionCard';
 import { PredictionDialog } from '@/components/PredictionDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { mockTournaments, mockSelections, mockMarkets } from '@/lib/mockData';
-import { Selection } from '@/types';
+import { Selection, Tournament, Market } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar, MapPin } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +19,10 @@ const TournamentDetail = () => {
   const [selectedSelection, setSelectedSelection] = useState<Selection | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [tournament, setTournament] = useState<Tournament | null>(null);
+  const [markets, setMarkets] = useState<Market[]>([]);
+  const [selections, setSelections] = useState<Selection[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) {
@@ -27,8 +30,102 @@ const TournamentDetail = () => {
       return;
     }
     
+    fetchTournamentData();
     fetchWalletBalance();
-  }, [user, navigate]);
+  }, [user, navigate, id]);
+
+  const fetchTournamentData = async () => {
+    try {
+      // Fetch tournament
+      const { data: tournamentData, error: tournamentError } = await supabase
+        .from('tournaments')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (tournamentError) throw tournamentError;
+
+      if (tournamentData) {
+        setTournament({
+          id: tournamentData.id,
+          name: tournamentData.name,
+          location: tournamentData.location,
+          start_date: tournamentData.start_date,
+          end_date: tournamentData.end_date,
+          disciplines: tournamentData.disciplines as Array<'slalom' | 'trick' | 'jump'>,
+          status: tournamentData.status as 'upcoming' | 'live' | 'finished'
+        });
+
+        // Fetch markets
+        const { data: marketsData, error: marketsError } = await supabase
+          .from('markets')
+          .select('*')
+          .eq('tournament_id', id);
+
+        if (marketsError) throw marketsError;
+
+        const mappedMarkets: Market[] = (marketsData || []).map(m => ({
+          id: m.id,
+          tournament_id: m.tournament_id,
+          discipline: m.discipline as 'slalom' | 'trick' | 'jump',
+          category: m.category as 'open_men' | 'open_women',
+          market_type: m.market_type as 'WINNER' | 'PODIUM' | 'HEAD_TO_HEAD' | 'OVER_UNDER',
+          name: m.name
+        }));
+
+        setMarkets(mappedMarkets);
+
+        // Fetch selections with athletes
+        if (marketsData && marketsData.length > 0) {
+          const marketIds = marketsData.map(m => m.id);
+          const { data: selectionsData, error: selectionsError } = await supabase
+            .from('selections')
+            .select(`
+              *,
+              athlete:athletes (
+                id,
+                name,
+                gender,
+                country,
+                federation,
+                year_of_birth,
+                disciplines
+              )
+            `)
+            .in('market_id', marketIds);
+
+          if (selectionsError) throw selectionsError;
+
+          const mappedSelections: Selection[] = (selectionsData || []).map((s: any) => ({
+            id: s.id,
+            market_id: s.market_id,
+            athlete_id: s.athlete_id,
+            athlete: {
+              id: s.athlete.id,
+              name: s.athlete.name,
+              gender: s.athlete.gender as 'male' | 'female',
+              country: s.athlete.country,
+              federation: s.athlete.federation,
+              year_of_birth: s.athlete.year_of_birth,
+              disciplines: s.athlete.disciplines as Array<'slalom' | 'trick' | 'jump'>
+            },
+            description: s.description,
+            decimal_odds: parseFloat(s.decimal_odds)
+          }));
+
+          setSelections(mappedSelections);
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error loading tournament",
+        description: "Please try again later",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchWalletBalance = async () => {
     if (!user) return;
@@ -37,10 +134,14 @@ const TournamentDetail = () => {
       .from('token_wallets')
       .select('purchased_tokens, earned_tokens')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (error) {
-      console.error('Error fetching wallet:', error);
+      toast({
+        title: "Error loading wallet",
+        description: "Please try again later",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -49,13 +150,30 @@ const TournamentDetail = () => {
     }
   };
 
-  const tournament = mockTournaments.find(t => t.id === id);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <PageHeader title="Tournament" showBack />
+        <div className="max-w-lg mx-auto px-4 py-12 text-center text-muted-foreground">
+          Loading...
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
   
   if (!tournament) {
-    return <div>Tournament not found</div>;
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <PageHeader title="Tournament" showBack />
+        <div className="max-w-lg mx-auto px-4 py-12 text-center text-muted-foreground">
+          Tournament not found
+        </div>
+        <BottomNav />
+      </div>
+    );
   }
 
-  const markets = mockMarkets.filter(m => m.tournament_id === tournament.id);
   const menMarkets = markets.filter(m => m.category === 'open_men');
   const womenMarkets = markets.filter(m => m.category === 'open_women');
 
@@ -67,7 +185,7 @@ const TournamentDetail = () => {
   const handleConfirmPrediction = async (stakeAmount: number) => {
     if (!user || !selectedSelection) return;
 
-    const market = mockMarkets.find(m => m.id === selectedSelection.market_id);
+    const market = markets.find(m => m.id === selectedSelection.market_id);
     if (!market) return;
 
     const potentialPayout = Math.floor(stakeAmount * selectedSelection.decimal_odds);
@@ -80,7 +198,7 @@ const TournamentDetail = () => {
           user_id: user.id,
           selection_id: selectedSelection.id,
           athlete_name: selectedSelection.athlete.name,
-          tournament_name: tournament.name,
+          tournament_name: tournament?.name || '',
           discipline: market.discipline,
           category: market.category,
           market_type: market.market_type,
@@ -97,9 +215,10 @@ const TournamentDetail = () => {
         .from('token_wallets')
         .select('purchased_tokens, earned_tokens')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (walletFetchError) throw walletFetchError;
+      if (!walletData) return;
 
       const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - stakeAmount);
       const remaining = stakeAmount - walletData.purchased_tokens;
@@ -124,7 +243,6 @@ const TournamentDetail = () => {
       setDialogOpen(false);
       setSelectedSelection(null);
     } catch (error) {
-      console.error('Error placing prediction:', error);
       toast({
         title: "Error",
         description: "Failed to place prediction. Please try again.",
@@ -186,9 +304,9 @@ const TournamentDetail = () => {
                   <h3 className="font-semibold text-sm text-muted-foreground mb-3">
                     Winner Market
                   </h3>
-                  {mockSelections
+                  {selections
                     .filter(s => {
-                      const market = mockMarkets.find(m => m.id === s.market_id);
+                      const market = markets.find(m => m.id === s.market_id);
                       return market?.discipline === discipline && market?.category === 'open_men';
                     })
                     .map((selection) => (
@@ -204,9 +322,9 @@ const TournamentDetail = () => {
                   <h3 className="font-semibold text-sm text-muted-foreground mb-3">
                     Winner Market
                   </h3>
-                  {mockSelections
+                  {selections
                     .filter(s => {
-                      const market = mockMarkets.find(m => m.id === s.market_id);
+                      const market = markets.find(m => m.id === s.market_id);
                       return market?.discipline === discipline && market?.category === 'open_women';
                     })
                     .map((selection) => (

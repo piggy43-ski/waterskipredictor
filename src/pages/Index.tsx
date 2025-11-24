@@ -1,16 +1,151 @@
+import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { TournamentCard } from '@/components/TournamentCard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { mockTournaments, mockPredictions, mockTokenWallet } from '@/lib/mockData';
-import { Coins, TrendingUp, Trophy } from 'lucide-react';
+import { Coins, TrendingUp, Trophy, LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { Tournament } from '@/types';
+
+interface UserPrediction {
+  id: string;
+  staked_tokens: number;
+  decimal_odds: number;
+  potential_payout: number;
+  athlete_name: string;
+  tournament_name: string;
+  status: string;
+}
 
 const Index = () => {
   const navigate = useNavigate();
-  const featuredTournament = mockTournaments[0];
-  const activePredictions = mockPredictions.filter(p => p.status === 'PENDING');
+  const { user } = useAuth();
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [featuredTournament, setFeaturedTournament] = useState<Tournament | null>(null);
+  const [userPredictions, setUserPredictions] = useState<UserPrediction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, [user]);
+
+  const fetchData = async () => {
+    try {
+      // Fetch featured tournament
+      const { data: tournamentData } = await supabase
+        .from('tournaments')
+        .select('*')
+        .eq('status', 'upcoming')
+        .order('start_date', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (tournamentData) {
+        setFeaturedTournament({
+          id: tournamentData.id,
+          name: tournamentData.name,
+          location: tournamentData.location,
+          start_date: tournamentData.start_date,
+          end_date: tournamentData.end_date,
+          disciplines: tournamentData.disciplines as Array<'slalom' | 'trick' | 'jump'>,
+          status: tournamentData.status as 'upcoming' | 'live' | 'finished'
+        });
+      }
+
+      if (user) {
+        // Fetch wallet balance
+        const { data: walletData } = await supabase
+          .from('token_wallets')
+          .select('purchased_tokens, earned_tokens')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (walletData) {
+          setWalletBalance(walletData.purchased_tokens + walletData.earned_tokens);
+        }
+
+        // Fetch user's active predictions
+        const { data: predictionsData } = await supabase
+          .from('predictions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'PENDING')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (predictionsData) {
+          setUserPredictions(predictionsData.map(p => ({
+            id: p.id,
+            staked_tokens: p.staked_tokens,
+            decimal_odds: parseFloat(p.decimal_odds.toString()),
+            potential_payout: p.potential_payout,
+            athlete_name: p.athlete_name,
+            tournament_name: p.tournament_name,
+            status: p.status
+          })));
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <PageHeader title="WaterSki Predictor" />
+        <div className="max-w-lg mx-auto px-4 py-12 text-center text-muted-foreground">
+          Loading...
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <PageHeader title="WaterSki Predictor" />
+        
+        <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+          {/* Welcome Card */}
+          <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium">
+            <h2 className="text-2xl font-bold mb-2">Welcome to WaterSki Predictor</h2>
+            <p className="opacity-90 mb-4">
+              Predict tournament outcomes, earn tokens, and win exclusive rewards from top waterski brands and events.
+            </p>
+            <Button 
+              onClick={() => navigate('/auth')}
+              className="w-full bg-background text-primary hover:bg-background/90"
+            >
+              <LogIn className="w-4 h-4 mr-2" />
+              Get Started
+            </Button>
+          </Card>
+
+          {/* Featured Tournament Preview */}
+          {featuredTournament && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-primary" />
+                  Upcoming Event
+                </h2>
+              </div>
+              <TournamentCard tournament={featuredTournament} />
+            </div>
+          )}
+        </div>
+
+        <BottomNav />
+      </div>
+    );
+  }
+
+  const activePredictions = userPredictions;
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -25,7 +160,7 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 <Coins className="w-6 h-6" />
                 <span className="text-3xl font-bold">
-                  {mockTokenWallet.balance.toLocaleString()}
+                  {walletBalance.toLocaleString()}
                 </span>
               </div>
             </div>
@@ -48,36 +183,31 @@ const Index = () => {
               <p className="text-xl font-bold flex items-center gap-1">
                 <TrendingUp className="w-4 h-4" />
                 {activePredictions.reduce((sum, p) => 
-                  sum + (p.staked_tokens * p.selection.decimal_odds), 0
-                ).toFixed(0)}
+                  sum + p.potential_payout, 0
+                ).toLocaleString()}
               </p>
             </div>
           </div>
         </Card>
 
         {/* Featured Tournament */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-primary" />
-              Featured Event
-            </h2>
+        {featuredTournament && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-primary" />
+                Featured Event
+              </h2>
+            </div>
+            <TournamentCard tournament={featuredTournament} />
           </div>
-          <TournamentCard tournament={featuredTournament} />
-        </div>
+        )}
 
         {/* Active Predictions */}
         {activePredictions.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold">Your Active Predictions</h2>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => navigate('/predictions')}
-              >
-                View All
-              </Button>
             </div>
             <div className="space-y-3">
               {activePredictions.map((prediction) => (
@@ -85,15 +215,15 @@ const Index = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <p className="font-semibold mb-1">
-                        {prediction.selection.athlete.name}
+                        {prediction.athlete_name}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {prediction.selection.description}
+                        {prediction.tournament_name}
                       </p>
                     </div>
                     <div className="text-right ml-4">
                       <p className="font-bold text-lg">
-                        {(prediction.staked_tokens * prediction.selection.decimal_odds).toFixed(0)}
+                        {prediction.potential_payout.toLocaleString()}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Staked: {prediction.staked_tokens}
@@ -118,11 +248,13 @@ const Index = () => {
               View All
             </Button>
           </div>
-          <div className="space-y-3">
-            {mockTournaments.slice(1).map((tournament) => (
-              <TournamentCard key={tournament.id} tournament={tournament} />
-            ))}
-          </div>
+          <Button 
+            variant="outline" 
+            className="w-full"
+            onClick={() => navigate('/tournaments')}
+          >
+            Browse All Tournaments
+          </Button>
         </div>
       </div>
 
