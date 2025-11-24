@@ -11,7 +11,8 @@ interface AdminLayoutProps {
 const navItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/admin/athletes', label: 'Athletes', icon: Users },
-  { path: '/admin/rankings-import', label: 'Rankings Import', icon: TrendingUp },
+  { path: '/admin/rankings-sync', label: 'Rankings Auto-Sync', icon: TrendingUp },
+  { path: '/admin/rankings-import', label: 'Manual Import', icon: TrendingUp },
   { path: '/admin/results', label: 'Results', icon: Trophy },
   { path: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { path: '/admin/markets', label: 'Markets', icon: TrendingUp },
