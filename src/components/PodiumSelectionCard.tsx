@@ -1,8 +1,8 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check } from 'lucide-react';
-import { Selection } from '@/types';
+import { Check, Medal } from 'lucide-react';
+import { Selection, Discipline } from '@/types';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 
 interface PodiumSelectionCardProps {
@@ -10,13 +10,15 @@ interface PodiumSelectionCardProps {
   selectedAthletes: Selection[];
   onToggleAthlete: (athlete: Selection) => void;
   maxSelections?: number;
+  discipline?: Discipline;
 }
 
 export const PodiumSelectionCard = ({ 
   athletes, 
   selectedAthletes, 
   onToggleAthlete,
-  maxSelections = 3 
+  maxSelections = 3,
+  discipline 
 }: PodiumSelectionCardProps) => {
   const getFlagEmoji = (countryCode: string): string => {
     const countryFlags: { [key: string]: string } = {
@@ -43,6 +45,29 @@ export const PodiumSelectionCard = ({
 
   const canSelect = selectedAthletes.length < maxSelections;
 
+  // Get the appropriate rank based on discipline
+  const getRank = (athlete: Selection) => {
+    if (!discipline) return null;
+    switch (discipline) {
+      case 'slalom':
+        return athlete.athlete.current_rank_slalom;
+      case 'trick':
+        return athlete.athlete.current_rank_trick;
+      case 'jump':
+        return athlete.athlete.current_rank_jump;
+      default:
+        return null;
+    }
+  };
+
+  // Determine badge color based on rank
+  const getRankVariant = (rank: number | null) => {
+    if (!rank) return 'secondary';
+    if (rank <= 3) return 'default';
+    if (rank <= 10) return 'secondary';
+    return 'outline';
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between mb-4">
@@ -57,6 +82,7 @@ export const PodiumSelectionCard = ({
       {athletes.map((athlete) => {
         const selected = isSelected(athlete);
         const disabled = !selected && !canSelect;
+        const rank = getRank(athlete);
         
         return (
           <Card 
@@ -79,7 +105,15 @@ export const PodiumSelectionCard = ({
                     {selected ? <Check className="w-5 h-5" /> : getFlagEmoji(athlete.athlete.country)}
                   </div>
                   <div className="flex-1">
-                    <div className="font-semibold">{athlete.athlete.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="font-semibold">{athlete.athlete.name}</div>
+                      {rank && (
+                        <Badge variant={getRankVariant(rank)} className="flex items-center gap-1 text-xs">
+                          {rank <= 3 && <Medal className="w-3 h-3" />}
+                          #{rank}
+                        </Badge>
+                      )}
+                    </div>
                     <div className="text-sm text-muted-foreground">
                       {getFlagEmoji(athlete.athlete.country)} {athlete.athlete.country}
                     </div>
