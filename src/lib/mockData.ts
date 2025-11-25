@@ -8,8 +8,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'USA',
     federation: 'USA-WSWS',
-    discipline: 'slalom',
-    world_rank: 1
+    disciplines: ['slalom'],
+    current_rank_slalom: 1
   },
   {
     id: '2',
@@ -17,8 +17,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'CAN',
     federation: 'WS Canada',
-    discipline: 'slalom',
-    world_rank: 2
+    disciplines: ['slalom'],
+    current_rank_slalom: 2
   },
   {
     id: '3',
@@ -26,8 +26,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'AUS',
     federation: 'AWWF',
-    discipline: 'slalom',
-    world_rank: 3
+    disciplines: ['slalom'],
+    current_rank_slalom: 3
   },
   {
     id: '4',
@@ -35,8 +35,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'USA',
     federation: 'USA-WSWS',
-    discipline: 'slalom',
-    world_rank: 4
+    disciplines: ['slalom'],
+    current_rank_slalom: 4
   },
   {
     id: '5',
@@ -44,8 +44,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'USA',
     federation: 'USA-WSWS',
-    discipline: 'slalom',
-    world_rank: 5
+    disciplines: ['slalom'],
+    current_rank_slalom: 5
   },
   {
     id: '6',
@@ -53,8 +53,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'female',
     country: 'USA',
     federation: 'USA-WSWS',
-    discipline: 'slalom',
-    world_rank: 1
+    disciplines: ['slalom'],
+    current_rank_slalom: 1
   },
   {
     id: '7',
@@ -62,8 +62,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'female',
     country: 'CAN',
     federation: 'WS Canada',
-    discipline: 'slalom',
-    world_rank: 2
+    disciplines: ['slalom'],
+    current_rank_slalom: 2
   },
   {
     id: '8',
@@ -71,8 +71,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'female',
     country: 'ARG',
     federation: 'Argentina',
-    discipline: 'slalom',
-    world_rank: 3
+    disciplines: ['slalom'],
+    current_rank_slalom: 3
   }
 ];
 
