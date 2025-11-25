@@ -116,7 +116,10 @@ const TournamentDetail = () => {
                 country,
                 federation,
                 year_of_birth,
-                disciplines
+                disciplines,
+                current_rank_slalom,
+                current_rank_trick,
+                current_rank_jump
               )
             `)
             .in('market_id', marketIds);
@@ -134,6 +137,9 @@ const TournamentDetail = () => {
               country: s.athlete.country,
               federation: s.athlete.federation,
               disciplines: s.athlete.disciplines,
+              current_rank_slalom: s.athlete.current_rank_slalom,
+              current_rank_trick: s.athlete.current_rank_trick,
+              current_rank_jump: s.athlete.current_rank_jump,
             },
             description: s.description,
             decimal_odds: Number(s.decimal_odds),
@@ -596,6 +602,15 @@ const TournamentDetail = () => {
                                  market?.category === 'open_men' && 
                                  market?.market_type === 'WINNER';
                         })
+                        .sort((a, b) => {
+                          const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                       discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                       a.athlete.current_rank_jump;
+                          const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                       discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                       b.athlete.current_rank_jump;
+                          return (rankA || 999) - (rankB || 999);
+                        })
                         .map((selection) => (
                           <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
                             <SelectionCard
@@ -616,6 +631,15 @@ const TournamentDetail = () => {
                           return market?.discipline === discipline && 
                                  market?.category === 'open_women' && 
                                  market?.market_type === 'WINNER';
+                        })
+                        .sort((a, b) => {
+                          const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                       discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                       a.athlete.current_rank_jump;
+                          const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                       discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                       b.athlete.current_rank_jump;
+                          return (rankA || 999) - (rankB || 999);
                         })
                         .map((selection) => (
                           <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
@@ -644,7 +668,17 @@ const TournamentDetail = () => {
                           m.category === 'open_men' && 
                           m.market_type === 'PODIUM'
                         );
-                        const podiumSelections = selections.filter(s => s.market_id === podiumMarket?.id);
+                        const podiumSelections = selections
+                          .filter(s => s.market_id === podiumMarket?.id)
+                          .sort((a, b) => {
+                            const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                         discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                         a.athlete.current_rank_jump;
+                            const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                         discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                         b.athlete.current_rank_jump;
+                            return (rankA || 999) - (rankB || 999);
+                          });
                         
                         return podiumMarket ? (
                           <>
@@ -673,7 +707,17 @@ const TournamentDetail = () => {
                           m.category === 'open_women' && 
                           m.market_type === 'PODIUM'
                         );
-                        const podiumSelections = selections.filter(s => s.market_id === podiumMarket?.id);
+                        const podiumSelections = selections
+                          .filter(s => s.market_id === podiumMarket?.id)
+                          .sort((a, b) => {
+                            const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                         discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                         a.athlete.current_rank_jump;
+                            const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                         discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                         b.athlete.current_rank_jump;
+                            return (rankA || 999) - (rankB || 999);
+                          });
                         
                         return podiumMarket ? (
                           <>
@@ -716,6 +760,15 @@ const TournamentDetail = () => {
                                  market?.category === 'open_men' && 
                                  market?.market_type === 'HIGHEST_SCORE';
                         })
+                        .sort((a, b) => {
+                          const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                       discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                       a.athlete.current_rank_jump;
+                          const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                       discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                       b.athlete.current_rank_jump;
+                          return (rankA || 999) - (rankB || 999);
+                        })
                         .map((selection) => (
                           <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
                             <SelectionCard
@@ -736,6 +789,15 @@ const TournamentDetail = () => {
                           return market?.discipline === discipline && 
                                  market?.category === 'open_women' && 
                                  market?.market_type === 'HIGHEST_SCORE';
+                        })
+                        .sort((a, b) => {
+                          const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                       discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                       a.athlete.current_rank_jump;
+                          const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                       discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                       b.athlete.current_rank_jump;
+                          return (rankA || 999) - (rankB || 999);
                         })
                         .map((selection) => (
                           <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
