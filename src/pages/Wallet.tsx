@@ -10,17 +10,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
 const tokenPacks = [
-  { name: 'Starter', price: 5, tokens: 500, popular: false },
-  { name: 'Athlete', price: 20, tokens: 2200, popular: true },
-  { name: 'Pro', price: 50, tokens: 6000, popular: false },
-  { name: 'Champion', price: 100, tokens: 13000, popular: false },
+  { name: 'Starter', price: 25, tokens: 2500, bonus: 0, popular: false },
+  { name: 'Standard', price: 50, tokens: 5500, bonus: 10, popular: true },
+  { name: 'Pro', price: 100, tokens: 11500, bonus: 15, popular: false },
+  { name: 'Elite', price: 250, tokens: 31250, bonus: 25, popular: false },
 ];
 
 const Wallet = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [walletBalance, setWalletBalance] = useState(0);
+  const [purchasedTokens, setPurchasedTokens] = useState(0);
+  const [earnedTokens, setEarnedTokens] = useState(0);
+  const walletBalance = purchasedTokens + earnedTokens;
 
   useEffect(() => {
     if (!user) {
@@ -46,7 +48,8 @@ const Wallet = () => {
     }
 
     if (data) {
-      setWalletBalance(data.purchased_tokens + data.earned_tokens);
+      setPurchasedTokens(data.purchased_tokens);
+      setEarnedTokens(data.earned_tokens);
     }
   };
 
@@ -64,12 +67,22 @@ const Wallet = () => {
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
         {/* Current Balance */}
         <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium">
-          <p className="text-sm opacity-90 mb-2">Current Balance</p>
-          <div className="flex items-center gap-3">
+          <p className="text-sm opacity-90 mb-2">Total Balance</p>
+          <div className="flex items-center gap-3 mb-4">
             <Coins className="w-10 h-10" />
             <span className="text-4xl font-bold">
               {walletBalance.toLocaleString()}
             </span>
+          </div>
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-primary-foreground/20">
+            <div>
+              <p className="text-xs opacity-75 mb-1">Purchased Tokens</p>
+              <p className="text-xl font-bold">{purchasedTokens.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-xs opacity-75 mb-1">Reward Tokens</p>
+              <p className="text-xl font-bold">{earnedTokens.toLocaleString()}</p>
+            </div>
           </div>
         </Card>
 
@@ -105,9 +118,9 @@ const Wallet = () => {
                       </span>
                       <span className="text-sm text-muted-foreground">tokens</span>
                     </div>
-                    {pack.price > 5 && (
+                    {pack.bonus > 0 && (
                       <p className="text-xs text-success">
-                        +{Math.round(((pack.tokens / pack.price - 100) / 100) * 100)}% bonus
+                        +{pack.bonus}% bonus
                       </p>
                     )}
                   </div>
@@ -138,7 +151,8 @@ const Wallet = () => {
           <h3 className="font-semibold mb-2">Important Information</h3>
           <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
             <li>Tokens cannot be converted back to cash</li>
-            <li>Use tokens for predictions and redeem for rewards</li>
+            <li>Only earned (reward) tokens can be redeemed for rewards</li>
+            <li>Use purchased tokens for predictions</li>
             <li>No real money gambling - entertainment only</li>
           </ul>
         </Card>
