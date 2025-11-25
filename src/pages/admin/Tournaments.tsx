@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { AdminLayout } from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,9 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users } from 'lucide-react';
 import { format } from 'date-fns';
 
 type Tournament = {
@@ -26,8 +29,10 @@ export default function AdminTournaments() {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
+  const [disciplines, setDisciplines] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: tournaments, isLoading } = useQuery({
     queryKey: ['admin-tournaments'],
@@ -107,6 +112,7 @@ export default function AdminTournaments() {
 
   const handleEdit = (tournament: Tournament) => {
     setEditingTournament(tournament);
+    setDisciplines(tournament.disciplines || []);
     setEditOpen(true);
   };
 

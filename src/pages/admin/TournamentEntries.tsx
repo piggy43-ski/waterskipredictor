@@ -1,0 +1,375 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { AdminLayout } from '@/components/AdminLayout';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { toast } from 'sonner';
+import { Plus, Trash2 } from 'lucide-react';
+import type { Discipline, TournamentEntry } from '@/types';
+
+export default function TournamentEntries() {
+  const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
+  const [filterDiscipline, setFilterDiscipline] = useState<Discipline | ''>('');
+  const [filterGender, setFilterGender] = useState<'male' | 'female' | ''>('');
+  const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(new Set());
+  const [customOdds, setCustomOdds] = useState<Record<string, string>>({});
+
+  const queryClient = useQueryClient();
+
+  const { data: tournaments } = useQuery({
+    queryKey: ['admin-tournaments'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('*')
+        .order('start_date', { nullsFirst: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: athletes } = useQuery({
+    queryKey: ['admin-athletes-for-entries', filterDiscipline, filterGender],
+    queryFn: async () => {
+      let query = supabase.from('athletes').select('*').order('world_rank');
+      
+      if (filterDiscipline) query = query.eq('discipline', filterDiscipline);
+      if (filterGender) query = query.eq('gender', filterGender);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!filterDiscipline && !!filterGender,
+  });
+
+  const { data: entries } = useQuery({
+    queryKey: ['tournament-entries', selectedTournamentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tournament_entries')
+        .select('*, athlete:athletes(*)')
+        .eq('tournament_id', selectedTournamentId);
+      if (error) throw error;
+      return data as TournamentEntry[];
+    },
+    enabled: !!selectedTournamentId,
+  });
+
+  const addEntriesMutation = useMutation({
+    mutationFn: async () => {
+      const entriesToAdd = Array.from(selectedAthletes).map(athleteId => {
+        const athlete = athletes?.find(a => a.id === athleteId);
+        const customOddsValue = customOdds[athleteId];
+        const calculatedOdds = customOddsValue 
+          ? parseFloat(customOddsValue) 
+          : 1.5 + ((athlete?.world_rank || 1) / 10);
+
+        return {
+          tournament_id: selectedTournamentId,
+          athlete_id: athleteId,
+          discipline: athlete?.discipline,
+          custom_odds: calculatedOdds,
+        };
+      });
+
+      const { error } = await supabase
+        .from('tournament_entries')
+        .insert(entriesToAdd);
+      
+      if (error) throw error;
+
+      // Auto-generate markets and selections
+      const tournament = tournaments?.find(t => t.id === selectedTournamentId);
+      if (!tournament) return;
+
+      for (const discipline of tournament.disciplines) {
+        const disciplineEntries = entriesToAdd.filter(e => e.discipline === discipline);
+        const genders = [...new Set(athletes?.filter(a => 
+          disciplineEntries.some(e => e.athlete_id === a.id)
+        ).map(a => a.gender))];
+
+        for (const gender of genders) {
+          const category = gender === 'male' ? 'open_men' : 'open_women';
+          
+          // Create WINNER market
+          const { data: winnerMarket, error: marketError } = await supabase
+            .from('markets')
+            .insert({
+              tournament_id: selectedTournamentId,
+              discipline,
+              category,
+              market_type: 'WINNER',
+              name: `${discipline} ${category} Winner`,
+            })
+            .select()
+            .single();
+
+          if (marketError) throw marketError;
+
+          // Create PODIUM market
+          const { data: podiumMarket, error: podiumError } = await supabase
+            .from('markets')
+            .insert({
+              tournament_id: selectedTournamentId,
+              discipline,
+              category,
+              market_type: 'PODIUM',
+              name: `${discipline} ${category} Podium`,
+            })
+            .select()
+            .single();
+
+          if (podiumError) throw podiumError;
+
+          // Create HIGHEST_SCORE market
+          const { data: scoreMarket, error: scoreError } = await supabase
+            .from('markets')
+            .insert({
+              tournament_id: selectedTournamentId,
+              discipline,
+              category,
+              market_type: 'HIGHEST_SCORE',
+              name: `${discipline} ${category} Highest Score`,
+            })
+            .select()
+            .single();
+
+          if (scoreError) throw scoreError;
+
+          // Create selections for all markets
+          const relevantEntries = disciplineEntries.filter(e => {
+            const athlete = athletes?.find(a => a.id === e.athlete_id);
+            return athlete?.gender === gender;
+          });
+
+          for (const entry of relevantEntries) {
+            const athlete = athletes?.find(a => a.id === entry.athlete_id);
+            if (!athlete) continue;
+
+            const selections = [
+              {
+                market_id: winnerMarket.id,
+                athlete_id: entry.athlete_id,
+                description: `${athlete.name} to win`,
+                decimal_odds: entry.custom_odds,
+              },
+              {
+                market_id: podiumMarket.id,
+                athlete_id: entry.athlete_id,
+                description: `${athlete.name} podium finish`,
+                decimal_odds: entry.custom_odds * 0.7,
+              },
+              {
+                market_id: scoreMarket.id,
+                athlete_id: entry.athlete_id,
+                description: `${athlete.name} highest score`,
+                decimal_odds: entry.custom_odds,
+              },
+            ];
+
+            const { error: selectionsError } = await supabase
+              .from('selections')
+              .insert(selections);
+
+            if (selectionsError) throw selectionsError;
+          }
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['markets'] });
+      queryClient.invalidateQueries({ queryKey: ['selections'] });
+      toast.success('Athletes added and markets created');
+      setSelectedAthletes(new Set());
+      setCustomOdds({});
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to add athletes: ${error.message}`);
+    },
+  });
+
+  const deleteEntryMutation = useMutation({
+    mutationFn: async (entryId: string) => {
+      const { error } = await supabase
+        .from('tournament_entries')
+        .delete()
+        .eq('id', entryId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
+      toast.success('Entry removed');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to remove entry: ${error.message}`);
+    },
+  });
+
+  const calculateAutoOdds = (rank: number) => {
+    return (1.5 + (rank / 10)).toFixed(2);
+  };
+
+  return (
+    <AdminLayout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Tournament Entries</h1>
+          <p className="text-muted-foreground">Add athletes to tournaments and manage entries</p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Tournament</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select value={selectedTournamentId} onValueChange={setSelectedTournamentId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a tournament" />
+              </SelectTrigger>
+              <SelectContent>
+                {tournaments?.map((tournament) => (
+                  <SelectItem key={tournament.id} value={tournament.id}>
+                    {tournament.name} - {tournament.location}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+
+        {selectedTournamentId && (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Current Entries ({entries?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {entries && entries.length > 0 ? (
+                  <div className="space-y-2">
+                    {entries.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between p-3 border rounded">
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium">{entry.athlete?.name}</span>
+                          <Badge variant="outline">{entry.discipline}</Badge>
+                          <Badge variant="secondary">Rank #{entry.athlete?.world_rank}</Badge>
+                          <span className="text-sm text-muted-foreground">
+                            Odds: {entry.custom_odds?.toFixed(2)}
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteEntryMutation.mutate(entry.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-center py-8">No entries yet</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Add Athletes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Discipline</Label>
+                    <Select value={filterDiscipline} onValueChange={(v) => setFilterDiscipline(v as Discipline)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select discipline" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="slalom">Slalom</SelectItem>
+                        <SelectItem value="trick">Trick</SelectItem>
+                        <SelectItem value="jump">Jump</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Gender</Label>
+                    <Select value={filterGender} onValueChange={(v) => setFilterGender(v as 'male' | 'female')}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {athletes && athletes.length > 0 && (
+                  <>
+                    <div className="border rounded-lg divide-y max-h-96 overflow-y-auto">
+                      {athletes.map((athlete) => (
+                        <div key={athlete.id} className="p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1">
+                            <Checkbox
+                              checked={selectedAthletes.has(athlete.id)}
+                              onCheckedChange={(checked) => {
+                                const newSelected = new Set(selectedAthletes);
+                                if (checked) {
+                                  newSelected.add(athlete.id);
+                                } else {
+                                  newSelected.delete(athlete.id);
+                                }
+                                setSelectedAthletes(newSelected);
+                              }}
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium">{athlete.name}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {athlete.country} • Rank #{athlete.world_rank}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder={`Auto: ${calculateAutoOdds(athlete.world_rank)}`}
+                                value={customOdds[athlete.id] || ''}
+                                onChange={(e) => setCustomOdds(prev => ({
+                                  ...prev,
+                                  [athlete.id]: e.target.value
+                                }))}
+                                className="w-24"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      onClick={() => addEntriesMutation.mutate()}
+                      disabled={selectedAthletes.size === 0 || addEntriesMutation.isPending}
+                      className="w-full"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add {selectedAthletes.size} Athlete{selectedAthletes.size !== 1 ? 's' : ''} & Generate Markets
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    </AdminLayout>
+  );
+}

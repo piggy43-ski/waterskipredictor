@@ -9,13 +9,23 @@ export interface Athlete {
   gender: 'male' | 'female';
   country: string;
   federation: string;
-  disciplines: Discipline[];
+  discipline: Discipline;
+  world_rank: number;
   current_rank_slalom?: number;
   current_rank_trick?: number;
   current_rank_jump?: number;
   current_points_slalom?: number;
   current_points_trick?: number;
   current_points_jump?: number;
+}
+
+export interface TournamentEntry {
+  id: string;
+  tournament_id: string;
+  athlete_id: string;
+  discipline: Discipline;
+  custom_odds?: number;
+  athlete?: Athlete;
 }
 
 export interface RankingSnapshot {
