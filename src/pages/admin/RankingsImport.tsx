@@ -69,7 +69,7 @@ export default function RankingsImport() {
         let athleteId: string;
 
         if (bestMatch) {
-          // Update existing athlete - consolidate disciplines
+          // Update existing athlete
           athleteId = bestMatch.id;
           
           const updateData: any = {
@@ -79,9 +79,10 @@ export default function RankingsImport() {
             country_code: countryTrimmed,
           };
 
-          const currentDisciplines = bestMatch.discipline;
-          if (currentDisciplines !== discipline) {
-            updateData.discipline = discipline;
+          // Add discipline if not already in disciplines array
+          const currentDisciplines = bestMatch.disciplines || [];
+          if (!currentDisciplines.includes(discipline)) {
+            updateData.disciplines = [...currentDisciplines, discipline];
           }
 
           await supabase
@@ -100,10 +101,9 @@ export default function RankingsImport() {
               country: countryTrimmed,
               country_code: countryTrimmed,
               gender,
-              discipline,
-              world_rank: rank,
+              disciplines: [discipline],
               federation: 'IWWF',
-              year_of_birth: 1990, // Default value - not displayed in UI
+              year_of_birth: 1990,
               [`current_rank_${discipline}`]: rank,
               [`current_points_${discipline}`]: points,
             })

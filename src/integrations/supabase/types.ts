@@ -130,7 +130,7 @@ export type Database = {
           current_rank_jump: number | null
           current_rank_slalom: number | null
           current_rank_trick: number | null
-          discipline: string | null
+          disciplines: string[]
           fantasy_price_jump: number | null
           fantasy_price_slalom: number | null
           fantasy_price_trick: number | null
@@ -148,7 +148,6 @@ export type Database = {
           popularity_index: number | null
           profile_image_url: string | null
           updated_at: string
-          world_rank: number | null
           year_of_birth: number
         }
         Insert: {
@@ -162,7 +161,7 @@ export type Database = {
           current_rank_jump?: number | null
           current_rank_slalom?: number | null
           current_rank_trick?: number | null
-          discipline?: string | null
+          disciplines?: string[]
           fantasy_price_jump?: number | null
           fantasy_price_slalom?: number | null
           fantasy_price_trick?: number | null
@@ -180,7 +179,6 @@ export type Database = {
           popularity_index?: number | null
           profile_image_url?: string | null
           updated_at?: string
-          world_rank?: number | null
           year_of_birth: number
         }
         Update: {
@@ -194,7 +192,7 @@ export type Database = {
           current_rank_jump?: number | null
           current_rank_slalom?: number | null
           current_rank_trick?: number | null
-          discipline?: string | null
+          disciplines?: string[]
           fantasy_price_jump?: number | null
           fantasy_price_slalom?: number | null
           fantasy_price_trick?: number | null
@@ -212,7 +210,6 @@ export type Database = {
           popularity_index?: number | null
           profile_image_url?: string | null
           updated_at?: string
-          world_rank?: number | null
           year_of_birth?: number
         }
         Relationships: []

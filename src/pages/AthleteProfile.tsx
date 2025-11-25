@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowLeft, TrendingUp } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
@@ -61,8 +62,6 @@ export default function AthleteProfile() {
     );
   }
 
-  const discipline = athlete.discipline;
-
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -92,11 +91,9 @@ export default function AthleteProfile() {
               {athlete.country_code || athlete.country}
             </p>
             <div className="flex gap-2 mt-3">
-              {discipline && (
-                <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm capitalize">
-                  {discipline}
-                </span>
-              )}
+              {athlete.disciplines?.map((disc) => (
+                <Badge key={disc} className="capitalize">{disc}</Badge>
+              ))}
             </div>
           </div>
         </div>
@@ -109,41 +106,31 @@ export default function AthleteProfile() {
           </Card>
         )}
 
-        {discipline && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="capitalize text-lg">{discipline}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">World Rank</p>
-                <p className="text-3xl font-bold text-primary">
-                  {athlete.world_rank || athlete[`current_rank_${discipline}`] || 'N/A'}
-                </p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Performance Statistics</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {athlete.current_rank_slalom && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Slalom Rank</span>
+                <span className="font-semibold">{athlete.current_rank_slalom}</span>
               </div>
-              
-              {athlete[`current_points_${discipline}`] && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Points</p>
-                  <p className="text-xl font-semibold">{athlete[`current_points_${discipline}`].toFixed(2)}</p>
-                </div>
-              )}
-
-              <div>
-                <p className="text-sm text-muted-foreground mb-2">Performance</p>
-                <Progress value={(athlete[`performance_index_${discipline}`] || 0) * 100} className="h-2" />
-                <p className="text-xs text-muted-foreground mt-1">{((athlete[`performance_index_${discipline}`] || 0) * 100).toFixed(0)}%</p>
+            )}
+            {athlete.current_rank_trick && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Trick Rank</span>
+                <span className="font-semibold">{athlete.current_rank_trick}</span>
               </div>
-
-              {athlete[`fantasy_price_${discipline}`] && athlete[`fantasy_price_${discipline}`] > 0 && (
-                <div className="pt-2 border-t">
-                  <p className="text-sm text-muted-foreground">Fantasy Price</p>
-                  <p className="text-xl font-bold text-accent">{athlete[`fantasy_price_${discipline}`]} tokens</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+            )}
+            {athlete.current_rank_jump && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Jump Rank</span>
+                <span className="font-semibold">{athlete.current_rank_jump}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {recentResult && (
           <Card>

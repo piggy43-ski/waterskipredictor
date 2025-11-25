@@ -9,8 +9,7 @@ export interface Athlete {
   gender: 'male' | 'female';
   country: string;
   federation: string;
-  discipline: Discipline;
-  world_rank: number;
+  disciplines: Discipline[];
   current_rank_slalom?: number;
   current_rank_trick?: number;
   current_rank_jump?: number;

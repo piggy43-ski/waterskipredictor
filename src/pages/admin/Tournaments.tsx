@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, Trash2, Users } from 'lucide-react';
@@ -30,6 +30,7 @@ export default function AdminTournaments() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   const [disciplines, setDisciplines] = useState<string[]>([]);
+  const [editDisciplines, setEditDisciplines] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -52,10 +53,10 @@ export default function AdminTournaments() {
       const tournament = {
         name: formData.get('name') as string,
         location: formData.get('location') as string,
-        start_date: formData.get('start_date') as string,
-        end_date: formData.get('end_date') as string,
+        start_date: formData.get('start_date') as string || null,
+        end_date: formData.get('end_date') as string || null,
         status: formData.get('status') as string,
-        disciplines: [formData.get('discipline') as string],
+        disciplines: disciplines,
       };
 
       const { error } = await supabase.from('tournaments').insert(tournament);
@@ -64,6 +65,7 @@ export default function AdminTournaments() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-tournaments'] });
       setOpen(false);
+      setDisciplines([]);
       toast({ title: 'Tournament created successfully' });
     },
     onError: (error: Error) => {
@@ -83,6 +85,7 @@ export default function AdminTournaments() {
       queryClient.invalidateQueries({ queryKey: ['admin-tournaments'] });
       setEditOpen(false);
       setEditingTournament(null);
+      setEditDisciplines([]);
       toast({ title: 'Tournament updated successfully' });
     },
     onError: (error: Error) => {
@@ -112,7 +115,7 @@ export default function AdminTournaments() {
 
   const handleEdit = (tournament: Tournament) => {
     setEditingTournament(tournament);
-    setDisciplines(tournament.disciplines || []);
+    setEditDisciplines(tournament.disciplines || []);
     setEditOpen(true);
   };
 
@@ -124,10 +127,10 @@ export default function AdminTournaments() {
     const updates = {
       name: formData.get('name') as string,
       location: formData.get('location') as string,
-      start_date: formData.get('start_date') as string,
-      end_date: formData.get('end_date') as string,
+      start_date: formData.get('start_date') as string || null,
+      end_date: formData.get('end_date') as string || null,
       status: formData.get('status') as string,
-      disciplines: [formData.get('discipline') as string],
+      disciplines: editDisciplines,
     };
 
     updateMutation.mutate({ id: editingTournament.id, updates });
@@ -142,7 +145,10 @@ export default function AdminTournaments() {
             <p className="text-muted-foreground mt-1">Manage tournament listings</p>
           </div>
           
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={(newOpen) => {
+            setOpen(newOpen);
+            if (!newOpen) setDisciplines([]);
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
@@ -163,16 +169,16 @@ export default function AdminTournaments() {
                   <Input id="location" name="location" required />
                 </div>
                 <div>
-                  <Label htmlFor="start_date">Start Date</Label>
-                  <Input id="start_date" name="start_date" type="date" required />
+                  <Label htmlFor="start_date">Start Date (Optional)</Label>
+                  <Input id="start_date" name="start_date" type="date" />
                 </div>
                 <div>
-                  <Label htmlFor="end_date">End Date</Label>
-                  <Input id="end_date" name="end_date" type="date" required />
+                  <Label htmlFor="end_date">End Date (Optional)</Label>
+                  <Input id="end_date" name="end_date" type="date" />
                 </div>
                 <div>
                   <Label htmlFor="status">Status</Label>
-                  <Select name="status" required>
+                  <Select name="status" defaultValue="upcoming" required>
                     <SelectTrigger>
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
@@ -183,20 +189,30 @@ export default function AdminTournaments() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label htmlFor="discipline">Discipline</Label>
-                  <Select name="discipline" required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select discipline" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="slalom">Slalom</SelectItem>
-                      <SelectItem value="trick">Trick</SelectItem>
-                      <SelectItem value="jump">Jump</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-2">
+                  <Label>Disciplines</Label>
+                  <div className="flex gap-4">
+                    {['slalom', 'trick', 'jump'].map((disc) => (
+                      <div key={disc} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`create-disc-${disc}`}
+                          checked={disciplines.includes(disc)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setDisciplines([...disciplines, disc]);
+                            } else {
+                              setDisciplines(disciplines.filter(d => d !== disc));
+                            }
+                          }}
+                        />
+                        <label htmlFor={`create-disc-${disc}`} className="capitalize cursor-pointer">
+                          {disc}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <Button type="submit" className="w-full" disabled={createMutation.isPending}>
+                <Button type="submit" className="w-full" disabled={createMutation.isPending || disciplines.length === 0}>
                   {createMutation.isPending ? 'Creating...' : 'Create Tournament'}
                 </Button>
               </form>
@@ -219,10 +235,18 @@ export default function AdminTournaments() {
                     <div>
                       <CardTitle>{tournament.name}</CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {tournament.location} • {format(new Date(tournament.start_date), 'MMM d')} - {format(new Date(tournament.end_date), 'MMM d, yyyy')}
+                        {tournament.location} • {tournament.start_date ? format(new Date(tournament.start_date), 'MMM d, yyyy') : 'TBD'}
                       </p>
                     </div>
                     <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate('/admin/tournament-entries')}
+                      >
+                        <Users className="w-4 h-4 mr-2" />
+                        Manage Entries
+                      </Button>
                       <Button 
                         variant="outline" 
                         size="icon"
@@ -242,13 +266,15 @@ export default function AdminTournaments() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex gap-4 text-sm">
-                    <span className="px-2 py-1 bg-secondary text-secondary-foreground rounded">
+                  <div className="flex gap-2 items-center flex-wrap">
+                    <Badge variant="secondary">
                       {tournament.status}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {tournament.disciplines.join(', ')}
-                    </span>
+                    </Badge>
+                    {tournament.disciplines.map((disc) => (
+                      <Badge key={disc} variant="outline" className="capitalize">
+                        {disc}
+                      </Badge>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -263,7 +289,17 @@ export default function AdminTournaments() {
         )}
 
         {/* Edit Dialog */}
-        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog 
+        open={editOpen} 
+        onOpenChange={(open) => {
+          setEditOpen(open);
+          if (open && editingTournament) {
+            setEditDisciplines(editingTournament.disciplines || []);
+          } else {
+            setEditDisciplines([]);
+          }
+        }}
+      >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Tournament</DialogTitle>
@@ -293,8 +329,7 @@ export default function AdminTournaments() {
                   id="edit-start" 
                   name="start_date" 
                   type="date" 
-                  defaultValue={editingTournament?.start_date}
-                  required 
+                  defaultValue={editingTournament?.start_date || ''}
                 />
               </div>
               <div>
@@ -303,8 +338,7 @@ export default function AdminTournaments() {
                   id="edit-end" 
                   name="end_date" 
                   type="date" 
-                  defaultValue={editingTournament?.end_date}
-                  required 
+                  defaultValue={editingTournament?.end_date || ''}
                 />
               </div>
               <div>
@@ -320,20 +354,30 @@ export default function AdminTournaments() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label htmlFor="edit-discipline">Discipline</Label>
-                <Select name="discipline" defaultValue={editingTournament?.disciplines[0]} required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select discipline" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="slalom">Slalom</SelectItem>
-                    <SelectItem value="trick">Trick</SelectItem>
-                    <SelectItem value="jump">Jump</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <Label>Disciplines</Label>
+                <div className="flex gap-4">
+                  {['slalom', 'trick', 'jump'].map((disc) => (
+                    <div key={disc} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`edit-disc-${disc}`}
+                        checked={editDisciplines.includes(disc)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setEditDisciplines([...editDisciplines, disc]);
+                          } else {
+                            setEditDisciplines(editDisciplines.filter(d => d !== disc));
+                          }
+                        }}
+                      />
+                      <label htmlFor={`edit-disc-${disc}`} className="capitalize cursor-pointer">
+                        {disc}
+                      </label>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+              <Button type="submit" className="w-full" disabled={updateMutation.isPending || editDisciplines.length === 0}>
                 {updateMutation.isPending ? 'Updating...' : 'Update Tournament'}
               </Button>
             </form>

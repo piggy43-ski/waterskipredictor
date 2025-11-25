@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Trash2, Pencil, Eye, AlertTriangle } from 'lucide-react';
@@ -19,8 +20,7 @@ type Athlete = {
   name: string;
   country: string;
   gender: string;
-  discipline: string;
-  world_rank: number;
+  disciplines: string[];
   federation: string;
   current_rank_slalom?: number;
   current_rank_trick?: number;
@@ -34,8 +34,10 @@ export default function AdminAthletes() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDiscipline, setFilterDiscipline] = useState<string>('all');
   const [filterGender, setFilterGender] = useState<string>('all');
-  const [selectedDiscipline, setSelectedDiscipline] = useState<string>('slalom');
-  const [editSelectedDiscipline, setEditSelectedDiscipline] = useState<string>('slalom');
+  const [formDisciplines, setFormDisciplines] = useState<string[]>([]);
+  const [rankSlalom, setRankSlalom] = useState<string>('');
+  const [rankTrick, setRankTrick] = useState<string>('');
+  const [rankJump, setRankJump] = useState<string>('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -53,24 +55,17 @@ export default function AdminAthletes() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (formData: FormData) => {
-      const athlete = {
-        name: formData.get('name') as string,
-        country: formData.get('country') as string,
-        gender: formData.get('gender') as string,
-        discipline: selectedDiscipline,
-        world_rank: parseInt(formData.get('world_rank') as string) || 999,
-        federation: formData.get('federation') as string,
-        year_of_birth: 1990, // Default value - not displayed in UI
-      };
-
-      const { error } = await supabase.from('athletes').insert(athlete);
+    mutationFn: async (athleteData: any) => {
+      const { error } = await supabase.from('athletes').insert(athleteData);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-athletes'] });
       setOpen(false);
-      setSelectedDiscipline('slalom');
+      setFormDisciplines([]);
+      setRankSlalom('');
+      setRankTrick('');
+      setRankJump('');
       toast({ title: 'Athlete created successfully' });
     },
     onError: (error: Error) => {
@@ -79,7 +74,8 @@ export default function AdminAthletes() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Athlete> }) => {
+    mutationFn: async (athleteData: any) => {
+      const { id, ...updates } = athleteData;
       const { error } = await supabase
         .from('athletes')
         .update(updates)
@@ -90,6 +86,10 @@ export default function AdminAthletes() {
       queryClient.invalidateQueries({ queryKey: ['admin-athletes'] });
       setEditOpen(false);
       setEditingAthlete(null);
+      setFormDisciplines([]);
+      setRankSlalom('');
+      setRankTrick('');
+      setRankJump('');
       toast({ title: 'Athlete updated successfully' });
     },
     onError: (error: Error) => {
@@ -113,9 +113,7 @@ export default function AdminAthletes() {
 
   const clearAllMutation = useMutation({
     mutationFn: async () => {
-      // Delete rankings first due to foreign key
       await supabase.from('athlete_rankings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      // Then delete athletes
       const { error } = await supabase.from('athletes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       if (error) throw error;
     },
@@ -131,36 +129,72 @@ export default function AdminAthletes() {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    createMutation.mutate(formData);
+    
+    const athleteData: any = {
+      name: formData.get('name') as string,
+      country: formData.get('country') as string,
+      gender: formData.get('gender') as string,
+      disciplines: formDisciplines,
+      federation: formData.get('federation') as string,
+      year_of_birth: parseInt(formData.get('year_of_birth') as string),
+    };
+
+    if (formDisciplines.includes('slalom') && rankSlalom) {
+      athleteData.current_rank_slalom = parseInt(rankSlalom);
+    }
+    if (formDisciplines.includes('trick') && rankTrick) {
+      athleteData.current_rank_trick = parseInt(rankTrick);
+    }
+    if (formDisciplines.includes('jump') && rankJump) {
+      athleteData.current_rank_jump = parseInt(rankJump);
+    }
+    
+    createMutation.mutate(athleteData);
   };
 
   const handleEdit = (athlete: Athlete) => {
     setEditingAthlete(athlete);
-    setEditSelectedDiscipline(athlete.discipline || 'slalom');
+    setFormDisciplines(athlete.disciplines || []);
+    setRankSlalom(athlete.current_rank_slalom?.toString() || '');
+    setRankTrick(athlete.current_rank_trick?.toString() || '');
+    setRankJump(athlete.current_rank_jump?.toString() || '');
     setEditOpen(true);
   };
 
   const handleEditSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editingAthlete) return;
-
+    
     const formData = new FormData(e.currentTarget);
-    const updates = {
+    
+    const athleteData: any = {
+      id: editingAthlete.id,
       name: formData.get('name') as string,
       country: formData.get('country') as string,
       gender: formData.get('gender') as string,
-      discipline: editSelectedDiscipline,
-      world_rank: parseInt(formData.get('world_rank') as string) || editingAthlete.world_rank,
+      disciplines: formDisciplines,
       federation: formData.get('federation') as string,
+      year_of_birth: parseInt(formData.get('year_of_birth') as string),
     };
 
-    updateMutation.mutate({ id: editingAthlete.id, updates });
+    if (formDisciplines.includes('slalom') && rankSlalom) {
+      athleteData.current_rank_slalom = parseInt(rankSlalom);
+    }
+    if (formDisciplines.includes('trick') && rankTrick) {
+      athleteData.current_rank_trick = parseInt(rankTrick);
+    }
+    if (formDisciplines.includes('jump') && rankJump) {
+      athleteData.current_rank_jump = parseInt(rankJump);
+    }
+    
+    updateMutation.mutate(athleteData);
   };
 
   const filteredAthletes = athletes?.filter(athlete => {
     const matchesSearch = athlete.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          athlete.country.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDiscipline = filterDiscipline === 'all' || athlete.discipline === filterDiscipline;
+    const matchesDiscipline = filterDiscipline === 'all' || 
+      athlete.disciplines?.some((d: string) => d === filterDiscipline);
     const matchesGender = filterGender === 'all' || athlete.gender === filterGender;
     return matchesSearch && matchesDiscipline && matchesGender;
   });
@@ -204,14 +238,22 @@ export default function AdminAthletes() {
               </AlertDialogContent>
             </AlertDialog>
 
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(newOpen) => {
+              setOpen(newOpen);
+              if (!newOpen) {
+                setFormDisciplines([]);
+                setRankSlalom('');
+                setRankTrick('');
+                setRankJump('');
+              }
+            }}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
                   Add Athlete
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Create Athlete</DialogTitle>
                 </DialogHeader>
@@ -241,22 +283,68 @@ export default function AdminAthletes() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="discipline">Discipline</Label>
-                    <Select value={selectedDiscipline} onValueChange={setSelectedDiscipline}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="slalom">Slalom</SelectItem>
-                        <SelectItem value="trick">Trick</SelectItem>
-                        <SelectItem value="jump">Jump</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="year_of_birth">Year of Birth</Label>
+                    <Input id="year_of_birth" name="year_of_birth" type="number" defaultValue="1990" required />
                   </div>
-                  <div>
-                    <Label htmlFor="world_rank">World Rank</Label>
-                    <Input id="world_rank" name="world_rank" type="number" placeholder="1-999" />
+                  <div className="space-y-2">
+                    <Label>Disciplines</Label>
+                    <div className="flex gap-4">
+                      {['slalom', 'trick', 'jump'].map((disc) => (
+                        <div key={disc} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`create-${disc}`}
+                            checked={formDisciplines.includes(disc)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setFormDisciplines([...formDisciplines, disc]);
+                              } else {
+                                setFormDisciplines(formDisciplines.filter(d => d !== disc));
+                              }
+                            }}
+                          />
+                          <label htmlFor={`create-${disc}`} className="capitalize cursor-pointer">
+                            {disc}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+
+                  {formDisciplines.includes('slalom') && (
+                    <div>
+                      <Label htmlFor="rank_slalom">Slalom Rank</Label>
+                      <Input 
+                        id="rank_slalom" 
+                        type="number" 
+                        value={rankSlalom}
+                        onChange={(e) => setRankSlalom(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {formDisciplines.includes('trick') && (
+                    <div>
+                      <Label htmlFor="rank_trick">Trick Rank</Label>
+                      <Input 
+                        id="rank_trick" 
+                        type="number"
+                        value={rankTrick}
+                        onChange={(e) => setRankTrick(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {formDisciplines.includes('jump') && (
+                    <div>
+                      <Label htmlFor="rank_jump">Jump Rank</Label>
+                      <Input 
+                        id="rank_jump" 
+                        type="number"
+                        value={rankJump}
+                        onChange={(e) => setRankJump(e.target.value)}
+                      />
+                    </div>
+                  )}
                   <Button type="submit" className="w-full" disabled={createMutation.isPending}>
                     {createMutation.isPending ? 'Creating...' : 'Create Athlete'}
                   </Button>
@@ -350,30 +438,24 @@ export default function AdminAthletes() {
                 <CardContent>
                   <div className="space-y-2">
                     <div className="flex gap-2 items-center flex-wrap">
-                      <span className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm">
+                      <Badge variant="secondary">
                         {athlete.gender}
-                      </span>
-                      <span className="px-2 py-1 bg-primary/10 text-primary rounded text-sm capitalize">
-                        {athlete.discipline}
-                      </span>
-                      <span className="px-2 py-1 bg-accent/10 text-accent rounded text-sm">
-                        Rank #{athlete.world_rank}
-                      </span>
+                      </Badge>
+                      {athlete.disciplines?.map((disc) => (
+                        <Badge key={disc} variant="outline" className="capitalize">
+                          {disc}
+                        </Badge>
+                      ))}
+                      {athlete.current_rank_slalom && (
+                        <Badge>S: {athlete.current_rank_slalom}</Badge>
+                      )}
+                      {athlete.current_rank_trick && (
+                        <Badge>T: {athlete.current_rank_trick}</Badge>
+                      )}
+                      {athlete.current_rank_jump && (
+                        <Badge>J: {athlete.current_rank_jump}</Badge>
+                      )}
                     </div>
-                    
-                    {(athlete.current_rank_slalom || athlete.current_rank_trick || athlete.current_rank_jump) && (
-                      <div className="flex gap-4 text-sm text-muted-foreground">
-                        {athlete.current_rank_slalom && (
-                          <span>Slalom Rank: #{athlete.current_rank_slalom}</span>
-                        )}
-                        {athlete.current_rank_trick && (
-                          <span>Trick Rank: #{athlete.current_rank_trick}</span>
-                        )}
-                        {athlete.current_rank_jump && (
-                          <span>Jump Rank: #{athlete.current_rank_jump}</span>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -388,8 +470,22 @@ export default function AdminAthletes() {
         )}
 
         {/* Edit Dialog */}
-        <Dialog open={editOpen} onOpenChange={setEditOpen}>
-          <DialogContent>
+        <Dialog open={editOpen} onOpenChange={(open) => {
+          setEditOpen(open);
+          if (!open) {
+            setEditingAthlete(null);
+            setFormDisciplines([]);
+            setRankSlalom('');
+            setRankTrick('');
+            setRankJump('');
+          } else if (editingAthlete) {
+            setFormDisciplines(editingAthlete.disciplines || []);
+            setRankSlalom(editingAthlete.current_rank_slalom?.toString() || '');
+            setRankTrick(editingAthlete.current_rank_trick?.toString() || '');
+            setRankJump(editingAthlete.current_rank_jump?.toString() || '');
+          }
+        }}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Athlete</DialogTitle>
             </DialogHeader>
@@ -434,28 +530,74 @@ export default function AdminAthletes() {
                 </Select>
               </div>
               <div>
-                <Label>Discipline</Label>
-                <Select value={editSelectedDiscipline} onValueChange={setEditSelectedDiscipline}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="slalom">Slalom</SelectItem>
-                    <SelectItem value="trick">Trick</SelectItem>
-                    <SelectItem value="jump">Jump</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-world-rank">World Rank</Label>
+                <Label htmlFor="edit-year-of-birth">Year of Birth</Label>
                 <Input 
-                  id="edit-world-rank" 
-                  name="world_rank" 
-                  type="number"
-                  defaultValue={editingAthlete?.world_rank} 
+                  id="edit-year-of-birth" 
+                  name="year_of_birth" 
+                  type="number" 
+                  defaultValue="1990"
                   required 
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Disciplines</Label>
+                <div className="flex gap-4">
+                  {['slalom', 'trick', 'jump'].map((disc) => (
+                    <div key={disc} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`edit-${disc}`}
+                        checked={formDisciplines.includes(disc)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setFormDisciplines([...formDisciplines, disc]);
+                          } else {
+                            setFormDisciplines(formDisciplines.filter(d => d !== disc));
+                          }
+                        }}
+                      />
+                      <label htmlFor={`edit-${disc}`} className="capitalize cursor-pointer">
+                        {disc}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {formDisciplines.includes('slalom') && (
+                <div>
+                  <Label htmlFor="edit-rank-slalom">Slalom Rank</Label>
+                  <Input 
+                    id="edit-rank-slalom" 
+                    type="number"
+                    value={rankSlalom}
+                    onChange={(e) => setRankSlalom(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {formDisciplines.includes('trick') && (
+                <div>
+                  <Label htmlFor="edit-rank-trick">Trick Rank</Label>
+                  <Input 
+                    id="edit-rank-trick" 
+                    type="number"
+                    value={rankTrick}
+                    onChange={(e) => setRankTrick(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {formDisciplines.includes('jump') && (
+                <div>
+                  <Label htmlFor="edit-rank-jump">Jump Rank</Label>
+                  <Input 
+                    id="edit-rank-jump" 
+                    type="number"
+                    value={rankJump}
+                    onChange={(e) => setRankJump(e.target.value)}
+                  />
+                </div>
+              )}
               <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? 'Updating...' : 'Update Athlete'}
               </Button>
