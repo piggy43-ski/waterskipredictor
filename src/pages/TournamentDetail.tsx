@@ -616,6 +616,7 @@ const TournamentDetail = () => {
                             <SelectionCard
                               selection={selection}
                               onSelect={(sel) => handleSelectSelection(sel, false)}
+                              discipline={discipline}
                             />
                           </div>
                         ))}
@@ -646,6 +647,7 @@ const TournamentDetail = () => {
                             <SelectionCard
                               selection={selection}
                               onSelect={(sel) => handleSelectSelection(sel, false)}
+                              discipline={discipline}
                             />
                           </div>
                         ))}
@@ -686,6 +688,7 @@ const TournamentDetail = () => {
                               athletes={podiumSelections}
                               selectedAthletes={selectedPodiumAthletes}
                               onToggleAthlete={handleTogglePodiumAthlete}
+                              discipline={discipline}
                             />
                             {selectedPodiumAthletes.length === 3 && (
                               <button
@@ -725,6 +728,7 @@ const TournamentDetail = () => {
                               athletes={podiumSelections}
                               selectedAthletes={selectedPodiumAthletes}
                               onToggleAthlete={handleTogglePodiumAthlete}
+                              discipline={discipline}
                             />
                             {selectedPodiumAthletes.length === 3 && (
                               <button
@@ -774,6 +778,7 @@ const TournamentDetail = () => {
                             <SelectionCard
                               selection={selection}
                               onSelect={(sel) => handleSelectSelection(sel, false)}
+                              discipline={discipline}
                             />
                           </div>
                         ))}
@@ -804,6 +809,7 @@ const TournamentDetail = () => {
                             <SelectionCard
                               selection={selection}
                               onSelect={(sel) => handleSelectSelection(sel, false)}
+                              discipline={discipline}
                             />
                           </div>
                         ))}
