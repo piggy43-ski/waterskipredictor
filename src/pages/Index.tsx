@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament } from '@/types';
+import { applyDynamicStatus } from '@/utils/tournamentStatus';
 
 interface UserPrediction {
   id: string;
@@ -34,26 +35,30 @@ const Index = () => {
 
   const fetchData = async () => {
     try {
-      // Fetch featured tournament
-      const { data: tournamentData } = await supabase
+      // Fetch featured tournament - prioritize live, then upcoming
+      let { data: tournamentData } = await supabase
         .from('tournaments')
         .select('*')
-        .eq('status', 'upcoming')
-        .order('start_date', { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .order('start_date', { ascending: true });
 
-      if (tournamentData) {
-        setFeaturedTournament({
-          id: tournamentData.id,
-          name: tournamentData.name,
-          location: tournamentData.location,
-          start_date: tournamentData.start_date,
-          end_date: tournamentData.end_date,
-          disciplines: tournamentData.disciplines as Array<'slalom' | 'trick' | 'jump'>,
-          status: tournamentData.status as 'upcoming' | 'live' | 'finished'
-        });
-      }
+      // Apply dynamic status to all tournaments
+      const tournamentsWithStatus = (tournamentData || []).map(t => 
+        applyDynamicStatus({
+          id: t.id,
+          name: t.name,
+          location: t.location,
+          start_date: t.start_date,
+          end_date: t.end_date,
+          disciplines: t.disciplines as Array<'slalom' | 'trick' | 'jump'>,
+          status: t.status as 'upcoming' | 'live' | 'finished'
+        })
+      );
+
+      // Prioritize live tournaments, then upcoming
+      const liveTournament = tournamentsWithStatus.find(t => t.status === 'live');
+      const upcomingTournament = tournamentsWithStatus.find(t => t.status === 'upcoming');
+      
+      setFeaturedTournament(liveTournament || upcomingTournament || null);
 
       if (user) {
         // Fetch wallet balance
