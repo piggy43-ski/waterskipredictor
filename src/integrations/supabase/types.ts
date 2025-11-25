@@ -130,7 +130,7 @@ export type Database = {
           current_rank_jump: number | null
           current_rank_slalom: number | null
           current_rank_trick: number | null
-          disciplines: string[]
+          discipline: string | null
           fantasy_price_jump: number | null
           fantasy_price_slalom: number | null
           fantasy_price_trick: number | null
@@ -148,6 +148,7 @@ export type Database = {
           popularity_index: number | null
           profile_image_url: string | null
           updated_at: string
+          world_rank: number | null
           year_of_birth: number
         }
         Insert: {
@@ -161,7 +162,7 @@ export type Database = {
           current_rank_jump?: number | null
           current_rank_slalom?: number | null
           current_rank_trick?: number | null
-          disciplines?: string[]
+          discipline?: string | null
           fantasy_price_jump?: number | null
           fantasy_price_slalom?: number | null
           fantasy_price_trick?: number | null
@@ -179,6 +180,7 @@ export type Database = {
           popularity_index?: number | null
           profile_image_url?: string | null
           updated_at?: string
+          world_rank?: number | null
           year_of_birth: number
         }
         Update: {
@@ -192,7 +194,7 @@ export type Database = {
           current_rank_jump?: number | null
           current_rank_slalom?: number | null
           current_rank_trick?: number | null
-          disciplines?: string[]
+          discipline?: string | null
           fantasy_price_jump?: number | null
           fantasy_price_slalom?: number | null
           fantasy_price_trick?: number | null
@@ -210,6 +212,7 @@ export type Database = {
           popularity_index?: number | null
           profile_image_url?: string | null
           updated_at?: string
+          world_rank?: number | null
           year_of_birth?: number
         }
         Relationships: []
@@ -571,39 +574,93 @@ export type Database = {
           },
         ]
       }
+      tournament_entries: {
+        Row: {
+          athlete_id: string
+          created_at: string | null
+          custom_odds: number | null
+          discipline: string
+          id: string
+          tournament_id: string
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string | null
+          custom_odds?: number | null
+          discipline: string
+          id?: string
+          tournament_id: string
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string | null
+          custom_odds?: number | null
+          discipline?: string
+          id?: string
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_entries_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_entries_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tournaments: {
         Row: {
+          allow_bet_modification_until: string | null
+          betting_open_time: string | null
           created_at: string
           disciplines: string[]
-          end_date: string
+          end_date: string | null
           id: string
           location: string
           name: string
-          start_date: string
+          notes: string | null
+          start_date: string | null
           status: string
           updated_at: string
+          year: number | null
         }
         Insert: {
+          allow_bet_modification_until?: string | null
+          betting_open_time?: string | null
           created_at?: string
           disciplines?: string[]
-          end_date: string
+          end_date?: string | null
           id?: string
           location: string
           name: string
-          start_date: string
+          notes?: string | null
+          start_date?: string | null
           status?: string
           updated_at?: string
+          year?: number | null
         }
         Update: {
+          allow_bet_modification_until?: string | null
+          betting_open_time?: string | null
           created_at?: string
           disciplines?: string[]
-          end_date?: string
+          end_date?: string | null
           id?: string
           location?: string
           name?: string
-          start_date?: string
+          notes?: string | null
+          start_date?: string | null
           status?: string
           updated_at?: string
+          year?: number | null
         }
         Relationships: []
       }

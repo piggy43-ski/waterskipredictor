@@ -8,7 +8,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'USA',
     federation: 'USA-WSWS',
-    disciplines: ['slalom']
+    discipline: 'slalom',
+    world_rank: 1
   },
   {
     id: '2',
@@ -16,7 +17,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'CAN',
     federation: 'WS Canada',
-    disciplines: ['slalom']
+    discipline: 'slalom',
+    world_rank: 2
   },
   {
     id: '3',
@@ -24,7 +26,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'AUS',
     federation: 'AWWF',
-    disciplines: ['slalom']
+    discipline: 'slalom',
+    world_rank: 3
   },
   {
     id: '4',
@@ -32,7 +35,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'USA',
     federation: 'USA-WSWS',
-    disciplines: ['slalom']
+    discipline: 'slalom',
+    world_rank: 4
   },
   {
     id: '5',
@@ -40,7 +44,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'male',
     country: 'USA',
     federation: 'USA-WSWS',
-    disciplines: ['slalom']
+    discipline: 'slalom',
+    world_rank: 5
   },
   {
     id: '6',
@@ -48,7 +53,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'female',
     country: 'USA',
     federation: 'USA-WSWS',
-    disciplines: ['slalom']
+    discipline: 'slalom',
+    world_rank: 1
   },
   {
     id: '7',
@@ -56,7 +62,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'female',
     country: 'CAN',
     federation: 'WS Canada',
-    disciplines: ['slalom']
+    discipline: 'slalom',
+    world_rank: 2
   },
   {
     id: '8',
@@ -64,7 +71,8 @@ export const mockAthletes: Athlete[] = [
     gender: 'female',
     country: 'ARG',
     federation: 'Argentina',
-    disciplines: ['slalom']
+    discipline: 'slalom',
+    world_rank: 3
   }
 ];
 

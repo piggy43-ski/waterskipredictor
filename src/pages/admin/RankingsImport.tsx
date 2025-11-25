@@ -79,10 +79,9 @@ export default function RankingsImport() {
             country_code: countryTrimmed,
           };
 
-          // Add discipline if not already present
-          const currentDisciplines = bestMatch.disciplines || [];
-          if (!currentDisciplines.includes(discipline)) {
-            updateData.disciplines = [...currentDisciplines, discipline];
+          const currentDisciplines = bestMatch.discipline;
+          if (currentDisciplines !== discipline) {
+            updateData.discipline = discipline;
           }
 
           await supabase
@@ -101,7 +100,8 @@ export default function RankingsImport() {
               country: countryTrimmed,
               country_code: countryTrimmed,
               gender,
-              disciplines: [discipline],
+              discipline,
+              world_rank: rank,
               federation: 'IWWF',
               year_of_birth: 1990, // Default value - not displayed in UI
               [`current_rank_${discipline}`]: rank,

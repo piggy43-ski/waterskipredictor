@@ -19,7 +19,8 @@ type Athlete = {
   name: string;
   country: string;
   gender: string;
-  disciplines: string[];
+  discipline: string;
+  world_rank: number;
   federation: string;
   current_rank_slalom?: number;
   current_rank_trick?: number;
@@ -33,8 +34,8 @@ export default function AdminAthletes() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDiscipline, setFilterDiscipline] = useState<string>('all');
   const [filterGender, setFilterGender] = useState<string>('all');
-  const [selectedDisciplines, setSelectedDisciplines] = useState<string[]>(['slalom']);
-  const [editSelectedDisciplines, setEditSelectedDisciplines] = useState<string[]>([]);
+  const [selectedDiscipline, setSelectedDiscipline] = useState<string>('slalom');
+  const [editSelectedDiscipline, setEditSelectedDiscipline] = useState<string>('slalom');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -47,7 +48,7 @@ export default function AdminAthletes() {
         .order('name');
       
       if (error) throw error;
-      return data as Athlete[];
+      return data;
     },
   });
 
@@ -57,7 +58,8 @@ export default function AdminAthletes() {
         name: formData.get('name') as string,
         country: formData.get('country') as string,
         gender: formData.get('gender') as string,
-        disciplines: selectedDisciplines,
+        discipline: selectedDiscipline,
+        world_rank: parseInt(formData.get('world_rank') as string) || 999,
         federation: formData.get('federation') as string,
         year_of_birth: 1990, // Default value - not displayed in UI
       };
@@ -68,7 +70,7 @@ export default function AdminAthletes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-athletes'] });
       setOpen(false);
-      setSelectedDisciplines(['slalom']);
+      setSelectedDiscipline('slalom');
       toast({ title: 'Athlete created successfully' });
     },
     onError: (error: Error) => {
@@ -128,17 +130,13 @@ export default function AdminAthletes() {
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (selectedDisciplines.length === 0) {
-      toast({ title: 'Please select at least one discipline', variant: 'destructive' });
-      return;
-    }
     const formData = new FormData(e.currentTarget);
     createMutation.mutate(formData);
   };
 
   const handleEdit = (athlete: Athlete) => {
     setEditingAthlete(athlete);
-    setEditSelectedDisciplines(athlete.disciplines || []);
+    setEditSelectedDiscipline(athlete.discipline || 'slalom');
     setEditOpen(true);
   };
 
@@ -146,43 +144,23 @@ export default function AdminAthletes() {
     e.preventDefault();
     if (!editingAthlete) return;
 
-    if (editSelectedDisciplines.length === 0) {
-      toast({ title: 'Please select at least one discipline', variant: 'destructive' });
-      return;
-    }
-
     const formData = new FormData(e.currentTarget);
     const updates = {
       name: formData.get('name') as string,
       country: formData.get('country') as string,
       gender: formData.get('gender') as string,
-      disciplines: editSelectedDisciplines,
+      discipline: editSelectedDiscipline,
+      world_rank: parseInt(formData.get('world_rank') as string) || editingAthlete.world_rank,
       federation: formData.get('federation') as string,
     };
 
     updateMutation.mutate({ id: editingAthlete.id, updates });
   };
 
-  const toggleDiscipline = (discipline: string, isEdit: boolean = false) => {
-    if (isEdit) {
-      setEditSelectedDisciplines(prev =>
-        prev.includes(discipline)
-          ? prev.filter(d => d !== discipline)
-          : [...prev, discipline]
-      );
-    } else {
-      setSelectedDisciplines(prev =>
-        prev.includes(discipline)
-          ? prev.filter(d => d !== discipline)
-          : [...prev, discipline]
-      );
-    }
-  };
-
   const filteredAthletes = athletes?.filter(athlete => {
     const matchesSearch = athlete.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          athlete.country.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDiscipline = filterDiscipline === 'all' || athlete.disciplines.includes(filterDiscipline);
+    const matchesDiscipline = filterDiscipline === 'all' || athlete.discipline === filterDiscipline;
     const matchesGender = filterGender === 'all' || athlete.gender === filterGender;
     return matchesSearch && matchesDiscipline && matchesGender;
   });
@@ -263,24 +241,21 @@ export default function AdminAthletes() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Disciplines</Label>
-                    <div className="space-y-2 mt-2">
-                      {['slalom', 'trick', 'jump'].map((discipline) => (
-                        <div key={discipline} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={discipline}
-                            checked={selectedDisciplines.includes(discipline)}
-                            onCheckedChange={() => toggleDiscipline(discipline)}
-                          />
-                          <label
-                            htmlFor={discipline}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize"
-                          >
-                            {discipline}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
+                    <Label htmlFor="discipline">Discipline</Label>
+                    <Select value={selectedDiscipline} onValueChange={setSelectedDiscipline}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="slalom">Slalom</SelectItem>
+                        <SelectItem value="trick">Trick</SelectItem>
+                        <SelectItem value="jump">Jump</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="world_rank">World Rank</Label>
+                    <Input id="world_rank" name="world_rank" type="number" placeholder="1-999" />
                   </div>
                   <Button type="submit" className="w-full" disabled={createMutation.isPending}>
                     {createMutation.isPending ? 'Creating...' : 'Create Athlete'}
@@ -378,11 +353,12 @@ export default function AdminAthletes() {
                       <span className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm">
                         {athlete.gender}
                       </span>
-                      {athlete.disciplines.map((discipline) => (
-                        <span key={discipline} className="px-2 py-1 bg-primary/10 text-primary rounded text-sm capitalize">
-                          {discipline}
-                        </span>
-                      ))}
+                      <span className="px-2 py-1 bg-primary/10 text-primary rounded text-sm capitalize">
+                        {athlete.discipline}
+                      </span>
+                      <span className="px-2 py-1 bg-accent/10 text-accent rounded text-sm">
+                        Rank #{athlete.world_rank}
+                      </span>
                     </div>
                     
                     {(athlete.current_rank_slalom || athlete.current_rank_trick || athlete.current_rank_jump) && (
@@ -458,24 +434,27 @@ export default function AdminAthletes() {
                 </Select>
               </div>
               <div>
-                <Label>Disciplines</Label>
-                <div className="space-y-2 mt-2">
-                  {['slalom', 'trick', 'jump'].map((discipline) => (
-                    <div key={discipline} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`edit-${discipline}`}
-                        checked={editSelectedDisciplines.includes(discipline)}
-                        onCheckedChange={() => toggleDiscipline(discipline, true)}
-                      />
-                      <label
-                        htmlFor={`edit-${discipline}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize"
-                      >
-                        {discipline}
-                      </label>
-                    </div>
-                  ))}
-                </div>
+                <Label>Discipline</Label>
+                <Select value={editSelectedDiscipline} onValueChange={setEditSelectedDiscipline}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="slalom">Slalom</SelectItem>
+                    <SelectItem value="trick">Trick</SelectItem>
+                    <SelectItem value="jump">Jump</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-world-rank">World Rank</Label>
+                <Input 
+                  id="edit-world-rank" 
+                  name="world_rank" 
+                  type="number"
+                  defaultValue={editingAthlete?.world_rank} 
+                  required 
+                />
               </div>
               <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? 'Updating...' : 'Update Athlete'}

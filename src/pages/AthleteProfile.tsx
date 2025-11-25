@@ -61,7 +61,7 @@ export default function AthleteProfile() {
     );
   }
 
-  const disciplines = athlete.disciplines || [];
+  const discipline = athlete.discipline;
 
   return (
     <div className="min-h-screen bg-background">
@@ -92,11 +92,11 @@ export default function AthleteProfile() {
               {athlete.country_code || athlete.country}
             </p>
             <div className="flex gap-2 mt-3">
-              {disciplines.map((d: string) => (
-                <span key={d} className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm capitalize">
-                  {d}
+              {discipline && (
+                <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm capitalize">
+                  {discipline}
                 </span>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -109,50 +109,41 @@ export default function AthleteProfile() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {disciplines.map((discipline: string) => {
-            const rank = athlete[`current_rank_${discipline}`];
-            const points = athlete[`current_points_${discipline}`];
-            const perfIndex = athlete[`performance_index_${discipline}`] || 0;
-            const fantasyPrice = athlete[`fantasy_price_${discipline}`] || 0;
+        {discipline && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="capitalize text-lg">{discipline}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">World Rank</p>
+                <p className="text-3xl font-bold text-primary">
+                  {athlete.world_rank || athlete[`current_rank_${discipline}`] || 'N/A'}
+                </p>
+              </div>
+              
+              {athlete[`current_points_${discipline}`] && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Points</p>
+                  <p className="text-xl font-semibold">{athlete[`current_points_${discipline}`].toFixed(2)}</p>
+                </div>
+              )}
 
-            return (
-              <Card key={discipline}>
-                <CardHeader>
-                  <CardTitle className="capitalize text-lg">{discipline}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">World Rank</p>
-                    <p className="text-3xl font-bold text-primary">
-                      {rank || 'N/A'}
-                    </p>
-                  </div>
-                  
-                  {points && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Points</p>
-                      <p className="text-xl font-semibold">{points.toFixed(2)}</p>
-                    </div>
-                  )}
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Performance</p>
+                <Progress value={(athlete[`performance_index_${discipline}`] || 0) * 100} className="h-2" />
+                <p className="text-xs text-muted-foreground mt-1">{((athlete[`performance_index_${discipline}`] || 0) * 100).toFixed(0)}%</p>
+              </div>
 
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Performance</p>
-                    <Progress value={perfIndex * 100} className="h-2" />
-                    <p className="text-xs text-muted-foreground mt-1">{(perfIndex * 100).toFixed(0)}%</p>
-                  </div>
-
-                  {fantasyPrice > 0 && (
-                    <div className="pt-2 border-t">
-                      <p className="text-sm text-muted-foreground">Fantasy Price</p>
-                      <p className="text-xl font-bold text-accent">{fantasyPrice} tokens</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+              {athlete[`fantasy_price_${discipline}`] && athlete[`fantasy_price_${discipline}`] > 0 && (
+                <div className="pt-2 border-t">
+                  <p className="text-sm text-muted-foreground">Fantasy Price</p>
+                  <p className="text-xl font-bold text-accent">{athlete[`fantasy_price_${discipline}`]} tokens</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {recentResult && (
           <Card>

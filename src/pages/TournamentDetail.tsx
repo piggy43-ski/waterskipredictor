@@ -130,14 +130,14 @@ const TournamentDetail = () => {
             athlete: {
               id: s.athlete.id,
               name: s.athlete.name,
-              gender: s.athlete.gender as 'male' | 'female',
+              gender: s.athlete.gender,
               country: s.athlete.country,
               federation: s.athlete.federation,
-              year_of_birth: s.athlete.year_of_birth,
-              disciplines: s.athlete.disciplines as Array<'slalom' | 'trick' | 'jump'>
+              discipline: s.athlete.discipline,
+              world_rank: s.athlete.world_rank,
             },
             description: s.description,
-            decimal_odds: parseFloat(s.decimal_odds)
+            decimal_odds: Number(s.decimal_odds),
           }));
 
           setSelections(mappedSelections);
