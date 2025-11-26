@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Selection } from '@/types';
-import { Coins } from 'lucide-react';
+import { Coins, Medal } from 'lucide-react';
+import { decimalToAmerican } from '@/utils/oddsConverter';
 
 interface PodiumPredictionDialogProps {
   selections: Selection[];
@@ -34,6 +35,7 @@ export const PodiumPredictionDialog = ({
   // Calculate combined odds for podium (lower odds since it's easier to win)
   const combinedOdds = selections.reduce((acc, sel) => acc * sel.decimal_odds, 1) * 0.3;
   const potentialPayout = Math.floor(Number(stakeAmount) * combinedOdds);
+  const americanOdds = decimalToAmerican(combinedOdds);
 
   const handleConfirm = () => {
     const amount = Number(stakeAmount);
@@ -54,22 +56,29 @@ export const PodiumPredictionDialog = ({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Selected Athletes */}
+          {/* Selected Athletes with Positions */}
           <div className="space-y-2">
-            <Label>Selected Athletes:</Label>
-            {selections.map((selection, index) => (
-              <div key={selection.id} className="flex items-center gap-2 p-2 bg-muted rounded">
-                <span className="font-semibold text-primary">{index + 1}.</span>
-                <span className="font-medium">{selection.athlete.name}</span>
-              </div>
-            ))}
+            <Label>Your Predicted Podium:</Label>
+            {selections.map((selection, index) => {
+              const medals = ['🥇', '🥈', '🥉'];
+              const positions = ['1st Place', '2nd Place', '3rd Place'];
+              return (
+                <div key={selection.id} className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                  <span className="text-2xl">{medals[index]}</span>
+                  <div className="flex-1">
+                    <div className="font-bold">{selection.athlete.name}</div>
+                    <div className="text-xs text-muted-foreground">{positions[index]}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Combined Odds */}
           <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg">
             <span className="text-sm font-medium">Combined Odds:</span>
             <span className="text-lg font-bold text-primary">
-              {combinedOdds.toFixed(2)}x
+              {americanOdds}
             </span>
           </div>
 
