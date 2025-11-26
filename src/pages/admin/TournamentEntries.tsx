@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Plus, Trash2 } from 'lucide-react';
 import type { Discipline } from '@/types';
+import { decimalToAmerican } from '@/utils/oddsConverter';
 
 export default function TournamentEntries() {
   const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
@@ -35,7 +36,7 @@ export default function TournamentEntries() {
   });
 
   const { data: athletes } = useQuery({
-    queryKey: ['athletes-for-tournament', selectedDiscipline, selectedGender],
+    queryKey: ['athletes-for-tournament', selectedDiscipline, selectedGender, selectedTournamentId],
     queryFn: async () => {
       let query = supabase
         .from('athletes')
@@ -48,6 +49,13 @@ export default function TournamentEntries() {
       
       const { data, error } = await query;
       if (error) throw error;
+      
+      // Filter out athletes already in this tournament for this discipline
+      if (selectedTournamentId && data) {
+        const existingEntryIds = entries?.filter(e => e.discipline === selectedDiscipline).map(e => e.athlete_id) || [];
+        return data.filter(athlete => !existingEntryIds.includes(athlete.id));
+      }
+      
       return data;
     },
     enabled: !!selectedDiscipline,
@@ -279,7 +287,7 @@ export default function TournamentEntries() {
                             {entry.athlete?.current_rank_jump && <span className="mr-2">J: {entry.athlete.current_rank_jump}</span>}
                           </div>
                           <span className="text-sm text-muted-foreground">
-                            Odds: {entry.custom_odds?.toFixed(2)}
+                            Odds: {decimalToAmerican(entry.custom_odds || 2.5)}
                           </span>
                         </div>
                         <Button
@@ -333,6 +341,12 @@ export default function TournamentEntries() {
 
                 {athletes && athletes.length > 0 && (
                   <>
+                    <div className="text-sm text-muted-foreground mb-2">
+                      Showing {athletes.length} available athletes
+                      {entries && entries.filter(e => e.discipline === selectedDiscipline).length > 0 && 
+                        ` (${entries.filter(e => e.discipline === selectedDiscipline).length} already entered)`
+                      }
+                    </div>
                     <div className="border rounded-lg divide-y max-h-96 overflow-y-auto">
                       {athletes.map((athlete: any) => {
                         const rank = athlete[`current_rank_${selectedDiscipline}`];
@@ -363,7 +377,7 @@ export default function TournamentEntries() {
                                 <Input
                                   type="number"
                                   step="0.01"
-                                  placeholder={`Auto: ${oddsValue.toFixed(2)}`}
+                                  placeholder={`Auto: ${decimalToAmerican(oddsValue)}`}
                                   value={customOdds[athlete.id] || ''}
                                   onChange={(e) => setCustomOdds(prev => ({
                                     ...prev,

@@ -6,6 +6,7 @@ import { SelectionCard } from '@/components/SelectionCard';
 import { PredictionDialog } from '@/components/PredictionDialog';
 import { PodiumSelectionCard } from '@/components/PodiumSelectionCard';
 import { PodiumPredictionDialog } from '@/components/PodiumPredictionDialog';
+import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
 import { ParlayCart } from '@/components/ParlayCart';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Selection, Tournament, Market } from '@/types';
@@ -33,7 +34,9 @@ const TournamentDetail = () => {
   // Podium betting state
   const [selectedPodiumAthletes, setSelectedPodiumAthletes] = useState<Selection[]>([]);
   const [podiumDialogOpen, setPodiumDialogOpen] = useState(false);
+  const [positionAssignerOpen, setPositionAssignerOpen] = useState(false);
   const [currentPodiumMarket, setCurrentPodiumMarket] = useState<Market | null>(null);
+  const [assignedPositions, setAssignedPositions] = useState<{ first: Selection; second: Selection; third: Selection } | null>(null);
   
   // Parlay state
   const [parlaySelections, setParlaySelections] = useState<Selection[]>([]);
@@ -237,19 +240,32 @@ const TournamentDetail = () => {
       setSelectedPodiumAthletes(selectedPodiumAthletes.filter(a => a.id !== athlete.id));
     } else if (selectedPodiumAthletes.length < 3) {
       setSelectedPodiumAthletes([...selectedPodiumAthletes, athlete]);
+      
+      // When 3 athletes selected, open position assigner
+      if (selectedPodiumAthletes.length === 2) {
+        setPositionAssignerOpen(true);
+      }
     }
   };
 
-  const handleOpenPodiumBet = (market: Market) => {
-    setCurrentPodiumMarket(market);
-    setSelectedPodiumAthletes([]);
+  const handleAssignPositions = (positions: { first: Selection; second: Selection; third: Selection }) => {
+    setAssignedPositions(positions);
+    setPositionAssignerOpen(false);
     setPodiumDialogOpen(true);
   };
 
-  const handleConfirmPodiumPrediction = async (stakeAmount: number) => {
-    if (!user || selectedPodiumAthletes.length !== 3 || !currentPodiumMarket) return;
+  const handleOpenPodiumBet = (market: Market) => {
+    if (selectedPodiumAthletes.length === 3 && assignedPositions) {
+      setCurrentPodiumMarket(market);
+      setPodiumDialogOpen(true);
+    }
+  };
 
-    const combinedOdds = selectedPodiumAthletes.reduce((acc, sel) => acc * sel.decimal_odds, 1) * 0.3;
+  const handleConfirmPodiumPrediction = async (stakeAmount: number) => {
+    if (!user || !assignedPositions || !currentPodiumMarket) return;
+
+    const orderedSelections = [assignedPositions.first, assignedPositions.second, assignedPositions.third];
+    const combinedOdds = orderedSelections.reduce((acc, sel) => acc * sel.decimal_odds, 1) * 0.3;
     const potentialPayout = Math.floor(stakeAmount * combinedOdds);
 
     try {
@@ -258,7 +274,7 @@ const TournamentDetail = () => {
         .from('predictions')
         .insert({
           user_id: user.id,
-          selection_id: selectedPodiumAthletes[0].id, // Use first as reference
+          selection_id: orderedSelections[0].id,
           athlete_name: 'Podium Bet',
           tournament_name: tournament?.name || '',
           discipline: currentPodiumMarket.discipline,
@@ -274,8 +290,8 @@ const TournamentDetail = () => {
 
       if (predictionError) throw predictionError;
 
-      // Insert podium selections
-      const podiumSelections = selectedPodiumAthletes.map((athlete, index) => ({
+      // Insert podium selections with correct positions
+      const podiumSelections = orderedSelections.map((athlete, index) => ({
         prediction_id: predictionData.id,
         athlete_id: athlete.athlete_id,
         position_predicted: index + 1
@@ -319,6 +335,7 @@ const TournamentDetail = () => {
       await fetchWalletBalance();
       setPodiumDialogOpen(false);
       setSelectedPodiumAthletes([]);
+      setAssignedPositions(null);
       setCurrentPodiumMarket(null);
     } catch (error) {
       toast({
@@ -684,19 +701,24 @@ const TournamentDetail = () => {
                         
                         return podiumMarket ? (
                           <>
-                            <PodiumSelectionCard
+                             <PodiumSelectionCard
                               athletes={podiumSelections}
                               selectedAthletes={selectedPodiumAthletes}
                               onToggleAthlete={handleTogglePodiumAthlete}
                               discipline={discipline}
                             />
-                            {selectedPodiumAthletes.length === 3 && (
+                            {selectedPodiumAthletes.length === 3 && assignedPositions && (
                               <button
                                 className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
                                 onClick={() => handleOpenPodiumBet(podiumMarket)}
                               >
                                 Place Podium Bet
                               </button>
+                            )}
+                            {selectedPodiumAthletes.length === 3 && !assignedPositions && (
+                              <div className="text-sm text-center text-muted-foreground py-2">
+                                Please assign positions in the dialog above
+                              </div>
                             )}
                           </>
                         ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
@@ -730,13 +752,18 @@ const TournamentDetail = () => {
                               onToggleAthlete={handleTogglePodiumAthlete}
                               discipline={discipline}
                             />
-                            {selectedPodiumAthletes.length === 3 && (
+                            {selectedPodiumAthletes.length === 3 && assignedPositions && (
                               <button
                                 className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
                                 onClick={() => handleOpenPodiumBet(podiumMarket)}
                               >
                                 Place Podium Bet
                               </button>
+                            )}
+                            {selectedPodiumAthletes.length === 3 && !assignedPositions && (
+                              <div className="text-sm text-center text-muted-foreground py-2">
+                                Please assign positions in the dialog above
+                              </div>
                             )}
                           </>
                         ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
@@ -826,6 +853,7 @@ const TournamentDetail = () => {
           <div className="mt-6">
             <ParlayCart
               selections={parlaySelections}
+              markets={markets}
               onRemove={handleRemoveFromParlay}
               onPlaceParlay={handlePlaceParlay}
               onClear={handleClearParlay}
@@ -843,8 +871,24 @@ const TournamentDetail = () => {
         parlaySelections={parlaySelections}
       />
 
+      {/* Position Assigner Dialog */}
+      {positionAssignerOpen && selectedPodiumAthletes.length === 3 && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full">
+            <PodiumPositionAssigner
+              athletes={selectedPodiumAthletes}
+              onAssignPositions={handleAssignPositions}
+              onCancel={() => {
+                setPositionAssignerOpen(false);
+                setSelectedPodiumAthletes([]);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       <PodiumPredictionDialog
-        selections={selectedPodiumAthletes}
+        selections={assignedPositions ? [assignedPositions.first, assignedPositions.second, assignedPositions.third] : []}
         open={podiumDialogOpen}
         onOpenChange={setPodiumDialogOpen}
         onConfirm={handleConfirmPodiumPrediction}
