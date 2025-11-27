@@ -19,6 +19,9 @@ interface PodiumPredictionDialogProps {
   onOpenChange: (open: boolean) => void;
   onConfirm: (stakeAmount: number) => void;
   walletBalance: number;
+  tournamentName: string;
+  discipline: string;
+  gender: string;
 }
 
 export const PodiumPredictionDialog = ({
@@ -27,6 +30,9 @@ export const PodiumPredictionDialog = ({
   onOpenChange,
   onConfirm,
   walletBalance,
+  tournamentName,
+  discipline,
+  gender,
 }: PodiumPredictionDialogProps) => {
   const [stakeAmount, setStakeAmount] = useState<string>('10');
 
@@ -49,13 +55,18 @@ export const PodiumPredictionDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Podium Prediction</DialogTitle>
+          <DialogTitle>Confirm Podium Bet</DialogTitle>
           <DialogDescription>
-            Predict these 3 athletes to finish in the top 3 (in any order)
+            {tournamentName} • {discipline.charAt(0).toUpperCase() + discipline.slice(1)} • {gender === 'men' ? 'Men' : 'Women'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Bet Summary */}
+          <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+            <div className="text-xs text-muted-foreground">Market Type</div>
+            <div className="font-semibold">Podium Finish (Exact Order)</div>
+          </div>
           {/* Selected Athletes with Positions */}
           <div className="space-y-2">
             <Label>Your Predicted Podium:</Label>

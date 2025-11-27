@@ -31,15 +31,24 @@ const TournamentDetail = () => {
   const [loading, setLoading] = useState(true);
   const [bettingWindow, setBettingWindow] = useState<ReturnType<typeof getBettingWindowStatus> | null>(null);
   
-  // Podium betting state
-  const [selectedPodiumAthletes, setSelectedPodiumAthletes] = useState<Selection[]>([]);
+  // Podium betting state - scoped by discipline+gender
+  const [podiumStateMap, setPodiumStateMap] = useState<Record<string, {
+    selectedAthletes: Selection[];
+    assignedPositions: { first: Selection; second: Selection; third: Selection } | null;
+  }>>({});
   const [podiumDialogOpen, setPodiumDialogOpen] = useState(false);
   const [positionAssignerOpen, setPositionAssignerOpen] = useState(false);
-  const [currentPodiumMarket, setCurrentPodiumMarket] = useState<Market | null>(null);
-  const [assignedPositions, setAssignedPositions] = useState<{ first: Selection; second: Selection; third: Selection } | null>(null);
+  const [currentPodiumContext, setCurrentPodiumContext] = useState<{
+    market: Market;
+    discipline: string;
+    gender: string;
+  } | null>(null);
   
   // Parlay state
   const [parlaySelections, setParlaySelections] = useState<Selection[]>([]);
+  
+  // Gender state per discipline
+  const [genderByDiscipline, setGenderByDiscipline] = useState<Record<string, 'men' | 'women'>>({});
 
   useEffect(() => {
     if (!user) {
@@ -216,7 +225,7 @@ const TournamentDetail = () => {
   const menMarkets = markets.filter(m => m.category === 'open_men');
   const womenMarkets = markets.filter(m => m.category === 'open_women');
 
-  const handleSelectSelection = (selection: Selection, isParlay: boolean = false) => {
+  const handleSelectSelection = (selection: Selection, isParlay: boolean = false, discipline?: string, gender?: string, marketType?: string) => {
     if (!bettingWindow?.canBet) {
       toast({
         title: "Betting Closed",
@@ -239,36 +248,64 @@ const TournamentDetail = () => {
     }
   };
 
-  const handleTogglePodiumAthlete = (athlete: Selection) => {
-    if (selectedPodiumAthletes.some(a => a.id === athlete.id)) {
-      setSelectedPodiumAthletes(selectedPodiumAthletes.filter(a => a.id !== athlete.id));
-    } else if (selectedPodiumAthletes.length < 3) {
-      setSelectedPodiumAthletes([...selectedPodiumAthletes, athlete]);
+  const getPodiumKey = (discipline: string, gender: string) => `${discipline}-${gender}`;
+
+  const getPodiumState = (discipline: string, gender: string) => {
+    const key = getPodiumKey(discipline, gender);
+    return podiumStateMap[key] || { selectedAthletes: [], assignedPositions: null };
+  };
+
+  const handleTogglePodiumAthlete = (athlete: Selection, discipline: string, gender: string, market: Market) => {
+    const key = getPodiumKey(discipline, gender);
+    const currentState = getPodiumState(discipline, gender);
+    
+    let newSelectedAthletes: Selection[];
+    
+    if (currentState.selectedAthletes.some(a => a.id === athlete.id)) {
+      newSelectedAthletes = currentState.selectedAthletes.filter(a => a.id !== athlete.id);
+    } else if (currentState.selectedAthletes.length < 3) {
+      newSelectedAthletes = [...currentState.selectedAthletes, athlete];
       
       // When 3 athletes selected, open position assigner
-      if (selectedPodiumAthletes.length === 2) {
+      if (newSelectedAthletes.length === 3) {
+        setCurrentPodiumContext({ market, discipline, gender });
         setPositionAssignerOpen(true);
       }
+    } else {
+      return;
     }
+    
+    setPodiumStateMap(prev => ({
+      ...prev,
+      [key]: {
+        ...currentState,
+        selectedAthletes: newSelectedAthletes
+      }
+    }));
   };
 
   const handleAssignPositions = (positions: { first: Selection; second: Selection; third: Selection }) => {
-    setAssignedPositions(positions);
+    if (!currentPodiumContext) return;
+    
+    const key = getPodiumKey(currentPodiumContext.discipline, currentPodiumContext.gender);
+    setPodiumStateMap(prev => ({
+      ...prev,
+      [key]: {
+        selectedAthletes: prev[key]?.selectedAthletes || [],
+        assignedPositions: positions
+      }
+    }));
     setPositionAssignerOpen(false);
     setPodiumDialogOpen(true);
   };
 
-  const handleOpenPodiumBet = (market: Market) => {
-    if (selectedPodiumAthletes.length === 3 && assignedPositions) {
-      setCurrentPodiumMarket(market);
-      setPodiumDialogOpen(true);
-    }
-  };
-
   const handleConfirmPodiumPrediction = async (stakeAmount: number) => {
-    if (!user || !assignedPositions || !currentPodiumMarket) return;
+    if (!user || !currentPodiumContext) return;
+    
+    const state = getPodiumState(currentPodiumContext.discipline, currentPodiumContext.gender);
+    if (!state.assignedPositions) return;
 
-    const orderedSelections = [assignedPositions.first, assignedPositions.second, assignedPositions.third];
+    const orderedSelections = [state.assignedPositions.first, state.assignedPositions.second, state.assignedPositions.third];
     const combinedOdds = orderedSelections.reduce((acc, sel) => acc * sel.decimal_odds, 1) * 0.3;
     const potentialPayout = Math.floor(stakeAmount * combinedOdds);
 
@@ -281,8 +318,8 @@ const TournamentDetail = () => {
           selection_id: orderedSelections[0].id,
           athlete_name: 'Podium Bet',
           tournament_name: tournament?.name || '',
-          discipline: currentPodiumMarket.discipline,
-          category: currentPodiumMarket.category,
+          discipline: currentPodiumContext.market.discipline,
+          category: currentPodiumContext.market.category,
           market_type: 'PODIUM',
           staked_tokens: stakeAmount,
           decimal_odds: combinedOdds,
@@ -338,9 +375,14 @@ const TournamentDetail = () => {
 
       await fetchWalletBalance();
       setPodiumDialogOpen(false);
-      setSelectedPodiumAthletes([]);
-      setAssignedPositions(null);
-      setCurrentPodiumMarket(null);
+      
+      // Clear this podium context
+      const key = getPodiumKey(currentPodiumContext.discipline, currentPodiumContext.gender);
+      setPodiumStateMap(prev => ({
+        ...prev,
+        [key]: { selectedAthletes: [], assignedPositions: null }
+      }));
+      setCurrentPodiumContext(null);
     } catch (error) {
       toast({
         title: "Error",
@@ -594,105 +636,43 @@ const TournamentDetail = () => {
             ))}
           </TabsList>
 
-          {tournament.disciplines.map((discipline) => (
-            <TabsContent key={discipline} value={discipline}>
-              {/* Market Type Tabs */}
-              <Tabs defaultValue="winner" className="w-full mb-4">
-                <TabsList className="w-full grid grid-cols-3 mb-4">
-                  <TabsTrigger value="winner">Winner</TabsTrigger>
-                  <TabsTrigger value="podium">Podium</TabsTrigger>
-                  <TabsTrigger value="highest">Highest</TabsTrigger>
-                </TabsList>
+          {tournament.disciplines.map((discipline) => {
+            const currentGender = genderByDiscipline[discipline] || 'men';
+            
+            return (
+              <TabsContent key={discipline} value={discipline}>
+                {/* Gender Selection - Persistent across market types */}
+                <Tabs 
+                  value={currentGender} 
+                  onValueChange={(value) => setGenderByDiscipline(prev => ({ ...prev, [discipline]: value as 'men' | 'women' }))}
+                  className="w-full mb-4"
+                >
+                  <TabsList className="w-full grid grid-cols-2 mb-4">
+                    <TabsTrigger value="men">Men</TabsTrigger>
+                    <TabsTrigger value="women">Women</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="men">
+                    {/* Market Type Tabs - Men */}
+                    <Tabs defaultValue="winner" className="w-full">
+                      <TabsList className="w-full grid grid-cols-3 mb-4">
+                        <TabsTrigger value="winner">Winner</TabsTrigger>
+                        <TabsTrigger value="podium">Podium</TabsTrigger>
+                        <TabsTrigger value="highest">Highest</TabsTrigger>
+                      </TabsList>
 
-                {/* Winner Market */}
-                <TabsContent value="winner">
-                  <Tabs defaultValue="men" className="w-full">
-                    <TabsList className="w-full grid grid-cols-2 mb-4">
-                      <TabsTrigger value="men">Men</TabsTrigger>
-                      <TabsTrigger value="women">Women</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="men" className="space-y-3">
-                      <h3 className="font-semibold text-sm text-muted-foreground mb-3">
-                        Winner Market - Select One or Add to Parlay
-                      </h3>
-                      {selections
-                        .filter(s => {
-                          const market = markets.find(m => m.id === s.market_id);
-                          return market?.discipline === discipline && 
-                                 market?.category === 'open_men' && 
-                                 market?.market_type === 'WINNER';
-                        })
-                        .sort((a, b) => {
-                          const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
-                                       discipline === 'trick' ? a.athlete.current_rank_trick : 
-                                       a.athlete.current_rank_jump;
-                          const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
-                                       discipline === 'trick' ? b.athlete.current_rank_trick : 
-                                       b.athlete.current_rank_jump;
-                          return (rankA || 999) - (rankB || 999);
-                        })
-                        .map((selection) => (
-                          <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
-                            <SelectionCard
-                              selection={selection}
-                              onSelect={(sel) => handleSelectSelection(sel, false)}
-                              discipline={discipline}
-                            />
-                          </div>
-                        ))}
-                    </TabsContent>
-
-                    <TabsContent value="women" className="space-y-3">
-                      <h3 className="font-semibold text-sm text-muted-foreground mb-3">
-                        Winner Market - Select One or Add to Parlay
-                      </h3>
-                      {selections
-                        .filter(s => {
-                          const market = markets.find(m => m.id === s.market_id);
-                          return market?.discipline === discipline && 
-                                 market?.category === 'open_women' && 
-                                 market?.market_type === 'WINNER';
-                        })
-                        .sort((a, b) => {
-                          const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
-                                       discipline === 'trick' ? a.athlete.current_rank_trick : 
-                                       a.athlete.current_rank_jump;
-                          const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
-                                       discipline === 'trick' ? b.athlete.current_rank_trick : 
-                                       b.athlete.current_rank_jump;
-                          return (rankA || 999) - (rankB || 999);
-                        })
-                        .map((selection) => (
-                          <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
-                            <SelectionCard
-                              selection={selection}
-                              onSelect={(sel) => handleSelectSelection(sel, false)}
-                              discipline={discipline}
-                            />
-                          </div>
-                        ))}
-                    </TabsContent>
-                  </Tabs>
-                </TabsContent>
-
-                {/* Podium Market */}
-                <TabsContent value="podium">
-                  <Tabs defaultValue="men" className="w-full">
-                    <TabsList className="w-full grid grid-cols-2 mb-4">
-                      <TabsTrigger value="men">Men</TabsTrigger>
-                      <TabsTrigger value="women">Women</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="men" className="space-y-3">
-                      {(() => {
-                        const podiumMarket = markets.find(m => 
-                          m.discipline === discipline && 
-                          m.category === 'open_men' && 
-                          m.market_type === 'PODIUM'
-                        );
-                        const podiumSelections = selections
-                          .filter(s => s.market_id === podiumMarket?.id)
+                      {/* Winner Market - Men */}
+                      <TabsContent value="winner" className="space-y-3">
+                        <h3 className="font-semibold text-sm text-muted-foreground mb-3">
+                          Winner Market - Select One or Add to Parlay
+                        </h3>
+                        {selections
+                          .filter(s => {
+                            const market = markets.find(m => m.id === s.market_id);
+                            return market?.discipline === discipline && 
+                                   market?.category === 'open_men' && 
+                                   market?.market_type === 'WINNER';
+                          })
                           .sort((a, b) => {
                             const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
                                          discipline === 'trick' ? a.athlete.current_rank_trick : 
@@ -701,43 +681,81 @@ const TournamentDetail = () => {
                                          discipline === 'trick' ? b.athlete.current_rank_trick : 
                                          b.athlete.current_rank_jump;
                             return (rankA || 999) - (rankB || 999);
-                          });
-                        
-                        return podiumMarket ? (
-                          <>
-                             <PodiumSelectionCard
-                              athletes={podiumSelections}
-                              selectedAthletes={selectedPodiumAthletes}
-                              onToggleAthlete={handleTogglePodiumAthlete}
-                              discipline={discipline}
-                            />
-                            {selectedPodiumAthletes.length === 3 && assignedPositions && (
-                              <button
-                                className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
-                                onClick={() => handleOpenPodiumBet(podiumMarket)}
-                              >
-                                Place Podium Bet
-                              </button>
-                            )}
-                            {selectedPodiumAthletes.length === 3 && !assignedPositions && (
-                              <div className="text-sm text-center text-muted-foreground py-2">
-                                Please assign positions in the dialog above
-                              </div>
-                            )}
-                          </>
-                        ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
-                      })()}
-                    </TabsContent>
+                          })
+                          .map((selection) => (
+                            <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                              <SelectionCard
+                                selection={selection}
+                                onSelect={(sel) => handleSelectSelection(sel, false)}
+                                discipline={discipline}
+                              />
+                            </div>
+                          ))}
+                      </TabsContent>
 
-                    <TabsContent value="women" className="space-y-3">
-                      {(() => {
-                        const podiumMarket = markets.find(m => 
-                          m.discipline === discipline && 
-                          m.category === 'open_women' && 
-                          m.market_type === 'PODIUM'
-                        );
-                        const podiumSelections = selections
-                          .filter(s => s.market_id === podiumMarket?.id)
+                      {/* Podium Market - Men */}
+                      <TabsContent value="podium" className="space-y-3">
+                        {(() => {
+                          const podiumMarket = markets.find(m => 
+                            m.discipline === discipline && 
+                            m.category === 'open_men' && 
+                            m.market_type === 'PODIUM'
+                          );
+                          const podiumSelections = selections
+                            .filter(s => s.market_id === podiumMarket?.id)
+                            .sort((a, b) => {
+                              const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                           discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                           a.athlete.current_rank_jump;
+                              const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                           discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                           b.athlete.current_rank_jump;
+                              return (rankA || 999) - (rankB || 999);
+                            });
+                          
+                          const podiumState = getPodiumState(discipline, 'men');
+                          
+                          return podiumMarket ? (
+                            <>
+                              <PodiumSelectionCard
+                                athletes={podiumSelections}
+                                selectedAthletes={podiumState.selectedAthletes}
+                                onToggleAthlete={(athlete) => handleTogglePodiumAthlete(athlete, discipline, 'men', podiumMarket)}
+                                discipline={discipline}
+                              />
+                              {podiumState.selectedAthletes.length === 3 && podiumState.assignedPositions && (
+                                <button
+                                  className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+                                  onClick={() => {
+                                    setCurrentPodiumContext({ market: podiumMarket, discipline, gender: 'men' });
+                                    setPodiumDialogOpen(true);
+                                  }}
+                                >
+                                  Place Podium Bet
+                                </button>
+                              )}
+                              {podiumState.selectedAthletes.length === 3 && !podiumState.assignedPositions && (
+                                <div className="text-sm text-center text-muted-foreground py-2">
+                                  Please assign positions in the dialog above
+                                </div>
+                              )}
+                            </>
+                          ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
+                        })()}
+                      </TabsContent>
+
+                      {/* Highest Score Market - Men */}
+                      <TabsContent value="highest" className="space-y-3">
+                        <h3 className="font-semibold text-sm text-muted-foreground mb-3">
+                          Highest Score Market
+                        </h3>
+                        {selections
+                          .filter(s => {
+                            const market = markets.find(m => m.id === s.market_id);
+                            return market?.discipline === discipline && 
+                                   market?.category === 'open_men' && 
+                                   market?.market_type === 'HIGHEST_SCORE';
+                          })
                           .sort((a, b) => {
                             const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
                                          discipline === 'trick' ? a.athlete.current_rank_trick : 
@@ -746,110 +764,149 @@ const TournamentDetail = () => {
                                          discipline === 'trick' ? b.athlete.current_rank_trick : 
                                          b.athlete.current_rank_jump;
                             return (rankA || 999) - (rankB || 999);
-                          });
-                        
-                        return podiumMarket ? (
-                          <>
-                            <PodiumSelectionCard
-                              athletes={podiumSelections}
-                              selectedAthletes={selectedPodiumAthletes}
-                              onToggleAthlete={handleTogglePodiumAthlete}
-                              discipline={discipline}
-                            />
-                            {selectedPodiumAthletes.length === 3 && assignedPositions && (
-                              <button
-                                className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
-                                onClick={() => handleOpenPodiumBet(podiumMarket)}
-                              >
-                                Place Podium Bet
-                              </button>
-                            )}
-                            {selectedPodiumAthletes.length === 3 && !assignedPositions && (
-                              <div className="text-sm text-center text-muted-foreground py-2">
-                                Please assign positions in the dialog above
-                              </div>
-                            )}
-                          </>
-                        ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
-                      })()}
-                    </TabsContent>
-                  </Tabs>
-                </TabsContent>
+                          })
+                          .map((selection) => (
+                            <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                              <SelectionCard
+                                selection={selection}
+                                onSelect={(sel) => handleSelectSelection(sel, false)}
+                                discipline={discipline}
+                              />
+                            </div>
+                          ))}
+                      </TabsContent>
+                    </Tabs>
+                  </TabsContent>
 
-                {/* Highest Score Market */}
-                <TabsContent value="highest">
-                  <Tabs defaultValue="men" className="w-full">
-                    <TabsList className="w-full grid grid-cols-2 mb-4">
-                      <TabsTrigger value="men">Men</TabsTrigger>
-                      <TabsTrigger value="women">Women</TabsTrigger>
-                    </TabsList>
+                  <TabsContent value="women">
+                    {/* Market Type Tabs - Women */}
+                    <Tabs defaultValue="winner" className="w-full">
+                      <TabsList className="w-full grid grid-cols-3 mb-4">
+                        <TabsTrigger value="winner">Winner</TabsTrigger>
+                        <TabsTrigger value="podium">Podium</TabsTrigger>
+                        <TabsTrigger value="highest">Highest</TabsTrigger>
+                      </TabsList>
 
-                    <TabsContent value="men" className="space-y-3">
-                      <h3 className="font-semibold text-sm text-muted-foreground mb-3">
-                        Highest Score Market
-                      </h3>
-                      {selections
-                        .filter(s => {
-                          const market = markets.find(m => m.id === s.market_id);
-                          return market?.discipline === discipline && 
-                                 market?.category === 'open_men' && 
-                                 market?.market_type === 'HIGHEST_SCORE';
-                        })
-                        .sort((a, b) => {
-                          const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
-                                       discipline === 'trick' ? a.athlete.current_rank_trick : 
-                                       a.athlete.current_rank_jump;
-                          const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
-                                       discipline === 'trick' ? b.athlete.current_rank_trick : 
-                                       b.athlete.current_rank_jump;
-                          return (rankA || 999) - (rankB || 999);
-                        })
-                        .map((selection) => (
-                          <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
-                            <SelectionCard
-                              selection={selection}
-                              onSelect={(sel) => handleSelectSelection(sel, false)}
-                              discipline={discipline}
-                            />
-                          </div>
-                        ))}
-                    </TabsContent>
+                      {/* Winner Market - Women */}
+                      <TabsContent value="winner" className="space-y-3">
+                        <h3 className="font-semibold text-sm text-muted-foreground mb-3">
+                          Winner Market - Select One or Add to Parlay
+                        </h3>
+                        {selections
+                          .filter(s => {
+                            const market = markets.find(m => m.id === s.market_id);
+                            return market?.discipline === discipline && 
+                                   market?.category === 'open_women' && 
+                                   market?.market_type === 'WINNER';
+                          })
+                          .sort((a, b) => {
+                            const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                         discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                         a.athlete.current_rank_jump;
+                            const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                         discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                         b.athlete.current_rank_jump;
+                            return (rankA || 999) - (rankB || 999);
+                          })
+                          .map((selection) => (
+                            <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                              <SelectionCard
+                                selection={selection}
+                                onSelect={(sel) => handleSelectSelection(sel, false)}
+                                discipline={discipline}
+                              />
+                            </div>
+                          ))}
+                      </TabsContent>
 
-                    <TabsContent value="women" className="space-y-3">
-                      <h3 className="font-semibold text-sm text-muted-foreground mb-3">
-                        Highest Score Market
-                      </h3>
-                      {selections
-                        .filter(s => {
-                          const market = markets.find(m => m.id === s.market_id);
-                          return market?.discipline === discipline && 
-                                 market?.category === 'open_women' && 
-                                 market?.market_type === 'HIGHEST_SCORE';
-                        })
-                        .sort((a, b) => {
-                          const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
-                                       discipline === 'trick' ? a.athlete.current_rank_trick : 
-                                       a.athlete.current_rank_jump;
-                          const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
-                                       discipline === 'trick' ? b.athlete.current_rank_trick : 
-                                       b.athlete.current_rank_jump;
-                          return (rankA || 999) - (rankB || 999);
-                        })
-                        .map((selection) => (
-                          <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
-                            <SelectionCard
-                              selection={selection}
-                              onSelect={(sel) => handleSelectSelection(sel, false)}
-                              discipline={discipline}
-                            />
-                          </div>
-                        ))}
-                    </TabsContent>
-                  </Tabs>
-                </TabsContent>
-              </Tabs>
-            </TabsContent>
-           ))}
+                      {/* Podium Market - Women */}
+                      <TabsContent value="podium" className="space-y-3">
+                        {(() => {
+                          const podiumMarket = markets.find(m => 
+                            m.discipline === discipline && 
+                            m.category === 'open_women' && 
+                            m.market_type === 'PODIUM'
+                          );
+                          const podiumSelections = selections
+                            .filter(s => s.market_id === podiumMarket?.id)
+                            .sort((a, b) => {
+                              const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                           discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                           a.athlete.current_rank_jump;
+                              const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                           discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                           b.athlete.current_rank_jump;
+                              return (rankA || 999) - (rankB || 999);
+                            });
+                          
+                          const podiumState = getPodiumState(discipline, 'women');
+                          
+                          return podiumMarket ? (
+                            <>
+                              <PodiumSelectionCard
+                                athletes={podiumSelections}
+                                selectedAthletes={podiumState.selectedAthletes}
+                                onToggleAthlete={(athlete) => handleTogglePodiumAthlete(athlete, discipline, 'women', podiumMarket)}
+                                discipline={discipline}
+                              />
+                              {podiumState.selectedAthletes.length === 3 && podiumState.assignedPositions && (
+                                <button
+                                  className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+                                  onClick={() => {
+                                    setCurrentPodiumContext({ market: podiumMarket, discipline, gender: 'women' });
+                                    setPodiumDialogOpen(true);
+                                  }}
+                                >
+                                  Place Podium Bet
+                                </button>
+                              )}
+                              {podiumState.selectedAthletes.length === 3 && !podiumState.assignedPositions && (
+                                <div className="text-sm text-center text-muted-foreground py-2">
+                                  Please assign positions in the dialog above
+                                </div>
+                              )}
+                            </>
+                          ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
+                        })()}
+                      </TabsContent>
+
+                      {/* Highest Score Market - Women */}
+                      <TabsContent value="highest" className="space-y-3">
+                        <h3 className="font-semibold text-sm text-muted-foreground mb-3">
+                          Highest Score Market
+                        </h3>
+                        {selections
+                          .filter(s => {
+                            const market = markets.find(m => m.id === s.market_id);
+                            return market?.discipline === discipline && 
+                                   market?.category === 'open_women' && 
+                                   market?.market_type === 'HIGHEST_SCORE';
+                          })
+                          .sort((a, b) => {
+                            const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
+                                         discipline === 'trick' ? a.athlete.current_rank_trick : 
+                                         a.athlete.current_rank_jump;
+                            const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
+                                         discipline === 'trick' ? b.athlete.current_rank_trick : 
+                                         b.athlete.current_rank_jump;
+                            return (rankA || 999) - (rankB || 999);
+                          })
+                          .map((selection) => (
+                            <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                              <SelectionCard
+                                selection={selection}
+                                onSelect={(sel) => handleSelectSelection(sel, false)}
+                                discipline={discipline}
+                              />
+                            </div>
+                          ))}
+                      </TabsContent>
+                    </Tabs>
+                  </TabsContent>
+                </Tabs>
+              </TabsContent>
+            );
+          })}
         </Tabs>
 
         {/* Parlay Cart */}
@@ -866,6 +923,7 @@ const TournamentDetail = () => {
         )}
       </div>
 
+      {/* Prediction Dialog with context */}
       <PredictionDialog
         selection={selectedSelection}
         open={dialogOpen}
@@ -873,31 +931,66 @@ const TournamentDetail = () => {
         onConfirm={handleConfirmPrediction}
         walletBalance={walletBalance}
         parlaySelections={parlaySelections}
+        marketContext={
+          selectedSelection
+            ? (() => {
+                const market = markets.find(m => m.id === selectedSelection.market_id);
+                return market
+                  ? {
+                      tournamentName: tournament.name,
+                      discipline: market.discipline,
+                      gender: market.category === 'open_men' ? 'men' : 'women',
+                      marketType: market.market_type.replace('_', ' '),
+                    }
+                  : undefined;
+              })()
+            : undefined
+        }
       />
 
       {/* Position Assigner Dialog */}
-      {positionAssignerOpen && selectedPodiumAthletes.length === 3 && (
+      {currentPodiumContext && positionAssignerOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="max-w-md w-full">
             <PodiumPositionAssigner
-              athletes={selectedPodiumAthletes}
+              athletes={getPodiumState(currentPodiumContext.discipline, currentPodiumContext.gender).selectedAthletes}
               onAssignPositions={handleAssignPositions}
               onCancel={() => {
                 setPositionAssignerOpen(false);
-                setSelectedPodiumAthletes([]);
+                // Clear selections for this context
+                const key = getPodiumKey(currentPodiumContext.discipline, currentPodiumContext.gender);
+                setPodiumStateMap(prev => ({
+                  ...prev,
+                  [key]: { selectedAthletes: [], assignedPositions: null }
+                }));
+                setCurrentPodiumContext(null);
               }}
             />
           </div>
         </div>
       )}
 
-      <PodiumPredictionDialog
-        selections={assignedPositions ? [assignedPositions.first, assignedPositions.second, assignedPositions.third] : []}
-        open={podiumDialogOpen}
-        onOpenChange={setPodiumDialogOpen}
-        onConfirm={handleConfirmPodiumPrediction}
-        walletBalance={walletBalance}
-      />
+      {/* Podium Prediction Dialog */}
+      {currentPodiumContext && (
+        <PodiumPredictionDialog
+          selections={
+            getPodiumState(currentPodiumContext.discipline, currentPodiumContext.gender).assignedPositions
+              ? [
+                  getPodiumState(currentPodiumContext.discipline, currentPodiumContext.gender).assignedPositions!.first,
+                  getPodiumState(currentPodiumContext.discipline, currentPodiumContext.gender).assignedPositions!.second,
+                  getPodiumState(currentPodiumContext.discipline, currentPodiumContext.gender).assignedPositions!.third,
+                ]
+              : []
+          }
+          open={podiumDialogOpen}
+          onOpenChange={setPodiumDialogOpen}
+          onConfirm={handleConfirmPodiumPrediction}
+          walletBalance={walletBalance}
+          tournamentName={tournament.name}
+          discipline={currentPodiumContext.discipline}
+          gender={currentPodiumContext.gender}
+        />
+      )}
 
       <BottomNav />
     </div>
