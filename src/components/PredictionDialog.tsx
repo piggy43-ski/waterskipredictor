@@ -21,6 +21,12 @@ interface PredictionDialogProps {
   onConfirm: (stakeAmount: number) => void;
   walletBalance: number;
   parlaySelections?: Selection[];
+  marketContext?: {
+    tournamentName: string;
+    discipline: string;
+    gender: string;
+    marketType: string;
+  };
 }
 
 export const PredictionDialog = ({
@@ -30,6 +36,7 @@ export const PredictionDialog = ({
   onConfirm,
   walletBalance,
   parlaySelections = [],
+  marketContext,
 }: PredictionDialogProps) => {
   const [stakeAmount, setStakeAmount] = useState('100');
   
@@ -60,16 +67,34 @@ export const PredictionDialog = ({
       <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
           <DialogTitle>
-            {isParlay ? `Place Parlay Bet (${parlaySelections.length} Legs)` : 'Place Prediction'}
+            {isParlay ? `Confirm Parlay Bet` : 'Confirm Bet'}
           </DialogTitle>
           <DialogDescription>
+            {marketContext && (
+              <span className="block mb-2">
+                {marketContext.tournamentName} • {marketContext.discipline.charAt(0).toUpperCase() + marketContext.discipline.slice(1)} • {marketContext.gender === 'men' ? 'Men' : 'Women'}
+              </span>
+            )}
             {isParlay 
-              ? 'All selections must win for the parlay to pay out'
+              ? `${parlaySelections.length}-leg parlay - All selections must win`
               : selection?.description}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Bet Summary for single bets */}
+          {!isParlay && marketContext && (
+            <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+              <div className="text-xs text-muted-foreground">Market Type</div>
+              <div className="font-semibold">{marketContext.marketType}</div>
+              {selection && (
+                <>
+                  <div className="text-xs text-muted-foreground mt-2">Selection</div>
+                  <div className="font-semibold">{selection.athlete.name}</div>
+                </>
+              )}
+            </div>
+          )}
           {/* Show parlay legs if it's a parlay */}
           {isParlay && (
             <div className="space-y-2 mb-4">
