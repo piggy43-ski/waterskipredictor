@@ -21,6 +21,8 @@ type Tournament = {
   location: string;
   start_date: string;
   end_date: string;
+  start_datetime?: string;
+  end_datetime?: string;
   status: string;
   disciplines: string[];
 };
@@ -50,12 +52,18 @@ export default function AdminTournaments() {
 
   const createMutation = useMutation({
     mutationFn: async (formData: FormData) => {
+      const startDatetime = formData.get('start_datetime') as string || null;
+      const endDatetime = formData.get('end_datetime') as string || null;
+      
       const tournament = {
         name: formData.get('name') as string,
         location: formData.get('location') as string,
-        start_date: formData.get('start_date') as string || null,
-        end_date: formData.get('end_date') as string || null,
-        status: formData.get('status') as string,
+        start_datetime: startDatetime,
+        end_datetime: endDatetime,
+        // Keep old fields for backward compatibility
+        start_date: startDatetime ? startDatetime.split('T')[0] : null,
+        end_date: endDatetime ? endDatetime.split('T')[0] : null,
+        status: 'upcoming', // Auto-calculate, but set default
         disciplines: disciplines,
       };
 
@@ -74,7 +82,7 @@ export default function AdminTournaments() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Tournament> }) => {
+    mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
       const { error } = await supabase
         .from('tournaments')
         .update(updates)
@@ -124,12 +132,17 @@ export default function AdminTournaments() {
     if (!editingTournament) return;
 
     const formData = new FormData(e.currentTarget);
+    const startDatetime = formData.get('start_datetime') as string || null;
+    const endDatetime = formData.get('end_datetime') as string || null;
+    
     const updates = {
       name: formData.get('name') as string,
       location: formData.get('location') as string,
-      start_date: formData.get('start_date') as string || null,
-      end_date: formData.get('end_date') as string || null,
-      status: formData.get('status') as string,
+      start_datetime: startDatetime,
+      end_datetime: endDatetime,
+      // Keep old fields synced for backward compatibility
+      start_date: startDatetime ? startDatetime.split('T')[0] : null,
+      end_date: endDatetime ? endDatetime.split('T')[0] : null,
       disciplines: editDisciplines,
     };
 
@@ -169,25 +182,28 @@ export default function AdminTournaments() {
                   <Input id="location" name="location" required />
                 </div>
                 <div>
-                  <Label htmlFor="start_date">Start Date (Optional)</Label>
-                  <Input id="start_date" name="start_date" type="date" />
+                  <Label htmlFor="start_datetime">Start Date & Time</Label>
+                  <Input 
+                    id="start_datetime" 
+                    name="start_datetime" 
+                    type="datetime-local" 
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Betting locks at this time
+                  </p>
                 </div>
                 <div>
-                  <Label htmlFor="end_date">End Date (Optional)</Label>
-                  <Input id="end_date" name="end_date" type="date" />
-                </div>
-                <div>
-                  <Label htmlFor="status">Status</Label>
-                  <Select name="status" defaultValue="upcoming" required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="upcoming">Upcoming</SelectItem>
-                      <SelectItem value="live">Live</SelectItem>
-                      <SelectItem value="finished">Finished</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="end_datetime">End Date & Time</Label>
+                  <Input 
+                    id="end_datetime" 
+                    name="end_datetime" 
+                    type="datetime-local" 
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Tournament status becomes "Finished" at this time
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Disciplines</Label>
@@ -324,35 +340,30 @@ export default function AdminTournaments() {
                 />
               </div>
               <div>
-                <Label htmlFor="edit-start">Start Date</Label>
+                <Label htmlFor="edit-start-datetime">Start Date & Time</Label>
                 <Input 
-                  id="edit-start" 
-                  name="start_date" 
-                  type="date" 
-                  defaultValue={editingTournament?.start_date || ''}
+                  id="edit-start-datetime" 
+                  name="start_datetime" 
+                  type="datetime-local" 
+                  defaultValue={editingTournament?.start_datetime || ''}
+                  required
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Betting locks at this time
+                </p>
               </div>
               <div>
-                <Label htmlFor="edit-end">End Date</Label>
+                <Label htmlFor="edit-end-datetime">End Date & Time</Label>
                 <Input 
-                  id="edit-end" 
-                  name="end_date" 
-                  type="date" 
-                  defaultValue={editingTournament?.end_date || ''}
+                  id="edit-end-datetime" 
+                  name="end_datetime" 
+                  type="datetime-local" 
+                  defaultValue={editingTournament?.end_datetime || ''}
+                  required
                 />
-              </div>
-              <div>
-                <Label htmlFor="edit-status">Status</Label>
-                <Select name="status" defaultValue={editingTournament?.status} required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="upcoming">Upcoming</SelectItem>
-                    <SelectItem value="live">Live</SelectItem>
-                    <SelectItem value="finished">Finished</SelectItem>
-                  </SelectContent>
-                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Status becomes "Finished" at this time (auto-calculated)
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Disciplines</Label>

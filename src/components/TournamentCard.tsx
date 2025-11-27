@@ -12,15 +12,18 @@ interface TournamentCardProps {
 
 export const TournamentCard = ({ tournament }: TournamentCardProps) => {
   const navigate = useNavigate();
-  const [bettingWindow, setBettingWindow] = useState(getBettingWindowStatus(tournament.start_date, tournament.end_date));
+  const startTime = tournament.start_datetime || tournament.start_date;
+  const endTime = tournament.end_datetime || tournament.end_date;
+  
+  const [bettingWindow, setBettingWindow] = useState(getBettingWindowStatus(startTime, endTime));
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setBettingWindow(getBettingWindowStatus(tournament.start_date, tournament.end_date));
+      setBettingWindow(getBettingWindowStatus(startTime, endTime));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [tournament.start_date, tournament.end_date]);
+  }, [startTime, endTime]);
   
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', { 

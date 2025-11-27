@@ -41,8 +41,10 @@ export interface Tournament {
   id: string;
   name: string;
   location: string;
-  start_date: string;
-  end_date: string;
+  start_date: string; // Deprecated: Use start_datetime
+  end_date: string; // Deprecated: Use end_datetime
+  start_datetime?: string; // New: Precise start date and time
+  end_datetime?: string; // New: Precise end date and time
   disciplines: Discipline[];
   status: 'upcoming' | 'live' | 'finished';
 }

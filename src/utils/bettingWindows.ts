@@ -15,14 +15,26 @@ export interface BettingWindow {
 
 /**
  * Get betting window status for a tournament
- * @param startDate - Tournament start date
- * @param endDate - Tournament end date
+ * @param startDatetime - Tournament start datetime (or fallback date)
+ * @param endDatetime - Tournament end datetime (or fallback date)
  * @returns Betting window information
  */
-export const getBettingWindowStatus = (startDate: string, endDate?: string): BettingWindow => {
+export const getBettingWindowStatus = (
+  startDatetime?: string, 
+  endDatetime?: string
+): BettingWindow => {
   const now = new Date();
-  const start = new Date(startDate);
-  const end = endDate ? new Date(endDate) : null;
+  
+  if (!startDatetime) {
+    return {
+      status: 'upcoming',
+      message: 'Tournament dates TBD',
+      canBet: false
+    };
+  }
+  
+  const start = new Date(startDatetime);
+  const end = endDatetime ? new Date(endDatetime) : null;
   
   // Betting opens 24 hours before tournament start
   const bettingOpens = new Date(start.getTime() - 24 * 60 * 60 * 1000);
@@ -36,11 +48,11 @@ export const getBettingWindowStatus = (startDate: string, endDate?: string): Bet
     };
   }
   
-  // Tournament has started (betting closed)
+  // Tournament has started (betting LOCKED)
   if (now >= start) {
     return {
       status: 'closed',
-      message: 'Betting closed – event in progress',
+      message: 'Betting locked – event in progress',
       canBet: false
     };
   }
@@ -53,10 +65,10 @@ export const getBettingWindowStatus = (startDate: string, endDate?: string): Bet
     const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
     
     const message = days > 0 
-      ? `Betting open – Event starts in ${days}d ${hours}h`
+      ? `Betting open – Starts in ${days}d ${hours}h`
       : hours > 0
-        ? `Betting open – Event starts in ${hours}h ${minutes}m`
-        : `Betting open – Event starts in ${minutes}m`;
+        ? `Betting open – Starts in ${hours}h ${minutes}m`
+        : `Betting open – Starts in ${minutes}m`;
     
     return {
       status: 'open',
