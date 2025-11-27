@@ -55,7 +55,9 @@ const TournamentDetail = () => {
     if (!tournament) return;
 
     const updateBettingWindow = () => {
-      setBettingWindow(getBettingWindowStatus(tournament.start_date, tournament.end_date));
+      const startTime = tournament.start_datetime || tournament.start_date;
+      const endTime = tournament.end_datetime || tournament.end_date;
+      setBettingWindow(getBettingWindowStatus(startTime, endTime));
     };
 
     updateBettingWindow();
@@ -82,6 +84,8 @@ const TournamentDetail = () => {
           location: tournamentData.location,
           start_date: tournamentData.start_date,
           end_date: tournamentData.end_date,
+          start_datetime: tournamentData.start_datetime,
+          end_datetime: tournamentData.end_datetime,
           disciplines: tournamentData.disciplines as Array<'slalom' | 'trick' | 'jump'>,
           status: tournamentData.status as 'upcoming' | 'live' | 'finished'
         });

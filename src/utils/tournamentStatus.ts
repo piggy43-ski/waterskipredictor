@@ -1,18 +1,27 @@
 import { Tournament } from '@/types';
 
 /**
- * Calculate tournament status dynamically based on dates
- * - "upcoming" if current_timestamp < start_date
- * - "live" if start_date ≤ current_timestamp ≤ end_date
- * - "finished" if current_timestamp > end_date
+ * Calculate tournament status dynamically based on datetime
+ * - "upcoming" if current_timestamp < start_datetime
+ * - "live" if start_datetime ≤ current_timestamp ≤ end_datetime
+ * - "finished" if current_timestamp > end_datetime
  */
 export const calculateTournamentStatus = (
-  startDate: string,
-  endDate: string
+  startDatetime?: string,
+  endDatetime?: string,
+  fallbackStartDate?: string,
+  fallbackEndDate?: string
 ): Tournament['status'] => {
   const now = new Date();
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  
+  // Use datetime if available, otherwise fall back to date-only
+  const startStr = startDatetime || fallbackStartDate;
+  const endStr = endDatetime || fallbackEndDate;
+  
+  if (!startStr || !endStr) return 'upcoming';
+  
+  const start = new Date(startStr);
+  const end = new Date(endStr);
 
   if (now < start) {
     return 'upcoming';
@@ -29,6 +38,11 @@ export const calculateTournamentStatus = (
 export const applyDynamicStatus = (tournament: any): Tournament => {
   return {
     ...tournament,
-    status: calculateTournamentStatus(tournament.start_date, tournament.end_date)
+    status: calculateTournamentStatus(
+      tournament.start_datetime, 
+      tournament.end_datetime,
+      tournament.start_date,
+      tournament.end_date
+    )
   };
 };

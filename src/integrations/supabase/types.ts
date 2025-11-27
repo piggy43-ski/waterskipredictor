@@ -620,11 +620,13 @@ export type Database = {
           created_at: string
           disciplines: string[]
           end_date: string | null
+          end_datetime: string | null
           id: string
           location: string
           name: string
           notes: string | null
           start_date: string | null
+          start_datetime: string | null
           status: string
           updated_at: string
           year: number | null
@@ -635,11 +637,13 @@ export type Database = {
           created_at?: string
           disciplines?: string[]
           end_date?: string | null
+          end_datetime?: string | null
           id?: string
           location: string
           name: string
           notes?: string | null
           start_date?: string | null
+          start_datetime?: string | null
           status?: string
           updated_at?: string
           year?: number | null
@@ -650,11 +654,13 @@ export type Database = {
           created_at?: string
           disciplines?: string[]
           end_date?: string | null
+          end_datetime?: string | null
           id?: string
           location?: string
           name?: string
           notes?: string | null
           start_date?: string | null
+          start_datetime?: string | null
           status?: string
           updated_at?: string
           year?: number | null
