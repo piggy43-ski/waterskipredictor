@@ -13,12 +13,13 @@ const navItems = [
   { path: '/admin/athletes', label: 'Athletes', icon: Users },
   { path: '/admin/rankings-sync', label: 'Rankings Auto-Sync', icon: TrendingUp },
   { path: '/admin/rankings-import', label: 'Manual Import', icon: TrendingUp },
-  { path: '/admin/results', label: 'Results', icon: Trophy },
+  { path: '/admin/tournament-settlement', label: 'Results & Settlement', icon: FileCheck },
+  { path: '/admin/results', label: 'Results (Legacy)', icon: Trophy },
   { path: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { path: '/admin/markets', label: 'Markets', icon: TrendingUp },
   { path: '/admin/selections', label: 'Selections', icon: Trophy },
   { path: '/admin/rewards', label: 'Rewards', icon: Gift },
-  { path: '/admin/settlement', label: 'Settlement', icon: FileCheck },
+  { path: '/admin/settlement', label: 'Settlement (Legacy)', icon: FileCheck },
 ];
 
 export const AdminLayout = ({ children }: AdminLayoutProps) => {
