@@ -9,12 +9,17 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
+// Token pack calculation: base_tokens = price * 100 (1 token = 1 cent)
+// Then apply bonus percentage on top
 const tokenPacks = [
-  { name: 'Starter', price: 25, tokens: 2500, bonus: 0, popular: false },
-  { name: 'Standard', price: 50, tokens: 5500, bonus: 10, popular: true },
-  { name: 'Pro', price: 100, tokens: 11500, bonus: 15, popular: false },
-  { name: 'Elite', price: 250, tokens: 31250, bonus: 25, popular: false },
-];
+  { name: 'Starter', price: 25, baseTokens: 2500, bonus: 0, popular: false },
+  { name: 'Standard', price: 50, baseTokens: 5000, bonus: 10, popular: true },
+  { name: 'Pro', price: 100, baseTokens: 10000, bonus: 15, popular: false },
+  { name: 'Elite', price: 250, baseTokens: 25000, bonus: 25, popular: false },
+].map(pack => ({
+  ...pack,
+  tokens: Math.floor(pack.baseTokens * (1 + pack.bonus / 100))
+}));
 
 const Wallet = () => {
   const navigate = useNavigate();
@@ -76,12 +81,14 @@ const Wallet = () => {
           </div>
           <div className="grid grid-cols-2 gap-4 pt-4 border-t border-primary-foreground/20">
             <div>
-              <p className="text-xs opacity-75 mb-1">Purchased Tokens</p>
+              <p className="text-xs opacity-75 mb-1">Purchased</p>
               <p className="text-xl font-bold">{purchasedTokens.toLocaleString()}</p>
+              <p className="text-xs opacity-60 mt-0.5">For bets & fantasy</p>
             </div>
             <div>
-              <p className="text-xs opacity-75 mb-1">Reward Tokens</p>
+              <p className="text-xs opacity-75 mb-1">Earned</p>
               <p className="text-xl font-bold">{earnedTokens.toLocaleString()}</p>
+              <p className="text-xs opacity-60 mt-0.5">For rewards only</p>
             </div>
           </div>
         </Card>
@@ -118,9 +125,13 @@ const Wallet = () => {
                       </span>
                       <span className="text-sm text-muted-foreground">tokens</span>
                     </div>
-                    {pack.bonus > 0 && (
-                      <p className="text-xs text-success">
-                        +{pack.bonus}% bonus
+                    {pack.bonus > 0 ? (
+                      <p className="text-xs text-success font-semibold">
+                        +{pack.bonus}% bonus ({pack.baseTokens.toLocaleString()} + {(pack.tokens - pack.baseTokens).toLocaleString()})
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {pack.baseTokens.toLocaleString()} tokens
                       </p>
                     )}
                   </div>
@@ -148,12 +159,20 @@ const Wallet = () => {
 
         {/* Info */}
         <Card className="p-4 bg-muted/30 border-border/50">
-          <h3 className="font-semibold mb-2">Important Information</h3>
-          <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-            <li>Tokens cannot be converted back to cash</li>
-            <li>Only earned (reward) tokens can be redeemed for rewards</li>
-            <li>Use purchased tokens for predictions</li>
-            <li>No real money gambling - entertainment only</li>
+          <h3 className="font-semibold mb-2">Token Usage Rules</h3>
+          <ul className="text-sm text-muted-foreground space-y-2">
+            <li className="flex items-start gap-2">
+              <span className="text-primary font-bold">•</span>
+              <span><strong>Purchased tokens</strong> can be used for bets and fantasy entries</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-success font-bold">•</span>
+              <span><strong>Earned tokens</strong> (from winnings) can be used for bets, fantasy, AND rewards redemptions</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-muted-foreground">•</span>
+              <span>Tokens cannot be converted back to cash - entertainment only</span>
+            </li>
           </ul>
         </Card>
       </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy } from 'lucide-react';
+import { SettlementConfirmDialog } from '@/components/SettlementConfirmDialog';
+import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search } from 'lucide-react';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
+import { compareScores, isValidSlalomScore, normalizeSlalomScore } from '@/utils/waterskiScoring';
 import type { Discipline, Category } from '@/types';
 
 type ResultEntry = {
@@ -31,8 +33,8 @@ type SettlementPreview = {
   market_type: string;
   discipline: Discipline;
   category: Category;
-  winning_selection_id?: string;
-  winning_athlete_name?: string;
+  winning_selection_ids: string[];
+  winning_athlete_names: string[];
   total_wagered: number;
   total_payout: number;
   affected_predictions: number;
@@ -41,13 +43,13 @@ type SettlementPreview = {
 export default function TournamentSettlement() {
   const [selectedTournament, setSelectedTournament] = useState('');
   const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline>('slalom');
+  const [athleteSearch, setAthleteSearch] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<Discipline, DisciplineResults>>({
     slalom: { male: [], female: [] },
     trick: { male: [], female: [] },
     jump: { male: [], female: [] },
   });
   const [settlementPreviews, setSettlementPreviews] = useState<SettlementPreview[]>([]);
-  const [showPreview, setShowPreview] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -57,7 +59,7 @@ export default function TournamentSettlement() {
       const { data, error } = await supabase
         .from('tournaments')
         .select('*')
-        .order('start_date', { ascending: false });
+        .order('start_datetime', { ascending: false, nullsFirst: false });
       
       if (error) throw error;
       return data.map(applyDynamicStatus).filter(t => t.status === 'finished');
@@ -73,8 +75,7 @@ export default function TournamentSettlement() {
       const { data: tournament, error: tournamentError } = await supabase
         .from('tournaments')
         .select('*, tournament_entries(*, athlete:athletes(*))')
-        .eq('id', selectedTournament)
-        .single();
+        .eq('id', selectedTournament);
 
       if (tournamentError) throw tournamentError;
 
@@ -94,10 +95,50 @@ export default function TournamentSettlement() {
 
       if (marketsError) throw marketsError;
 
-      return { tournament, existingResults, markets };
+      // Pre-populate results from existing data
+      if (existingResults && existingResults.length > 0) {
+        const newResults: Record<Discipline, DisciplineResults> = {
+          slalom: { male: [], female: [] },
+          trick: { male: [], female: [] },
+          jump: { male: [], female: [] },
+        };
+
+        for (const result of existingResults) {
+          const discipline = result.discipline as Discipline;
+          const genderKey = result.gender === 'male' ? 'male' : 'female';
+          
+          newResults[discipline][genderKey].push({
+            athlete_id: result.athlete_id,
+            position: result.position || 0,
+            score: result.score_raw?.toString() || '',
+          });
+        }
+
+        setResults(newResults);
+      }
+
+      return { tournament: tournament[0], existingResults, markets };
     },
     enabled: !!selectedTournament,
   });
+
+  // Get filtered athletes for a specific discipline and gender
+  const getFilteredAthletes = (discipline: Discipline, gender: 'male' | 'female') => {
+    if (!tournamentData?.tournament?.tournament_entries) return [];
+    
+    const genderValue = gender === 'male' ? 'male' : 'female';
+    const searchKey = `${discipline}-${gender}`;
+    const searchTerm = athleteSearch[searchKey]?.toLowerCase() || '';
+    
+    return tournamentData.tournament.tournament_entries
+      .filter((entry: any) => 
+        entry.discipline === discipline &&
+        entry.athlete?.gender === genderValue &&
+        (!searchTerm || entry.athlete?.name?.toLowerCase().includes(searchTerm))
+      )
+      .map((entry: any) => entry.athlete)
+      .filter(Boolean);
+  };
 
   const addResultRow = (discipline: Discipline, gender: string) => {
     setResults(prev => ({
@@ -139,11 +180,37 @@ export default function TournamentSettlement() {
     }));
   };
 
+  const validateResults = (): boolean => {
+    let hasErrors = false;
+
+    for (const [discipline, genderData] of Object.entries(results)) {
+      for (const [gender, entries] of Object.entries(genderData)) {
+        for (const entry of entries) {
+          if (entry.athlete_id && entry.position > 0) {
+            // Validate slalom scores
+            if (discipline === 'slalom' && entry.score && !isValidSlalomScore(entry.score)) {
+              toast({
+                title: 'Invalid slalom score',
+                description: `Score "${entry.score}" is not valid. Use format: buoy@rope (e.g., 2@43, 3.5@41)`,
+                variant: 'destructive',
+              });
+              hasErrors = true;
+            }
+          }
+        }
+      }
+    }
+
+    return !hasErrors;
+  };
+
   const calculateSettlementPreview = async () => {
     if (!selectedTournament || !tournamentData?.markets) {
       toast({ title: 'Please select a tournament and enter results', variant: 'destructive' });
       return;
     }
+
+    if (!validateResults()) return;
 
     const previews: SettlementPreview[] = [];
 
@@ -154,34 +221,46 @@ export default function TournamentSettlement() {
 
       if (disciplineResults.length === 0) continue;
 
-      // Sort by position
-      const sortedResults = [...disciplineResults]
-        .filter(r => r.athlete_id && r.position > 0)
-        .sort((a, b) => a.position - b.position);
+      // Filter valid results
+      const validResults = disciplineResults.filter(r => r.athlete_id && r.position > 0 && r.score);
 
-      let winningSelectionId: string | undefined;
-      let winningAthleteName: string | undefined;
+      let winningSelectionIds: string[] = [];
+      let winningAthleteNames: string[] = [];
 
-      // Determine winner based on market type
-      if (market.market_type === 'WINNER' && sortedResults.length > 0) {
-        const winner = sortedResults[0];
-        const selection = market.selections?.find(s => s.athlete_id === winner.athlete_id);
-        if (selection) {
-          winningSelectionId = selection.id;
-          winningAthleteName = selection.athlete?.name;
+      // Determine winners based on market type
+      if (market.market_type === 'WINNER') {
+        // Find athlete in position 1
+        const winner = validResults.find(r => r.position === 1);
+        if (winner) {
+          const selection = market.selections?.find(s => s.athlete_id === winner.athlete_id);
+          if (selection) {
+            winningSelectionIds = [selection.id];
+            winningAthleteNames = [selection.athlete?.name || ''];
+          }
         }
-      } else if (market.market_type === 'HIGHEST_SCORE' && sortedResults.length > 0) {
-        // Find athlete with highest score (assuming score is numeric for now)
-        const highestScorer = sortedResults.reduce((max, curr) => {
-          const currScore = parseFloat(curr.score) || 0;
-          const maxScore = parseFloat(max.score) || 0;
-          return currScore > maxScore ? curr : max;
-        }, sortedResults[0]);
+      } else if (market.market_type === 'PODIUM') {
+        // Find athletes in positions 1, 2, 3
+        const podiumFinishers = validResults.filter(r => r.position >= 1 && r.position <= 3);
+        for (const finisher of podiumFinishers) {
+          const selection = market.selections?.find(s => s.athlete_id === finisher.athlete_id);
+          if (selection) {
+            winningSelectionIds.push(selection.id);
+            winningAthleteNames.push(selection.athlete?.name || '');
+          }
+        }
+      } else if (market.market_type === 'HIGHEST_SCORE') {
+        // Sort by score using discipline-specific comparison
+        const sortedByScore = [...validResults].sort((a, b) => 
+          compareScores(b.score, a.score, discipline)
+        );
         
-        const selection = market.selections?.find(s => s.athlete_id === highestScorer.athlete_id);
-        if (selection) {
-          winningSelectionId = selection.id;
-          winningAthleteName = selection.athlete?.name;
+        if (sortedByScore.length > 0) {
+          const highestScorer = sortedByScore[0];
+          const selection = market.selections?.find(s => s.athlete_id === highestScorer.athlete_id);
+          if (selection) {
+            winningSelectionIds = [selection.id];
+            winningAthleteNames = [selection.athlete?.name || ''];
+          }
         }
       }
 
@@ -194,7 +273,7 @@ export default function TournamentSettlement() {
 
       const totalWagered = predictions?.reduce((sum, p) => sum + p.staked_tokens, 0) || 0;
       const totalPayout = predictions
-        ?.filter(p => p.selection_id === winningSelectionId)
+        ?.filter(p => winningSelectionIds.includes(p.selection_id))
         .reduce((sum, p) => sum + p.potential_payout, 0) || 0;
 
       previews.push({
@@ -203,8 +282,8 @@ export default function TournamentSettlement() {
         market_type: market.market_type,
         discipline: market.discipline as Discipline,
         category: market.category as Category,
-        winning_selection_id: winningSelectionId,
-        winning_athlete_name: winningAthleteName,
+        winning_selection_ids: winningSelectionIds,
+        winning_athlete_names: winningAthleteNames,
         total_wagered: totalWagered,
         total_payout: totalPayout,
         affected_predictions: predictions?.length || 0,
@@ -212,7 +291,6 @@ export default function TournamentSettlement() {
     }
 
     setSettlementPreviews(previews);
-    setShowPreview(true);
   };
 
   const saveResultsMutation = useMutation({
@@ -223,13 +301,18 @@ export default function TournamentSettlement() {
         for (const [gender, entries] of Object.entries(genderData)) {
           for (const entry of entries) {
             if (entry.athlete_id && entry.position > 0) {
+              // Normalize slalom scores
+              const score = discipline === 'slalom' && entry.score
+                ? normalizeSlalomScore(entry.score)
+                : entry.score;
+
               allResults.push({
                 tournament_id: selectedTournament,
                 athlete_id: entry.athlete_id,
                 discipline,
                 gender,
                 position: entry.position,
-                score_raw: parseFloat(entry.score) || null,
+                score_raw: score,
               });
             }
           }
@@ -260,22 +343,22 @@ export default function TournamentSettlement() {
     mutationFn: async () => {
       // Build settlement payload
       const selections = settlementPreviews
-        .map(preview => ({
-          selection_id: preview.winning_selection_id!,
-          result: 'won' as const,
-        }))
+        .flatMap(preview => 
+          preview.winning_selection_ids.map(id => ({
+            selection_id: id,
+            result: 'won' as const,
+          }))
+        )
         .filter(s => s.selection_id);
 
       // Mark all other selections as lost
       const allSelections = tournamentData?.markets.flatMap(m => m.selections || []) || [];
+      const winningIds = selections.map(s => s.selection_id);
       const losingSelections = allSelections
-        .filter(s => !selections.find(winning => winning.selection_id === s.id))
+        .filter(s => !winningIds.includes(s.id))
         .map(s => ({ selection_id: s.id, result: 'lost' as const }));
 
       const allSettlements = [...selections, ...losingSelections];
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No session');
 
       const response = await supabase.functions.invoke('settle-predictions', {
         body: { selections: allSettlements },
@@ -291,27 +374,25 @@ export default function TournamentSettlement() {
         title: 'Settlement completed',
         description: `Settled ${data.settled_predictions} predictions, paid out ${data.total_payout.toLocaleString()} tokens`,
       });
-      setShowPreview(false);
       setSelectedTournament('');
       setResults({
         slalom: { male: [], female: [] },
         trick: { male: [], female: [] },
         jump: { male: [], female: [] },
       });
+      setSettlementPreviews([]);
     },
     onError: (error: Error) => {
       toast({ title: 'Settlement failed', description: error.message, variant: 'destructive' });
     },
   });
 
-  const athletes = tournamentData?.tournament?.tournament_entries
-    ?.map(entry => entry.athlete)
-    .filter(Boolean) || [];
-
   const totalHouseProfit = settlementPreviews.reduce(
     (sum, p) => sum + (p.total_wagered - p.total_payout),
     0
   );
+
+  // Not needed anymore - we'll settle all at once
 
   return (
     <AdminLayout>
@@ -343,7 +424,7 @@ export default function TournamentSettlement() {
           </CardContent>
         </Card>
 
-        {selectedTournament && !showPreview && (
+        {selectedTournament && settlementPreviews.length === 0 && (
           <>
             <Card>
               <CardHeader>
@@ -361,77 +442,103 @@ export default function TournamentSettlement() {
 
                   {tournamentData?.tournament?.disciplines.map((discipline: Discipline) => (
                     <TabsContent key={discipline} value={discipline} className="space-y-6 mt-6">
-                      {['male', 'female'].map((gender) => (
-                        <div key={gender} className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-semibold">
-                              {gender === 'male' ? 'Open Men' : 'Open Women'}
-                            </h3>
-                            <Button size="sm" onClick={() => addResultRow(discipline, gender)}>
-                              Add Athlete
-                            </Button>
+                      {(['male', 'female'] as const).map((gender) => {
+                        const athletes = getFilteredAthletes(discipline, gender);
+                        const searchKey = `${discipline}-${gender}`;
+                        
+                        return (
+                          <div key={gender} className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-lg font-semibold">
+                                {gender === 'male' ? 'Open Men' : 'Open Women'}
+                              </h3>
+                              <Button size="sm" onClick={() => addResultRow(discipline, gender)}>
+                                Add Result
+                              </Button>
+                            </div>
+
+                            <div className="space-y-3">
+                              {results[discipline]?.[gender]?.map((entry, index) => (
+                                <div key={index} className="grid grid-cols-12 gap-3 items-end">
+                                  <div className="col-span-5">
+                                    <Label>Athlete</Label>
+                                    <div className="relative">
+                                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                      <Select
+                                        value={entry.athlete_id}
+                                        onValueChange={(v) => updateResultRow(discipline, gender, index, 'athlete_id', v)}
+                                      >
+                                        <SelectTrigger className="pl-9">
+                                          <SelectValue placeholder="Select athlete" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <div className="p-2">
+                                            <Input
+                                              placeholder="Search athletes..."
+                                              value={athleteSearch[searchKey] || ''}
+                                              onChange={(e) => setAthleteSearch(prev => ({
+                                                ...prev,
+                                                [searchKey]: e.target.value
+                                              }))}
+                                              className="mb-2"
+                                            />
+                                          </div>
+                                          {athletes.map((athlete: any) => (
+                                            <SelectItem key={athlete.id} value={athlete.id}>
+                                              {athlete.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+
+                                  <div className="col-span-2">
+                                    <Label>Position</Label>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={entry.position || ''}
+                                      onChange={(e) => updateResultRow(discipline, gender, index, 'position', parseInt(e.target.value) || 0)}
+                                      placeholder="1, 2, 3..."
+                                    />
+                                  </div>
+
+                                  <div className="col-span-4">
+                                    <Label>
+                                      Score 
+                                      {discipline === 'slalom' && <span className="text-xs text-muted-foreground ml-1">(e.g., 2@43)</span>}
+                                    </Label>
+                                    <Input
+                                      value={entry.score}
+                                      onChange={(e) => updateResultRow(discipline, gender, index, 'score', e.target.value)}
+                                      placeholder={
+                                        discipline === 'slalom' ? '2@43' : 
+                                        discipline === 'trick' ? '10500' : 
+                                        '67.2'
+                                      }
+                                    />
+                                  </div>
+
+                                  <div className="col-span-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => removeResultRow(discipline, gender, index)}
+                                    >
+                                      ×
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {results[discipline]?.[gender]?.length === 0 && (
+                                <p className="text-sm text-muted-foreground">No results entered yet</p>
+                              )}
+                            </div>
                           </div>
-
-                          <div className="space-y-3">
-                            {results[discipline]?.[gender]?.map((entry, index) => (
-                              <div key={index} className="grid grid-cols-12 gap-3 items-end">
-                                <div className="col-span-5">
-                                  <Label>Athlete</Label>
-                                  <Select
-                                    value={entry.athlete_id}
-                                    onValueChange={(v) => updateResultRow(discipline, gender, index, 'athlete_id', v)}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Select athlete" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {athletes.map((athlete: any) => (
-                                        <SelectItem key={athlete.id} value={athlete.id}>
-                                          {athlete.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-
-                                <div className="col-span-2">
-                                  <Label>Position</Label>
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    value={entry.position || ''}
-                                    onChange={(e) => updateResultRow(discipline, gender, index, 'position', parseInt(e.target.value) || 0)}
-                                    placeholder="1, 2, 3..."
-                                  />
-                                </div>
-
-                                <div className="col-span-4">
-                                  <Label>Score</Label>
-                                  <Input
-                                    value={entry.score}
-                                    onChange={(e) => updateResultRow(discipline, gender, index, 'score', e.target.value)}
-                                    placeholder={discipline === 'slalom' ? '1@43' : discipline === 'trick' ? '10500' : '67.2'}
-                                  />
-                                </div>
-
-                                <div className="col-span-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => removeResultRow(discipline, gender, index)}
-                                  >
-                                    ×
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-
-                            {results[discipline]?.[gender]?.length === 0 && (
-                              <p className="text-sm text-muted-foreground">No results entered yet</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </TabsContent>
                   ))}
                 </Tabs>
@@ -439,8 +546,8 @@ export default function TournamentSettlement() {
             </Card>
 
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => saveResultsMutation.mutate()}>
-                Save Results
+              <Button variant="outline" onClick={() => saveResultsMutation.mutate()} disabled={saveResultsMutation.isPending}>
+                {saveResultsMutation.isPending ? 'Saving...' : 'Save Results'}
               </Button>
               <Button onClick={calculateSettlementPreview} disabled={saveResultsMutation.isPending}>
                 Preview Settlement
@@ -449,107 +556,99 @@ export default function TournamentSettlement() {
           </>
         )}
 
-        {showPreview && settlementPreviews.length > 0 && (
+        {settlementPreviews.length > 0 && (
           <>
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Review the settlement details below. Once confirmed, all predictions will be settled and user wallets will be updated. This action cannot be undone.
+                Review settlement details below. Once confirmed, all predictions will be settled and payouts processed.
               </AlertDescription>
             </Alert>
 
             <Card>
               <CardHeader>
-                <CardTitle>Settlement Summary</CardTitle>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Settlement Summary</span>
+                  <div className="flex gap-4 text-sm font-normal">
+                    <div className="flex items-center gap-2">
+                      <Coins className="w-4 h-4" />
+                      <span>Wagered: {settlementPreviews.reduce((s, p) => s + p.total_wagered, 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      <span>Payout: {settlementPreviews.reduce((s, p) => s + p.total_payout, 0).toLocaleString()}</span>
+                    </div>
+                    <div className={`flex items-center gap-2 ${totalHouseProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
+                      <Trophy className="w-4 h-4" />
+                      <span>House: {totalHouseProfit >= 0 ? '+' : ''}{totalHouseProfit.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className="text-center p-4 rounded-lg bg-primary/5 border border-primary/10">
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground mb-2">
-                      <Coins className="w-5 h-5" />
-                      <span className="text-sm">Total Wagered</span>
-                    </div>
-                    <p className="text-2xl font-bold">
-                      {settlementPreviews.reduce((sum, p) => sum + p.total_wagered, 0).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div className="text-center p-4 rounded-lg bg-success/5 border border-success/10">
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground mb-2">
-                      <TrendingUp className="w-5 h-5" />
-                      <span className="text-sm">Total Payout</span>
-                    </div>
-                    <p className="text-2xl font-bold text-success">
-                      {settlementPreviews.reduce((sum, p) => sum + p.total_payout, 0).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div className="text-center p-4 rounded-lg bg-secondary/5 border border-secondary/10">
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground mb-2">
-                      <Trophy className="w-5 h-5" />
-                      <span className="text-sm">House P/L</span>
-                    </div>
-                    <p className={`text-2xl font-bold ${totalHouseProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
-                      {totalHouseProfit >= 0 ? '+' : ''}{totalHouseProfit.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {settlementPreviews.map((preview) => (
-                    <Card key={preview.market_id} className="border-border/50">
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <p className="font-semibold">{preview.market_name}</p>
-                            <p className="text-sm text-muted-foreground capitalize">
-                              {preview.discipline} • {preview.category.replace('_', ' ')}
-                            </p>
-                          </div>
-                          {preview.winning_athlete_name && (
-                            <Badge className="bg-success text-success-foreground">
-                              Winner: {preview.winning_athlete_name}
-                            </Badge>
-                          )}
+              <CardContent className="space-y-4">
+                {settlementPreviews.map((preview) => (
+                  <div key={preview.market_id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold">{preview.market_name}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="capitalize">{preview.discipline}</Badge>
+                          <Badge variant="outline">{preview.market_type.replace('_', ' ')}</Badge>
                         </div>
+                      </div>
+                      {preview.winning_athlete_names.length > 0 ? (
+                        <Badge className="bg-success text-success-foreground">
+                          Winners: {preview.winning_athlete_names.join(', ')}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">No Winner</Badge>
+                      )}
+                    </div>
 
-                        <div className="flex gap-6 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Wagered:</span>
-                            <span className="ml-2 font-medium">{preview.total_wagered.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Payout:</span>
-                            <span className="ml-2 font-medium text-success">{preview.total_payout.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Predictions:</span>
-                            <span className="ml-2 font-medium">{preview.affected_predictions}</span>
-                          </div>
+                    <div className="grid grid-cols-3 gap-4 pt-3 border-t">
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                          <Users className="w-4 h-4" />
+                          <span className="text-xs">Predictions</span>
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        <p className="text-lg font-bold">{preview.affected_predictions}</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                          <Coins className="w-4 h-4" />
+                          <span className="text-xs">Wagered</span>
+                        </div>
+                        <p className="text-lg font-bold">{preview.total_wagered.toLocaleString()}</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-1 text-success mb-1">
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-xs">Payout</span>
+                        </div>
+                        <p className="text-lg font-bold text-success">{preview.total_payout.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
 
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowPreview(false)}>
+              <Button variant="outline" onClick={() => setSettlementPreviews([])}>
                 Back to Results
               </Button>
-              <Button
-                onClick={() => settleMutation.mutate()}
+              <Button 
+                onClick={() => settleMutation.mutate()} 
                 disabled={settleMutation.isPending}
-                className="bg-success hover:bg-success/90"
+                className="bg-primary hover:bg-primary/90"
               >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                {settleMutation.isPending ? 'Settling...' : 'Confirm Settlement'}
+                {settleMutation.isPending ? 'Processing...' : 'Confirm & Settle All Markets'}
               </Button>
             </div>
           </>
         )}
       </div>
+
     </AdminLayout>
   );
 }
