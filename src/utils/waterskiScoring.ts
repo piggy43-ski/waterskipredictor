@@ -3,9 +3,26 @@
 export type Discipline = 'slalom' | 'trick' | 'jump';
 
 // Rope difficulty hierarchy (easiest to hardest)
+// Each rope can have multiple notations (off values or meters)
 const ROPE_HIERARCHY = [
-  '15', '22', '28', '32', '35', '38', '39.5', '41', '43'
+  ['15', '18.25'],
+  ['22', '16'],
+  ['28', '14.25'],
+  ['32', '13'],
+  ['35', '12.2'],
+  ['38', '11.25'],
+  ['39.5', '10.75'],
+  ['41', '10.25'],
+  ['43', '9.75']
 ];
+
+// Flatten for easy lookup
+const ROPE_LOOKUP = new Map<string, number>();
+ROPE_HIERARCHY.forEach((variations, index) => {
+  variations.forEach(rope => {
+    ROPE_LOOKUP.set(rope, index);
+  });
+});
 
 /**
  * Parse slalom score format (e.g., "2@43", "3.5@41", "3 1/2@41", "½@38")
@@ -58,8 +75,8 @@ export function parseSlalomScore(scoreStr: string): { buoys: number; rope: strin
   }
   
   // Calculate value: rope_index * 10 + buoys
-  const ropeIndex = ROPE_HIERARCHY.indexOf(rope);
-  if (ropeIndex === -1) return null;
+  const ropeIndex = ROPE_LOOKUP.get(rope);
+  if (ropeIndex === undefined) return null;
   
   const value = ropeIndex * 10 + buoys;
   
