@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Search } from 'lucide-react';
 import type { Discipline } from '@/types';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 
@@ -20,6 +20,7 @@ export default function TournamentEntries() {
   const [selectedGender, setSelectedGender] = useState<'male' | 'female' | ''>('');
   const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(new Set());
   const [customOdds, setCustomOdds] = useState<Record<string, string>>({});
+  const [athleteSearch, setAthleteSearch] = useState('');
 
   const queryClient = useQueryClient();
 
@@ -341,14 +342,32 @@ export default function TournamentEntries() {
 
                 {athletes && athletes.length > 0 && (
                   <>
+                    <div>
+                      <Label>Search Athletes</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Type to search athletes..."
+                          value={athleteSearch}
+                          onChange={(e) => setAthleteSearch(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
                     <div className="text-sm text-muted-foreground mb-2">
-                      Showing {athletes.length} available athletes
+                      Showing {athletes.filter((a: any) => 
+                        !athleteSearch || a.name.toLowerCase().includes(athleteSearch.toLowerCase())
+                      ).length} of {athletes.length} available athletes
                       {entries && entries.filter(e => e.discipline === selectedDiscipline).length > 0 && 
                         ` (${entries.filter(e => e.discipline === selectedDiscipline).length} already entered)`
                       }
                     </div>
                     <div className="border rounded-lg divide-y max-h-96 overflow-y-auto">
-                      {athletes.map((athlete: any) => {
+                      {athletes
+                        .filter((athlete: any) => 
+                          !athleteSearch || athlete.name.toLowerCase().includes(athleteSearch.toLowerCase())
+                        )
+                        .map((athlete: any) => {
                         const rank = athlete[`current_rank_${selectedDiscipline}`];
                         const oddsValue = customOdds[athlete.id] ? parseFloat(customOdds[athlete.id]) : calculateDefaultOdds(athlete, selectedDiscipline);
                         
