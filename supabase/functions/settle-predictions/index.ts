@@ -147,21 +147,12 @@ Deno.serve(async (req) => {
       const selIdString = String(selection_id);
       
       try {
-        // Update selection result
-        const { error: selectionError } = await supabaseClient
-          .from('selections')
-          .update({ result: selectionResult })
-          .eq('id', selection_id);
+        // Note: we intentionally do NOT update selections.result here.
+        // That column has a DB CHECK constraint with a specific enum set,
+        // and settlement status is fully driven off predictions.status instead.
 
-        if (selectionError) {
-          result.errors?.push(`Failed to update selection ${selection_id}: ${selectionError.message}`);
-          console.error(`❌ Selection update error for ${selection_id}:`, selectionError);
-          continue;
-        }
-
-        // Get predictions for this selection from our batch
+        // Get predictions for this selection from our pre-fetched batch
         const predictions = predictionsBySelection.get(selIdString) || [];
-
         if (predictions.length === 0) {
           console.log(`⚠️  No pending predictions for selection ${selection_id}`);
           result.debug_info!.selection_ids_without_predictions.push(selIdString);
