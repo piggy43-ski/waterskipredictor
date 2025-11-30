@@ -769,7 +769,7 @@ const TournamentDetail = () => {
                           const podiumState = getPodiumState(discipline, 'men');
                           
                           return podiumMarket ? (
-                            <>
+                            <div className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
                               <PodiumSelectionCard
                                 athletes={podiumSelections}
                                 selectedAthletes={podiumState.selectedAthletes}
@@ -792,7 +792,7 @@ const TournamentDetail = () => {
                                   Please assign positions in the dialog above
                                 </div>
                               )}
-                            </>
+                            </div>
                           ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
                         })()}
                       </TabsContent>
@@ -895,7 +895,7 @@ const TournamentDetail = () => {
                           const podiumState = getPodiumState(discipline, 'women');
                           
                           return podiumMarket ? (
-                            <>
+                            <div className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
                               <PodiumSelectionCard
                                 athletes={podiumSelections}
                                 selectedAthletes={podiumState.selectedAthletes}
@@ -918,7 +918,7 @@ const TournamentDetail = () => {
                                   Please assign positions in the dialog above
                                 </div>
                               )}
-                            </>
+                            </div>
                           ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
                         })()}
                       </TabsContent>
