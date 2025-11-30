@@ -9,6 +9,7 @@ import { PodiumPredictionDialog } from '@/components/PodiumPredictionDialog';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
 import { ParlayCart } from '@/components/ParlayCart';
 import { TournamentResults } from '@/components/TournamentResults';
+import { UserTournamentResults } from '@/components/UserTournamentResults';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Selection, Tournament, Market } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -32,6 +33,7 @@ const TournamentDetail = () => {
   const [loading, setLoading] = useState(true);
   const [bettingWindow, setBettingWindow] = useState<ReturnType<typeof getBettingWindowStatus> | null>(null);
   const [athleteResults, setAthleteResults] = useState<any[]>([]);
+  const [userPredictions, setUserPredictions] = useState<any[]>([]);
   
   // Podium betting state - scoped by discipline+gender
   const [podiumStateMap, setPodiumStateMap] = useState<Record<string, {
@@ -181,6 +183,20 @@ const TournamentDetail = () => {
 
           if (!resultsError && resultsData) {
             setAthleteResults(resultsData);
+          }
+
+          // Fetch user predictions for finished tournaments
+          if (user) {
+            const { data: predictionsData, error: predictionsError } = await supabase
+              .from('predictions')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('tournament_name', tournamentData.name)
+              .order('created_at', { ascending: false });
+
+            if (!predictionsError && predictionsData) {
+              setUserPredictions(predictionsData);
+            }
           }
         }
       }
@@ -645,6 +661,13 @@ const TournamentDetail = () => {
             </Alert>
           )}
         </div>
+
+        {/* User Results Section - Show only for finished tournaments */}
+        {tournament.status === 'finished' && (
+          <div className="mb-6">
+            <UserTournamentResults predictions={userPredictions} />
+          </div>
+        )}
 
         {/* Results Section - Show only for finished tournaments */}
         {tournament.status === 'finished' && athleteResults.length > 0 && (
