@@ -208,6 +208,25 @@ Deno.serve(async (req) => {
             result.total_payout += prediction.potential_payout;
             result.settled_predictions += 1;
 
+            // Update lifetime winnings in profile
+            const winAmount = prediction.potential_payout - prediction.staked_tokens;
+            if (winAmount > 0) {
+              const { data: profileData } = await supabaseClient
+                .from('profiles')
+                .select('lifetime_winnings')
+                .eq('id', prediction.user_id)
+                .single();
+              
+              if (profileData) {
+                await supabaseClient
+                  .from('profiles')
+                  .update({
+                    lifetime_winnings: (profileData.lifetime_winnings || 0) + winAmount
+                  })
+                  .eq('id', prediction.user_id);
+              }
+            }
+
             console.log(`✅ WON: ${prediction.id} → +${prediction.potential_payout} tokens to user ${prediction.user_id}`);
           } else if (selectionResult === 'lost') {
             // Update prediction to LOST
@@ -227,6 +246,23 @@ Deno.serve(async (req) => {
             }
 
             result.settled_predictions += 1;
+
+            // Update lifetime losses in profile
+            const { data: profileData } = await supabaseClient
+              .from('profiles')
+              .select('lifetime_losses')
+              .eq('id', prediction.user_id)
+              .single();
+            
+            if (profileData) {
+              await supabaseClient
+                .from('profiles')
+                .update({
+                  lifetime_losses: (profileData.lifetime_losses || 0) + prediction.staked_tokens
+                })
+                .eq('id', prediction.user_id);
+            }
+
             console.log(`❌ LOST: ${prediction.id}`);
           } else if (selectionResult === 'void') {
             // Refund stake for void predictions

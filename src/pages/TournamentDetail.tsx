@@ -8,6 +8,7 @@ import { PodiumSelectionCard } from '@/components/PodiumSelectionCard';
 import { PodiumPredictionDialog } from '@/components/PodiumPredictionDialog';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
 import { ParlayCart } from '@/components/ParlayCart';
+import { TournamentResults } from '@/components/TournamentResults';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Selection, Tournament, Market } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +31,7 @@ const TournamentDetail = () => {
   const [selections, setSelections] = useState<Selection[]>([]);
   const [loading, setLoading] = useState(true);
   const [bettingWindow, setBettingWindow] = useState<ReturnType<typeof getBettingWindowStatus> | null>(null);
+  const [athleteResults, setAthleteResults] = useState<any[]>([]);
   
   // Podium betting state - scoped by discipline+gender
   const [podiumStateMap, setPodiumStateMap] = useState<Record<string, {
@@ -162,6 +164,24 @@ const TournamentDetail = () => {
           }));
 
           setSelections(mappedSelections);
+        }
+
+        // Fetch athlete results if tournament is finished
+        if (tournamentData.status === 'finished') {
+          const { data: resultsData, error: resultsError } = await supabase
+            .from('athlete_results')
+            .select(`
+              *,
+              athlete:athletes (
+                name,
+                country
+              )
+            `)
+            .eq('tournament_id', id);
+
+          if (!resultsError && resultsData) {
+            setAthleteResults(resultsData);
+          }
         }
       }
     } catch (error) {
@@ -625,6 +645,16 @@ const TournamentDetail = () => {
             </Alert>
           )}
         </div>
+
+        {/* Results Section - Show only for finished tournaments */}
+        {tournament.status === 'finished' && athleteResults.length > 0 && (
+          <div className="mb-6">
+            <TournamentResults 
+              results={athleteResults}
+              disciplines={tournament.disciplines}
+            />
+          </div>
+        )}
 
         {/* Markets by Discipline */}
         <Tabs defaultValue="slalom" className="w-full">
