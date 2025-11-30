@@ -37,6 +37,7 @@ const Profile = () => {
     
     fetchProfile();
     fetchWallet();
+    fetchLifetimeStats();
     checkAdminStatus();
   }, [user, navigate]);
 
@@ -58,7 +59,7 @@ const Profile = () => {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('username, country, avatar_url, lifetime_deposited, lifetime_winnings, lifetime_losses')
+      .select('username, country, avatar_url, lifetime_deposited')
       .eq('id', user.id)
       .single();
 
@@ -72,8 +73,6 @@ const Profile = () => {
       setCountry(data.country || '');
       setAvatarUrl(data.avatar_url || '');
       setLifetimeDeposited(data.lifetime_deposited || 0);
-      setLifetimeWinnings(data.lifetime_winnings || 0);
-      setLifetimeLosses(data.lifetime_losses || 0);
     }
   };
 
@@ -95,6 +94,45 @@ const Profile = () => {
       setPurchasedTokens(data.purchased_tokens);
       setEarnedTokens(data.earned_tokens);
     }
+  };
+
+  const fetchLifetimeStats = async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('predictions')
+      .select('status, staked_tokens, payout_tokens')
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Error fetching lifetime stats:', error);
+      return;
+    }
+
+    if (!data) {
+      setLifetimeWinnings(0);
+      setLifetimeLosses(0);
+      return;
+    }
+
+    let winnings = 0;
+    let losses = 0;
+
+    for (const prediction of data) {
+      const status = String(prediction.status);
+      if (status === 'WON') {
+        const payout = prediction.payout_tokens ?? 0;
+        const winAmount = payout - prediction.staked_tokens;
+        if (winAmount > 0) {
+          winnings += winAmount;
+        }
+      } else if (status === 'LOST') {
+        losses += prediction.staked_tokens;
+      }
+    }
+
+    setLifetimeWinnings(winnings);
+    setLifetimeLosses(losses);
   };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
