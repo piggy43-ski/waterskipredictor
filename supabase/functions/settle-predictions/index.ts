@@ -18,6 +18,12 @@ interface SettlementResult {
   total_payout: number;
   affected_users: number;
   errors?: string[];
+  debug_info?: {
+    selections_processed: number;
+    predictions_found: number;
+    selection_ids_with_predictions: string[];
+    selection_ids_without_predictions: string[];
+  };
 }
 
 Deno.serve(async (req) => {
@@ -72,7 +78,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Processing settlement for ${selections.length} selections`);
+    console.log(`🎯 Starting settlement for ${selections.length} selections`);
+    
+    // Extract all selection IDs - ensure they're strings
+    const selectionIds = selections.map(s => String(s.selection_id));
+    console.log(`📋 Selection IDs to process:`, selectionIds.slice(0, 5), `... (showing first 5)`);
 
     const result: SettlementResult = {
       success: true,
@@ -80,12 +90,62 @@ Deno.serve(async (req) => {
       total_payout: 0,
       affected_users: 0,
       errors: [],
+      debug_info: {
+        selections_processed: selections.length,
+        predictions_found: 0,
+        selection_ids_with_predictions: [],
+        selection_ids_without_predictions: [],
+      },
     };
 
     const affectedUserIds = new Set<string>();
 
+    // BATCH FETCH: Get all pending predictions for all selections in ONE query
+    console.log(`🔍 Fetching all pending predictions for ${selectionIds.length} selections...`);
+    
+    const { data: allPredictions, error: batchError } = await supabaseClient
+      .from('predictions')
+      .select('*')
+      .in('selection_id', selectionIds)
+      .eq('status', 'PENDING');
+
+    if (batchError) {
+      console.error('❌ Error fetching predictions batch:', batchError);
+      return new Response(
+        JSON.stringify({ 
+          error: `Failed to fetch predictions: ${batchError.message}`,
+          debug_info: {
+            selection_ids: selectionIds.slice(0, 10),
+            error_details: batchError,
+          }
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`✅ Found ${allPredictions?.length || 0} pending predictions total`);
+    result.debug_info!.predictions_found = allPredictions?.length || 0;
+
+    // Group predictions by selection_id for efficient lookup
+    const predictionsBySelection = new Map<string, typeof allPredictions>();
+    
+    if (allPredictions && allPredictions.length > 0) {
+      allPredictions.forEach(pred => {
+        const selId = String(pred.selection_id); // Ensure string comparison
+        if (!predictionsBySelection.has(selId)) {
+          predictionsBySelection.set(selId, []);
+        }
+        predictionsBySelection.get(selId)!.push(pred);
+      });
+
+      console.log(`📊 Grouped predictions across ${predictionsBySelection.size} unique selections`);
+      console.log(`🔑 Selection IDs with predictions:`, Array.from(predictionsBySelection.keys()).slice(0, 5));
+    }
+
     // Process each selection
     for (const { selection_id, result: selectionResult } of selections) {
+      const selIdString = String(selection_id);
+      
       try {
         // Update selection result
         const { error: selectionError } = await supabaseClient
@@ -95,25 +155,21 @@ Deno.serve(async (req) => {
 
         if (selectionError) {
           result.errors?.push(`Failed to update selection ${selection_id}: ${selectionError.message}`);
+          console.error(`❌ Selection update error for ${selection_id}:`, selectionError);
           continue;
         }
 
-        // Get all pending predictions for this selection
-        const { data: predictions, error: predError } = await supabaseClient
-          .from('predictions')
-          .select('*')
-          .eq('selection_id', selection_id)
-          .eq('status', 'PENDING');
+        // Get predictions for this selection from our batch
+        const predictions = predictionsBySelection.get(selIdString) || [];
 
-        if (predError) {
-          result.errors?.push(`Failed to fetch predictions for ${selection_id}: ${predError.message}`);
+        if (predictions.length === 0) {
+          console.log(`⚠️  No pending predictions for selection ${selection_id}`);
+          result.debug_info!.selection_ids_without_predictions.push(selIdString);
           continue;
         }
 
-        if (!predictions || predictions.length === 0) {
-          console.log(`No pending predictions for selection ${selection_id}`);
-          continue;
-        }
+        console.log(`💰 Processing ${predictions.length} predictions for selection ${selection_id} (${selectionResult})`);
+        result.debug_info!.selection_ids_with_predictions.push(selIdString);
 
         // Process each prediction
         for (const prediction of predictions) {
@@ -132,6 +188,7 @@ Deno.serve(async (req) => {
 
             if (updateError) {
               result.errors?.push(`Failed to update prediction ${prediction.id}: ${updateError.message}`);
+              console.error(`❌ Prediction update error:`, updateError);
               continue;
             }
 
@@ -142,7 +199,7 @@ Deno.serve(async (req) => {
             });
 
             if (walletError) {
-              // If wallet update fails, we need to rollback the prediction update
+              // If wallet update fails, rollback the prediction update
               await supabaseClient
                 .from('predictions')
                 .update({
@@ -153,13 +210,14 @@ Deno.serve(async (req) => {
                 .eq('id', prediction.id);
 
               result.errors?.push(`Failed to update wallet for prediction ${prediction.id}: ${walletError.message}`);
+              console.error(`❌ Wallet error, rolled back:`, walletError);
               continue;
             }
 
             result.total_payout += prediction.potential_payout;
             result.settled_predictions += 1;
 
-            console.log(`Settled WON prediction ${prediction.id}: +${prediction.potential_payout} tokens to user ${prediction.user_id}`);
+            console.log(`✅ WON: ${prediction.id} → +${prediction.potential_payout} tokens to user ${prediction.user_id}`);
           } else if (selectionResult === 'lost') {
             // Update prediction to LOST
             const { error: updateError } = await supabaseClient
@@ -173,11 +231,12 @@ Deno.serve(async (req) => {
 
             if (updateError) {
               result.errors?.push(`Failed to update prediction ${prediction.id}: ${updateError.message}`);
+              console.error(`❌ Prediction update error:`, updateError);
               continue;
             }
 
             result.settled_predictions += 1;
-            console.log(`Settled LOST prediction ${prediction.id}`);
+            console.log(`❌ LOST: ${prediction.id}`);
           } else if (selectionResult === 'void') {
             // Refund stake for void predictions
             const { error: updateError } = await supabaseClient
@@ -191,6 +250,7 @@ Deno.serve(async (req) => {
 
             if (updateError) {
               result.errors?.push(`Failed to update prediction ${prediction.id}: ${updateError.message}`);
+              console.error(`❌ Prediction update error:`, updateError);
               continue;
             }
 
@@ -212,31 +272,41 @@ Deno.serve(async (req) => {
                 .eq('id', prediction.id);
 
               result.errors?.push(`Failed to refund for prediction ${prediction.id}: ${walletError.message}`);
+              console.error(`❌ Wallet error, rolled back:`, walletError);
               continue;
             }
 
             result.total_payout += prediction.staked_tokens;
             result.settled_predictions += 1;
 
-            console.log(`Settled VOID prediction ${prediction.id}: refunded ${prediction.staked_tokens} tokens to user ${prediction.user_id}`);
+            console.log(`🔄 VOID: ${prediction.id} → refunded ${prediction.staked_tokens} tokens to user ${prediction.user_id}`);
           }
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         result.errors?.push(`Error processing selection ${selection_id}: ${errorMessage}`);
+        console.error(`❌ Error processing selection ${selection_id}:`, error);
       }
     }
 
     result.affected_users = affectedUserIds.size;
 
-    console.log(`Settlement complete: ${result.settled_predictions} predictions, ${result.total_payout} tokens paid out to ${result.affected_users} users`);
+    console.log(`\n🎉 Settlement complete:`);
+    console.log(`   ✅ ${result.settled_predictions} predictions settled`);
+    console.log(`   💰 ${result.total_payout} tokens paid out`);
+    console.log(`   👥 ${result.affected_users} users affected`);
+    console.log(`   📋 ${result.debug_info!.selection_ids_with_predictions.length} selections had predictions`);
+    console.log(`   ⚠️  ${result.debug_info!.selection_ids_without_predictions.length} selections had no predictions`);
+    if (result.errors && result.errors.length > 0) {
+      console.log(`   ❌ ${result.errors.length} errors occurred`);
+    }
 
     return new Response(
       JSON.stringify(result),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Settlement error:', error);
+    console.error('💥 Settlement error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
       JSON.stringify({ error: errorMessage }),

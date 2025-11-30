@@ -370,10 +370,23 @@ export default function TournamentSettlement() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data'] });
       queryClient.invalidateQueries({ queryKey: ['settlement-tournaments'] });
-      toast({
-        title: 'Settlement completed',
-        description: `Settled ${data.settled_predictions} predictions, paid out ${data.total_payout.toLocaleString()} tokens`,
-      });
+      
+      // Show detailed results
+      console.log('Settlement results:', data);
+      
+      if (data.settled_predictions === 0 && data.debug_info) {
+        toast({
+          title: 'Settlement completed with issues',
+          description: `Found ${data.debug_info.predictions_found} predictions but settled 0. Check console for details.`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Settlement completed successfully',
+          description: `Settled ${data.settled_predictions} predictions, paid out ${data.total_payout.toLocaleString()} tokens to ${data.affected_users} users`,
+        });
+      }
+      
       setSelectedTournament('');
       setResults({
         slalom: { male: [], female: [] },
