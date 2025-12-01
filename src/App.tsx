@@ -19,11 +19,9 @@ import AdminAthletes from "./pages/admin/Athletes";
 import AdminAthleteDetail from "./pages/admin/AthleteDetail";
 import AdminRankingsSync from "./pages/admin/RankingsSync";
 import AdminRankingsImport from "./pages/admin/RankingsImport";
-import AdminResults from "./pages/admin/Results";
 import AdminMarkets from "./pages/admin/Markets";
 import AdminSelections from "./pages/admin/Selections";
 import AdminRewards from "./pages/admin/Rewards";
-import AdminSettlement from "./pages/admin/Settlement";
 import AdminTournamentSettlement from "./pages/admin/TournamentSettlement";
 import AdminTournamentEntries from "./pages/admin/TournamentEntries";
 import AthleteProfile from "./pages/AthleteProfile";
@@ -52,12 +50,10 @@ const App = () => (
             <Route path="/admin/athletes/:id" element={<AdminAthleteDetail />} />
             <Route path="/admin/rankings-sync" element={<AdminRankingsSync />} />
             <Route path="/admin/rankings-import" element={<AdminRankingsImport />} />
-            <Route path="/admin/results" element={<AdminResults />} />
             <Route path="/admin/tournaments" element={<AdminTournaments />} />
             <Route path="/admin/markets" element={<AdminMarkets />} />
             <Route path="/admin/selections" element={<AdminSelections />} />
             <Route path="/admin/rewards" element={<AdminRewards />} />
-            <Route path="/admin/settlement" element={<AdminSettlement />} />
             <Route path="/admin/tournament-settlement" element={<AdminTournamentSettlement />} />
             <Route path="/admin/tournament-entries" element={<AdminTournamentEntries />} />
             <Route path="*" element={<NotFound />} />
