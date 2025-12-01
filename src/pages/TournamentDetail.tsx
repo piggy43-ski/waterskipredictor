@@ -11,6 +11,8 @@ import { ParlayCart } from '@/components/ParlayCart';
 import { TournamentResults } from '@/components/TournamentResults';
 import { UserTournamentResults } from '@/components/UserTournamentResults';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Selection, Tournament, Market } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar, MapPin, Clock, AlertCircle } from 'lucide-react';
@@ -52,6 +54,7 @@ const TournamentDetail = () => {
   
   // Parlay state
   const [parlaySelections, setParlaySelections] = useState<Selection[]>([]);
+  const [isParlayMode, setIsParlayMode] = useState(false);
   
   // Gender state per discipline
   const [genderByDiscipline, setGenderByDiscipline] = useState<Record<string, 'men' | 'women'>>({});
@@ -715,6 +718,28 @@ const TournamentDetail = () => {
           )}
         </div>
 
+        {/* Betting Mode Toggle */}
+        {tournament.status !== 'finished' && bettingWindow?.canBet && (
+          <div className="mb-6 flex items-center justify-center gap-4 p-4 bg-card border border-border rounded-lg">
+            <Label htmlFor="parlay-mode" className="text-sm font-medium cursor-pointer">
+              Single Bets
+            </Label>
+            <Switch 
+              id="parlay-mode"
+              checked={isParlayMode}
+              onCheckedChange={(checked) => {
+                setIsParlayMode(checked);
+                if (!checked) {
+                  setParlaySelections([]);
+                }
+              }}
+            />
+            <Label htmlFor="parlay-mode" className="text-sm font-medium cursor-pointer">
+              Build Parlay
+            </Label>
+          </div>
+        )}
+
         {/* User Results Section - Show only for finished tournaments */}
         {tournament.status === 'finished' && (
           <div className="mb-6">
@@ -794,6 +819,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={(sel) => handleSelectSelection(sel, false)}
                                 discipline={discipline}
+                                mode={isParlayMode ? 'parlay' : 'single'}
                                 onAddToParlay={handleAddToParlay}
                                 isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
@@ -924,6 +950,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={(sel) => handleSelectSelection(sel, false)}
                                 discipline={discipline}
+                                mode={isParlayMode ? 'parlay' : 'single'}
                                 onAddToParlay={handleAddToParlay}
                                 isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
@@ -1009,6 +1036,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={(sel) => handleSelectSelection(sel, false)}
                                 discipline={discipline}
+                                mode={isParlayMode ? 'parlay' : 'single'}
                                 onAddToParlay={handleAddToParlay}
                                 isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
@@ -1024,7 +1052,7 @@ const TournamentDetail = () => {
         </Tabs>
 
         {/* Parlay Cart */}
-        {parlaySelections.length > 0 && (
+        {isParlayMode && parlaySelections.length > 0 && (
           <div className="mt-6">
             <ParlayCart
               selections={parlaySelections}
@@ -1032,6 +1060,10 @@ const TournamentDetail = () => {
               onRemove={handleRemoveFromParlay}
               onPlaceParlay={handlePlaceParlay}
               onClear={handleClearParlay}
+              onExitParlayMode={() => {
+                setIsParlayMode(false);
+                setParlaySelections([]);
+              }}
             />
           </div>
         )}

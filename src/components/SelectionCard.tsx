@@ -2,13 +2,14 @@ import { Selection, Discipline } from '@/types';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { TrendingUp, Medal } from 'lucide-react';
+import { TrendingUp, Medal, Check } from 'lucide-react';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 
 interface SelectionCardProps {
   selection: Selection;
   onSelect: (selection: Selection) => void;
   discipline?: Discipline;
+  mode?: 'single' | 'parlay';
   onAddToParlay?: (selection: Selection) => void;
   isInParlay?: boolean;
 }
@@ -36,7 +37,7 @@ const getFlagEmoji = (countryCode: string): string => {
   return countryFlags[countryCode] || '🏴';
 };
 
-export const SelectionCard = ({ selection, onSelect, discipline, onAddToParlay, isInParlay }: SelectionCardProps) => {
+export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single', onAddToParlay, isInParlay }: SelectionCardProps) => {
   const americanOdds = decimalToAmerican(selection.decimal_odds);
   
   // Get the appropriate rank based on discipline
@@ -66,7 +67,7 @@ export const SelectionCard = ({ selection, onSelect, discipline, onAddToParlay, 
   };
   
   return (
-    <Card className={`p-4 hover:shadow-glow hover:border-primary/50 transition-all ${isInParlay ? 'border-primary' : ''}`}>
+    <Card className={`p-4 hover:shadow-glow transition-all ${isInParlay && mode === 'parlay' ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`}>
       <div className="flex justify-between items-center">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
@@ -75,11 +76,6 @@ export const SelectionCard = ({ selection, onSelect, discipline, onAddToParlay, 
               <Badge variant={getRankVariant()} className="flex items-center gap-1">
                 {rank <= 3 && <Medal className="w-3 h-3" />}
                 #{rank}
-              </Badge>
-            )}
-            {isInParlay && (
-              <Badge variant="default" className="text-xs">
-                In Parlay
               </Badge>
             )}
           </div>
@@ -95,11 +91,13 @@ export const SelectionCard = ({ selection, onSelect, discipline, onAddToParlay, 
               {americanOdds}
             </span>
           </div>
-          <div className="flex gap-2">
+          
+          {/* Single Bet Mode - Show only Place Bet */}
+          {mode === 'single' && (
             <Button 
               size="sm" 
               variant="default" 
-              className="min-w-[80px]"
+              className="min-w-[100px]"
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(selection);
@@ -107,19 +105,29 @@ export const SelectionCard = ({ selection, onSelect, discipline, onAddToParlay, 
             >
               Place Bet
             </Button>
-            {onAddToParlay && (
-              <Button 
-                size="sm" 
-                variant={isInParlay ? "secondary" : "outline"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddToParlay(selection);
-                }}
-              >
-                {isInParlay ? 'Remove' : 'Add +'}
-              </Button>
-            )}
-          </div>
+          )}
+          
+          {/* Parlay Mode - Show only Select/Selected */}
+          {mode === 'parlay' && onAddToParlay && (
+            <Button 
+              size="sm" 
+              variant={isInParlay ? "default" : "outline"}
+              className="min-w-[100px]"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddToParlay(selection);
+              }}
+            >
+              {isInParlay ? (
+                <>
+                  <Check className="w-4 h-4 mr-1" />
+                  Selected
+                </>
+              ) : (
+                'Select'
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </Card>
