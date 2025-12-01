@@ -318,6 +318,42 @@ Deno.serve(async (req) => {
 
     result.affected_users = affectedUserIds.size;
 
+    // Mark tournament as settled
+    if (result.settled_predictions > 0 && predictionsBySelection.size > 0) {
+      try {
+        // Get tournament_id from the first selection that had predictions
+        const firstSelectionId = Array.from(predictionsBySelection.keys())[0];
+        const { data: selectionData, error: selError } = await supabaseClient
+          .from('selections')
+          .select('market_id')
+          .eq('id', firstSelectionId)
+          .single();
+
+        if (selectionData && !selError) {
+          const { data: marketData, error: marketError } = await supabaseClient
+            .from('markets')
+            .select('tournament_id')
+            .eq('id', selectionData.market_id)
+            .single();
+
+          if (marketData && !marketError) {
+            const { error: tournamentError } = await supabaseClient
+              .from('tournaments')
+              .update({ settled_at: new Date().toISOString() })
+              .eq('id', marketData.tournament_id);
+
+            if (tournamentError) {
+              console.error('⚠️  Failed to mark tournament as settled:', tournamentError);
+            } else {
+              console.log(`✅ Tournament ${marketData.tournament_id} marked as settled`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('⚠️  Error marking tournament as settled:', error);
+      }
+    }
+
     console.log(`\n🎉 Settlement complete:`);
     console.log(`   ✅ ${result.settled_predictions} predictions settled`);
     console.log(`   💰 ${result.total_payout} tokens paid out`);

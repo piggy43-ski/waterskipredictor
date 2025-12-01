@@ -14,6 +14,7 @@ export default function AdminDashboard() {
       const { data, error } = await supabase
         .from('tournaments')
         .select('*')
+        .is('settled_at', null)
         .order('start_date', { ascending: false });
       
       if (error) throw error;
