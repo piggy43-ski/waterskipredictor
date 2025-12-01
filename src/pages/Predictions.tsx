@@ -5,11 +5,29 @@ import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, TrendingUp, Calendar } from 'lucide-react';
+import { Coins, TrendingUp, Calendar, ChevronDown } from 'lucide-react';
 import { decimalToAmerican } from '@/utils/oddsConverter';
+
+interface BetSlip {
+  id: string;
+  type: 'single' | 'parlay';
+  tournament_id: string;
+  total_stake_tokens: number;
+  total_odds_american: number;
+  total_odds_decimal: number;
+  status: string;
+  potential_payout_tokens: number;
+  actual_payout_tokens?: number;
+  leg_count: number;
+  created_at: string;
+  settled_at?: string;
+  tournament_name?: string;
+  legs?: Prediction[];
+}
 
 interface Prediction {
   id: string;
@@ -18,21 +36,16 @@ interface Prediction {
   discipline: string;
   category: string;
   market_type: string;
-  staked_tokens: number;
   decimal_odds: number;
-  potential_payout: number;
   status: string;
-  created_at: string;
-  settled_at?: string;
-  payout_tokens?: number;
 }
 
 const Predictions = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [activePredictions, setActivePredictions] = useState<Prediction[]>([]);
-  const [completedPredictions, setCompletedPredictions] = useState<Prediction[]>([]);
+  const [activeBetSlips, setActiveBetSlips] = useState<BetSlip[]>([]);
+  const [completedBetSlips, setCompletedBetSlips] = useState<BetSlip[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,32 +54,52 @@ const Predictions = () => {
       return;
     }
     
-    fetchPredictions();
+    fetchBetSlips();
   }, [user, navigate]);
 
-  const fetchPredictions = async () => {
+  const fetchBetSlips = async () => {
     if (!user) return;
 
     try {
-      // Fetch all predictions
-      const { data, error } = await supabase
-        .from('predictions')
-        .select('*')
+      // Fetch all bet slips
+      const { data: slips, error: slipsError } = await supabase
+        .from('bet_slips')
+        .select(`
+          *,
+          tournaments (name)
+        `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (slipsError) throw slipsError;
 
-      if (data) {
-        const active = data.filter(p => p.status === 'PENDING');
-        const completed = data.filter(p => p.status !== 'PENDING');
+      if (slips) {
+        // Fetch legs for each slip
+        const slipsWithLegs = await Promise.all(
+          slips.map(async (slip: any) => {
+            const { data: legs } = await supabase
+              .from('predictions')
+              .select('*')
+              .eq('bet_slip_id', slip.id)
+              .order('created_at', { ascending: true });
+
+            return {
+              ...slip,
+              tournament_name: slip.tournaments?.name || 'Unknown Tournament',
+              legs: legs || []
+            };
+          })
+        );
+
+        const active = slipsWithLegs.filter(s => s.status === 'PENDING');
+        const completed = slipsWithLegs.filter(s => s.status !== 'PENDING');
         
-        setActivePredictions(active);
-        setCompletedPredictions(completed);
+        setActiveBetSlips(active);
+        setCompletedBetSlips(completed);
       }
     } catch (error) {
       toast({
-        title: "Error loading predictions",
+        title: "Error loading bets",
         description: "Please try again later",
         variant: "destructive"
       });
@@ -99,29 +132,71 @@ const Predictions = () => {
     }
   };
 
-  const PredictionCard = ({ prediction, isActive }: { prediction: Prediction; isActive: boolean }) => {
-    const americanOdds = decimalToAmerican(prediction.decimal_odds);
+  const BetSlipCard = ({ slip, isActive }: { slip: BetSlip; isActive: boolean }) => {
+    const isParlayDisplay = slip.type === 'parlay' || slip.leg_count > 1;
+    const americanOdds = decimalToAmerican(slip.total_odds_decimal);
     
     return (
       <Card className="p-4 hover:shadow-glow transition-all">
         <div className="space-y-3">
           <div className="flex justify-between items-start">
             <div className="flex-1">
-              <h3 className="font-semibold text-lg">{prediction.athlete_name}</h3>
-              <p className="text-sm text-muted-foreground">{prediction.tournament_name}</p>
-              <p className="text-xs text-muted-foreground capitalize">
-                {prediction.discipline} • {prediction.category.replace('_', ' ')}
-              </p>
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="font-semibold text-lg">
+                  {isParlayDisplay ? `Parlay (${slip.leg_count} legs)` : slip.legs?.[0]?.athlete_name || 'Single Bet'}
+                </h3>
+                {isParlayDisplay && (
+                  <Badge variant="secondary" className="text-xs">Parlay</Badge>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">{slip.tournament_name}</p>
+              {!isParlayDisplay && slip.legs?.[0] && (
+                <p className="text-xs text-muted-foreground capitalize">
+                  {slip.legs[0].discipline} • {slip.legs[0].category.replace('_', ' ')}
+                </p>
+              )}
             </div>
-            {getStatusBadge(prediction.status)}
+            {getStatusBadge(slip.status)}
           </div>
+
+          {/* Show legs for parlays */}
+          {isParlayDisplay && slip.legs && slip.legs.length > 0 && (
+            <Accordion type="single" collapsible className="border-t border-border pt-2">
+              <AccordionItem value="legs" className="border-0">
+                <AccordionTrigger className="py-2 text-sm text-muted-foreground hover:no-underline">
+                  <span className="flex items-center gap-1">
+                    View {slip.leg_count} legs
+                    <ChevronDown className="w-4 h-4" />
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-2 pt-2">
+                  {slip.legs.map((leg, idx) => (
+                    <div key={leg.id} className="flex items-center justify-between p-2 bg-muted/30 rounded text-sm">
+                      <div className="flex-1">
+                        <div className="font-medium">{idx + 1}. {leg.athlete_name}</div>
+                        <div className="text-xs text-muted-foreground capitalize">
+                          {leg.market_type.replace('_', ' ')} • {leg.discipline}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-primary">
+                          {decimalToAmerican(leg.decimal_odds)}
+                        </span>
+                        {getStatusBadge(leg.status)}
+                      </div>
+                    </div>
+                  ))}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          )}
 
           <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
             <div>
               <p className="text-xs text-muted-foreground mb-1">Stake</p>
               <p className="font-semibold flex items-center gap-1">
                 <Coins className="w-4 h-4 text-primary" />
-                {prediction.staked_tokens.toLocaleString()}
+                {slip.total_stake_tokens.toLocaleString()}
               </p>
             </div>
             <div>
@@ -139,16 +214,16 @@ const Predictions = () => {
                 {isActive ? 'Potential Win' : 'Result'}
               </p>
               <p className={`font-bold ${
-                prediction.status === 'WON' ? 'text-success' : 
-                prediction.status === 'LOST' ? 'text-destructive' : 
+                slip.status === 'WON' ? 'text-success' : 
+                slip.status === 'LOST' ? 'text-destructive' : 
                 'text-primary'
               }`}>
                 {isActive ? (
-                  `${prediction.potential_payout.toLocaleString()} tokens`
-                ) : prediction.status === 'WON' ? (
-                  `+${prediction.payout_tokens?.toLocaleString() || 0} tokens`
-                ) : prediction.status === 'LOST' ? (
-                  `-${prediction.staked_tokens.toLocaleString()} tokens`
+                  `${slip.potential_payout_tokens.toLocaleString()} tokens`
+                ) : slip.status === 'WON' ? (
+                  `+${slip.actual_payout_tokens?.toLocaleString() || 0} tokens`
+                ) : slip.status === 'LOST' ? (
+                  `-${slip.total_stake_tokens.toLocaleString()} tokens`
                 ) : (
                   'Refunded'
                 )}
@@ -160,7 +235,7 @@ const Predictions = () => {
                 {isActive ? 'Placed' : 'Settled'}
               </p>
               <p className="text-sm">
-                {formatDate(isActive ? prediction.created_at : (prediction.settled_at || prediction.created_at))}
+                {formatDate(isActive ? slip.created_at : (slip.settled_at || slip.created_at))}
               </p>
             </div>
           </div>
@@ -172,7 +247,7 @@ const Predictions = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="My Predictions" />
+        <PageHeader title="My Bets" />
         <div className="max-w-lg mx-auto px-4 py-12 text-center text-muted-foreground">
           Loading...
         </div>
@@ -183,45 +258,45 @@ const Predictions = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="My Predictions" />
+      <PageHeader title="My Bets" />
       
       <div className="max-w-lg mx-auto px-4 py-6">
         <Tabs defaultValue="active" className="w-full">
           <TabsList className="w-full grid grid-cols-2 mb-6">
             <TabsTrigger value="active">
-              Active ({activePredictions.length})
+              Active ({activeBetSlips.length})
             </TabsTrigger>
             <TabsTrigger value="history">
-              History ({completedPredictions.length})
+              History ({completedBetSlips.length})
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="active" className="space-y-3">
-            {activePredictions.length === 0 ? (
+            {activeBetSlips.length === 0 ? (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground mb-4">No active predictions</p>
+                <p className="text-muted-foreground mb-4">No active bets</p>
                 <p className="text-sm text-muted-foreground">
                   Browse tournaments and place your first bet!
                 </p>
               </Card>
             ) : (
-              activePredictions.map((prediction) => (
-                <PredictionCard key={prediction.id} prediction={prediction} isActive />
+              activeBetSlips.map((slip) => (
+                <BetSlipCard key={slip.id} slip={slip} isActive />
               ))
             )}
           </TabsContent>
 
           <TabsContent value="history" className="space-y-3">
-            {completedPredictions.length === 0 ? (
+            {completedBetSlips.length === 0 ? (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground mb-4">No completed predictions yet</p>
+                <p className="text-muted-foreground mb-4">No completed bets yet</p>
                 <p className="text-sm text-muted-foreground">
-                  Your settled predictions will appear here
+                  Your settled bets will appear here
                 </p>
               </Card>
             ) : (
-              completedPredictions.map((prediction) => (
-                <PredictionCard key={prediction.id} prediction={prediction} isActive={false} />
+              completedBetSlips.map((slip) => (
+                <BetSlipCard key={slip.id} slip={slip} isActive={false} />
               ))
             )}
           </TabsContent>

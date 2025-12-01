@@ -11,8 +11,10 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Coins, TrendingUp } from 'lucide-react';
-import { decimalToAmerican } from '@/utils/oddsConverter';
+import { Alert, AlertDescription } from './ui/alert';
+import { Coins, TrendingUp, AlertCircle } from 'lucide-react';
+import { decimalToAmerican, calculateParlayOdds } from '@/utils/oddsConverter';
+import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 
 interface PredictionDialogProps {
   selection: Selection | null;
@@ -42,17 +44,21 @@ export const PredictionDialog = ({
   
   const isParlay = parlaySelections.length >= 2;
   
-  // For parlay, calculate combined odds
+  // For parlay, calculate combined odds with house edge
   const combinedOdds = isParlay 
-    ? parlaySelections.reduce((acc, sel) => acc * sel.decimal_odds, 1)
+    ? calculateParlayOdds(parlaySelections.map(s => s.decimal_odds), PARLAY_CONFIG.HOUSE_EDGE)
     : selection?.decimal_odds || 1;
 
   const stake = parseInt(stakeAmount) || 0;
   const potentialPayout = Math.floor(stake * combinedOdds);
   const potentialProfit = potentialPayout - stake;
+  
+  // Validation
+  const exceedsMaxStake = stake > PARLAY_CONFIG.MAX_STAKE;
+  const isValidStake = stake > 0 && stake <= walletBalance && !exceedsMaxStake;
 
   const handleConfirm = () => {
-    if (stake > 0 && stake <= walletBalance) {
+    if (isValidStake) {
       onConfirm(stake);
       setStakeAmount('100');
     }
@@ -120,6 +126,11 @@ export const PredictionDialog = ({
                 {decimalToAmerican(combinedOdds)}
               </span>
             </div>
+            {isParlay && (
+              <div className="text-xs text-muted-foreground">
+                5% house edge applied to combined odds
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Your Balance</span>
               <span className="font-semibold flex items-center gap-1">
@@ -138,8 +149,16 @@ export const PredictionDialog = ({
               onChange={(e) => setStakeAmount(e.target.value)}
               placeholder="Enter stake amount"
               min="1"
-              max={walletBalance}
+              max={Math.min(walletBalance, PARLAY_CONFIG.MAX_STAKE)}
             />
+            {exceedsMaxStake && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Maximum stake is {PARLAY_CONFIG.MAX_STAKE.toLocaleString()} tokens
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="flex gap-2">
               {quickAmounts.map((amount) => (
                 <Button
@@ -148,6 +167,7 @@ export const PredictionDialog = ({
                   size="sm"
                   onClick={() => setStakeAmount(amount.toString())}
                   className="flex-1"
+                  disabled={amount > walletBalance}
                 >
                   {amount}
                 </Button>
@@ -180,7 +200,7 @@ export const PredictionDialog = ({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={stake === 0 || stake > walletBalance}
+            disabled={!isValidStake}
             className="bg-primary hover:bg-primary/90"
           >
             Confirm Prediction

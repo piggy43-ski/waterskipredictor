@@ -214,6 +214,69 @@ export type Database = {
         }
         Relationships: []
       }
+      bet_slips: {
+        Row: {
+          actual_payout_tokens: number | null
+          created_at: string
+          id: string
+          leg_count: number
+          potential_payout_tokens: number
+          settled_at: string | null
+          status: string
+          total_odds_american: number
+          total_odds_decimal: number
+          total_stake_tokens: number
+          tournament_id: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          actual_payout_tokens?: number | null
+          created_at?: string
+          id?: string
+          leg_count?: number
+          potential_payout_tokens: number
+          settled_at?: string | null
+          status?: string
+          total_odds_american: number
+          total_odds_decimal: number
+          total_stake_tokens: number
+          tournament_id: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          actual_payout_tokens?: number | null
+          created_at?: string
+          id?: string
+          leg_count?: number
+          potential_payout_tokens?: number
+          settled_at?: string | null
+          status?: string
+          total_odds_american?: number
+          total_odds_decimal?: number
+          total_stake_tokens?: number
+          tournament_id?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bet_slips_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bet_slips_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       markets: {
         Row: {
           category: string
@@ -297,6 +360,7 @@ export type Database = {
       predictions: {
         Row: {
           athlete_name: string
+          bet_slip_id: string | null
           category: string
           created_at: string
           decimal_odds: number
@@ -317,6 +381,7 @@ export type Database = {
         }
         Insert: {
           athlete_name: string
+          bet_slip_id?: string | null
           category: string
           created_at?: string
           decimal_odds: number
@@ -337,6 +402,7 @@ export type Database = {
         }
         Update: {
           athlete_name?: string
+          bet_slip_id?: string | null
           category?: string
           created_at?: string
           decimal_odds?: number
@@ -356,6 +422,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "predictions_bet_slip_id_fkey"
+            columns: ["bet_slip_id"]
+            isOneToOne: false
+            referencedRelation: "bet_slips"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "predictions_parlay_id_fkey"
             columns: ["parlay_id"]

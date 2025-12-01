@@ -1,9 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, TrendingUp, Zap } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { X, TrendingUp, AlertCircle } from 'lucide-react';
 import { Selection, Market } from '@/types';
-import { decimalToAmerican } from '@/utils/oddsConverter';
+import { decimalToAmerican, calculateParlayOdds } from '@/utils/oddsConverter';
+import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 
 interface ParlayCartProps {
   selections: Selection[];
@@ -22,22 +24,16 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
     return market?.market_type || 'WINNER';
   };
 
-  // Count unique market types
-  const uniqueMarketTypes = new Set(selections.map(getMarketType));
-  const multiMarketCount = uniqueMarketTypes.size;
-
-  // Calculate base combined odds
-  const combinedOdds = selections.reduce((acc, sel) => acc * sel.decimal_odds, 1);
-  
-  // Apply multi-market bonus
-  let bonusMultiplier = 1;
-  if (multiMarketCount === 2) bonusMultiplier = 5;
-  if (multiMarketCount === 3) bonusMultiplier = 10;
-  
-  const finalOdds = combinedOdds * bonusMultiplier;
+  // Calculate combined odds with 5% house edge
+  const decimalOddsArray = selections.map(sel => sel.decimal_odds);
+  const adjustedOdds = calculateParlayOdds(decimalOddsArray, PARLAY_CONFIG.HOUSE_EDGE);
   
   // Convert to American odds
-  const americanOdds = decimalToAmerican(finalOdds);
+  const americanOdds = decimalToAmerican(adjustedOdds);
+  
+  // Validation checks
+  const hasMaxLegs = selections.length > PARLAY_CONFIG.MAX_LEGS;
+  const hasMinLegs = selections.length >= PARLAY_CONFIG.MIN_LEGS;
 
   const getMarketBadge = (marketType: string) => {
     const colors: Record<string, string> = {
@@ -61,11 +57,8 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
             <TrendingUp className="w-5 h-5 text-primary" />
             Parlay Bet
             <Badge variant="secondary">{selections.length} Legs</Badge>
-            {multiMarketCount > 1 && (
-              <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0">
-                <Zap className="w-3 h-3 mr-1" />
-                x{bonusMultiplier} Bonus
-              </Badge>
+            {hasMaxLegs && (
+              <Badge variant="destructive">Max {PARLAY_CONFIG.MAX_LEGS}</Badge>
             )}
           </CardTitle>
           <Button 
@@ -76,9 +69,9 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
             Clear All
           </Button>
         </div>
-        {multiMarketCount > 1 && (
+        {selections.length > 0 && (
           <p className="text-xs text-muted-foreground mt-2">
-            🎯 Multi-Market Parlay: {multiMarketCount === 3 ? 'x10' : 'x5'} bonus applied! All legs must win.
+            All {selections.length} legs must win. 5% house edge applied to combined odds.
           </p>
         )}
       </CardHeader>
@@ -125,29 +118,37 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
           })}
         </div>
 
+        {/* Validation Warnings */}
+        {hasMaxLegs && (
+          <Alert variant="destructive" className="mb-3">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Maximum {PARLAY_CONFIG.MAX_LEGS} legs allowed. Remove {selections.length - PARLAY_CONFIG.MAX_LEGS} selection(s).
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Combined Odds */}
         <div className="pt-3 border-t border-border">
           <div className="flex items-center justify-between mb-3">
             <div>
               <div className="text-sm text-muted-foreground">Combined Odds:</div>
-              {bonusMultiplier > 1 && (
-                <div className="text-xs text-primary font-medium">
-                  Includes x{bonusMultiplier} multi-market bonus
-                </div>
-              )}
+              <div className="text-xs text-muted-foreground">
+                (5% house edge applied)
+              </div>
             </div>
             <span className="text-xl font-bold text-primary">{americanOdds}</span>
           </div>
           <Button 
             className="w-full"
             onClick={onPlaceParlay}
-            disabled={selections.length < 2}
+            disabled={!hasMinLegs || hasMaxLegs}
           >
             Place Parlay Bet
           </Button>
-          {selections.length < 2 && (
+          {!hasMinLegs && (
             <p className="text-xs text-muted-foreground text-center mt-2">
-              Add at least 2 selections to create a parlay
+              Add at least {PARLAY_CONFIG.MIN_LEGS} selections to create a parlay
             </p>
           )}
         </div>

@@ -18,6 +18,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getBettingWindowStatus } from '@/utils/bettingWindows';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { PARLAY_CONFIG } from '@/utils/parlayConfig';
+import { calculateParlayOdds, decimalToAmerican } from '@/utils/oddsConverter';
 
 const TournamentDetail = () => {
   const { id } = useParams();
@@ -272,17 +274,38 @@ const TournamentDetail = () => {
       return;
     }
     
-    if (isParlay) {
-      // Add to parlay cart
-      if (parlaySelections.some(s => s.id === selection.id)) {
-        setParlaySelections(parlaySelections.filter(s => s.id !== selection.id));
-      } else {
-        setParlaySelections([...parlaySelections, selection]);
-      }
-    } else {
-      setSelectedSelection(selection);
-      setDialogOpen(true);
+    setSelectedSelection(selection);
+    setDialogOpen(true);
+  };
+
+  const handleAddToParlay = (selection: Selection) => {
+    if (!bettingWindow?.canBet) {
+      toast({
+        title: "Betting Closed",
+        description: bettingWindow?.message || "Betting is not available for this tournament",
+        variant: "destructive"
+      });
+      return;
     }
+
+    // Check if already in parlay
+    if (parlaySelections.some(s => s.id === selection.id)) {
+      setParlaySelections(parlaySelections.filter(s => s.id !== selection.id));
+      return;
+    }
+
+    // Check max legs
+    if (parlaySelections.length >= PARLAY_CONFIG.MAX_LEGS) {
+      toast({
+        title: "Max Legs Reached",
+        description: `A parlay can have maximum ${PARLAY_CONFIG.MAX_LEGS} legs`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Add to parlay
+    setParlaySelections([...parlaySelections, selection]);
   };
 
   const getPodiumKey = (discipline: string, gender: string) => `${discipline}-${gender}`;
@@ -443,54 +466,62 @@ const TournamentDetail = () => {
   };
 
   const handleConfirmPrediction = async (stakeAmount: number) => {
-    if (!user) return;
+    if (!user || !tournament) return;
+
+    // Validate stake for parlays
+    if (parlaySelections.length >= 2 && stakeAmount > PARLAY_CONFIG.MAX_STAKE) {
+      toast({
+        title: "Stake Too High",
+        description: `Maximum parlay stake is ${PARLAY_CONFIG.MAX_STAKE.toLocaleString()} tokens`,
+        variant: "destructive"
+      });
+      return;
+    }
 
     // Handle parlay bet
     if (parlaySelections.length >= 2) {
-      const combinedOdds = parlaySelections.reduce((acc, sel) => acc * sel.decimal_odds, 1);
-      const potentialPayout = Math.floor(stakeAmount * combinedOdds);
-
       try {
-        // Insert parent parlay prediction
-        const { data: parentPrediction, error: parentError } = await supabase
-          .from('predictions')
+        // Calculate odds with 5% house edge
+        const decimalOddsArray = parlaySelections.map(s => s.decimal_odds);
+        const adjustedOdds = calculateParlayOdds(decimalOddsArray, PARLAY_CONFIG.HOUSE_EDGE);
+        const americanOdds = decimalToAmerican(adjustedOdds);
+        const potentialPayout = Math.floor(stakeAmount * adjustedOdds);
+
+        // Create bet slip first
+        const { data: betSlip, error: slipError } = await supabase
+          .from('bet_slips')
           .insert({
             user_id: user.id,
-            selection_id: parlaySelections[0].id,
-            athlete_name: 'Parlay Bet',
-            tournament_name: tournament?.name || '',
-            discipline: 'slalom',
-            category: 'open_men',
-            market_type: 'WINNER',
-            staked_tokens: stakeAmount,
-            decimal_odds: combinedOdds,
-            potential_payout: potentialPayout,
+            tournament_id: tournament.id,
+            type: 'parlay',
+            total_stake_tokens: stakeAmount,
+            total_odds_american: parseInt(americanOdds.replace('+', '')),
+            total_odds_decimal: adjustedOdds,
             status: 'PENDING',
-            is_parlay_parent: true,
-            parlay_leg_count: parlaySelections.length
+            potential_payout_tokens: potentialPayout,
+            leg_count: parlaySelections.length
           })
           .select()
           .single();
 
-        if (parentError) throw parentError;
+        if (slipError) throw slipError;
 
-        // Insert individual legs
+        // Insert predictions as legs
         const legInserts = parlaySelections.map(selection => {
           const market = markets.find(m => m.id === selection.market_id);
           return {
             user_id: user.id,
+            bet_slip_id: betSlip.id,
             selection_id: selection.id,
             athlete_name: selection.athlete.name,
-            tournament_name: tournament?.name || '',
+            tournament_name: tournament.name,
             discipline: market?.discipline || 'slalom',
             category: market?.category || 'open_men',
             market_type: market?.market_type || 'WINNER',
-            staked_tokens: 0,
+            staked_tokens: 0, // Stake is on the slip, not individual legs
             decimal_odds: selection.decimal_odds,
-            potential_payout: 0,
-            status: 'PENDING',
-            parlay_id: parentPrediction.id,
-            parlay_leg_count: 1
+            potential_payout: 0, // Payout is on the slip
+            status: 'PENDING'
           };
         });
 
@@ -500,7 +531,7 @@ const TournamentDetail = () => {
 
         if (legsError) throw legsError;
 
-        // Update wallet
+        // Deduct stake from wallet
         const { data: walletData, error: walletFetchError } = await supabase
           .from('token_wallets')
           .select('purchased_tokens, earned_tokens')
@@ -526,7 +557,7 @@ const TournamentDetail = () => {
 
         toast({
           title: "Parlay Bet Placed!",
-          description: `You've staked ${stakeAmount} tokens on a ${parlaySelections.length}-leg parlay`,
+          description: `${parlaySelections.length} legs • ${stakeAmount} tokens staked`,
         });
 
         await fetchWalletBalance();
@@ -553,14 +584,35 @@ const TournamentDetail = () => {
     const potentialPayout = Math.floor(stakeAmount * selectedSelection.decimal_odds);
 
     try {
+      // Create bet slip
+      const americanOdds = decimalToAmerican(selectedSelection.decimal_odds);
+      const { data: betSlip, error: slipError } = await supabase
+        .from('bet_slips')
+        .insert({
+          user_id: user.id,
+          tournament_id: tournament.id,
+          type: 'single',
+          total_stake_tokens: stakeAmount,
+          total_odds_american: parseInt(americanOdds.replace('+', '')),
+          total_odds_decimal: selectedSelection.decimal_odds,
+          status: 'PENDING',
+          potential_payout_tokens: potentialPayout,
+          leg_count: 1
+        })
+        .select()
+        .single();
+
+      if (slipError) throw slipError;
+
       // Insert prediction
       const { error: predictionError } = await supabase
         .from('predictions')
         .insert({
           user_id: user.id,
+          bet_slip_id: betSlip.id,
           selection_id: selectedSelection.id,
           athlete_name: selectedSelection.athlete.name,
-          tournament_name: tournament?.name || '',
+          tournament_name: tournament.name,
           discipline: market.discipline,
           category: market.category,
           market_type: market.market_type,
@@ -572,7 +624,7 @@ const TournamentDetail = () => {
 
       if (predictionError) throw predictionError;
 
-      // Update wallet - deduct from purchased_tokens first
+      // Deduct from wallet
       const { data: walletData, error: walletFetchError } = await supabase
         .from('token_wallets')
         .select('purchased_tokens, earned_tokens')
@@ -597,8 +649,8 @@ const TournamentDetail = () => {
       if (walletUpdateError) throw walletUpdateError;
 
       toast({
-        title: "Prediction Placed!",
-        description: `You've staked ${stakeAmount} tokens on ${selectedSelection?.athlete.name}`,
+        title: "Bet Placed!",
+        description: `${stakeAmount} tokens on ${selectedSelection.athlete.name}`,
       });
 
       await fetchWalletBalance();
@@ -607,7 +659,7 @@ const TournamentDetail = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to place prediction. Please try again.",
+        description: "Failed to place bet. Please try again.",
         variant: "destructive"
       });
     }
@@ -742,6 +794,8 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={(sel) => handleSelectSelection(sel, false)}
                                 discipline={discipline}
+                                onAddToParlay={handleAddToParlay}
+                                isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
                             </div>
                           ))}
@@ -825,6 +879,8 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={(sel) => handleSelectSelection(sel, false)}
                                 discipline={discipline}
+                                onAddToParlay={handleAddToParlay}
+                                isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
                             </div>
                           ))}
@@ -868,6 +924,8 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={(sel) => handleSelectSelection(sel, false)}
                                 discipline={discipline}
+                                onAddToParlay={handleAddToParlay}
+                                isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
                             </div>
                           ))}
@@ -951,6 +1009,8 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={(sel) => handleSelectSelection(sel, false)}
                                 discipline={discipline}
+                                onAddToParlay={handleAddToParlay}
+                                isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
                             </div>
                           ))}

@@ -53,3 +53,35 @@ export const formatAmericanOdds = (odds: string | number): string => {
   }
   return `${oddsNum}`;
 };
+
+/**
+ * Calculate combined parlay odds from multiple decimal odds with house edge applied
+ * @param decimalOdds - Array of decimal odds for each leg
+ * @param houseEdge - House edge percentage (default 5% = 0.05)
+ * @returns Combined decimal odds after applying house edge
+ */
+export const calculateParlayOdds = (decimalOdds: number[], houseEdge: number = 0.05): number => {
+  // Multiply all decimal odds together
+  const combinedOdds = decimalOdds.reduce((acc, odds) => acc * odds, 1);
+  
+  // Apply house edge (5% = multiply by 0.95)
+  const adjustedOdds = combinedOdds * (1 - houseEdge);
+  
+  return adjustedOdds;
+};
+
+/**
+ * Calculate parlay payout with house edge applied
+ * @param stake - Amount staked
+ * @param decimalOdds - Array of decimal odds for each leg
+ * @param houseEdge - House edge percentage (default 5% = 0.05)
+ * @returns Total payout including stake
+ */
+export const calculateParlayPayout = (
+  stake: number, 
+  decimalOdds: number[], 
+  houseEdge: number = 0.05
+): number => {
+  const adjustedOdds = calculateParlayOdds(decimalOdds, houseEdge);
+  return Math.floor(stake * adjustedOdds);
+};
