@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck } from 'lucide-react';
+import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAdminCheck } from '@/hooks/useAdminCheck';
 
@@ -18,6 +18,7 @@ const navItems = [
   { path: '/admin/markets', label: 'Markets', icon: TrendingUp },
   { path: '/admin/selections', label: 'Selections', icon: Trophy },
   { path: '/admin/rewards', label: 'Rewards', icon: Gift },
+  { path: '/admin/data-integrity', label: 'Data Integrity', icon: Database },
 ];
 
 export const AdminLayout = ({ children }: AdminLayoutProps) => {
