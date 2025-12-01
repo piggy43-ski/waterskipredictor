@@ -19,7 +19,7 @@ import type { Discipline, Category } from '@/types';
 
 type ResultEntry = {
   athlete_id: string;
-  position: number;
+  position?: number; // Auto-calculated from score
   score: string;
 };
 
@@ -103,14 +103,14 @@ export default function TournamentSettlement() {
           jump: { male: [], female: [] },
         };
 
-        for (const result of existingResults) {
+          for (const result of existingResults) {
           const discipline = result.discipline as Discipline;
           const genderKey = result.gender === 'male' ? 'male' : 'female';
           
           newResults[discipline][genderKey].push({
             athlete_id: result.athlete_id,
-            position: result.position || 0,
             score: result.score_raw?.toString() || '',
+            // Position will be auto-calculated
           });
         }
 
@@ -140,12 +140,32 @@ export default function TournamentSettlement() {
       .filter(Boolean);
   };
 
+  // Auto-calculate positions based on scores
+  const calculatePositions = (discipline: Discipline, gender: string, entries: ResultEntry[]): ResultEntry[] => {
+    // Filter entries with valid scores
+    const validEntries = entries.filter(e => e.athlete_id && e.score);
+    const invalidEntries = entries.filter(e => !e.athlete_id || !e.score);
+
+    // Sort by score (highest to lowest)
+    const sorted = [...validEntries].sort((a, b) => 
+      compareScores(b.score, a.score, discipline)
+    );
+
+    // Assign positions
+    const withPositions = sorted.map((entry, index) => ({
+      ...entry,
+      position: index + 1,
+    }));
+
+    return [...withPositions, ...invalidEntries];
+  };
+
   const addResultRow = (discipline: Discipline, gender: string) => {
     setResults(prev => ({
       ...prev,
       [discipline]: {
         ...prev[discipline],
-        [gender]: [...prev[discipline][gender], { athlete_id: '', position: 0, score: '' }],
+        [gender]: [...prev[discipline][gender], { athlete_id: '', score: '' }],
       },
     }));
   };
@@ -160,11 +180,15 @@ export default function TournamentSettlement() {
     setResults(prev => {
       const updated = [...prev[discipline][gender]];
       updated[index] = { ...updated[index], [field]: value };
+      
+      // Auto-calculate positions after update
+      const withPositions = calculatePositions(discipline, gender, updated);
+      
       return {
         ...prev,
         [discipline]: {
           ...prev[discipline],
-          [gender]: updated,
+          [gender]: withPositions,
         },
       };
     });
@@ -183,12 +207,12 @@ export default function TournamentSettlement() {
   const validateResults = (): boolean => {
     let hasErrors = false;
 
-    for (const [discipline, genderData] of Object.entries(results)) {
+      for (const [discipline, genderData] of Object.entries(results)) {
       for (const [gender, entries] of Object.entries(genderData)) {
         for (const entry of entries) {
-          if (entry.athlete_id && entry.position > 0) {
+          if (entry.athlete_id && entry.score) {
             // Validate slalom scores
-            if (discipline === 'slalom' && entry.score && !isValidSlalomScore(entry.score)) {
+            if (discipline === 'slalom' && !isValidSlalomScore(entry.score)) {
               toast({
                 title: 'Invalid slalom score',
                 description: `Score "${entry.score}" is not valid. Use format: buoy@rope (e.g., 2@43, 3.5@41)`,
@@ -221,8 +245,8 @@ export default function TournamentSettlement() {
 
       if (disciplineResults.length === 0) continue;
 
-      // Filter valid results
-      const validResults = disciplineResults.filter(r => r.athlete_id && r.position > 0 && r.score);
+      // Filter valid results (position is auto-calculated, so we only check for athlete and score)
+      const validResults = disciplineResults.filter(r => r.athlete_id && r.score);
 
       let winningSelectionIds: string[] = [];
       let winningAthleteNames: string[] = [];
@@ -300,9 +324,9 @@ export default function TournamentSettlement() {
       for (const [discipline, genderData] of Object.entries(results)) {
         for (const [gender, entries] of Object.entries(genderData)) {
           for (const entry of entries) {
-            if (entry.athlete_id && entry.position > 0) {
+            if (entry.athlete_id && entry.score) {
               // Normalize slalom scores
-              const score = discipline === 'slalom' && entry.score
+              const score = discipline === 'slalom'
                 ? normalizeSlalomScore(entry.score)
                 : entry.score;
 
@@ -311,7 +335,7 @@ export default function TournamentSettlement() {
                 athlete_id: entry.athlete_id,
                 discipline,
                 gender,
-                position: entry.position,
+                position: entry.position || 0, // Use auto-calculated position
                 score_raw: score,
               });
             }
@@ -444,6 +468,12 @@ export default function TournamentSettlement() {
                 <CardTitle>Enter Results by Discipline</CardTitle>
               </CardHeader>
               <CardContent>
+                <Alert className="mb-4">
+                  <CheckCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Positions are auto-calculated</strong> - Just enter the athlete and their score. The system will automatically rank them based on their performance.
+                  </AlertDescription>
+                </Alert>
                 <Tabs value={selectedDiscipline} onValueChange={(v) => setSelectedDiscipline(v as Discipline)}>
                   <TabsList className="grid grid-cols-3 w-full">
                     {tournamentData?.tournament?.disciplines.map((discipline: Discipline) => (
@@ -469,6 +499,15 @@ export default function TournamentSettlement() {
                                 Add Result
                               </Button>
                             </div>
+
+                            {athletes.length === 0 && (
+                              <Alert>
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription>
+                                  No athletes entered for this discipline and gender. Add tournament entries first.
+                                </AlertDescription>
+                              </Alert>
+                            )}
 
                             <div className="space-y-3">
                               {results[discipline]?.[gender]?.map((entry, index) => (
@@ -507,14 +546,12 @@ export default function TournamentSettlement() {
                                   </div>
 
                                   <div className="col-span-2">
-                                    <Label>Position</Label>
-                                    <Input
-                                      type="number"
-                                      min="1"
-                                      value={entry.position || ''}
-                                      onChange={(e) => updateResultRow(discipline, gender, index, 'position', parseInt(e.target.value) || 0)}
-                                      placeholder="1, 2, 3..."
-                                    />
+                                    <Label>Position <span className="text-xs text-muted-foreground">(auto)</span></Label>
+                                    <div className="h-10 flex items-center justify-center bg-muted rounded-md border border-input">
+                                      <Badge variant={entry.position === 1 ? 'default' : entry.position && entry.position <= 3 ? 'secondary' : 'outline'}>
+                                        {entry.position ? `#${entry.position}` : '-'}
+                                      </Badge>
+                                    </div>
                                   </div>
 
                                   <div className="col-span-4">
