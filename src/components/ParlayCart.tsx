@@ -13,9 +13,10 @@ interface ParlayCartProps {
   onRemove: (selection: Selection) => void;
   onPlaceParlay: () => void;
   onClear: () => void;
+  onExitParlayMode?: () => void;
 }
 
-export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onClear }: ParlayCartProps) => {
+export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onClear, onExitParlayMode }: ParlayCartProps) => {
   if (selections.length === 0) return null;
 
   // Get market types for each selection
@@ -139,13 +140,23 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
             </div>
             <span className="text-xl font-bold text-primary">{americanOdds}</span>
           </div>
-          <Button 
-            className="w-full"
-            onClick={onPlaceParlay}
-            disabled={!hasMinLegs || hasMaxLegs}
-          >
-            Place Parlay Bet
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              className="flex-1"
+              onClick={onPlaceParlay}
+              disabled={!hasMinLegs || hasMaxLegs}
+            >
+              Place Parlay Bet
+            </Button>
+            {onExitParlayMode && (
+              <Button 
+                variant="outline"
+                onClick={onExitParlayMode}
+              >
+                Exit
+              </Button>
+            )}
+          </div>
           {!hasMinLegs && (
             <p className="text-xs text-muted-foreground text-center mt-2">
               Add at least {PARLAY_CONFIG.MIN_LEGS} selections to create a parlay
