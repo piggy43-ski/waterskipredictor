@@ -22,7 +22,7 @@ const Tournaments = () => {
       const { data, error } = await supabase
         .from('tournaments')
         .select('*')
-        .order('start_date', { ascending: true });
+        .order('start_datetime', { ascending: true });
 
       if (error) throw error;
 

@@ -66,7 +66,7 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Calendar className="w-3.5 h-3.5" />
         <span>
-          {formatDate(tournament.start_date)} - {formatDate(tournament.end_date)}
+          {formatDate(startTime)} - {formatDate(endTime)}
         </span>
       </div>
 
