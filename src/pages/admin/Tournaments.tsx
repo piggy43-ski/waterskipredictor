@@ -25,6 +25,7 @@ type Tournament = {
   end_datetime?: string;
   status: string;
   disciplines: string[];
+  settled_at?: string | null;
 };
 
 export default function AdminTournaments() {
@@ -286,6 +287,17 @@ export default function AdminTournaments() {
                     <Badge variant="secondary">
                       {tournament.status}
                     </Badge>
+                    {tournament.status === 'finished' && (
+                      tournament.settled_at ? (
+                        <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+                          Settled
+                        </Badge>
+                      ) : (
+                        <Badge variant="default" className="bg-orange-600 hover:bg-orange-700">
+                          Pending Settlement
+                        </Badge>
+                      )
+                    )}
                     {tournament.disciplines.map((disc) => (
                       <Badge key={disc} variant="outline" className="capitalize">
                         {disc}
