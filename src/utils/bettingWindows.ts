@@ -17,11 +17,13 @@ export interface BettingWindow {
  * Get betting window status for a tournament
  * @param startDatetime - Tournament start datetime (or fallback date)
  * @param endDatetime - Tournament end datetime (or fallback date)
+ * @param settledAt - Tournament settlement timestamp
  * @returns Betting window information
  */
 export const getBettingWindowStatus = (
   startDatetime?: string, 
-  endDatetime?: string
+  endDatetime?: string,
+  settledAt?: string | null
 ): BettingWindow => {
   const now = new Date();
   
@@ -38,6 +40,15 @@ export const getBettingWindowStatus = (
   
   // Betting opens 24 hours before tournament start
   const bettingOpens = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+  
+  // Tournament has been settled
+  if (settledAt) {
+    return {
+      status: 'finished',
+      message: 'Tournament settled',
+      canBet: false
+    };
+  }
   
   // Tournament has finished
   if (end && now > end) {

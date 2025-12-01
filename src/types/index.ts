@@ -47,6 +47,7 @@ export interface Tournament {
   end_datetime?: string; // New: Precise end date and time
   disciplines: Discipline[];
   status: 'upcoming' | 'live' | 'finished';
+  settled_at?: string | null;
 }
 
 export interface Market {

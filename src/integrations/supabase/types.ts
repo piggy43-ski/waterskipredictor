@@ -625,6 +625,7 @@ export type Database = {
           location: string
           name: string
           notes: string | null
+          settled_at: string | null
           start_date: string | null
           start_datetime: string | null
           status: string
@@ -642,6 +643,7 @@ export type Database = {
           location: string
           name: string
           notes?: string | null
+          settled_at?: string | null
           start_date?: string | null
           start_datetime?: string | null
           status?: string
@@ -659,6 +661,7 @@ export type Database = {
           location?: string
           name?: string
           notes?: string | null
+          settled_at?: string | null
           start_date?: string | null
           start_datetime?: string | null
           status?: string
