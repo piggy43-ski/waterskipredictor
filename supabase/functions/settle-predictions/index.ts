@@ -318,6 +318,139 @@ Deno.serve(async (req) => {
 
     result.affected_users = affectedUserIds.size;
 
+    // PARLAY SETTLEMENT: Process bet_slips after individual predictions are settled
+    console.log(`\n🎯 Starting parlay settlement...`);
+    
+    try {
+      // Fetch all pending parlay bet slips
+      const { data: parlaySlips, error: parlayFetchError } = await supabaseClient
+        .from('bet_slips')
+        .select('*')
+        .eq('type', 'parlay')
+        .eq('status', 'PENDING');
+
+      if (parlayFetchError) {
+        console.error('❌ Error fetching parlay slips:', parlayFetchError);
+      } else if (parlaySlips && parlaySlips.length > 0) {
+        console.log(`📋 Found ${parlaySlips.length} pending parlay slips to check`);
+
+        for (const slip of parlaySlips) {
+          try {
+            // Get all legs for this parlay
+            const { data: legs, error: legsError } = await supabaseClient
+              .from('predictions')
+              .select('*')
+              .eq('bet_slip_id', slip.id);
+
+            if (legsError || !legs || legs.length === 0) {
+              console.log(`⚠️  No legs found for slip ${slip.id}`);
+              continue;
+            }
+
+            // Check if all legs are settled
+            const allSettled = legs.every(leg => leg.status !== 'PENDING');
+            if (!allSettled) {
+              console.log(`⏳ Slip ${slip.id} has pending legs, skipping`);
+              continue;
+            }
+
+            // Check if any leg is LOST
+            const hasLostLeg = legs.some(leg => leg.status === 'LOST');
+            if (hasLostLeg) {
+              // Parlay loses if any leg loses
+              await supabaseClient
+                .from('bet_slips')
+                .update({
+                  status: 'LOST',
+                  actual_payout_tokens: 0,
+                  settled_at: new Date().toISOString()
+                })
+                .eq('id', slip.id);
+
+              console.log(`❌ Parlay ${slip.id} LOST (has losing leg)`);
+              continue;
+            }
+
+            // All legs are WON or VOID
+            // Recalculate odds treating VOID legs as 1.0
+            const adjustedOdds = legs.reduce((acc, leg) => {
+              if (leg.status === 'VOID') {
+                return acc * 1.0; // Void legs don't affect odds
+              }
+              return acc * leg.decimal_odds;
+            }, 1);
+
+            // Apply 5% house edge
+            const finalOdds = adjustedOdds * 0.95;
+            const actualPayout = Math.floor(slip.total_stake_tokens * finalOdds);
+
+            // Update slip to WON
+            await supabaseClient
+              .from('bet_slips')
+              .update({
+                status: 'WON',
+                actual_payout_tokens: actualPayout,
+                settled_at: new Date().toISOString()
+              })
+              .eq('id', slip.id);
+
+            // Credit user wallet
+            const { error: walletError } = await supabaseClient.rpc('increment_earned_tokens', {
+              user_id_param: slip.user_id,
+              amount: actualPayout
+            });
+
+            if (walletError) {
+              console.error(`❌ Failed to credit wallet for slip ${slip.id}:`, walletError);
+              // Rollback
+              await supabaseClient
+                .from('bet_slips')
+                .update({
+                  status: 'PENDING',
+                  actual_payout_tokens: null,
+                  settled_at: null
+                })
+                .eq('id', slip.id);
+              continue;
+            }
+
+            // Update lifetime winnings
+            const winAmount = actualPayout - slip.total_stake_tokens;
+            if (winAmount > 0) {
+              const { data: profileData } = await supabaseClient
+                .from('profiles')
+                .select('lifetime_winnings')
+                .eq('id', slip.user_id)
+                .single();
+              
+              if (profileData) {
+                await supabaseClient
+                  .from('profiles')
+                  .update({
+                    lifetime_winnings: (profileData.lifetime_winnings || 0) + winAmount
+                  })
+                  .eq('id', slip.user_id);
+              }
+            }
+
+            result.total_payout += actualPayout;
+            affectedUserIds.add(slip.user_id);
+
+            console.log(`✅ Parlay ${slip.id} WON → +${actualPayout} tokens (adjusted odds: ${finalOdds.toFixed(2)})`);
+          } catch (error) {
+            console.error(`❌ Error processing parlay slip ${slip.id}:`, error);
+          }
+        }
+
+        result.affected_users = affectedUserIds.size;
+        console.log(`🎉 Parlay settlement complete`);
+      } else {
+        console.log(`📋 No pending parlay slips to process`);
+      }
+    } catch (error) {
+      console.error('❌ Error in parlay settlement:', error);
+    }
+
     // Mark tournament as settled
     if (result.settled_predictions > 0 && predictionsBySelection.size > 0) {
       try {

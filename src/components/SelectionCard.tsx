@@ -9,6 +9,8 @@ interface SelectionCardProps {
   selection: Selection;
   onSelect: (selection: Selection) => void;
   discipline?: Discipline;
+  onAddToParlay?: (selection: Selection) => void;
+  isInParlay?: boolean;
 }
 
 const getFlagEmoji = (countryCode: string): string => {
@@ -34,7 +36,7 @@ const getFlagEmoji = (countryCode: string): string => {
   return countryFlags[countryCode] || '🏴';
 };
 
-export const SelectionCard = ({ selection, onSelect, discipline }: SelectionCardProps) => {
+export const SelectionCard = ({ selection, onSelect, discipline, onAddToParlay, isInParlay }: SelectionCardProps) => {
   const americanOdds = decimalToAmerican(selection.decimal_odds);
   
   // Get the appropriate rank based on discipline
@@ -64,15 +66,20 @@ export const SelectionCard = ({ selection, onSelect, discipline }: SelectionCard
   };
   
   return (
-    <Card className="p-4 hover:shadow-glow hover:border-primary/50 transition-all cursor-pointer group" onClick={() => onSelect(selection)}>
+    <Card className={`p-4 hover:shadow-glow hover:border-primary/50 transition-all ${isInParlay ? 'border-primary' : ''}`}>
       <div className="flex justify-between items-center">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">{selection.athlete.name}</h3>
+            <h3 className="font-semibold text-lg">{selection.athlete.name}</h3>
             {rank && (
               <Badge variant={getRankVariant()} className="flex items-center gap-1">
                 {rank <= 3 && <Medal className="w-3 h-3" />}
                 #{rank}
+              </Badge>
+            )}
+            {isInParlay && (
+              <Badge variant="default" className="text-xs">
+                In Parlay
               </Badge>
             )}
           </div>
@@ -88,9 +95,31 @@ export const SelectionCard = ({ selection, onSelect, discipline }: SelectionCard
               {americanOdds}
             </span>
           </div>
-          <Button size="sm" variant="default" className="min-w-[80px]">
-            Place Bet
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              size="sm" 
+              variant="default" 
+              className="min-w-[80px]"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(selection);
+              }}
+            >
+              Place Bet
+            </Button>
+            {onAddToParlay && (
+              <Button 
+                size="sm" 
+                variant={isInParlay ? "secondary" : "outline"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToParlay(selection);
+                }}
+              >
+                {isInParlay ? 'Remove' : 'Add +'}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </Card>
