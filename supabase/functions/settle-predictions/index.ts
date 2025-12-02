@@ -208,6 +208,32 @@ Deno.serve(async (req) => {
             result.total_payout += prediction.potential_payout;
             result.settled_predictions += 1;
 
+            // Log transaction
+            const { data: walletData } = await supabaseClient
+              .from('token_wallets')
+              .select('purchased_tokens, earned_tokens')
+              .eq('user_id', prediction.user_id)
+              .single();
+            
+            if (walletData) {
+              await supabaseClient.from('token_transactions').insert({
+                user_id: prediction.user_id,
+                type: 'bet_won',
+                amount: prediction.potential_payout,
+                balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                reference_type: 'prediction',
+                reference_id: prediction.id,
+                description: `Won bet: ${prediction.athlete_name} - ${prediction.tournament_name}`,
+                metadata: {
+                  tournament_name: prediction.tournament_name,
+                  athlete_name: prediction.athlete_name,
+                  staked: prediction.staked_tokens,
+                  payout: prediction.potential_payout,
+                  profit: prediction.potential_payout - prediction.staked_tokens
+                }
+              });
+            }
+
             // Update lifetime winnings in profile
             const winAmount = prediction.potential_payout - prediction.staked_tokens;
             if (winAmount > 0) {
@@ -246,6 +272,30 @@ Deno.serve(async (req) => {
             }
 
             result.settled_predictions += 1;
+
+            // Log transaction
+            const { data: walletData } = await supabaseClient
+              .from('token_wallets')
+              .select('purchased_tokens, earned_tokens')
+              .eq('user_id', prediction.user_id)
+              .single();
+            
+            if (walletData) {
+              await supabaseClient.from('token_transactions').insert({
+                user_id: prediction.user_id,
+                type: 'bet_lost',
+                amount: 0,
+                balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                reference_type: 'prediction',
+                reference_id: prediction.id,
+                description: `Lost bet: ${prediction.athlete_name} - ${prediction.tournament_name}`,
+                metadata: {
+                  tournament_name: prediction.tournament_name,
+                  athlete_name: prediction.athlete_name,
+                  staked: prediction.staked_tokens
+                }
+              });
+            }
 
             // Update lifetime losses in profile
             const { data: profileData } = await supabaseClient
@@ -305,6 +355,30 @@ Deno.serve(async (req) => {
 
             result.total_payout += prediction.staked_tokens;
             result.settled_predictions += 1;
+
+            // Log transaction
+            const { data: walletData } = await supabaseClient
+              .from('token_wallets')
+              .select('purchased_tokens, earned_tokens')
+              .eq('user_id', prediction.user_id)
+              .single();
+            
+            if (walletData) {
+              await supabaseClient.from('token_transactions').insert({
+                user_id: prediction.user_id,
+                type: 'bet_void',
+                amount: prediction.staked_tokens,
+                balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                reference_type: 'prediction',
+                reference_id: prediction.id,
+                description: `Voided bet (refunded): ${prediction.athlete_name} - ${prediction.tournament_name}`,
+                metadata: {
+                  tournament_name: prediction.tournament_name,
+                  athlete_name: prediction.athlete_name,
+                  refunded: prediction.staked_tokens
+                }
+              });
+            }
 
             console.log(`🔄 VOID: ${prediction.id} → refunded ${prediction.staked_tokens} tokens to user ${prediction.user_id}`);
           }

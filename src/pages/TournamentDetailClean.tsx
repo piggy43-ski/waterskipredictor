@@ -389,6 +389,32 @@ const TournamentDetail = () => {
 
       if (walletUpdateError) throw walletUpdateError;
 
+      const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
+
+      // Log transaction
+      await supabase.from('token_transactions').insert({
+        user_id: user.id,
+        type: 'bet_placed',
+        amount: -stakeAmount,
+        balance_after: newBalance,
+        reference_type: 'bet_slip',
+        reference_id: betSlip.id,
+        description: `Podium bet: ${podiumState.assignedPositions.first.athlete.name}, ${podiumState.assignedPositions.second.athlete.name}, ${podiumState.assignedPositions.third.athlete.name} - ${tournament.name}`,
+        metadata: {
+          tournament_name: tournament.name,
+          discipline: currentPodiumContext.discipline,
+          category: podiumMarket.category,
+          market_type: 'PODIUM',
+          decimal_odds: combinedOdds,
+          potential_payout: potentialPayout,
+          athletes: [
+            podiumState.assignedPositions.first.athlete.name,
+            podiumState.assignedPositions.second.athlete.name,
+            podiumState.assignedPositions.third.athlete.name
+          ]
+        }
+      });
+
       toast({
         title: "Podium Bet Placed!",
         description: `${stakeAmount} tokens staked on podium prediction`,
@@ -487,6 +513,28 @@ const TournamentDetail = () => {
         .eq('user_id', user.id);
 
       if (walletUpdateError) throw walletUpdateError;
+
+      const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
+
+      // Log transaction
+      await supabase.from('token_transactions').insert({
+        user_id: user.id,
+        type: 'bet_placed',
+        amount: -stakeAmount,
+        balance_after: newBalance,
+        reference_type: 'bet_slip',
+        reference_id: betSlip.id,
+        description: `Bet placed on ${selectedSelection.athlete.name} - ${tournament.name}`,
+        metadata: {
+          tournament_name: tournament.name,
+          athlete_name: selectedSelection.athlete.name,
+          discipline: market.discipline,
+          category: market.category,
+          market_type: market.market_type,
+          decimal_odds: selectedSelection.decimal_odds,
+          potential_payout: potentialPayout
+        }
+      });
 
       toast({
         title: "Bet Placed!",

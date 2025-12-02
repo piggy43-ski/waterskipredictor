@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, Upload } from 'lucide-react';
+import { Coins, Upload, History } from 'lucide-react';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -351,6 +351,18 @@ const Profile = () => {
               {loading ? 'Updating...' : 'Update Profile'}
             </Button>
           </form>
+        </Card>
+
+        {/* Transaction History */}
+        <Card className="p-4">
+          <Button 
+            variant="outline" 
+            className="w-full"
+            onClick={() => navigate('/transactions')}
+          >
+            <History className="w-4 h-4 mr-2" />
+            View Transaction History
+          </Button>
         </Card>
 
         {/* Admin Panel Link */}
