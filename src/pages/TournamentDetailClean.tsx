@@ -7,21 +7,19 @@ import { PredictionDialog } from '@/components/PredictionDialog';
 import { PodiumSelectionCard } from '@/components/PodiumSelectionCard';
 import { PodiumPredictionDialog } from '@/components/PodiumPredictionDialog';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
-import { ParlayCart } from '@/components/ParlayCart';
 import { TournamentResults } from '@/components/TournamentResults';
 import { UserTournamentResults } from '@/components/UserTournamentResults';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Selection, Tournament, Market } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar, MapPin, Clock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { ParlayBuilder } from '@/components/ParlayBuilder';
+import { Button } from '@/components/ui/button';
 import { getBettingWindowStatus } from '@/utils/bettingWindows';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { PARLAY_CONFIG } from '@/utils/parlayConfig';
-import { calculateParlayOdds, decimalToAmerican } from '@/utils/oddsConverter';
 
 const TournamentDetail = () => {
   const { id } = useParams();
@@ -52,9 +50,8 @@ const TournamentDetail = () => {
     gender: string;
   } | null>(null);
   
-  // Parlay state
-  const [parlaySelections, setParlaySelections] = useState<Selection[]>([]);
-  const [isParlayMode, setIsParlayMode] = useState(false);
+  // Parlay Builder state
+  const [parlayBuilderOpen, setParlayBuilderOpen] = useState(false);
   
   // Gender state per discipline
   const [genderByDiscipline, setGenderByDiscipline] = useState<Record<string, 'men' | 'women'>>({});
@@ -86,7 +83,6 @@ const TournamentDetail = () => {
 
   const fetchTournamentData = async () => {
     try {
-      // Fetch tournament
       const { data: tournamentData, error: tournamentError } = await supabase
         .from('tournaments')
         .select('*')
@@ -104,7 +100,7 @@ const TournamentDetail = () => {
           end_date: tournamentData.end_date,
           start_datetime: tournamentData.start_datetime,
           end_datetime: tournamentData.end_datetime,
-          disciplines: tournamentData.disciplines as Array<'slalom' | 'trick' | 'jump'>,
+          disciplines: tournamentData.disciplines,
           status: tournamentData.status as 'upcoming' | 'live' | 'finished',
           settled_at: tournamentData.settled_at
         });
@@ -113,85 +109,39 @@ const TournamentDetail = () => {
         const { data: marketsData, error: marketsError } = await supabase
           .from('markets')
           .select('*')
-          .eq('tournament_id', id);
+          .eq('tournament_id', tournamentData.id);
 
         if (marketsError) throw marketsError;
-
-          const mappedMarkets: Market[] = (marketsData || []).map(m => ({
-          id: m.id,
-          tournament_id: m.tournament_id,
-          discipline: m.discipline as 'slalom' | 'trick' | 'jump',
-          category: m.category as 'open_men' | 'open_women',
-          market_type: m.market_type as 'WINNER' | 'PODIUM' | 'HEAD_TO_HEAD' | 'OVER_UNDER' | 'HIGHEST_SCORE',
-          name: m.name
-        }));
-
-        setMarkets(mappedMarkets);
+        if (marketsData) setMarkets(marketsData as Market[]);
 
         // Fetch selections with athletes
-        if (marketsData && marketsData.length > 0) {
-          const marketIds = marketsData.map(m => m.id);
-          const { data: selectionsData, error: selectionsError } = await supabase
-            .from('selections')
-            .select(`
-              *,
-              athlete:athletes (
-                id,
-                name,
-                gender,
-                country,
-                federation,
-                year_of_birth,
-                disciplines,
-                current_rank_slalom,
-                current_rank_trick,
-                current_rank_jump
-              )
-            `)
-            .in('market_id', marketIds);
+        const { data: selectionsData, error: selectionsError } = await supabase
+          .from('selections')
+          .select(`
+            *,
+            athlete:athletes(*)
+          `)
+          .in('market_id', marketsData?.map(m => m.id) || []);
 
-          if (selectionsError) throw selectionsError;
+        if (selectionsError) throw selectionsError;
+        if (selectionsData) setSelections(selectionsData as any);
 
-          const mappedSelections: Selection[] = (selectionsData || []).map((s: any) => ({
-            id: s.id,
-            market_id: s.market_id,
-            athlete_id: s.athlete_id,
-            athlete: {
-              id: s.athlete.id,
-              name: s.athlete.name,
-              gender: s.athlete.gender,
-              country: s.athlete.country,
-              federation: s.athlete.federation,
-              disciplines: s.athlete.disciplines,
-              current_rank_slalom: s.athlete.current_rank_slalom,
-              current_rank_trick: s.athlete.current_rank_trick,
-              current_rank_jump: s.athlete.current_rank_jump,
-            },
-            description: s.description,
-            decimal_odds: Number(s.decimal_odds),
-          }));
-
-          setSelections(mappedSelections);
-        }
-
-        // Fetch athlete results if tournament is finished
+        // If finished, fetch results
         if (tournamentData.status === 'finished') {
           const { data: resultsData, error: resultsError } = await supabase
             .from('athlete_results')
             .select(`
               *,
-              athlete:athletes (
-                name,
-                country
-              )
+              athlete:athletes(*)
             `)
-            .eq('tournament_id', id);
+            .eq('tournament_id', tournamentData.id)
+            .order('position', { ascending: true });
 
           if (!resultsError && resultsData) {
             setAthleteResults(resultsData);
           }
 
-          // Fetch user predictions for finished tournaments
+          // Fetch user's predictions for this tournament
           if (user) {
             const { data: predictionsData, error: predictionsError } = await supabase
               .from('predictions')
@@ -267,7 +217,7 @@ const TournamentDetail = () => {
   const menMarkets = markets.filter(m => m.category === 'open_men');
   const womenMarkets = markets.filter(m => m.category === 'open_women');
 
-  const handleSelectSelection = (selection: Selection, isParlay: boolean = false, discipline?: string, gender?: string, marketType?: string) => {
+  const handleSelectSelection = (selection: Selection) => {
     if (!bettingWindow?.canBet) {
       toast({
         title: "Betting Closed",
@@ -279,36 +229,6 @@ const TournamentDetail = () => {
     
     setSelectedSelection(selection);
     setDialogOpen(true);
-  };
-
-  const handleAddToParlay = (selection: Selection) => {
-    if (!bettingWindow?.canBet) {
-      toast({
-        title: "Betting Closed",
-        description: bettingWindow?.message || "Betting is not available for this tournament",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Check if already in parlay
-    if (parlaySelections.some(s => s.id === selection.id)) {
-      setParlaySelections(parlaySelections.filter(s => s.id !== selection.id));
-      return;
-    }
-
-    // Check max legs
-    if (parlaySelections.length >= PARLAY_CONFIG.MAX_LEGS) {
-      toast({
-        title: "Max Legs Reached",
-        description: `A parlay can have maximum ${PARLAY_CONFIG.MAX_LEGS} legs`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Add to parlay
-    setParlaySelections([...parlaySelections, selection]);
   };
 
   const getPodiumKey = (discipline: string, gender: string) => `${discipline}-${gender}`;
@@ -329,7 +249,6 @@ const TournamentDetail = () => {
     } else if (currentState.selectedAthletes.length < 3) {
       newSelectedAthletes = [...currentState.selectedAthletes, athlete];
       
-      // When 3 athletes selected, open position assigner
       if (newSelectedAthletes.length === 3) {
         setCurrentPodiumContext({ market, discipline, gender });
         setPositionAssignerOpen(true);
@@ -354,60 +273,75 @@ const TournamentDetail = () => {
     setPodiumStateMap(prev => ({
       ...prev,
       [key]: {
-        selectedAthletes: prev[key]?.selectedAthletes || [],
+        selectedAthletes: [positions.first, positions.second, positions.third],
         assignedPositions: positions
       }
     }));
+    
     setPositionAssignerOpen(false);
-    setPodiumDialogOpen(true);
   };
 
   const handleConfirmPodiumPrediction = async (stakeAmount: number) => {
-    if (!user || !currentPodiumContext) return;
+    if (!user || !currentPodiumContext || !tournament) return;
     
-    const state = getPodiumState(currentPodiumContext.discipline, currentPodiumContext.gender);
-    if (!state.assignedPositions) return;
-
-    const orderedSelections = [state.assignedPositions.first, state.assignedPositions.second, state.assignedPositions.third];
-    const combinedOdds = orderedSelections.reduce((acc, sel) => acc * sel.decimal_odds, 1) * 0.3;
-    const potentialPayout = Math.floor(stakeAmount * combinedOdds);
-
+    const podiumState = getPodiumState(currentPodiumContext.discipline, currentPodiumContext.gender);
+    if (!podiumState.assignedPositions) return;
+    
     try {
-      // Insert parent prediction for podium
-      const { data: predictionData, error: predictionError } = await supabase
+      const podiumMarket = currentPodiumContext.market;
+      
+      // Calculate multiplier based on combined odds (simplified)
+      const combinedOdds = 1.5;
+      const potentialPayout = Math.floor(stakeAmount * combinedOdds);
+
+      // Create the main parent prediction
+      const { data: parentPrediction, error: parentError } = await supabase
         .from('predictions')
         .insert({
           user_id: user.id,
-          selection_id: orderedSelections[0].id,
-          athlete_name: 'Podium Bet',
-          tournament_name: tournament?.name || '',
-          discipline: currentPodiumContext.market.discipline,
-          category: currentPodiumContext.market.category,
+          selection_id: `${podiumMarket.id}-podium`,
+          athlete_name: `Podium: ${podiumState.assignedPositions.first.athlete.name}, ${podiumState.assignedPositions.second.athlete.name}, ${podiumState.assignedPositions.third.athlete.name}`,
+          tournament_name: tournament.name,
+          discipline: currentPodiumContext.discipline,
+          category: podiumMarket.category,
           market_type: 'PODIUM',
           staked_tokens: stakeAmount,
           decimal_odds: combinedOdds,
           potential_payout: potentialPayout,
+          is_parlay_parent: true,
           status: 'PENDING'
         })
         .select()
         .single();
 
-      if (predictionError) throw predictionError;
+      if (parentError) throw parentError;
 
-      // Insert podium selections with correct positions
-      const podiumSelections = orderedSelections.map((athlete, index) => ({
-        prediction_id: predictionData.id,
-        athlete_id: athlete.athlete_id,
-        position_predicted: index + 1
-      }));
+      // Insert podium selections
+      const podiumInserts = [
+        {
+          prediction_id: parentPrediction.id,
+          athlete_id: podiumState.assignedPositions.first.athlete_id,
+          position_predicted: 1
+        },
+        {
+          prediction_id: parentPrediction.id,
+          athlete_id: podiumState.assignedPositions.second.athlete_id,
+          position_predicted: 2
+        },
+        {
+          prediction_id: parentPrediction.id,
+          athlete_id: podiumState.assignedPositions.third.athlete_id,
+          position_predicted: 3
+        }
+      ];
 
       const { error: podiumError } = await supabase
         .from('podium_selections')
-        .insert(podiumSelections);
+        .insert(podiumInserts);
 
       if (podiumError) throw podiumError;
 
-      // Update wallet
+      // Deduct from wallet
       const { data: walletData, error: walletFetchError } = await supabase
         .from('token_wallets')
         .select('purchased_tokens, earned_tokens')
@@ -433,13 +367,12 @@ const TournamentDetail = () => {
 
       toast({
         title: "Podium Bet Placed!",
-        description: `You've staked ${stakeAmount} tokens on a podium finish`,
+        description: `${stakeAmount} tokens staked on podium prediction`,
       });
 
       await fetchWalletBalance();
       setPodiumDialogOpen(false);
       
-      // Clear this podium context
       const key = getPodiumKey(currentPodiumContext.discipline, currentPodiumContext.gender);
       setPodiumStateMap(prev => ({
         ...prev,
@@ -455,164 +388,20 @@ const TournamentDetail = () => {
     }
   };
 
-  const handlePlaceParlay = () => {
-    if (parlaySelections.length < 2) return;
-    setDialogOpen(true);
-  };
-
-  const handleRemoveFromParlay = (selection: Selection) => {
-    setParlaySelections(parlaySelections.filter(s => s.id !== selection.id));
-  };
-
-  const handleClearParlay = () => {
-    setParlaySelections([]);
-  };
-
   const handleConfirmPrediction = async (stakeAmount: number) => {
-    if (!user || !tournament) return;
-
-    // Validate stake for parlays
-    if (parlaySelections.length >= 2 && stakeAmount > PARLAY_CONFIG.MAX_STAKE) {
-      toast({
-        title: "Stake Too High",
-        description: `Maximum parlay stake is ${PARLAY_CONFIG.MAX_STAKE.toLocaleString()} tokens`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Handle parlay bet
-    if (parlaySelections.length >= 2) {
-      try {
-        // Calculate odds with 5% house edge
-        const decimalOddsArray = parlaySelections.map(s => s.decimal_odds);
-        const adjustedOdds = calculateParlayOdds(decimalOddsArray, PARLAY_CONFIG.HOUSE_EDGE);
-        const americanOdds = decimalToAmerican(adjustedOdds);
-        const potentialPayout = Math.floor(stakeAmount * adjustedOdds);
-
-        // Create bet slip first
-        const { data: betSlip, error: slipError } = await supabase
-          .from('bet_slips')
-          .insert({
-            user_id: user.id,
-            tournament_id: tournament.id,
-            type: 'parlay',
-            total_stake_tokens: stakeAmount,
-            total_odds_american: parseInt(americanOdds.replace('+', '')),
-            total_odds_decimal: adjustedOdds,
-            status: 'PENDING',
-            potential_payout_tokens: potentialPayout,
-            leg_count: parlaySelections.length
-          })
-          .select()
-          .single();
-
-        if (slipError) throw slipError;
-
-        // Insert predictions as legs
-        const legInserts = parlaySelections.map(selection => {
-          const market = markets.find(m => m.id === selection.market_id);
-          return {
-            user_id: user.id,
-            bet_slip_id: betSlip.id,
-            selection_id: selection.id,
-            athlete_name: selection.athlete.name,
-            tournament_name: tournament.name,
-            discipline: market?.discipline || 'slalom',
-            category: market?.category || 'open_men',
-            market_type: market?.market_type || 'WINNER',
-            staked_tokens: 0, // Stake is on the slip, not individual legs
-            decimal_odds: selection.decimal_odds,
-            potential_payout: 0, // Payout is on the slip
-            status: 'PENDING'
-          };
-        });
-
-        const { error: legsError } = await supabase
-          .from('predictions')
-          .insert(legInserts);
-
-        if (legsError) throw legsError;
-
-        // Deduct stake from wallet
-        const { data: walletData, error: walletFetchError } = await supabase
-          .from('token_wallets')
-          .select('purchased_tokens, earned_tokens')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (walletFetchError) throw walletFetchError;
-        if (!walletData) return;
-
-        const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - stakeAmount);
-        const remaining = stakeAmount - walletData.purchased_tokens;
-        const newEarnedTokens = remaining > 0 ? walletData.earned_tokens - remaining : walletData.earned_tokens;
-
-        const { error: walletUpdateError } = await supabase
-          .from('token_wallets')
-          .update({
-            purchased_tokens: newPurchasedTokens,
-            earned_tokens: Math.max(0, newEarnedTokens)
-          })
-          .eq('user_id', user.id);
-
-        if (walletUpdateError) throw walletUpdateError;
-
-        toast({
-          title: "Parlay Bet Placed!",
-          description: `${parlaySelections.length} legs • ${stakeAmount} tokens staked`,
-        });
-
-        await fetchWalletBalance();
-        setParlaySelections([]);
-        setDialogOpen(false);
-        setSelectedSelection(null);
-        return;
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to place parlay bet. Please try again.",
-          variant: "destructive"
-        });
-        return;
-      }
-    }
-
-    // Handle single bet
-    if (!selectedSelection) return;
-
-    const market = markets.find(m => m.id === selectedSelection.market_id);
-    if (!market) return;
-
-    const potentialPayout = Math.floor(stakeAmount * selectedSelection.decimal_odds);
+    if (!user || !tournament || !selectedSelection) return;
 
     try {
-      // Create bet slip
-      const americanOdds = decimalToAmerican(selectedSelection.decimal_odds);
-      const { data: betSlip, error: slipError } = await supabase
-        .from('bet_slips')
-        .insert({
-          user_id: user.id,
-          tournament_id: tournament.id,
-          type: 'single',
-          total_stake_tokens: stakeAmount,
-          total_odds_american: parseInt(americanOdds.replace('+', '')),
-          total_odds_decimal: selectedSelection.decimal_odds,
-          status: 'PENDING',
-          potential_payout_tokens: potentialPayout,
-          leg_count: 1
-        })
-        .select()
-        .single();
+      const market = markets.find(m => m.id === selectedSelection.market_id);
+      if (!market) return;
 
-      if (slipError) throw slipError;
+      const potentialPayout = Math.floor(stakeAmount * selectedSelection.decimal_odds);
 
       // Insert prediction
       const { error: predictionError } = await supabase
         .from('predictions')
         .insert({
           user_id: user.id,
-          bet_slip_id: betSlip.id,
           selection_id: selectedSelection.id,
           athlete_name: selectedSelection.athlete.name,
           tournament_name: tournament.name,
@@ -653,7 +442,7 @@ const TournamentDetail = () => {
 
       toast({
         title: "Bet Placed!",
-        description: `${stakeAmount} tokens on ${selectedSelection.athlete.name}`,
+        description: `${stakeAmount} tokens staked on ${selectedSelection.athlete.name}`,
       });
 
       await fetchWalletBalance();
@@ -668,9 +457,9 @@ const TournamentDetail = () => {
     }
   };
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', { 
-      month: 'long', 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', { 
+      month: 'short', 
       day: 'numeric',
       year: 'numeric'
     });
@@ -678,13 +467,9 @@ const TournamentDetail = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <PageHeader 
-        title={tournament.name} 
-        subtitle={tournament.location}
-        showBack 
-      />
-      
-      <div className="max-w-lg mx-auto px-4 py-6">
+      <PageHeader title={tournament.name} showBack />
+
+      <div className="max-w-6xl mx-auto px-4 py-6">
         {/* Tournament Info */}
         <div className="mb-6 space-y-3">
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -694,7 +479,7 @@ const TournamentDetail = () => {
           <div className="flex items-center gap-2 text-muted-foreground">
             <Calendar className="w-4 h-4" />
             <span>
-              {formatDate(tournament.start_date)} - {formatDate(tournament.end_date)}
+              {formatDate(tournament.start_datetime || tournament.start_date)} - {formatDate(tournament.end_datetime || tournament.end_date)}
             </span>
           </div>
           
@@ -718,36 +503,27 @@ const TournamentDetail = () => {
           )}
         </div>
 
-        {/* Betting Mode Toggle */}
+        {/* Parlay Builder Button */}
         {tournament.status !== 'finished' && bettingWindow?.canBet && (
-          <div className="mb-6 flex items-center justify-center gap-4 p-4 bg-card border border-border rounded-lg">
-            <Label htmlFor="parlay-mode" className="text-sm font-medium cursor-pointer">
-              Single Bets
-            </Label>
-            <Switch 
-              id="parlay-mode"
-              checked={isParlayMode}
-              onCheckedChange={(checked) => {
-                setIsParlayMode(checked);
-                if (!checked) {
-                  setParlaySelections([]);
-                }
-              }}
-            />
-            <Label htmlFor="parlay-mode" className="text-sm font-medium cursor-pointer">
-              Build Parlay
-            </Label>
+          <div className="mb-6 flex items-center justify-center">
+            <Button 
+              onClick={() => setParlayBuilderOpen(true)}
+              size="lg"
+              className="w-full max-w-md"
+            >
+              Build Parlay Bet
+            </Button>
           </div>
         )}
 
-        {/* User Results Section - Show only for finished tournaments */}
+        {/* User Results Section */}
         {tournament.status === 'finished' && (
           <div className="mb-6">
             <UserTournamentResults predictions={userPredictions} />
           </div>
         )}
 
-        {/* Results Section - Show only for finished tournaments */}
+        {/* Results Section */}
         {tournament.status === 'finished' && athleteResults.length > 0 && (
           <div className="mb-6">
             <TournamentResults 
@@ -772,7 +548,6 @@ const TournamentDetail = () => {
             
             return (
               <TabsContent key={discipline} value={discipline}>
-                {/* Gender Selection - Persistent across market types */}
                 <Tabs 
                   value={currentGender} 
                   onValueChange={(value) => setGenderByDiscipline(prev => ({ ...prev, [discipline]: value as 'men' | 'women' }))}
@@ -784,7 +559,6 @@ const TournamentDetail = () => {
                   </TabsList>
                   
                   <TabsContent value="men">
-                    {/* Market Type Tabs - Men */}
                     <Tabs defaultValue="winner" className="w-full">
                       <TabsList className="w-full grid grid-cols-3 mb-4">
                         <TabsTrigger value="winner">Winner</TabsTrigger>
@@ -792,10 +566,9 @@ const TournamentDetail = () => {
                         <TabsTrigger value="highest">Highest</TabsTrigger>
                       </TabsList>
 
-                      {/* Winner Market - Men */}
                       <TabsContent value="winner" className="space-y-3">
                         <h3 className="font-semibold text-sm text-muted-foreground mb-3">
-                          Winner Market - Select One or Add to Parlay
+                          Winner Market - Select One
                         </h3>
                         {selections
                           .filter(s => {
@@ -817,17 +590,13 @@ const TournamentDetail = () => {
                             <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
                                 selection={selection}
-                                onSelect={(sel) => handleSelectSelection(sel, false)}
+                                onSelect={handleSelectSelection}
                                 discipline={discipline}
-                                mode={isParlayMode ? 'parlay' : 'single'}
-                                onAddToParlay={handleAddToParlay}
-                                isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
                             </div>
                           ))}
                       </TabsContent>
 
-                      {/* Podium Market - Men */}
                       <TabsContent value="podium" className="space-y-3">
                         {(() => {
                           const podiumMarket = markets.find(m => 
@@ -868,17 +637,11 @@ const TournamentDetail = () => {
                                   Place Podium Bet
                                 </button>
                               )}
-                              {podiumState.selectedAthletes.length === 3 && !podiumState.assignedPositions && (
-                                <div className="text-sm text-center text-muted-foreground py-2">
-                                  Please assign positions in the dialog above
-                                </div>
-                              )}
                             </div>
                           ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
                         })()}
                       </TabsContent>
 
-                      {/* Highest Score Market - Men */}
                       <TabsContent value="highest" className="space-y-3">
                         <h3 className="font-semibold text-sm text-muted-foreground mb-3">
                           Highest Score Market
@@ -890,23 +653,12 @@ const TournamentDetail = () => {
                                    market?.category === 'open_men' && 
                                    market?.market_type === 'HIGHEST_SCORE';
                           })
-                          .sort((a, b) => {
-                            const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
-                                         discipline === 'trick' ? a.athlete.current_rank_trick : 
-                                         a.athlete.current_rank_jump;
-                            const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
-                                         discipline === 'trick' ? b.athlete.current_rank_trick : 
-                                         b.athlete.current_rank_jump;
-                            return (rankA || 999) - (rankB || 999);
-                          })
                           .map((selection) => (
                             <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
                                 selection={selection}
-                                onSelect={(sel) => handleSelectSelection(sel, false)}
+                                onSelect={handleSelectSelection}
                                 discipline={discipline}
-                                onAddToParlay={handleAddToParlay}
-                                isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
                             </div>
                           ))}
@@ -914,8 +666,8 @@ const TournamentDetail = () => {
                     </Tabs>
                   </TabsContent>
 
+                  {/* Women's markets - similar structure */}
                   <TabsContent value="women">
-                    {/* Market Type Tabs - Women */}
                     <Tabs defaultValue="winner" className="w-full">
                       <TabsList className="w-full grid grid-cols-3 mb-4">
                         <TabsTrigger value="winner">Winner</TabsTrigger>
@@ -923,10 +675,9 @@ const TournamentDetail = () => {
                         <TabsTrigger value="highest">Highest</TabsTrigger>
                       </TabsList>
 
-                      {/* Winner Market - Women */}
                       <TabsContent value="winner" className="space-y-3">
                         <h3 className="font-semibold text-sm text-muted-foreground mb-3">
-                          Winner Market - Select One or Add to Parlay
+                          Winner Market - Select One
                         </h3>
                         {selections
                           .filter(s => {
@@ -948,17 +699,13 @@ const TournamentDetail = () => {
                             <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
                                 selection={selection}
-                                onSelect={(sel) => handleSelectSelection(sel, false)}
+                                onSelect={handleSelectSelection}
                                 discipline={discipline}
-                                mode={isParlayMode ? 'parlay' : 'single'}
-                                onAddToParlay={handleAddToParlay}
-                                isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
                             </div>
                           ))}
                       </TabsContent>
 
-                      {/* Podium Market - Women */}
                       <TabsContent value="podium" className="space-y-3">
                         {(() => {
                           const podiumMarket = markets.find(m => 
@@ -999,17 +746,11 @@ const TournamentDetail = () => {
                                   Place Podium Bet
                                 </button>
                               )}
-                              {podiumState.selectedAthletes.length === 3 && !podiumState.assignedPositions && (
-                                <div className="text-sm text-center text-muted-foreground py-2">
-                                  Please assign positions in the dialog above
-                                </div>
-                              )}
                             </div>
                           ) : <p className="text-muted-foreground text-center py-8">No podium market available</p>;
                         })()}
                       </TabsContent>
 
-                      {/* Highest Score Market - Women */}
                       <TabsContent value="highest" className="space-y-3">
                         <h3 className="font-semibold text-sm text-muted-foreground mb-3">
                           Highest Score Market
@@ -1021,24 +762,12 @@ const TournamentDetail = () => {
                                    market?.category === 'open_women' && 
                                    market?.market_type === 'HIGHEST_SCORE';
                           })
-                          .sort((a, b) => {
-                            const rankA = discipline === 'slalom' ? a.athlete.current_rank_slalom : 
-                                         discipline === 'trick' ? a.athlete.current_rank_trick : 
-                                         a.athlete.current_rank_jump;
-                            const rankB = discipline === 'slalom' ? b.athlete.current_rank_slalom : 
-                                         discipline === 'trick' ? b.athlete.current_rank_trick : 
-                                         b.athlete.current_rank_jump;
-                            return (rankA || 999) - (rankB || 999);
-                          })
                           .map((selection) => (
                             <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
                                 selection={selection}
-                                onSelect={(sel) => handleSelectSelection(sel, false)}
+                                onSelect={handleSelectSelection}
                                 discipline={discipline}
-                                mode={isParlayMode ? 'parlay' : 'single'}
-                                onAddToParlay={handleAddToParlay}
-                                isInParlay={parlaySelections.some(s => s.id === selection.id)}
                               />
                             </div>
                           ))}
@@ -1050,33 +779,15 @@ const TournamentDetail = () => {
             );
           })}
         </Tabs>
-
-        {/* Parlay Cart */}
-        {isParlayMode && parlaySelections.length > 0 && (
-          <div className="mt-6">
-            <ParlayCart
-              selections={parlaySelections}
-              markets={markets}
-              onRemove={handleRemoveFromParlay}
-              onPlaceParlay={handlePlaceParlay}
-              onClear={handleClearParlay}
-              onExitParlayMode={() => {
-                setIsParlayMode(false);
-                setParlaySelections([]);
-              }}
-            />
-          </div>
-        )}
       </div>
 
-      {/* Prediction Dialog with context */}
+      {/* Prediction Dialog */}
       <PredictionDialog
         selection={selectedSelection}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onConfirm={handleConfirmPrediction}
         walletBalance={walletBalance}
-        parlaySelections={parlaySelections}
         marketContext={
           selectedSelection
             ? (() => {
@@ -1103,7 +814,6 @@ const TournamentDetail = () => {
               onAssignPositions={handleAssignPositions}
               onCancel={() => {
                 setPositionAssignerOpen(false);
-                // Clear selections for this context
                 const key = getPodiumKey(currentPodiumContext.discipline, currentPodiumContext.gender);
                 setPodiumStateMap(prev => ({
                   ...prev,
@@ -1135,6 +845,23 @@ const TournamentDetail = () => {
           tournamentName={tournament.name}
           discipline={currentPodiumContext.discipline}
           gender={currentPodiumContext.gender}
+        />
+      )}
+
+      {/* Parlay Builder Modal */}
+      {user && tournament && (
+        <ParlayBuilder
+          open={parlayBuilderOpen}
+          onClose={() => setParlayBuilderOpen(false)}
+          tournament={tournament}
+          markets={markets}
+          selections={selections}
+          onComplete={() => {
+            fetchWalletBalance();
+            setParlayBuilderOpen(false);
+          }}
+          userId={user.id}
+          walletBalance={walletBalance}
         />
       )}
 
