@@ -12,7 +12,8 @@ export const calculateTournamentStatus = (
   fallbackStartDate?: string,
   fallbackEndDate?: string
 ): Tournament['status'] => {
-  const now = new Date();
+  // Use UTC time for consistent timezone handling
+  const now = new Date().getTime();
   
   // Use datetime if available, otherwise fall back to date-only
   const startStr = startDatetime || fallbackStartDate;
@@ -20,8 +21,8 @@ export const calculateTournamentStatus = (
   
   if (!startStr || !endStr) return 'upcoming';
   
-  const start = new Date(startStr);
-  const end = new Date(endStr);
+  const start = new Date(startStr).getTime();
+  const end = new Date(endStr).getTime();
 
   if (now < start) {
     return 'upcoming';
