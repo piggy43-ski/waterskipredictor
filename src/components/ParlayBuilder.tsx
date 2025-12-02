@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Tournament, Selection, Market, Discipline, Category } from '@/types';
 import { ParlayLeg, ParlayStep } from '@/types/parlay';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +12,7 @@ import { SelectionCard } from '@/components/SelectionCard';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
 import { calculateParlayMultiplier, getParlayMultiplierDetails, getMultiplierSuggestions, isDuplicateLeg } from '@/utils/parlayMultipliers';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
-import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { decimalToAmerican } from '@/utils/oddsConverter';
@@ -54,6 +55,7 @@ export function ParlayBuilder({
   // Stake
   const [stake, setStake] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   // Update category when gender changes
   useEffect(() => {
@@ -91,6 +93,34 @@ export function ParlayBuilder({
 
   const getSelectionsForMarket = (marketId: string) => {
     return selections.filter(s => s.market_id === marketId);
+  };
+
+  // Reset parlay to initial state
+  const resetParlay = () => {
+    setLegs([]);
+    setCurrentStep('context');
+    setCurrentLegIndex(0);
+    setSelectedGender('men');
+    setSelectedDiscipline('slalom');
+    setSelectedAthletes([]);
+    setShowAssigner(false);
+    setStake('');
+  };
+
+  // Handle close with confirmation if progress exists
+  const handleClose = () => {
+    if (legs.length > 0) {
+      setShowExitConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  // Handle discard and exit
+  const handleDiscardAndExit = () => {
+    resetParlay();
+    setShowExitConfirm(false);
+    onClose();
   };
 
   const startNewLeg = () => {
@@ -853,12 +883,28 @@ export function ParlayBuilder({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Parlay Builder</DialogTitle>
-          <DialogDescription>{tournament.name}</DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Parlay Builder</DialogTitle>
+                <DialogDescription>{tournament.name}</DialogDescription>
+              </div>
+              {legs.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resetParlay}
+                  className="gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Start Fresh
+                </Button>
+              )}
+            </div>
+          </DialogHeader>
 
         {renderProgressIndicator()}
         {renderStepIndicator()}
@@ -872,12 +918,44 @@ export function ParlayBuilder({
           {currentStep === 'stake' && renderStakeStep()}
         </div>
 
-        <DialogFooter className="mt-4">
-          <Button variant="ghost" onClick={onClose} className="w-full">
-            Cancel Parlay
-          </Button>
+        <DialogFooter className="mt-4 gap-2">
+          {legs.length > 0 ? (
+            <>
+              <Button variant="destructive" onClick={() => setShowExitConfirm(true)}>
+                Discard Parlay
+              </Button>
+              <Button variant="outline" onClick={onClose}>
+                Save & Exit Later
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={onClose} className="w-full">
+              Close
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={showExitConfirm} onOpenChange={setShowExitConfirm}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>You have {legs.length} leg{legs.length !== 1 ? 's' : ''} in progress</AlertDialogTitle>
+          <AlertDialogDescription>
+            What would you like to do with your parlay?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep Building</AlertDialogCancel>
+          <AlertDialogAction className="bg-secondary text-secondary-foreground hover:bg-secondary/80" onClick={() => { setShowExitConfirm(false); onClose(); }}>
+            Save & Exit
+          </AlertDialogAction>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDiscardAndExit}>
+            Discard All
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
