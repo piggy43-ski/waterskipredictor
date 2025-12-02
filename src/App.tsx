@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import Index from "./pages/Index";
 import Tournaments from "./pages/Tournaments";
-import TournamentDetail from "./pages/TournamentDetail";
+import TournamentDetail from "./pages/TournamentDetailClean";
 import Wallet from "./pages/Wallet";
 import Rewards from "./pages/Rewards";
 import Auth from "./pages/Auth";

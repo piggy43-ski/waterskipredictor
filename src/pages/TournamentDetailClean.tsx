@@ -100,7 +100,7 @@ const TournamentDetail = () => {
           end_date: tournamentData.end_date,
           start_datetime: tournamentData.start_datetime,
           end_datetime: tournamentData.end_datetime,
-          disciplines: tournamentData.disciplines,
+          disciplines: tournamentData.disciplines as ('slalom' | 'trick' | 'jump')[],
           status: tournamentData.status as 'upcoming' | 'live' | 'finished',
           settled_at: tournamentData.settled_at
         });
