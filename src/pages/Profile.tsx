@@ -10,7 +10,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, Upload, History } from 'lucide-react';
+import { Coins, Upload, History, Gift, TrendingUp, TrendingDown, ArrowRightLeft } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -28,6 +30,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) {
@@ -39,6 +42,7 @@ const Profile = () => {
     fetchWallet();
     fetchLifetimeStats();
     checkAdminStatus();
+    fetchRecentTransactions();
   }, [user, navigate]);
 
   const checkAdminStatus = async () => {
@@ -133,6 +137,46 @@ const Profile = () => {
 
     setLifetimeWinnings(winnings);
     setLifetimeLosses(losses);
+  };
+
+  const fetchRecentTransactions = async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('token_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (error) {
+      console.error('Error fetching transactions:', error);
+      return;
+    }
+
+    if (data) {
+      setRecentTransactions(data);
+    }
+  };
+
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case 'bonus': return <Gift className="w-4 h-4" />;
+      case 'win': return <TrendingUp className="w-4 h-4" />;
+      case 'loss':
+      case 'bet': return <TrendingDown className="w-4 h-4" />;
+      default: return <ArrowRightLeft className="w-4 h-4" />;
+    }
+  };
+
+  const getTransactionBadgeVariant = (type: string) => {
+    switch (type) {
+      case 'bonus':
+      case 'win': return 'default';
+      case 'loss':
+      case 'bet': return 'destructive';
+      default: return 'secondary';
+    }
   };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -353,15 +397,54 @@ const Profile = () => {
           </form>
         </Card>
 
-        {/* Transaction History */}
-        <Card className="p-4">
+        {/* Recent Transactions */}
+        <Card className="p-6">
+          <h2 className="text-lg font-bold mb-4">Recent Transactions</h2>
+          {recentTransactions.length === 0 ? (
+            <p className="text-muted-foreground text-sm text-center py-4">
+              No transactions yet
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {recentTransactions.map((tx) => (
+                <div 
+                  key={tx.id} 
+                  className="flex items-start justify-between p-3 rounded-lg bg-muted/50"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5">
+                      {getTransactionIcon(tx.type)}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={getTransactionBadgeVariant(tx.type)} className="text-xs capitalize">
+                          {tx.type}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-1">
+                        {tx.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(tx.created_at), 'MMM d, yyyy')}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`font-bold whitespace-nowrap ${
+                    tx.amount >= 0 ? 'text-success' : 'text-destructive'
+                  }`}>
+                    {tx.amount >= 0 ? '+' : ''}{tx.amount.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           <Button 
             variant="outline" 
-            className="w-full"
+            className="w-full mt-4"
             onClick={() => navigate('/transactions')}
           >
             <History className="w-4 h-4 mr-2" />
-            View Transaction History
+            View Full Transaction History
           </Button>
         </Card>
 
