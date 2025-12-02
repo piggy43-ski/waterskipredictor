@@ -48,6 +48,10 @@ interface Prediction {
   market_type: string;
   decimal_odds: number;
   status: string;
+  podium_selections?: {
+    position_predicted: number;
+    athletes: { name: string };
+  }[];
 }
 
 const Predictions = () => {
@@ -114,7 +118,13 @@ const Predictions = () => {
           slips.map(async (slip: any) => {
             const { data: legs } = await supabase
               .from('predictions')
-              .select('*')
+              .select(`
+                *,
+                podium_selections (
+                  position_predicted,
+                  athletes (name)
+                )
+              `)
               .eq('bet_slip_id', slip.id)
               .order('created_at', { ascending: true });
 
@@ -369,24 +379,67 @@ const Predictions = () => {
     
     const canCancel = isActive && bettingWindow?.canBet;
     
+    const getBetTypeLabel = (marketType: string) => {
+      switch (marketType) {
+        case 'WINNER': return '🏆 Winner';
+        case 'PODIUM': return '🥇 Podium';
+        case 'HIGHEST_SCORE': return '📊 Highest Score';
+        default: return marketType.replace('_', ' ');
+      }
+    };
+    
     return (
       <Card className="p-4 hover:shadow-glow transition-all">
         <div className="space-y-3">
           <div className="flex justify-between items-start">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-semibold text-lg">
-                  {isParlayDisplay ? `Parlay (${slip.leg_count} legs)` : slip.legs?.[0]?.athlete_name || 'Single Bet'}
-                </h3>
-                {isParlayDisplay && (
-                  <Badge variant="secondary" className="text-xs">Parlay</Badge>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground">{slip.tournament_name}</p>
               {!isParlayDisplay && slip.legs?.[0] && (
-                <p className="text-xs text-muted-foreground capitalize">
-                  {slip.legs[0].discipline} • {slip.legs[0].category.replace('_', ' ')}
-                </p>
+                <div className="space-y-2">
+                  {/* Bet Type Badge */}
+                  <Badge variant="secondary" className="text-xs mb-2">
+                    {getBetTypeLabel(slip.legs[0].market_type)}
+                  </Badge>
+                  
+                  {/* For PODIUM: Show all 3 athletes with positions */}
+                  {slip.legs[0].market_type === 'PODIUM' && slip.legs[0].podium_selections && slip.legs[0].podium_selections.length > 0 && (
+                    <div className="space-y-1">
+                      {slip.legs[0].podium_selections
+                        .sort((a, b) => a.position_predicted - b.position_predicted)
+                        .map(ps => (
+                          <div key={ps.position_predicted} className="flex items-center gap-2 text-sm">
+                            <span className="font-medium">
+                              {ps.position_predicted === 1 && '🥇'}
+                              {ps.position_predicted === 2 && '🥈'}
+                              {ps.position_predicted === 3 && '🥉'}
+                            </span>
+                            <span className="font-medium">{ps.athletes.name}</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                  
+                  {/* For non-podium: Show single athlete name */}
+                  {slip.legs[0].market_type !== 'PODIUM' && (
+                    <h3 className="font-semibold text-lg">{slip.legs[0].athlete_name}</h3>
+                  )}
+                  
+                  {/* Tournament and discipline info */}
+                  <p className="text-sm text-muted-foreground">📍 {slip.tournament_name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    🎿 {slip.legs[0].discipline} • {slip.legs[0].category.replace('_', ' ')}
+                  </p>
+                </div>
+              )}
+              
+              {/* Parlay display */}
+              {isParlayDisplay && (
+                <>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-semibold text-lg">Parlay ({slip.leg_count} legs)</h3>
+                    <Badge variant="secondary" className="text-xs">Parlay</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{slip.tournament_name}</p>
+                </>
               )}
             </div>
             {getStatusBadge(slip.status)}
