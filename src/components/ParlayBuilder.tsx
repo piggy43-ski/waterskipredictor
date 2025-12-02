@@ -11,7 +11,8 @@ import { SelectionCard } from '@/components/SelectionCard';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
 import { calculateParlayMultiplier, getParlayMultiplierDetails, getMultiplierSuggestions, isDuplicateLeg } from '@/utils/parlayMultipliers';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
-import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -292,6 +293,31 @@ export function ParlayBuilder({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const renderProgressIndicator = () => {
+    const completedLegs = legs.filter(l => l.isComplete).length;
+    const progressPercentage = (completedLegs / PARLAY_CONFIG.MAX_LEGS) * 100;
+    
+    return (
+      <div className="mb-6 p-4 bg-muted/50 rounded-lg border border-border">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-primary" />
+            <span className="text-sm font-medium">Parlay Progress</span>
+          </div>
+          <span className="text-sm font-bold">
+            {completedLegs}/{PARLAY_CONFIG.MAX_LEGS} Legs
+          </span>
+        </div>
+        <Progress value={progressPercentage} className="h-2" />
+        {completedLegs === PARLAY_CONFIG.MAX_LEGS && (
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 text-center">
+            ✨ All legs complete! Maximum multiplier unlocked!
+          </p>
+        )}
+      </div>
+    );
   };
 
   const renderStepIndicator = () => {
@@ -753,6 +779,7 @@ export function ParlayBuilder({
           <DialogDescription>{tournament.name}</DialogDescription>
         </DialogHeader>
 
+        {renderProgressIndicator()}
         {renderStepIndicator()}
 
         <div className="py-4">
