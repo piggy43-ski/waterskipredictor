@@ -5,14 +5,20 @@ export const PARLAY_CONFIG = {
   /** Minimum number of legs required for a parlay bet (now 1 leg = winner + podium + highest) */
   MIN_LEGS: 1,
   
-  /** Maximum number of legs allowed in a parlay bet (3 disciplines × 2 genders) */
-  MAX_LEGS: 6,
+  /** Maximum number of legs allowed in a parlay bet (increased to support full 200x cap) */
+  MAX_LEGS: 12,
   
   /** Maximum stake amount in tokens for any parlay bet */
   MAX_STAKE: 10000,
   
-  /** House edge applied to parlay odds (0 for fixed multipliers) */
+  /** House edge applied to parlay odds (0 for progressive cap system) */
   HOUSE_EDGE: 0,
+  
+  /** Maximum parlay multiplier cap (full dream cap) */
+  MAX_PARLAY_MULTIPLIER: 200,
+  
+  /** Number of legs needed to reach full 200x cap */
+  MAX_LEGS_FOR_FULL_CAP: 12,
 } as const;
 
 /**
