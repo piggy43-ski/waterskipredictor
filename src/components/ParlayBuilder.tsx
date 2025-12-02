@@ -45,6 +45,10 @@ export function ParlayBuilder({
   const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline>('slalom');
   const [selectedCategory, setSelectedCategory] = useState<Category>('open_men');
   
+  // Podium step state
+  const [selectedAthletes, setSelectedAthletes] = useState<Selection[]>([]);
+  const [showAssigner, setShowAssigner] = useState(false);
+  
   // Stake
   const [stake, setStake] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -100,6 +104,10 @@ export function ParlayBuilder({
     const updatedLegs = [...legs];
     updatedLegs[currentLegIndex] = updatedLeg;
     setLegs(updatedLegs);
+    
+    // Reset podium state when moving to next step
+    setSelectedAthletes([]);
+    setShowAssigner(false);
   };
 
   const handlePodiumComplete = (positions: { first: Selection; second: Selection; third: Selection }) => {
@@ -415,8 +423,6 @@ export function ParlayBuilder({
     if (!podiumMarket) return <Alert><AlertDescription>No podium market available</AlertDescription></Alert>;
 
     const podiumSelections = getSelectionsForMarket(podiumMarket.id);
-    const [selectedAthletes, setSelectedAthletes] = useState<Selection[]>([]);
-    const [showAssigner, setShowAssigner] = useState(false);
 
     const toggleAthlete = (selection: Selection) => {
       if (selectedAthletes.find(s => s.id === selection.id)) {
