@@ -650,21 +650,38 @@ export function ParlayBuilder({
                           </span>
                         </div>
                         
-                        <div className="space-y-1 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Trophy className="w-3 h-3 text-yellow-600 dark:text-yellow-500" />
-                            <strong>Winner:</strong> {leg.winner?.athlete.name}
+                        <div className="space-y-1 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1 text-muted-foreground">
+                              <Trophy className="w-3 h-3 text-yellow-600 dark:text-yellow-500" />
+                              <strong>Winner:</strong> {leg.winner?.athlete.name}
+                            </div>
+                            <Badge variant="secondary" className="text-xs h-5 px-1.5">
+                              {leg.winner?.decimal_odds.toFixed(2)}x
+                            </Badge>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Medal className="w-3 h-3 text-orange-600 dark:text-orange-500" />
-                            <strong>Podium:</strong> 
-                            <span className="truncate">
-                              {leg.podium.first?.athlete.name}, {leg.podium.second?.athlete.name}, {leg.podium.third?.athlete.name}
-                            </span>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1 text-muted-foreground">
+                              <Medal className="w-3 h-3 text-orange-600 dark:text-orange-500" />
+                              <strong>Podium:</strong> 
+                              <span className="truncate">
+                                {leg.podium.first?.athlete.name}, {leg.podium.second?.athlete.name}, {leg.podium.third?.athlete.name}
+                              </span>
+                            </div>
+                            <Badge variant="secondary" className="text-xs h-5 px-1.5 whitespace-nowrap">
+                              {((leg.podium.first?.decimal_odds || 1) * 
+                                (leg.podium.second?.decimal_odds || 1) * 
+                                (leg.podium.third?.decimal_odds || 1)).toFixed(2)}x
+                            </Badge>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Target className="w-3 h-3 text-blue-600 dark:text-blue-500" />
-                            <strong>Highest:</strong> {leg.highestScore?.athlete.name}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1 text-muted-foreground">
+                              <Target className="w-3 h-3 text-blue-600 dark:text-blue-500" />
+                              <strong>Highest:</strong> {leg.highestScore?.athlete.name}
+                            </div>
+                            <Badge variant="secondary" className="text-xs h-5 px-1.5">
+                              {leg.highestScore?.decimal_odds.toFixed(2)}x
+                            </Badge>
                           </div>
                         </div>
                       </div>
