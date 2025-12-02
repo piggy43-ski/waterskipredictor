@@ -36,7 +36,8 @@ const Tournaments = () => {
           start_datetime: t.start_datetime,
           end_datetime: t.end_datetime,
           disciplines: t.disciplines as Array<'slalom' | 'trick' | 'jump'>,
-          status: t.status as 'upcoming' | 'live' | 'finished'
+          status: t.status as 'upcoming' | 'live' | 'finished',
+          settled_at: t.settled_at
         })
       );
 
