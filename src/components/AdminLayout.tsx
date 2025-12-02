@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database } from 'lucide-react';
+import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAdminCheck } from '@/hooks/useAdminCheck';
 
@@ -10,6 +10,7 @@ interface AdminLayoutProps {
 
 const navItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/admin/house-ledger', label: 'House Ledger', icon: DollarSign },
   { path: '/admin/athletes', label: 'Athletes', icon: Users },
   { path: '/admin/rankings-sync', label: 'Rankings Auto-Sync', icon: TrendingUp },
   { path: '/admin/rankings-import', label: 'Manual Import', icon: TrendingUp },
