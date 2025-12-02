@@ -11,9 +11,13 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, TrendingUp, Calendar, ChevronDown, Trash2 } from 'lucide-react';
+import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil } from 'lucide-react';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 import { getBettingWindowStatus } from '@/utils/bettingWindows';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 
 interface BetSlip {
   id: string;
@@ -55,6 +59,10 @@ const Predictions = () => {
   const [loading, setLoading] = useState(true);
   const [deleteSlip, setDeleteSlip] = useState<BetSlip | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editSlip, setEditSlip] = useState<BetSlip | null>(null);
+  const [newStakeAmount, setNewStakeAmount] = useState<string>('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
     if (!user) {
@@ -63,7 +71,26 @@ const Predictions = () => {
     }
     
     fetchBetSlips();
+    fetchWalletBalance();
   }, [user, navigate]);
+
+  const fetchWalletBalance = async () => {
+    if (!user) return;
+    
+    try {
+      const { data: wallet } = await supabase
+        .from('token_wallets')
+        .select('earned_tokens, purchased_tokens')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (wallet) {
+        setWalletBalance(wallet.earned_tokens + wallet.purchased_tokens);
+      }
+    } catch (error) {
+      console.error('Error fetching wallet:', error);
+    }
+  };
 
   const fetchBetSlips = async () => {
     if (!user) return;
@@ -209,6 +236,111 @@ const Predictions = () => {
     }
   };
 
+  const handleEditBet = async () => {
+    if (!editSlip || !user) return;
+    
+    setIsEditing(true);
+    try {
+      // 1. Check betting window is still open
+      const bettingWindow = getBettingWindowStatus(
+        editSlip.tournament_start_datetime,
+        editSlip.tournament_end_datetime,
+        editSlip.tournament_settled_at
+      );
+      
+      if (!bettingWindow.canBet) {
+        toast({
+          title: "Cannot edit bet",
+          description: "Betting window has closed",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const oldStake = editSlip.total_stake_tokens;
+      const newStake = parseInt(newStakeAmount);
+      const stakeDiff = newStake - oldStake;
+      
+      // 2. Validate new stake
+      if (newStake <= 0 || newStake > PARLAY_CONFIG.MAX_STAKE) {
+        toast({
+          title: "Invalid stake",
+          description: `Stake must be between 1 and ${PARLAY_CONFIG.MAX_STAKE} tokens`,
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // 3. If increasing stake, check wallet balance
+      if (stakeDiff > 0 && stakeDiff > walletBalance) {
+        toast({
+          title: "Insufficient balance",
+          description: "You don't have enough tokens",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // 4. Calculate new potential payout
+      const newPotentialPayout = Math.floor(newStake * editSlip.total_odds_decimal);
+
+      // 5. Update bet_slip
+      await supabase
+        .from('bet_slips')
+        .update({
+          total_stake_tokens: newStake,
+          potential_payout_tokens: newPotentialPayout
+        })
+        .eq('id', editSlip.id);
+
+      // 6. Update predictions (for single bets, update the leg too)
+      if (editSlip.leg_count === 1 && editSlip.legs?.[0]) {
+        await supabase
+          .from('predictions')
+          .update({
+            staked_tokens: newStake,
+            potential_payout: newPotentialPayout
+          })
+          .eq('id', editSlip.legs[0].id);
+      }
+
+      // 7. Update wallet (add/subtract difference)
+      const { data: wallet } = await supabase
+        .from('token_wallets')
+        .select('earned_tokens')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (wallet) {
+        await supabase
+          .from('token_wallets')
+          .update({ 
+            earned_tokens: wallet.earned_tokens - stakeDiff
+          })
+          .eq('user_id', user.id);
+      }
+
+      toast({
+        title: "Bet updated",
+        description: stakeDiff > 0 
+          ? `Added ${stakeDiff} tokens to your bet`
+          : `Refunded ${Math.abs(stakeDiff)} tokens to your wallet`
+      });
+      
+      fetchBetSlips();
+      fetchWalletBalance();
+    } catch (error) {
+      toast({
+        title: "Error updating bet",
+        description: "Please try again",
+        variant: "destructive"
+      });
+    } finally {
+      setIsEditing(false);
+      setEditSlip(null);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'WON':
@@ -341,19 +473,33 @@ const Predictions = () => {
             </div>
           </div>
 
-          {/* Cancel button for active bets with open betting window */}
+          {/* Edit and Cancel buttons for active bets with open betting window */}
           {canCancel && (
-            <div className="pt-3 border-t border-border">
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                className="w-full"
-                onClick={() => setDeleteSlip(slip)}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Cancel Bet
-              </Button>
-              <p className="text-xs text-muted-foreground text-center mt-1">
+            <div className="pt-3 border-t border-border space-y-2">
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => {
+                    setEditSlip(slip);
+                    setNewStakeAmount(slip.total_stake_tokens.toString());
+                  }}
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Edit Stake
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => setDeleteSlip(slip)}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Cancel
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
                 {bettingWindow.message}
               </p>
             </div>
@@ -424,7 +570,7 @@ const Predictions = () => {
 
       <BottomNav />
 
-      {/* Confirmation dialog */}
+      {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteSlip} onOpenChange={() => setDeleteSlip(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -445,6 +591,84 @@ const Predictions = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit stake dialog */}
+      <Dialog open={!!editSlip} onOpenChange={() => setEditSlip(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Bet Stake</DialogTitle>
+            <DialogDescription>
+              Adjust your stake for this bet. Changes will be reflected in your wallet.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Current bet info */}
+            <div className="bg-muted/50 rounded-lg p-3">
+              <div className="text-sm text-muted-foreground">Current Stake</div>
+              <div className="font-semibold">{editSlip?.total_stake_tokens.toLocaleString()} tokens</div>
+            </div>
+            
+            {/* Wallet balance */}
+            <div className="flex justify-between text-sm">
+              <span>Available Balance</span>
+              <span className="font-semibold">{walletBalance.toLocaleString()} tokens</span>
+            </div>
+            
+            {/* New stake input */}
+            <div className="space-y-2">
+              <Label>New Stake Amount</Label>
+              <Input
+                type="number"
+                value={newStakeAmount}
+                onChange={(e) => setNewStakeAmount(e.target.value)}
+                min="1"
+                max={editSlip ? walletBalance + editSlip.total_stake_tokens : walletBalance}
+              />
+              {/* Quick amount buttons */}
+              <div className="flex gap-2">
+                {[50, 100, 250, 500].map(amount => (
+                  <Button 
+                    key={amount} 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setNewStakeAmount(amount.toString())}
+                  >
+                    {amount}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            
+            {/* New potential payout preview */}
+            {editSlip && parseInt(newStakeAmount) > 0 && (
+              <div className="bg-primary/10 rounded-lg p-3">
+                <div className="text-sm text-muted-foreground">New Potential Payout</div>
+                <div className="font-bold text-lg">
+                  {Math.floor(parseInt(newStakeAmount) * editSlip.total_odds_decimal).toLocaleString()} tokens
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {parseInt(newStakeAmount) > editSlip.total_stake_tokens 
+                    ? `+${parseInt(newStakeAmount) - editSlip.total_stake_tokens} tokens from wallet`
+                    : parseInt(newStakeAmount) < editSlip.total_stake_tokens
+                      ? `${editSlip.total_stake_tokens - parseInt(newStakeAmount)} tokens refunded`
+                      : 'No change'}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditSlip(null)}>Cancel</Button>
+            <Button 
+              onClick={handleEditBet}
+              disabled={isEditing || !newStakeAmount || parseInt(newStakeAmount) <= 0}
+            >
+              {isEditing ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
