@@ -294,7 +294,30 @@ const TournamentDetail = () => {
       const combinedOdds = 1.5;
       const potentialPayout = Math.floor(stakeAmount * combinedOdds);
 
-      // Create the main parent prediction
+      // Step 1: Create bet_slip FIRST
+      const americanOdds = combinedOdds >= 2 
+        ? Math.round((combinedOdds - 1) * 100)
+        : Math.round(-100 / (combinedOdds - 1));
+        
+      const { data: betSlip, error: slipError } = await supabase
+        .from('bet_slips')
+        .insert({
+          user_id: user.id,
+          tournament_id: tournament.id,
+          type: 'single',
+          leg_count: 1,
+          total_stake_tokens: stakeAmount,
+          total_odds_decimal: combinedOdds,
+          total_odds_american: americanOdds,
+          potential_payout_tokens: potentialPayout,
+          status: 'PENDING'
+        })
+        .select()
+        .single();
+
+      if (slipError) throw slipError;
+
+      // Step 2: Create the main parent prediction linked to bet_slip
       const { data: parentPrediction, error: parentError } = await supabase
         .from('predictions')
         .insert({
@@ -308,6 +331,7 @@ const TournamentDetail = () => {
           staked_tokens: stakeAmount,
           decimal_odds: combinedOdds,
           potential_payout: potentialPayout,
+          bet_slip_id: betSlip.id,
           is_parlay_parent: true,
           status: 'PENDING'
         })
@@ -397,7 +421,30 @@ const TournamentDetail = () => {
 
       const potentialPayout = Math.floor(stakeAmount * selectedSelection.decimal_odds);
 
-      // Insert prediction
+      // Step 1: Create bet_slip FIRST
+      const americanOdds = selectedSelection.decimal_odds >= 2 
+        ? Math.round((selectedSelection.decimal_odds - 1) * 100)
+        : Math.round(-100 / (selectedSelection.decimal_odds - 1));
+        
+      const { data: betSlip, error: slipError } = await supabase
+        .from('bet_slips')
+        .insert({
+          user_id: user.id,
+          tournament_id: tournament.id,
+          type: 'single',
+          leg_count: 1,
+          total_stake_tokens: stakeAmount,
+          total_odds_decimal: selectedSelection.decimal_odds,
+          total_odds_american: americanOdds,
+          potential_payout_tokens: potentialPayout,
+          status: 'PENDING'
+        })
+        .select()
+        .single();
+
+      if (slipError) throw slipError;
+
+      // Step 2: Insert prediction linked to bet_slip
       const { error: predictionError } = await supabase
         .from('predictions')
         .insert({
@@ -411,6 +458,7 @@ const TournamentDetail = () => {
           staked_tokens: stakeAmount,
           decimal_odds: selectedSelection.decimal_odds,
           potential_payout: potentialPayout,
+          bet_slip_id: betSlip.id,
           status: 'PENDING'
         });
 
