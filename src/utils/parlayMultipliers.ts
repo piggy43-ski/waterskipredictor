@@ -1,58 +1,133 @@
 import { ParlayLeg } from '@/types/parlay';
+import { PARLAY_CONFIG } from './parlayConfig';
 
 /**
- * Fixed multiplier rules:
- * - 1 leg (1 discipline, 1 gender): 20x
- * - 2 legs (same discipline, both genders): 50x
- * - 2 disciplines, 1 gender: 50x
- * - 2 disciplines, both genders: 100x
- * - 3 disciplines, 1 gender: 100x
- * - 3 disciplines, both genders: 200x
+ * Convert American odds to decimal odds
+ */
+export function americanToDecimal(americanOdds: number): number {
+  if (americanOdds > 0) {
+    return 1 + (americanOdds / 100);
+  } else {
+    return 1 + (100 / Math.abs(americanOdds));
+  }
+}
+
+/**
+ * Calculate the raw parlay multiplier from all selections' decimal odds
+ * Each leg contains: winner + 3 podium positions + highest score = 5 selections
+ */
+export function calculateRawParlayMultiplier(legs: ParlayLeg[]): number {
+  if (legs.length === 0) return 0;
+  
+  let totalDecimalOdds = 1;
+  
+  for (const leg of legs) {
+    // Winner odds
+    if (leg.winner?.decimal_odds) {
+      totalDecimalOdds *= leg.winner.decimal_odds;
+    }
+    
+    // Podium odds (3 selections)
+    if (leg.podium.first?.decimal_odds) {
+      totalDecimalOdds *= leg.podium.first.decimal_odds;
+    }
+    if (leg.podium.second?.decimal_odds) {
+      totalDecimalOdds *= leg.podium.second.decimal_odds;
+    }
+    if (leg.podium.third?.decimal_odds) {
+      totalDecimalOdds *= leg.podium.third.decimal_odds;
+    }
+    
+    // Highest score odds
+    if (leg.highestScore?.decimal_odds) {
+      totalDecimalOdds *= leg.highestScore.decimal_odds;
+    }
+  }
+  
+  return totalDecimalOdds;
+}
+
+/**
+ * Calculate the progressive cap based on number of legs
+ * More legs = higher allowed multiplier cap
+ * 
+ * Examples:
+ * - 1 leg: ~17.6x cap
+ * - 3 legs: ~50.8x cap  
+ * - 6 legs: ~100.5x cap
+ * - 12 legs: 200x cap
+ */
+export function calculateProgressiveCap(legCount: number): number {
+  const { MAX_PARLAY_MULTIPLIER, MAX_LEGS_FOR_FULL_CAP } = PARLAY_CONFIG;
+  
+  // If at or above max legs, return full cap
+  if (legCount >= MAX_LEGS_FOR_FULL_CAP) {
+    return MAX_PARLAY_MULTIPLIER;
+  }
+  
+  // Progressive formula: cap scales linearly with leg count
+  return 1 + (legCount / MAX_LEGS_FOR_FULL_CAP) * (MAX_PARLAY_MULTIPLIER - 1);
+}
+
+/**
+ * Calculate the final parlay multiplier (raw odds capped by progressive limit)
  */
 export function calculateParlayMultiplier(legs: ParlayLeg[]): number {
   if (legs.length === 0) return 0;
-
-  const disciplines = new Set(legs.map(l => l.discipline));
-  const genders = new Set(legs.map(l => l.gender));
-
-  const disciplineCount = disciplines.size;
-  const genderCount = genders.size;
-
-  if (disciplineCount === 3 && genderCount === 2) return 200;
-  if (disciplineCount === 3 && genderCount === 1) return 100;
-  if (disciplineCount === 2 && genderCount === 2) return 100;
-  if (disciplineCount === 2 && genderCount === 1) return 50;
-  if (disciplineCount === 1 && genderCount === 2) return 50;
   
-  return 20; // Default: 1 discipline, 1 gender
+  const completedLegs = legs.filter(l => l.isComplete);
+  if (completedLegs.length === 0) return 0;
+  
+  const rawMultiplier = calculateRawParlayMultiplier(completedLegs);
+  const progressiveCap = calculateProgressiveCap(completedLegs.length);
+  
+  return Math.min(rawMultiplier, progressiveCap);
+}
+
+/**
+ * Get detailed multiplier info for UI display
+ */
+export function getParlayMultiplierDetails(legs: ParlayLeg[]): {
+  rawMultiplier: number;
+  progressiveCap: number;
+  finalMultiplier: number;
+  isCapped: boolean;
+  legCount: number;
+} {
+  const completedLegs = legs.filter(l => l.isComplete);
+  const rawMultiplier = calculateRawParlayMultiplier(completedLegs);
+  const progressiveCap = calculateProgressiveCap(completedLegs.length);
+  const finalMultiplier = Math.min(rawMultiplier, progressiveCap);
+  
+  return {
+    rawMultiplier: Math.round(rawMultiplier * 100) / 100,
+    progressiveCap: Math.round(progressiveCap * 100) / 100,
+    finalMultiplier: Math.round(finalMultiplier * 100) / 100,
+    isCapped: rawMultiplier > progressiveCap,
+    legCount: completedLegs.length
+  };
 }
 
 /**
  * Get suggestions for increasing the multiplier
  */
 export function getMultiplierSuggestions(legs: ParlayLeg[], availableDisciplines: string[]): string[] {
-  const disciplines = new Set(legs.map(l => l.discipline));
-  const genders = new Set(legs.map(l => l.gender));
+  const completedLegs = legs.filter(l => l.isComplete);
+  const { progressiveCap, isCapped, legCount } = getParlayMultiplierDetails(legs);
   const suggestions: string[] = [];
-
-  const currentMultiplier = calculateParlayMultiplier(legs);
-
-  // Suggest adding other gender for same discipline
-  if (genders.size === 1) {
-    const otherGender = genders.has('men') ? 'Women' : 'Men';
-    const currentDiscipline = legs[0].discipline;
-    const disciplineName = currentDiscipline.charAt(0).toUpperCase() + currentDiscipline.slice(1);
-    suggestions.push(`Add ${otherGender}'s ${disciplineName} to reach ${currentMultiplier === 20 ? 50 : currentMultiplier === 100 ? 200 : 100}x`);
+  
+  // Calculate what cap would be with one more leg
+  if (legCount < PARLAY_CONFIG.MAX_LEGS_FOR_FULL_CAP) {
+    const nextCap = calculateProgressiveCap(legCount + 1);
+    suggestions.push(`Add another leg to increase max cap from ${progressiveCap.toFixed(0)}x to ${nextCap.toFixed(0)}x`);
   }
-
-  // Suggest adding more disciplines
-  const unusedDisciplines = availableDisciplines.filter(d => !disciplines.has(d as any));
-  if (unusedDisciplines.length > 0 && disciplines.size < 3) {
-    const disciplineNames = unusedDisciplines.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(' & ');
-    const targetMultiplier = disciplines.size === 1 ? (genders.size === 2 ? 100 : 50) : (genders.size === 2 ? 200 : 100);
-    suggestions.push(`Add ${disciplineNames} to reach ${targetMultiplier}x`);
+  
+  // If currently capped, show how many more legs needed for full 200x
+  if (isCapped && legCount < PARLAY_CONFIG.MAX_LEGS_FOR_FULL_CAP) {
+    const legsNeeded = PARLAY_CONFIG.MAX_LEGS_FOR_FULL_CAP - legCount;
+    suggestions.push(`Add ${legsNeeded} more leg${legsNeeded > 1 ? 's' : ''} to unlock full 200x potential`);
   }
-
+  
   return suggestions;
 }
 
