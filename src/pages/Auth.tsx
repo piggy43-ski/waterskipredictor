@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
-import { Waves } from 'lucide-react';
+import { Waves, Mail } from 'lucide-react';
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -62,7 +62,10 @@ const Auth = () => {
           <TabsContent value="signin">
             <form onSubmit={handleSignIn} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="signin-email">Email</Label>
+                <Label htmlFor="signin-email" className="flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  Email Address
+                </Label>
                 <Input
                   id="signin-email"
                   type="email"
@@ -71,6 +74,9 @@ const Auth = () => {
                   onChange={(e) => setSignInEmail(e.target.value)}
                   required
                 />
+                <p className="text-xs text-muted-foreground">
+                  Use the email you signed up with, not your username
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="signin-password">Password</Label>
@@ -83,6 +89,14 @@ const Auth = () => {
                   required
                 />
               </div>
+              <div className="text-right">
+                <Link 
+                  to="/reset-password" 
+                  className="text-sm text-primary hover:underline"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Signing in...' : 'Sign In'}
               </Button>
@@ -92,7 +106,10 @@ const Auth = () => {
           <TabsContent value="signup">
             <form onSubmit={handleSignUp} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="signup-email">Email</Label>
+                <Label htmlFor="signup-email" className="flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  Email Address
+                </Label>
                 <Input
                   id="signup-email"
                   type="email"
@@ -112,6 +129,9 @@ const Auth = () => {
                   onChange={(e) => setUsername(e.target.value)}
                   required
                 />
+                <p className="text-xs text-muted-foreground">
+                  This will be your display name in the app
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="country">Country (Optional)</Label>

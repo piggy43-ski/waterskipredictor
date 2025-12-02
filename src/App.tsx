@@ -11,6 +11,8 @@ import Wallet from "./pages/Wallet";
 import Rewards from "./pages/Rewards";
 import Transactions from "./pages/Transactions";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
+import UpdatePassword from "./pages/UpdatePassword";
 import Profile from "./pages/Profile";
 import Predictions from "./pages/Predictions";
 import NotFound from "./pages/NotFound";
@@ -40,6 +42,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/update-password" element={<UpdatePassword />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/tournaments" element={<Tournaments />} />
