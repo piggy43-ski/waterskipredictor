@@ -63,6 +63,21 @@ export function ParlayBuilder({
   const multiplier = multiplierDetails.finalMultiplier;
   const suggestions = getMultiplierSuggestions(legs.filter(l => l.isComplete), tournament.disciplines);
 
+  // Get available discipline+gender combinations
+  const getAvailableCombinations = () => {
+    const allCombos = [
+      { discipline: 'slalom', gender: 'men' },
+      { discipline: 'slalom', gender: 'women' },
+      { discipline: 'trick', gender: 'men' },
+      { discipline: 'trick', gender: 'women' },
+      { discipline: 'jump', gender: 'men' },
+      { discipline: 'jump', gender: 'women' },
+    ];
+    return allCombos.filter(combo => 
+      !legs.some(leg => leg.discipline === combo.discipline && leg.gender === combo.gender)
+    );
+  };
+
   // Filter markets and selections for current context
   const getMarketForType = (marketType: string) => {
     return markets.find(m => 
@@ -315,57 +330,75 @@ export function ParlayBuilder({
 
   const renderContextStep = () => {
     const usedCombinations = legs.map(l => `${l.discipline}-${l.gender}`);
+    const completedLegs = legs.filter(l => l.isComplete);
+    const availableCombinations = getAvailableCombinations();
     
     return (
       <div className="space-y-6">
         <div>
           <h3 className="text-lg font-semibold mb-4">Select Discipline & Gender</h3>
           
-          <div className="space-y-4">
-            <div>
-              <Label>Gender</Label>
-              <div className="flex gap-2 mt-2">
-                {['men', 'women'].map(gender => (
-                  <Button
-                    key={gender}
-                    variant={selectedGender === gender ? 'default' : 'outline'}
-                    onClick={() => setSelectedGender(gender as 'men' | 'women')}
-                    className="flex-1"
-                  >
-                    {gender === 'men' ? 'Men' : 'Women'}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <Label>Discipline</Label>
-              <div className="flex gap-2 mt-2">
-                {tournament.disciplines.map(disc => {
-                  const key = `${disc}-${selectedGender}`;
-                  const isUsed = usedCombinations.includes(key);
-                  
-                  return (
+          {availableCombinations.length === 0 ? (
+            <Alert>
+              <AlertCircle className="w-4 h-4" />
+              <AlertDescription>Maximum legs reached! All discipline+gender combinations are used.</AlertDescription>
+            </Alert>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <Label>Gender</Label>
+                <div className="flex gap-2 mt-2">
+                  {['men', 'women'].map(gender => (
                     <Button
-                      key={disc}
-                      variant={selectedDiscipline === disc ? 'default' : 'outline'}
-                      onClick={() => !isUsed && setSelectedDiscipline(disc as Discipline)}
-                      disabled={isUsed}
-                      className="flex-1 capitalize"
+                      key={gender}
+                      variant={selectedGender === gender ? 'default' : 'outline'}
+                      onClick={() => setSelectedGender(gender as 'men' | 'women')}
+                      className="flex-1"
                     >
-                      {disc}
-                      {isUsed && <Badge variant="secondary" className="ml-2">Used</Badge>}
+                      {gender === 'men' ? 'Men' : 'Women'}
                     </Button>
-                  );
-                })}
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label>Discipline</Label>
+                <div className="flex gap-2 mt-2">
+                  {tournament.disciplines.map(disc => {
+                    const key = `${disc}-${selectedGender}`;
+                    const isUsed = usedCombinations.includes(key);
+                    
+                    return (
+                      <Button
+                        key={disc}
+                        variant={selectedDiscipline === disc ? 'default' : 'outline'}
+                        onClick={() => !isUsed && setSelectedDiscipline(disc as Discipline)}
+                        disabled={isUsed}
+                        className="flex-1 capitalize"
+                      >
+                        {disc}
+                        {isUsed && <Badge variant="secondary" className="ml-2">Used</Badge>}
+                      </Button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
-        <Button onClick={startNewLeg} className="w-full" size="lg">
-          Continue to Winner <ArrowRight className="ml-2 w-4 h-4" />
-        </Button>
+        <div className="flex gap-2">
+          {completedLegs.length > 0 && (
+            <Button variant="outline" onClick={() => setCurrentStep('summary')} className="flex-1">
+              <ArrowLeft className="mr-2 w-4 h-4" /> Back to Summary
+            </Button>
+          )}
+          {availableCombinations.length > 0 && (
+            <Button onClick={startNewLeg} className="flex-1" size="lg">
+              Continue to Winner <ArrowRight className="ml-2 w-4 h-4" />
+            </Button>
+          )}
+        </div>
       </div>
     );
   };
@@ -550,6 +583,7 @@ export function ParlayBuilder({
   const renderSummary = () => {
     const completeLegs = legs.filter(l => l.isComplete);
     const multiplierDetails = getParlayMultiplierDetails(legs);
+    const availableCombinations = getAvailableCombinations();
 
     return (
       <div className="space-y-6">
@@ -586,19 +620,19 @@ export function ParlayBuilder({
 
         <div className="bg-primary/10 rounded-lg p-4 space-y-2">
           <div className="text-2xl font-bold text-center">
-            {multiplierDetails.finalMultiplier.toFixed(1)}x Multiplier
+            {multiplierDetails.finalMultiplier.toFixed(0)}x Multiplier
           </div>
           
           {multiplierDetails.isCapped && (
             <div className="text-sm text-amber-600 dark:text-amber-500 text-center flex items-center justify-center gap-1">
               <AlertCircle className="w-3 h-3" />
               Capped from {multiplierDetails.rawMultiplier.toFixed(1)}x 
-              (max {multiplierDetails.progressiveCap.toFixed(0)}x for {multiplierDetails.legCount} legs)
+              (max {multiplierDetails.progressiveCap}x for {multiplierDetails.legCount} legs)
             </div>
           )}
           
           <div className="text-xs text-muted-foreground text-center">
-            Progressive cap: {multiplierDetails.legCount} legs → up to {multiplierDetails.progressiveCap.toFixed(0)}x max
+            Progressive cap: {multiplierDetails.legCount} legs → up to {multiplierDetails.progressiveCap}x max
           </div>
           
           {suggestions.length > 0 && (
@@ -613,10 +647,16 @@ export function ParlayBuilder({
         </div>
 
         <div className="flex gap-2">
-          {completeLegs.length < PARLAY_CONFIG.MAX_LEGS && (
+          {availableCombinations.length > 0 && completeLegs.length < PARLAY_CONFIG.MAX_LEGS && (
             <Button variant="outline" onClick={() => setCurrentStep('context')} className="flex-1">
               <Plus className="mr-2 w-4 h-4" /> Add Another Leg
             </Button>
+          )}
+          {completeLegs.length >= PARLAY_CONFIG.MAX_LEGS && (
+            <Alert className="flex-1">
+              <AlertCircle className="w-4 h-4" />
+              <AlertDescription>Maximum legs reached (6/6)!</AlertDescription>
+            </Alert>
           )}
           <Button 
             onClick={() => setCurrentStep('stake')} 
@@ -729,6 +769,12 @@ export function ParlayBuilder({
           {currentStep === 'summary' && renderSummary()}
           {currentStep === 'stake' && renderStakeStep()}
         </div>
+
+        <DialogFooter className="mt-4">
+          <Button variant="ghost" onClick={onClose} className="w-full">
+            Cancel Parlay
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
