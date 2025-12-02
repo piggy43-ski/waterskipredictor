@@ -623,17 +623,17 @@ export function ParlayBuilder({
             {multiplierDetails.finalMultiplier.toFixed(0)}x Multiplier
           </div>
           
-          {multiplierDetails.isCapped && (
-            <div className="text-sm text-amber-600 dark:text-amber-500 text-center flex items-center justify-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              Capped from {multiplierDetails.rawMultiplier.toFixed(1)}x 
-              (max {multiplierDetails.progressiveCap}x for {multiplierDetails.legCount} legs)
+          {multiplierDetails.legCount < PARLAY_CONFIG.MAX_LEGS && (
+            <div className="text-xs text-muted-foreground text-center">
+              💡 Add more legs to unlock higher multipliers (up to 200x)
             </div>
           )}
           
-          <div className="text-xs text-muted-foreground text-center">
-            Progressive cap: {multiplierDetails.legCount} legs → up to {multiplierDetails.progressiveCap}x max
-          </div>
+          {multiplierDetails.legCount === PARLAY_CONFIG.MAX_LEGS && (
+            <div className="text-xs text-emerald-600 dark:text-emerald-400 text-center">
+              ✨ Maximum multiplier unlocked!
+            </div>
+          )}
           
           {suggestions.length > 0 && (
             <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
@@ -691,12 +691,6 @@ export function ParlayBuilder({
                 <span>Multiplier</span>
                 <span className="font-semibold">{multiplierDetails.finalMultiplier.toFixed(1)}x</span>
               </div>
-              {multiplierDetails.isCapped && (
-                <div className="flex justify-between text-xs text-amber-600 dark:text-amber-500">
-                  <span>Raw Multiplier (capped)</span>
-                  <span className="font-semibold">{multiplierDetails.rawMultiplier.toFixed(1)}x → {multiplierDetails.progressiveCap.toFixed(0)}x</span>
-                </div>
-              )}
               <div className="flex justify-between text-sm">
                 <span>Available Balance</span>
                 <span className="font-semibold">{walletBalance.toLocaleString()} tokens</span>
