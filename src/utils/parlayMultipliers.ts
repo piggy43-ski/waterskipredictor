@@ -49,24 +49,31 @@ export function calculateRawParlayMultiplier(legs: ParlayLeg[]): number {
 
 /**
  * Calculate the progressive cap based on number of legs
- * More legs = higher allowed multiplier cap
+ * Uses lookup table with 12-18% house edge
  * 
- * Examples:
- * - 1 leg: ~17.6x cap
- * - 3 legs: ~50.8x cap  
- * - 6 legs: ~100.5x cap
- * - 12 legs: 200x cap
+ * Progressive Caps (Option B):
+ * - 1 leg: 30x cap (12% house edge)
+ * - 2 legs: 55x cap (18% house edge)
+ * - 3 legs: 85x cap (15% house edge)
+ * - 4 legs: 115x cap (14% house edge)
+ * - 5 legs: 145x cap (13% house edge)
+ * - 6 legs: 200x cap (full reward)
  */
 export function calculateProgressiveCap(legCount: number): number {
-  const { MAX_PARLAY_MULTIPLIER, MAX_LEGS_FOR_FULL_CAP } = PARLAY_CONFIG;
+  const { PROGRESSIVE_CAPS, MAX_PARLAY_MULTIPLIER } = PARLAY_CONFIG;
   
-  // If at or above max legs, return full cap
-  if (legCount >= MAX_LEGS_FOR_FULL_CAP) {
+  // Return full cap for max legs or above
+  if (legCount >= 6) {
     return MAX_PARLAY_MULTIPLIER;
   }
   
-  // Progressive formula: cap scales linearly with leg count
-  return 1 + (legCount / MAX_LEGS_FOR_FULL_CAP) * (MAX_PARLAY_MULTIPLIER - 1);
+  // Return 0 for invalid leg counts
+  if (legCount <= 0) {
+    return 0;
+  }
+  
+  // Use lookup table for progressive caps
+  return PROGRESSIVE_CAPS[legCount as keyof typeof PROGRESSIVE_CAPS] || MAX_PARLAY_MULTIPLIER;
 }
 
 /**
