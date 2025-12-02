@@ -6,11 +6,14 @@ import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, TrendingUp, Calendar, ChevronDown } from 'lucide-react';
+import { Coins, TrendingUp, Calendar, ChevronDown, Trash2 } from 'lucide-react';
 import { decimalToAmerican } from '@/utils/oddsConverter';
+import { getBettingWindowStatus } from '@/utils/bettingWindows';
 
 interface BetSlip {
   id: string;
@@ -26,6 +29,9 @@ interface BetSlip {
   created_at: string;
   settled_at?: string;
   tournament_name?: string;
+  tournament_start_datetime?: string;
+  tournament_end_datetime?: string;
+  tournament_settled_at?: string | null;
   legs?: Prediction[];
 }
 
@@ -47,6 +53,8 @@ const Predictions = () => {
   const [activeBetSlips, setActiveBetSlips] = useState<BetSlip[]>([]);
   const [completedBetSlips, setCompletedBetSlips] = useState<BetSlip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteSlip, setDeleteSlip] = useState<BetSlip | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -66,7 +74,7 @@ const Predictions = () => {
         .from('bet_slips')
         .select(`
           *,
-          tournaments (name)
+          tournaments (name, start_datetime, end_datetime, settled_at)
         `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
@@ -86,6 +94,9 @@ const Predictions = () => {
             return {
               ...slip,
               tournament_name: slip.tournaments?.name || 'Unknown Tournament',
+              tournament_start_datetime: slip.tournaments?.start_datetime,
+              tournament_end_datetime: slip.tournaments?.end_datetime,
+              tournament_settled_at: slip.tournaments?.settled_at,
               legs: legs || []
             };
           })
@@ -117,6 +128,87 @@ const Predictions = () => {
     });
   };
 
+  const handleDeleteBet = async () => {
+    if (!deleteSlip || !user) return;
+    
+    setIsDeleting(true);
+    try {
+      // Check betting window is still open (double-check before delete)
+      const bettingWindow = getBettingWindowStatus(
+        deleteSlip.tournament_start_datetime,
+        deleteSlip.tournament_end_datetime,
+        deleteSlip.tournament_settled_at
+      );
+      
+      if (!bettingWindow.canBet) {
+        toast({
+          title: "Cannot cancel bet",
+          description: "Betting window has closed",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Get all prediction IDs for this bet slip
+      const predictionIds = deleteSlip.legs?.map(l => l.id) || [];
+      
+      // 1. Delete podium_selections first (if any)
+      if (predictionIds.length > 0) {
+        await supabase
+          .from('podium_selections')
+          .delete()
+          .in('prediction_id', predictionIds);
+      }
+      
+      // 2. Delete predictions
+      await supabase
+        .from('predictions')
+        .delete()
+        .eq('bet_slip_id', deleteSlip.id);
+      
+      // 3. Delete bet_slip
+      const { error: deleteError } = await supabase
+        .from('bet_slips')
+        .delete()
+        .eq('id', deleteSlip.id);
+      
+      if (deleteError) throw deleteError;
+      
+      // 4. Refund tokens to wallet
+      const { data: wallet } = await supabase
+        .from('token_wallets')
+        .select('earned_tokens')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (wallet) {
+        await supabase
+          .from('token_wallets')
+          .update({ 
+            earned_tokens: wallet.earned_tokens + deleteSlip.total_stake_tokens 
+          })
+          .eq('user_id', user.id);
+      }
+      
+      toast({
+        title: "Bet cancelled",
+        description: `${deleteSlip.total_stake_tokens} tokens refunded to your wallet`
+      });
+      
+      // Refresh bet list
+      fetchBetSlips();
+    } catch (error) {
+      toast({
+        title: "Error cancelling bet",
+        description: "Please try again",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeleteSlip(null);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'WON':
@@ -135,6 +227,15 @@ const Predictions = () => {
   const BetSlipCard = ({ slip, isActive }: { slip: BetSlip; isActive: boolean }) => {
     const isParlayDisplay = slip.type === 'parlay' || slip.leg_count > 1;
     const americanOdds = decimalToAmerican(slip.total_odds_decimal);
+    
+    // Check if betting window is still open
+    const bettingWindow = isActive ? getBettingWindowStatus(
+      slip.tournament_start_datetime,
+      slip.tournament_end_datetime,
+      slip.tournament_settled_at
+    ) : null;
+    
+    const canCancel = isActive && bettingWindow?.canBet;
     
     return (
       <Card className="p-4 hover:shadow-glow transition-all">
@@ -239,6 +340,24 @@ const Predictions = () => {
               </p>
             </div>
           </div>
+
+          {/* Cancel button for active bets with open betting window */}
+          {canCancel && (
+            <div className="pt-3 border-t border-border">
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                className="w-full"
+                onClick={() => setDeleteSlip(slip)}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Cancel Bet
+              </Button>
+              <p className="text-xs text-muted-foreground text-center mt-1">
+                {bettingWindow.message}
+              </p>
+            </div>
+          )}
         </div>
       </Card>
     );
@@ -304,6 +423,28 @@ const Predictions = () => {
       </div>
 
       <BottomNav />
+
+      {/* Confirmation dialog */}
+      <AlertDialog open={!!deleteSlip} onOpenChange={() => setDeleteSlip(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this bet?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your stake of <strong>{deleteSlip?.total_stake_tokens.toLocaleString()} tokens</strong> will be refunded to your wallet. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Bet</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteBet}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Cancelling...' : 'Cancel Bet'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
