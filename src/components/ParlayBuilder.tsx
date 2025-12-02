@@ -606,6 +606,14 @@ export function ParlayBuilder({
     );
   };
 
+  const handleEditLeg = (legIndex: number) => {
+    setCurrentLegIndex(legIndex);
+    const leg = legs[legIndex];
+    setSelectedDiscipline(leg.discipline);
+    setSelectedGender(leg.gender);
+    setCurrentStep('winner'); // Start from winner step to allow editing
+  };
+
   const renderSummary = () => {
     const completeLegs = legs.filter(l => l.isComplete);
     const multiplierDetails = getParlayMultiplierDetails(legs);
@@ -622,24 +630,77 @@ export function ParlayBuilder({
               <AlertDescription>No complete legs yet. Add your first leg to continue.</AlertDescription>
             </Alert>
           ) : (
-            <div className="space-y-4">
-              {completeLegs.map((leg, idx) => (
-                <div key={idx} className="border rounded-lg p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold capitalize">
-                      Leg {idx + 1}: {leg.gender === 'men' ? 'Men' : 'Women'}'s {leg.discipline}
+            <div className="grid gap-3">
+              {completeLegs.map((leg, idx) => {
+                const actualIndex = legs.findIndex(l => l === leg);
+                return (
+                  <div 
+                    key={idx} 
+                    className="group border rounded-lg p-4 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer bg-card relative"
+                    onClick={() => handleEditLeg(actualIndex)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="capitalize">
+                            Leg {idx + 1}
+                          </Badge>
+                          <span className="font-semibold capitalize text-sm">
+                            {leg.gender === 'men' ? 'Men' : 'Women'}'s {leg.discipline}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Trophy className="w-3 h-3 text-yellow-600 dark:text-yellow-500" />
+                            <strong>Winner:</strong> {leg.winner?.athlete.name}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Medal className="w-3 h-3 text-orange-600 dark:text-orange-500" />
+                            <strong>Podium:</strong> 
+                            <span className="truncate">
+                              {leg.podium.first?.athlete.name}, {leg.podium.second?.athlete.name}, {leg.podium.third?.athlete.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Target className="w-3 h-3 text-blue-600 dark:text-blue-500" />
+                            <strong>Highest:</strong> {leg.highestScore?.athlete.name}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditLeg(actualIndex);
+                          }}
+                          title="Edit leg"
+                        >
+                          <ArrowRight className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeLeg(actualIndex);
+                          }}
+                          title="Delete leg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => removeLeg(idx)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    
+                    <div className="absolute inset-0 rounded-lg bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                   </div>
-                  <div className="text-sm space-y-1">
-                    <div>• <strong>Winner:</strong> {leg.winner?.athlete.name}</div>
-                    <div>• <strong>Podium:</strong> 1) {leg.podium.first?.athlete.name}, 2) {leg.podium.second?.athlete.name}, 3) {leg.podium.third?.athlete.name}</div>
-                    <div>• <strong>Highest Score:</strong> {leg.highestScore?.athlete.name}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
