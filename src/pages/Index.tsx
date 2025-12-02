@@ -49,6 +49,9 @@ const Index = () => {
           location: t.location,
           start_date: t.start_date,
           end_date: t.end_date,
+          start_datetime: t.start_datetime,
+          end_datetime: t.end_datetime,
+          settled_at: t.settled_at,
           disciplines: t.disciplines as Array<'slalom' | 'trick' | 'jump'>,
           status: t.status as 'upcoming' | 'live' | 'finished'
         })
