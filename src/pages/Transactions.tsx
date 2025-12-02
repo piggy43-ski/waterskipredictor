@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Coins, TrendingUp, TrendingDown, DollarSign, Gift, RefreshCw, Settings, Filter, CalendarIcon, X } from 'lucide-react';
+import { Coins, TrendingUp, TrendingDown, DollarSign, Gift, RefreshCw, Shield, Filter, CalendarIcon, X, Sun, Undo2, ShoppingBag } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -133,37 +133,38 @@ const Transactions = () => {
         return <DollarSign className="w-5 h-5" />;
       case 'bonus':
         return <Gift className="w-5 h-5" />;
+      case 'daily_bonus':
+        return <Sun className="w-5 h-5" />;
+      case 'redemption':
+        return <ShoppingBag className="w-5 h-5" />;
       case 'adjustment':
-        return <Settings className="w-5 h-5" />;
+        return <Shield className="w-5 h-5" />;
+      case 'refund':
+        return <Undo2 className="w-5 h-5" />;
       default:
         return <Coins className="w-5 h-5" />;
     }
   };
 
   const getTypeBadge = (type: string) => {
-    const variants: Record<string, any> = {
-      bet_placed: 'secondary',
-      bet_won: 'default',
-      bet_lost: 'destructive',
-      bet_void: 'outline',
-      deposit: 'default',
-      bonus: 'default',
-      adjustment: 'secondary',
+    const config: Record<string, { variant: any; label: string; className?: string }> = {
+      bet_placed: { variant: 'secondary', label: 'Bet Placed' },
+      bet_won: { variant: 'default', label: 'Won', className: 'bg-success text-success-foreground' },
+      bet_lost: { variant: 'destructive', label: 'Lost' },
+      bet_void: { variant: 'outline', label: 'Voided' },
+      deposit: { variant: 'default', label: 'Deposit', className: 'bg-success text-success-foreground' },
+      bonus: { variant: 'default', label: 'Bonus', className: 'bg-purple-600 text-white' },
+      daily_bonus: { variant: 'default', label: 'Daily Bonus', className: 'bg-success text-success-foreground' },
+      redemption: { variant: 'secondary', label: 'Redemption' },
+      adjustment: { variant: 'default', label: 'Admin Adjustment', className: 'bg-purple-600 text-white' },
+      refund: { variant: 'default', label: 'Refund', className: 'bg-purple-600 text-white' },
     };
 
-    const labels: Record<string, string> = {
-      bet_placed: 'Bet Placed',
-      bet_won: 'Won',
-      bet_lost: 'Lost',
-      bet_void: 'Voided',
-      deposit: 'Deposit',
-      bonus: 'Bonus',
-      adjustment: 'Adjustment',
-    };
+    const { variant, label, className } = config[type] || { variant: 'secondary', label: type };
 
     return (
-      <Badge variant={variants[type] || 'secondary'} className="text-xs">
-        {labels[type] || type}
+      <Badge variant={variant} className={cn("text-xs", className)}>
+        {label}
       </Badge>
     );
   };
@@ -232,8 +233,10 @@ const Transactions = () => {
                   <SelectItem value="bet_void">Bet Voided</SelectItem>
                   <SelectItem value="deposit">Deposit</SelectItem>
                   <SelectItem value="bonus">Bonus</SelectItem>
+                  <SelectItem value="daily_bonus">Daily Bonus</SelectItem>
                   <SelectItem value="redemption">Redemption</SelectItem>
                   <SelectItem value="adjustment">Admin Adjustment</SelectItem>
+                  <SelectItem value="refund">Refund</SelectItem>
                 </SelectContent>
               </Select>
             </div>
