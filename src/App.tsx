@@ -9,6 +9,7 @@ import Tournaments from "./pages/Tournaments";
 import TournamentDetail from "./pages/TournamentDetailClean";
 import Wallet from "./pages/Wallet";
 import Rewards from "./pages/Rewards";
+import Transactions from "./pages/Transactions";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import Predictions from "./pages/Predictions";
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/transactions" element={<Transactions />} />
             <Route path="/tournaments" element={<Tournaments />} />
             <Route path="/tournaments/:id" element={<TournamentDetail />} />
             <Route path="/wallet" element={<Wallet />} />
