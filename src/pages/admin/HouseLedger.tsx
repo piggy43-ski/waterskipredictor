@@ -24,9 +24,12 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
-  Minus
+  Minus,
+  BarChart3
 } from 'lucide-react';
 import { formatTokensWithUSD, formatPL, tokensToUSD, TOKENS_PER_USD } from '@/utils/tokenConversion';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
+import { format, parseISO, startOfMonth, subMonths } from 'date-fns';
 
 const HouseLedger = () => {
   // Fetch total players
@@ -310,7 +313,68 @@ const HouseLedger = () => {
     },
   });
 
-  const StatCard = ({ 
+  // Fetch monthly P/L trend data
+  const { data: monthlyPL, isLoading: loadingMonthlyPL } = useQuery({
+    queryKey: ['house-ledger-monthly-pl'],
+    queryFn: async () => {
+      const { data: predictions, error } = await supabase
+        .from('predictions')
+        .select('created_at, status, staked_tokens, payout_tokens, settled_at');
+      if (error) throw error;
+
+      // Group by month based on settled_at or created_at
+      const byMonth: Record<string, {
+        month: string;
+        wagered: number;
+        paidOut: number;
+        bets: number;
+        won: number;
+        lost: number;
+      }> = {};
+
+      // Initialize last 12 months
+      for (let i = 11; i >= 0; i--) {
+        const date = subMonths(new Date(), i);
+        const monthKey = format(startOfMonth(date), 'yyyy-MM');
+        byMonth[monthKey] = {
+          month: monthKey,
+          wagered: 0,
+          paidOut: 0,
+          bets: 0,
+          won: 0,
+          lost: 0,
+        };
+      }
+
+      predictions?.forEach((p) => {
+        const dateStr = p.settled_at || p.created_at;
+        if (!dateStr) return;
+        
+        const monthKey = format(parseISO(dateStr), 'yyyy-MM');
+        if (!byMonth[monthKey]) return; // Skip if outside our 12-month window
+
+        byMonth[monthKey].bets++;
+        byMonth[monthKey].wagered += p.staked_tokens || 0;
+        
+        if (p.status === 'WON') {
+          byMonth[monthKey].paidOut += p.payout_tokens || 0;
+          byMonth[monthKey].won++;
+        } else if (p.status === 'LOST') {
+          byMonth[monthKey].lost++;
+        }
+      });
+
+      return Object.values(byMonth)
+        .sort((a, b) => a.month.localeCompare(b.month))
+        .map(m => ({
+          ...m,
+          pl: m.wagered - m.paidOut,
+          displayMonth: format(parseISO(`${m.month}-01`), 'MMM yy'),
+        }));
+    },
+  });
+
+  const StatCard = ({
     title, 
     value, 
     icon: Icon, 
@@ -495,6 +559,65 @@ const HouseLedger = () => {
                 <p className="font-bold">{formatTokensWithUSD(tokenFlow?.burned || 0)}</p>
               </div>
             </div>
+          )}
+        </Card>
+
+        {/* Monthly P/L Trend Chart */}
+        <Card className="p-6">
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            Monthly P/L Trend
+          </h2>
+          {loadingMonthlyPL ? (
+            <Skeleton className="h-72" />
+          ) : monthlyPL && monthlyPL.length > 0 ? (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyPL} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis 
+                    dataKey="displayMonth" 
+                    className="text-xs fill-muted-foreground"
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis 
+                    className="text-xs fill-muted-foreground"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip 
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
+                            <p className="font-bold text-foreground">{label}</p>
+                            <p className="text-sm text-muted-foreground">Bets: {data.bets}</p>
+                            <p className="text-sm text-muted-foreground">Wagered: {formatTokensWithUSD(data.wagered)}</p>
+                            <p className="text-sm text-muted-foreground">Paid Out: {formatTokensWithUSD(data.paidOut)}</p>
+                            <p className={`text-sm font-bold ${data.pl >= 0 ? 'text-success' : 'text-destructive'}`}>
+                              P/L: {data.pl >= 0 ? '+' : ''}{formatTokensWithUSD(data.pl)}
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
+                  <Bar dataKey="pl" radius={[4, 4, 0, 0]}>
+                    {monthlyPL.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={entry.pl >= 0 ? 'hsl(var(--success))' : 'hsl(var(--destructive))'} 
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-center py-8">No monthly data available</p>
           )}
         </Card>
 
