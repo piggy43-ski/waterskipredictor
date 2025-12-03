@@ -29,6 +29,7 @@ import AdminTournamentSettlement from "./pages/admin/TournamentSettlement";
 import AdminTournamentEntries from "./pages/admin/TournamentEntries";
 import AdminDataIntegrity from "./pages/admin/DataIntegrity";
 import AdminHouseLedger from "./pages/admin/HouseLedger";
+import AdminUsers from "./pages/admin/Users";
 import AthleteProfile from "./pages/AthleteProfile";
 
 const queryClient = new QueryClient();
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="/admin/tournament-entries" element={<AdminTournamentEntries />} />
             <Route path="/admin/data-integrity" element={<AdminDataIntegrity />} />
             <Route path="/admin/house-ledger" element={<AdminHouseLedger />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

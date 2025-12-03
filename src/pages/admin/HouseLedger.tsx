@@ -136,13 +136,20 @@ const HouseLedger = () => {
         .select('tokens_spent');
       const redeemed = redemptions?.reduce((sum, r) => sum + (r.tokens_spent || 0), 0) || 0;
 
+      // Tokens burned
+      const { data: burns } = await supabase
+        .from('token_transactions')
+        .select('amount')
+        .eq('type', 'burn');
+      const burned = burns?.reduce((sum, t) => sum + Math.abs(t.amount || 0), 0) || 0;
+
       return {
         wagered,
         paidOut,
         pendingStakes,
         bonusesGiven,
         redeemed,
-        burned: 0, // No burn mechanism yet
+        burned,
       };
     },
   });
