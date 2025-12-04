@@ -8,8 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Trophy, Users, Coins, Calendar, Info, CheckCircle } from 'lucide-react';
+import { Trophy, Users, Coins, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -83,12 +82,12 @@ const FantasyPotDetail = () => {
 
   const fetchData = async () => {
     try {
-      // Fetch pot details
+      // Fetch pot details with hint for tournament_id FK
       const { data: potData, error: potError } = await supabase
         .from('fantasy_pots')
         .select(`
           *,
-          tournament:tournaments(id, name, location, start_date, disciplines)
+          tournament:tournament_id(id, name, location, start_date, disciplines)
         `)
         .eq('id', potId)
         .single();

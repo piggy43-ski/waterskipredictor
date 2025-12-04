@@ -9,12 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Pencil, Trash2, Users, Trophy, Crown, Coins } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, Trophy, Crown, Coins, Info, Play } from 'lucide-react';
 import { format } from 'date-fns';
-import { FANTASY_TEAM_BUDGET, PAYOUT_STRUCTURES, DEFAULT_HOUSE_RAKE_PERCENT } from '@/utils/fantasyConfig';
+import { FANTASY_TEAM_BUDGET, PAYOUT_STRUCTURES, DEFAULT_HOUSE_RAKE_PERCENT, SEASON_TIERS } from '@/utils/fantasyConfig';
 
 type Tournament = {
   id: string;
@@ -37,6 +38,7 @@ type FantasyPot = {
   team_budget: number;
   house_rake_percent: number;
   created_at: string;
+  invite_code: string | null;
   tournament?: Tournament;
   entrant_count?: number;
 };
@@ -47,6 +49,8 @@ export default function AdminFantasyPots() {
   const [editingPot, setEditingPot] = useState<FantasyPot | null>(null);
   const [disciplines, setDisciplines] = useState<string[]>(['slalom', 'trick', 'jump']);
   const [editDisciplines, setEditDisciplines] = useState<string[]>([]);
+  const [potType, setPotType] = useState<string>('tournament');
+  const [scoringFantasy, setScoringFantasy] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -58,7 +62,7 @@ export default function AdminFantasyPots() {
         .from('fantasy_pots')
         .select(`
           *,
-          tournament:tournaments(id, name, location, start_date)
+          tournament:tournament_id(id, name, location, start_date)
         `)
         .order('created_at', { ascending: false });
       
@@ -100,15 +104,20 @@ export default function AdminFantasyPots() {
 
   const createMutation = useMutation({
     mutationFn: async (formData: FormData) => {
+      const selectedPotType = formData.get('pot_type') as string;
+      const isSeasonType = selectedPotType === 'season';
+      
       const pot = {
         name: formData.get('name') as string,
-        pot_type: formData.get('pot_type') as string,
-        tournament_id: (formData.get('tournament_id') as string) === 'none' ? null : formData.get('tournament_id') as string,
+        pot_type: selectedPotType,
+        // Season pots don't need a tournament_id - they auto-link to ALL tournaments
+        tournament_id: isSeasonType ? null : ((formData.get('tournament_id') as string) === 'none' ? null : formData.get('tournament_id') as string),
         entry_fee_tokens: parseInt(formData.get('entry_fee_tokens') as string) || 1000,
         max_entrants: parseInt(formData.get('max_entrants') as string) || null,
         team_budget: parseInt(formData.get('team_budget') as string) || FANTASY_TEAM_BUDGET,
         payout_structure: formData.get('payout_structure') as string || 'top_3_split',
-        visibility: formData.get('visibility') as string || 'public',
+        // Admin-created leagues are ALWAYS public
+        visibility: 'public',
         discipline_scope: disciplines,
         status: 'open',
         house_rake_percent: DEFAULT_HOUSE_RAKE_PERCENT,
@@ -122,6 +131,7 @@ export default function AdminFantasyPots() {
       queryClient.invalidateQueries({ queryKey: ['admin-fantasy-pots'] });
       setOpen(false);
       setDisciplines(['slalom', 'trick', 'jump']);
+      setPotType('tournament');
       toast({ title: 'Fantasy league created successfully' });
     },
     onError: (error: Error) => {
@@ -159,6 +169,38 @@ export default function AdminFantasyPots() {
     },
     onError: (error: Error) => {
       toast({ title: 'Error deleting league', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const scoreFantasyMutation = useMutation({
+    mutationFn: async (potId: string) => {
+      const pot = pots?.find(p => p.id === potId);
+      if (!pot) throw new Error('Pot not found');
+
+      // For tournament pots, score that tournament
+      // For season pots, we'd need to score all tournaments
+      const tournamentId = pot.tournament_id;
+      
+      if (!tournamentId && pot.pot_type === 'tournament') {
+        throw new Error('No tournament linked to this pot');
+      }
+
+      const response = await supabase.functions.invoke('score-fantasy', {
+        body: { tournament_id: tournamentId, pot_id: potId }
+      });
+
+      if (response.error) throw response.error;
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-fantasy-pots'] });
+      toast({ 
+        title: 'Fantasy Scored!', 
+        description: `Updated ${data?.entries_updated || 0} entries` 
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error scoring fantasy', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -219,7 +261,10 @@ export default function AdminFantasyPots() {
           
           <Dialog open={open} onOpenChange={(newOpen) => {
             setOpen(newOpen);
-            if (!newOpen) setDisciplines(['slalom', 'trick', 'jump']);
+            if (!newOpen) {
+              setDisciplines(['slalom', 'trick', 'jump']);
+              setPotType('tournament');
+            }
           }}>
             <DialogTrigger asChild>
               <Button>
@@ -227,7 +272,7 @@ export default function AdminFantasyPots() {
                 Create League
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Fantasy League</DialogTitle>
               </DialogHeader>
@@ -240,47 +285,50 @@ export default function AdminFantasyPots() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="pot_type">Type</Label>
-                    <Select name="pot_type" defaultValue="tournament">
+                    <Select name="pot_type" defaultValue="tournament" onValueChange={setPotType}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="tournament">Tournament</SelectItem>
-                        <SelectItem value="season">Season</SelectItem>
-                        <SelectItem value="private">Private</SelectItem>
+                        <SelectItem value="season">Season (All Tournaments)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="visibility">Visibility</Label>
-                    <Select name="visibility" defaultValue="public">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="public">Public</SelectItem>
-                        <SelectItem value="private">Private</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Visibility</Label>
+                    <Input value="Public" disabled className="bg-muted" />
+                    <p className="text-xs text-muted-foreground mt-1">Admin leagues are always public</p>
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="tournament_id">Linked Tournament (Optional)</Label>
-                  <Select name="tournament_id" defaultValue="none">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a tournament" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No tournament</SelectItem>
-                      {tournaments?.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name} ({t.location})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {potType === 'season' && (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      Season leagues automatically include ALL tournaments. Scoring accumulates across all events.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {potType === 'tournament' && (
+                  <div>
+                    <Label htmlFor="tournament_id">Linked Tournament</Label>
+                    <Select name="tournament_id" defaultValue="none">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a tournament" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No tournament</SelectItem>
+                        {tournaments?.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name} ({t.location})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -381,12 +429,30 @@ export default function AdminFantasyPots() {
                       <CardTitle className="flex items-center gap-2">
                         <Crown className="w-5 h-5 text-primary" />
                         {pot.name}
+                        {pot.pot_type === 'season' && (
+                          <Badge variant="outline" className="ml-2">Season</Badge>
+                        )}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {pot.tournament ? `${pot.tournament.name} • ${pot.tournament.location}` : 'Season League'}
+                        {pot.pot_type === 'season' 
+                          ? 'All Tournaments (Season League)' 
+                          : pot.tournament 
+                            ? `${pot.tournament.name} • ${pot.tournament.location}` 
+                            : 'No Tournament Linked'}
                       </p>
                     </div>
                     <div className="flex gap-2">
+                      {pot.status === 'open' && pot.tournament_id && (
+                        <Button 
+                          variant="outline" 
+                          size="icon"
+                          onClick={() => scoreFantasyMutation.mutate(pot.id)}
+                          disabled={scoreFantasyMutation.isPending}
+                          title="Score Fantasy"
+                        >
+                          <Play className="w-4 h-4" />
+                        </Button>
+                      )}
                       <Button 
                         variant="outline" 
                         size="icon"
@@ -429,21 +495,23 @@ export default function AdminFantasyPots() {
                     <div className="text-center p-3 bg-muted/50 rounded-lg">
                       <p className="text-xs text-muted-foreground mb-1">House Rake</p>
                       <p className="font-bold">{((pot.entrant_count || 0) * pot.entry_fee_tokens * pot.house_rake_percent / 100).toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">({pot.house_rake_percent}%)</p>
                     </div>
                   </div>
-                  
-                  <div className="flex gap-2 items-center flex-wrap">
-                    <Badge className={getStatusColor(pot.status)}>
+
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <Badge className={`${getStatusColor(pot.status)} text-white`}>
                       {pot.status}
                     </Badge>
-                    <Badge variant="outline">{pot.pot_type}</Badge>
                     <Badge variant="outline">{pot.visibility}</Badge>
-                    {pot.discipline_scope.map((disc) => (
-                      <Badge key={disc} variant="secondary" className="capitalize">
-                        {disc}
-                      </Badge>
+                    <Badge variant="outline">{pot.pot_type}</Badge>
+                    {pot.discipline_scope?.map(d => (
+                      <Badge key={d} variant="secondary" className="capitalize">{d}</Badge>
                     ))}
+                    {pot.invite_code && (
+                      <Badge variant="outline" className="font-mono">
+                        Code: {pot.invite_code}
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -453,38 +521,33 @@ export default function AdminFantasyPots() {
           <Card>
             <CardContent className="p-6 text-center">
               <Crown className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">No fantasy leagues found. Create your first league to get started.</p>
+              <p className="text-muted-foreground">No fantasy leagues created yet</p>
+              <Button className="mt-4" onClick={() => setOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Create First League
+              </Button>
             </CardContent>
           </Card>
         )}
+      </div>
 
-        {/* Edit Dialog */}
-        <Dialog open={editOpen} onOpenChange={(open) => {
-          setEditOpen(open);
-          if (!open) {
-            setEditingPot(null);
-            setEditDisciplines([]);
-          }
-        }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Edit Fantasy League</DialogTitle>
-            </DialogHeader>
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Fantasy League</DialogTitle>
+          </DialogHeader>
+          {editingPot && (
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
                 <Label htmlFor="edit-name">League Name</Label>
-                <Input 
-                  id="edit-name" 
-                  name="name" 
-                  defaultValue={editingPot?.name}
-                  required 
-                />
+                <Input id="edit-name" name="name" defaultValue={editingPot.name} required />
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="edit-pot_type">Type</Label>
-                  <Select name="pot_type" defaultValue={editingPot?.pot_type}>
+                  <Select name="pot_type" defaultValue={editingPot.pot_type}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -496,16 +559,14 @@ export default function AdminFantasyPots() {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="edit-status">Status</Label>
-                  <Select name="status" defaultValue={editingPot?.status}>
+                  <Label htmlFor="edit-visibility">Visibility</Label>
+                  <Select name="visibility" defaultValue={editingPot.visibility}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="open">Open</SelectItem>
-                      <SelectItem value="locked">Locked</SelectItem>
-                      <SelectItem value="settled">Settled</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                      <SelectItem value="public">Public</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -513,7 +574,7 @@ export default function AdminFantasyPots() {
 
               <div>
                 <Label htmlFor="edit-tournament_id">Linked Tournament</Label>
-                <Select name="tournament_id" defaultValue={editingPot?.tournament_id || 'none'}>
+                <Select name="tournament_id" defaultValue={editingPot.tournament_id || 'none'}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a tournament" />
                   </SelectTrigger>
@@ -530,12 +591,13 @@ export default function AdminFantasyPots() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="edit-entry_fee">Entry Fee (tokens)</Label>
+                  <Label htmlFor="edit-entry_fee_tokens">Entry Fee (tokens)</Label>
                   <Input 
-                    id="edit-entry_fee" 
+                    id="edit-entry_fee_tokens" 
                     name="entry_fee_tokens" 
                     type="number" 
-                    defaultValue={editingPot?.entry_fee_tokens}
+                    defaultValue={editingPot.entry_fee_tokens}
+                    min="0"
                     required 
                   />
                 </div>
@@ -545,8 +607,9 @@ export default function AdminFantasyPots() {
                     id="edit-max_entrants" 
                     name="max_entrants" 
                     type="number" 
-                    defaultValue={editingPot?.max_entrants || ''}
+                    defaultValue={editingPot.max_entrants || ''}
                     placeholder="Unlimited"
+                    min="2"
                   />
                 </div>
               </div>
@@ -558,19 +621,21 @@ export default function AdminFantasyPots() {
                     id="edit-team_budget" 
                     name="team_budget" 
                     type="number" 
-                    defaultValue={editingPot?.team_budget}
+                    defaultValue={editingPot.team_budget}
                     required 
                   />
                 </div>
                 <div>
-                  <Label htmlFor="edit-visibility">Visibility</Label>
-                  <Select name="visibility" defaultValue={editingPot?.visibility}>
+                  <Label htmlFor="edit-status">Status</Label>
+                  <Select name="status" defaultValue={editingPot.status}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="public">Public</SelectItem>
-                      <SelectItem value="private">Private</SelectItem>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="locked">Locked</SelectItem>
+                      <SelectItem value="settled">Settled</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -578,7 +643,7 @@ export default function AdminFantasyPots() {
 
               <div>
                 <Label htmlFor="edit-payout_structure">Payout Structure</Label>
-                <Select name="payout_structure" defaultValue={editingPot?.payout_structure}>
+                <Select name="payout_structure" defaultValue={editingPot.payout_structure}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -616,12 +681,12 @@ export default function AdminFantasyPots() {
               </div>
 
               <Button type="submit" className="w-full" disabled={updateMutation.isPending || editDisciplines.length === 0}>
-                {updateMutation.isPending ? 'Updating...' : 'Update League'}
+                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

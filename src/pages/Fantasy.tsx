@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Trophy, Users, Coins, Plus, Crown, Lock, CheckCircle } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Trophy, Users, Coins, Plus, Crown, Lock, CheckCircle, Link as LinkIcon, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,6 +30,8 @@ interface FantasyPot {
   discipline_scope: string[];
   payout_structure: string;
   created_at: string;
+  created_by: string;
+  invite_code?: string | null;
   tournament?: {
     name: string;
     location: string;
@@ -62,10 +65,14 @@ const Fantasy = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [availablePots, setAvailablePots] = useState<FantasyPot[]>([]);
+  const [myPrivatePots, setMyPrivatePots] = useState<FantasyPot[]>([]);
   const [userEntries, setUserEntries] = useState<UserEntry[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [creating, setCreating] = useState(false);
+  const [joinCodeDialogOpen, setJoinCodeDialogOpen] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [joiningByCode, setJoiningByCode] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -88,12 +95,12 @@ const Fantasy = () => {
         setWalletBalance(walletData.purchased_tokens + walletData.earned_tokens);
       }
 
-      // Fetch available pots (open status, public visibility)
+      // Fetch available PUBLIC pots (open status)
       const { data: potsData, error: potsError } = await supabase
         .from('fantasy_pots')
         .select(`
           *,
-          tournament:tournaments(name, location, start_date, start_datetime, end_datetime)
+          tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
         `)
         .eq('status', 'open')
         .eq('visibility', 'public')
@@ -119,14 +126,55 @@ const Fantasy = () => {
 
       setAvailablePots(potsWithCounts);
 
+      // Fetch private pots I created OR was invited to
+      const { data: myPrivatePotsData } = await supabase
+        .from('fantasy_pots')
+        .select(`
+          *,
+          tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
+        `)
+        .eq('visibility', 'private')
+        .eq('created_by', user!.id)
+        .order('created_at', { ascending: false });
+
+      // Fetch pots I was invited to and accepted
+      const { data: invitedPots } = await supabase
+        .from('fantasy_invites')
+        .select(`
+          pot:pot_id(
+            *,
+            tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
+          )
+        `)
+        .eq('invited_user_id', user!.id)
+        .eq('status', 'accepted');
+
+      const allPrivatePots = [
+        ...(myPrivatePotsData || []).map(p => ({ ...p, tournament: p.tournament as FantasyPot['tournament'] })),
+        ...(invitedPots || []).map(i => ({ ...(i.pot as any), tournament: (i.pot as any)?.tournament as FantasyPot['tournament'] }))
+      ].filter((pot, index, self) => pot && self.findIndex(p => p?.id === pot.id) === index);
+
+      // Get entrant counts for private pots
+      const privatePotsWithCounts = await Promise.all(
+        allPrivatePots.map(async (pot) => {
+          const { count } = await supabase
+            .from('fantasy_entries')
+            .select('*', { count: 'exact', head: true })
+            .eq('pot_id', pot.id);
+          return { ...pot, entrant_count: count || 0 };
+        })
+      );
+
+      setMyPrivatePots(privatePotsWithCounts);
+
       // Fetch user's entries
       const { data: entriesData, error: entriesError } = await supabase
         .from('fantasy_entries')
         .select(`
           *,
-          pot:fantasy_pots(
+          pot:pot_id(
             *,
-            tournament:tournaments(name, location, start_date, start_datetime, end_datetime)
+            tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
           )
         `)
         .eq('user_id', user!.id)
@@ -164,6 +212,10 @@ const Fantasy = () => {
     }
   };
 
+  const generateInviteCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
+
   const handleCreatePot = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!user) return;
@@ -177,6 +229,9 @@ const Fantasy = () => {
         throw new Error('Please select at least one discipline');
       }
 
+      const visibility = formData.get('visibility') as string || 'private';
+      const inviteCodeValue = visibility === 'private' ? generateInviteCode() : null;
+
       const pot = {
         name: formData.get('name') as string,
         pot_type: 'tournament',
@@ -185,10 +240,11 @@ const Fantasy = () => {
         max_entrants: parseInt(formData.get('max_entrants') as string) || null,
         team_budget: FANTASY_TEAM_BUDGET,
         payout_structure: formData.get('payout_structure') as string || 'top_3_split',
-        visibility: formData.get('visibility') as string || 'public',
+        visibility: visibility,
         discipline_scope: disciplineScope,
         created_by: user.id,
-        status: 'open'
+        status: 'open',
+        invite_code: inviteCodeValue
       };
 
       const { data, error } = await supabase
@@ -201,7 +257,9 @@ const Fantasy = () => {
 
       toast({
         title: 'League Created!',
-        description: 'Your fantasy league has been created successfully'
+        description: visibility === 'private' 
+          ? `Your private league has been created. Share code: ${inviteCodeValue}`
+          : 'Your fantasy league has been created successfully'
       });
 
       // Refresh data
@@ -219,6 +277,69 @@ const Fantasy = () => {
       });
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleJoinByCode = async () => {
+    if (!inviteCode.trim() || !user) return;
+    
+    setJoiningByCode(true);
+    try {
+      // Find the pot with this invite code
+      const { data: pot, error: potError } = await supabase
+        .from('fantasy_pots')
+        .select('id, name, status, invite_code')
+        .eq('invite_code', inviteCode.trim().toUpperCase())
+        .maybeSingle();
+
+      if (potError) throw potError;
+      if (!pot) {
+        toast({ title: 'Invalid Code', description: 'No league found with that code', variant: 'destructive' });
+        return;
+      }
+
+      if (pot.status !== 'open') {
+        toast({ title: 'League Closed', description: 'This league is no longer accepting entries', variant: 'destructive' });
+        return;
+      }
+
+      // Check if already has an entry
+      const { data: existingEntry } = await supabase
+        .from('fantasy_entries')
+        .select('id')
+        .eq('pot_id', pot.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existingEntry) {
+        navigate(`/fantasy/${pot.id}/team/${existingEntry.id}`);
+        return;
+      }
+
+      // Create/update invite record
+      await supabase
+        .from('fantasy_invites')
+        .upsert({
+          pot_id: pot.id,
+          invited_by: user.id, // Self-invited via code
+          invited_user_id: user.id,
+          invite_code: inviteCode.trim().toUpperCase(),
+          status: 'accepted',
+          accepted_at: new Date().toISOString()
+        }, { onConflict: 'pot_id,invited_user_id' });
+
+      toast({ title: 'Code Accepted!', description: `You can now join ${pot.name}` });
+      setJoinCodeDialogOpen(false);
+      setInviteCode('');
+      
+      // Navigate to pot
+      navigate(`/fantasy/${pot.id}`);
+
+    } catch (error: any) {
+      console.error('Error joining by code:', error);
+      toast({ title: 'Error', description: error.message || 'Failed to join league', variant: 'destructive' });
+    } finally {
+      setJoiningByCode(false);
     }
   };
 
@@ -287,10 +408,44 @@ const Fantasy = () => {
           </div>
         </Card>
 
+        {/* Join by Code Button */}
+        <Dialog open={joinCodeDialogOpen} onOpenChange={setJoinCodeDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="w-full gap-2">
+              <LinkIcon className="w-4 h-4" />
+              Join Private League by Code
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Join Private League</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Invite Code</Label>
+                <Input
+                  placeholder="Enter code (e.g., ABC123)"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  maxLength={6}
+                />
+              </div>
+              <Button 
+                className="w-full" 
+                onClick={handleJoinByCode}
+                disabled={joiningByCode || !inviteCode.trim()}
+              >
+                {joiningByCode ? 'Joining...' : 'Join League'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Tabs defaultValue="browse" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="browse">Browse</TabsTrigger>
-            <TabsTrigger value="my-teams">My Teams ({userEntries.length})</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="browse">Public</TabsTrigger>
+            <TabsTrigger value="private">Private ({myPrivatePots.length})</TabsTrigger>
+            <TabsTrigger value="my-teams">Teams ({userEntries.length})</TabsTrigger>
             <TabsTrigger value="create">Create</TabsTrigger>
           </TabsList>
 
@@ -298,7 +453,7 @@ const Fantasy = () => {
             {availablePots.length === 0 ? (
               <Card className="p-8 text-center">
                 <Trophy className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">No Leagues Available</h3>
+                <h3 className="font-semibold mb-2">No Public Leagues</h3>
                 <p className="text-sm text-muted-foreground">
                   Check back soon for new fantasy leagues to join!
                 </p>
@@ -315,6 +470,69 @@ const Fantasy = () => {
             )}
           </TabsContent>
 
+          <TabsContent value="private" className="space-y-4 mt-4">
+            {myPrivatePots.length === 0 ? (
+              <Card className="p-8 text-center">
+                <Lock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="font-semibold mb-2">No Private Leagues</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Create a private league or join one with an invite code!
+                </p>
+              </Card>
+            ) : (
+              myPrivatePots.map((pot) => (
+                <Card 
+                  key={pot.id} 
+                  className="p-4 cursor-pointer hover:shadow-glow transition-all bg-gradient-card border-border/50"
+                  onClick={() => navigate(`/fantasy/${pot.id}`)}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h3 className="font-bold">{pot.name}</h3>
+                      {pot.tournament && (
+                        <p className="text-sm text-muted-foreground">{pot.tournament.name}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Badge variant="secondary">
+                        <Lock className="w-3 h-3 mr-1" />
+                        Private
+                      </Badge>
+                    </div>
+                  </div>
+                  {pot.invite_code && pot.created_by === user?.id && (
+                    <div className="flex items-center gap-2 mt-2 p-2 bg-muted/50 rounded">
+                      <span className="text-xs text-muted-foreground">Code:</span>
+                      <span className="font-mono font-bold">{pot.invite_code}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(pot.invite_code!);
+                          toast({ title: 'Copied!', description: 'Invite code copied to clipboard' });
+                        }}
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
+                  <div className="flex gap-4 mt-3 text-sm">
+                    <span className="flex items-center gap-1">
+                      <Users className="w-4 h-4 text-muted-foreground" />
+                      {pot.entrant_count || 0}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Coins className="w-4 h-4 text-muted-foreground" />
+                      {pot.entry_fee_tokens.toLocaleString()}
+                    </span>
+                  </div>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+
           <TabsContent value="my-teams" className="space-y-4 mt-4">
             {userEntries.length === 0 ? (
               <Card className="p-8 text-center">
@@ -323,9 +541,6 @@ const Fantasy = () => {
                 <p className="text-sm text-muted-foreground mb-4">
                   Join a league and build your first fantasy team!
                 </p>
-                <Button variant="outline" onClick={() => {}}>
-                  Browse Leagues
-                </Button>
               </Card>
             ) : (
               userEntries.map((entry) => {
@@ -396,6 +611,9 @@ const Fantasy = () => {
                 <Plus className="w-5 h-5" />
                 Create Tournament League
               </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Player-created leagues are private by default. Share the invite code with friends!
+              </p>
               <form onSubmit={handleCreatePot} className="space-y-4">
                 <div>
                   <Label htmlFor="name">League Name</Label>
@@ -463,15 +681,18 @@ const Fantasy = () => {
 
                 <div>
                   <Label htmlFor="visibility">Visibility</Label>
-                  <Select name="visibility" defaultValue="public">
+                  <Select name="visibility" defaultValue="private">
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="public">Public</SelectItem>
                       <SelectItem value="private">Private (Invite Only)</SelectItem>
+                      <SelectItem value="public">Public</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Private leagues require an invite code to join
+                  </p>
                 </div>
 
                 <div>
@@ -486,7 +707,7 @@ const Fantasy = () => {
                           defaultChecked
                           className="rounded border-border"
                         />
-                        <span className="capitalize text-sm">{disc}</span>
+                        <span className="capitalize">{disc}</span>
                       </label>
                     ))}
                   </div>

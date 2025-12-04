@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Trophy, Users, Coins, Medal, User, Lock, Edit } from 'lucide-react';
+import { Trophy, Users, Medal, User, Lock, Edit } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -82,14 +82,14 @@ const FantasyTeamView = () => {
 
   const fetchData = async () => {
     try {
-      // Fetch entry details
+      // Fetch entry details with hint for tournament_id FK
       const { data: entryData, error: entryError } = await supabase
         .from('fantasy_entries')
         .select(`
           *,
-          pot:fantasy_pots(
+          pot:pot_id(
             id, name, status, pot_type, entry_fee_tokens, payout_structure, tournament_id,
-            tournament:tournaments(name, location, start_date, start_datetime, end_datetime)
+            tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
           )
         `)
         .eq('id', entryId)
