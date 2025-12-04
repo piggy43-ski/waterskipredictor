@@ -5,3 +5,21 @@ verify_jwt = false
 
 [functions.fix-data-duplicates]
 verify_jwt = true
+
+[functions.settle-predictions]
+verify_jwt = true
+
+[functions.sync-iwwf-rankings]
+verify_jwt = true
+
+[functions.score-fantasy]
+verify_jwt = true
+
+[functions.initialize-fantasy-prices]
+verify_jwt = true
+
+[functions.update-fantasy-prices]
+verify_jwt = true
+
+[functions.settle-fantasy-pot]
+verify_jwt = true
