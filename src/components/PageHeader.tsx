@@ -23,7 +23,7 @@ export const PageHeader = ({
                 <ChevronLeft className="w-5 h-5" />
               </Button>}
             <div className="flex-1 min-w-0">
-              <h1 className="font-elegant italic font-semibold truncate tracking-wide text-2xl text-center">{title}</h1>
+              <h1 className="text-2xl font-medium tracking-tight text-center bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent truncate">{title}</h1>
               {subtitle && <p className="text-sm text-muted-foreground truncate">{subtitle}</p>}
             </div>
           </div>
