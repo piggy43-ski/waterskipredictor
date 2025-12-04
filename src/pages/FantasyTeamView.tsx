@@ -6,10 +6,11 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Trophy, Users, Coins, Medal, TrendingUp, User } from 'lucide-react';
+import { Trophy, Users, Coins, Medal, User, Lock, Edit } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { isFantasyPotLocked, getLockStatusMessage, type TournamentInfo } from '@/utils/fantasyLockRules';
 
 interface EntryAthlete {
   id: string;
@@ -28,6 +29,7 @@ interface EntryAthlete {
 interface FantasyEntry {
   id: string;
   pot_id: string;
+  user_id: string;
   team_name: string | null;
   total_points: number;
   total_team_value: number;
@@ -36,12 +38,16 @@ interface FantasyEntry {
     id: string;
     name: string;
     status: string;
+    pot_type: string;
     entry_fee_tokens: number;
     payout_structure: string;
+    tournament_id: string | null;
     tournament?: {
       name: string;
       location: string;
       start_date: string;
+      start_datetime?: string;
+      end_datetime?: string;
     };
   };
 }
@@ -82,8 +88,8 @@ const FantasyTeamView = () => {
         .select(`
           *,
           pot:fantasy_pots(
-            id, name, status, entry_fee_tokens, payout_structure,
-            tournament:tournaments(name, location, start_date)
+            id, name, status, pot_type, entry_fee_tokens, payout_structure, tournament_id,
+            tournament:tournaments(name, location, start_date, start_datetime, end_datetime)
           )
         `)
         .eq('id', entryId)
@@ -143,6 +149,22 @@ const FantasyTeamView = () => {
     }
   };
 
+  const getLockStatus = () => {
+    if (!entry) return { isLocked: true, message: '', canJoin: false, canEdit: false };
+
+    const tournamentInfo: TournamentInfo | null = entry.pot.tournament ? {
+      id: entry.pot.tournament_id || '',
+      start_datetime: entry.pot.tournament.start_datetime,
+      end_datetime: entry.pot.tournament.end_datetime,
+      start_date: entry.pot.tournament.start_date
+    } : null;
+
+    return getLockStatusMessage(
+      { id: entry.pot.id, status: entry.pot.status, pot_type: entry.pot.pot_type, tournament_id: entry.pot.tournament_id },
+      tournamentInfo
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
@@ -174,7 +196,8 @@ const FantasyTeamView = () => {
     jump: athletes.filter(a => a.discipline === 'jump'),
   };
 
-  const isMyTeam = user?.id === entry.pot?.id; // TODO: Fix this check with actual user_id
+  const lockStatus = getLockStatus();
+  const isMyTeam = user?.id === entry.user_id;
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -188,9 +211,16 @@ const FantasyTeamView = () => {
               <h2 className="text-xl font-bold">{entry.team_name || 'My Team'}</h2>
               <p className="text-sm opacity-90">{entry.pot.name}</p>
             </div>
-            <Badge variant="secondary" className="bg-background/20 text-primary-foreground">
-              {entry.pot.status}
-            </Badge>
+            {lockStatus.isLocked ? (
+              <Badge variant="secondary" className="bg-background/20 text-primary-foreground gap-1">
+                <Lock className="w-3 h-3" />
+                Locked
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="bg-background/20 text-primary-foreground">
+                {entry.pot.status}
+              </Badge>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-4">
@@ -211,6 +241,30 @@ const FantasyTeamView = () => {
             </div>
           </div>
         </Card>
+
+        {/* Lock Status Banner */}
+        <Card className={`p-3 ${lockStatus.isLocked ? 'bg-destructive/10 border-destructive/30' : 'bg-primary/10 border-primary/30'}`}>
+          <div className="flex items-center gap-2">
+            {lockStatus.isLocked ? (
+              <Lock className="w-4 h-4 text-destructive" />
+            ) : (
+              <Edit className="w-4 h-4 text-primary" />
+            )}
+            <p className="text-sm">{lockStatus.message}</p>
+          </div>
+        </Card>
+
+        {/* Edit Team Button */}
+        {isMyTeam && !lockStatus.isLocked && (
+          <Button 
+            className="w-full" 
+            variant="outline"
+            onClick={() => navigate(`/fantasy/${entry.pot_id}/team/${entry.id}/edit`)}
+          >
+            <Edit className="w-4 h-4 mr-2" />
+            Edit Team
+          </Button>
+        )}
 
         {/* Tournament Info */}
         {entry.pot.tournament && (

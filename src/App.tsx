@@ -34,6 +34,7 @@ import AthleteProfile from "./pages/AthleteProfile";
 import Fantasy from "./pages/Fantasy";
 import FantasyPotDetail from "./pages/FantasyPotDetail";
 import FantasyTeamView from "./pages/FantasyTeamView";
+import FantasyTeamEdit from "./pages/FantasyTeamEdit";
 import AdminFantasyPots from "./pages/admin/FantasyPots";
 
 const queryClient = new QueryClient();
@@ -61,6 +62,7 @@ const App = () => (
             <Route path="/fantasy" element={<Fantasy />} />
             <Route path="/fantasy/:potId" element={<FantasyPotDetail />} />
             <Route path="/fantasy/:potId/team/:entryId" element={<FantasyTeamView />} />
+            <Route path="/fantasy/:potId/team/:entryId/edit" element={<FantasyTeamEdit />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/fantasy-pots" element={<AdminFantasyPots />} />
             <Route path="/admin/athletes" element={<AdminAthletes />} />
