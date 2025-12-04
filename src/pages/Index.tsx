@@ -198,6 +198,27 @@ const Index = () => {
           </div>
         </Card>
 
+        {/* My Bets Quick Access Card */}
+        <Card 
+          className="p-4 cursor-pointer hover:bg-accent/50 transition-colors border-border/50"
+          onClick={() => navigate('/predictions')}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold">My Bets</p>
+                <p className="text-xs text-muted-foreground">
+                  {activePredictions.length} active · {activePredictions.reduce((sum, p) => sum + p.staked_tokens, 0).toLocaleString()} staked
+                </p>
+              </div>
+            </div>
+            <span className="text-muted-foreground text-sm">View all →</span>
+          </div>
+        </Card>
+
         {/* Featured Tournament */}
         {featuredTournament && (
           <div>
