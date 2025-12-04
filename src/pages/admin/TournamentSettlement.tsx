@@ -353,10 +353,35 @@ export default function TournamentSettlement() {
       const { error } = await supabase.from('athlete_results').insert(allResults);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data'] });
       toast({ title: 'Results saved successfully' });
       calculateSettlementPreview();
+      
+      // Auto-trigger fantasy scoring
+      try {
+        console.log('Triggering fantasy scoring for tournament:', selectedTournament);
+        const { data, error } = await supabase.functions.invoke('score-fantasy', {
+          body: { tournament_id: selectedTournament }
+        });
+        
+        if (error) {
+          console.error('Fantasy scoring error:', error);
+          toast({ 
+            title: 'Fantasy scoring failed', 
+            description: error.message,
+            variant: 'destructive' 
+          });
+        } else {
+          console.log('Fantasy scoring result:', data);
+          toast({ 
+            title: 'Fantasy scores updated',
+            description: `Scored ${data?.entries_scored || 0} entries with ${data?.scoring_events || 0} events`
+          });
+        }
+      } catch (err) {
+        console.error('Error invoking score-fantasy:', err);
+      }
     },
     onError: (error: Error) => {
       toast({ title: 'Error saving results', description: error.message, variant: 'destructive' });
@@ -391,7 +416,7 @@ export default function TournamentSettlement() {
       if (response.error) throw response.error;
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data'] });
       queryClient.invalidateQueries({ queryKey: ['settlement-tournaments'] });
       
@@ -409,6 +434,46 @@ export default function TournamentSettlement() {
           title: 'Settlement completed successfully',
           description: `Settled ${data.settled_predictions} predictions, paid out ${data.total_payout.toLocaleString()} tokens to ${data.affected_users} users`,
         });
+      }
+      
+      // Auto-settle fantasy pots linked to this tournament
+      try {
+        // Find fantasy pots linked to this tournament
+        const { data: fantasyPots, error: potsError } = await supabase
+          .from('fantasy_pots')
+          .select('id, name, status')
+          .eq('status', 'open')
+          .or(`tournament_id.eq.${selectedTournament},season_tournaments.cs.{${selectedTournament}}`);
+        
+        if (potsError) {
+          console.error('Error finding fantasy pots:', potsError);
+        } else if (fantasyPots && fantasyPots.length > 0) {
+          console.log(`Found ${fantasyPots.length} fantasy pots to settle`);
+          
+          for (const pot of fantasyPots) {
+            console.log(`Settling fantasy pot: ${pot.name} (${pot.id})`);
+            const { data: settleData, error: settleError } = await supabase.functions.invoke('settle-fantasy-pot', {
+              body: { pot_id: pot.id }
+            });
+            
+            if (settleError) {
+              console.error(`Error settling pot ${pot.id}:`, settleError);
+              toast({
+                title: `Fantasy pot "${pot.name}" settlement failed`,
+                description: settleError.message,
+                variant: 'destructive'
+              });
+            } else {
+              console.log(`Pot ${pot.id} settled:`, settleData);
+              toast({
+                title: `Fantasy pot "${pot.name}" settled`,
+                description: `Prize pool: ${settleData?.net_prize_pool?.toLocaleString() || 0} tokens`
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error settling fantasy pots:', err);
       }
       
       setSelectedTournament('');
