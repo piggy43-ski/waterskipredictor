@@ -31,10 +31,14 @@ GENDER DETECTION:
 - Assign gender to each athlete based on which section they appear in
 - If gender is unclear, make your best guess based on name patterns or mark as "male" by default
 
-DISCIPLINE DETECTION:
+DISCIPLINE DETECTION - CRITICAL:
+- ONLY return one of these EXACT values: "slalom", "trick", "jump"
+- Do NOT return "waterski" - this is the sport name, NOT a valid discipline
+- Do NOT return "overall" or any other discipline name
 - Look for: "Slalom", "Trick", "Jump" in headers or section titles
 - If a document covers multiple disciplines, note which discipline each athlete is listed under
 - If only one discipline is visible, apply it to all athletes
+- If you cannot determine a specific discipline (slalom, trick, or jump), set discipline to null
 
 NAME EXTRACTION RULES:
 - Extract full names as they appear
