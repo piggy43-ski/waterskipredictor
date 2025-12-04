@@ -31,6 +31,9 @@ import AdminDataIntegrity from "./pages/admin/DataIntegrity";
 import AdminHouseLedger from "./pages/admin/HouseLedger";
 import AdminUsers from "./pages/admin/Users";
 import AthleteProfile from "./pages/AthleteProfile";
+import Fantasy from "./pages/Fantasy";
+import FantasyPotDetail from "./pages/FantasyPotDetail";
+import FantasyTeamView from "./pages/FantasyTeamView";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +57,9 @@ const App = () => (
             <Route path="/predictions" element={<Predictions />} />
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/athletes/:id" element={<AthleteProfile />} />
+            <Route path="/fantasy" element={<Fantasy />} />
+            <Route path="/fantasy/:potId" element={<FantasyPotDetail />} />
+            <Route path="/fantasy/:potId/team/:entryId" element={<FantasyTeamView />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/athletes" element={<AdminAthletes />} />
             <Route path="/admin/athletes/:id" element={<AdminAthleteDetail />} />
