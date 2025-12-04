@@ -256,10 +256,37 @@ export default function TournamentEntries() {
         };
       });
 
-      setMatchedParticipants(matched);
+      // Deduplicate athletes - merge disciplines from duplicate entries
+      const athleteMap = new Map<string, MatchedParticipant>();
+      const unmatched: MatchedParticipant[] = [];
+
+      for (const m of matched) {
+        if (m.matchedAthlete) {
+          const key = m.matchedAthlete.id;
+          if (athleteMap.has(key)) {
+            // Merge disciplines from duplicate entries
+            const existing = athleteMap.get(key)!;
+            const mergedDisciplines = [...new Set([
+              ...existing.selectedDisciplines, 
+              ...m.selectedDisciplines
+            ])];
+            existing.selectedDisciplines = mergedDisciplines;
+            // Use highest confidence
+            existing.confidence = Math.max(existing.confidence, m.confidence);
+          } else {
+            athleteMap.set(key, m);
+          }
+        } else {
+          // Keep unmatched entries separate (can't dedupe without athlete ID)
+          unmatched.push(m);
+        }
+      }
+
+      const deduplicated = [...athleteMap.values(), ...unmatched];
+      setMatchedParticipants(deduplicated);
       setShowPreviewDialog(true);
       
-      const matchedCount = matched.filter(m => m.matchedAthlete).length;
+      const matchedCount = deduplicated.filter(m => m.matchedAthlete).length;
       toast.success(`Found ${data.participants.length} participants, matched ${matchedCount} to existing athletes`);
 
     } catch (error) {
