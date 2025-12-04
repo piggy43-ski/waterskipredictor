@@ -308,13 +308,29 @@ export default function TournamentSettlement() {
       );
 
       try {
+        // Build request body based on file type
+        const requestBody: Record<string, any> = {
+          discipline: selectedDiscipline,
+          gender: aiParseGender,
+        };
+
+        if (file.type === 'url' && file.url) {
+          // Check if it's a direct image URL or webpage
+          const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+          const isImageUrl = imageExtensions.some(ext => file.url!.toLowerCase().includes(ext));
+          
+          if (isImageUrl) {
+            requestBody.image_url = file.url;
+          } else {
+            requestBody.webpage_url = file.url;
+          }
+        } else {
+          requestBody.image_base64 = file.base64;
+          requestBody.is_pdf = file.type === 'pdf';
+        }
+
         const { data, error } = await supabase.functions.invoke('parse-tournament-scores', {
-          body: {
-            image_base64: file.base64,
-            discipline: selectedDiscipline,
-            gender: aiParseGender,
-            is_pdf: file.type === 'pdf',
-          },
+          body: requestBody,
         });
 
         if (error) throw error;

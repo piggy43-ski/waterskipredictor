@@ -29,11 +29,11 @@ serve(async (req) => {
   }
 
   try {
-    const { image_base64, image_url, discipline, gender, is_pdf } = await req.json();
+    const { image_base64, image_url, webpage_url, discipline, gender, is_pdf } = await req.json();
     
-    if (!image_base64 && !image_url) {
+    if (!image_base64 && !image_url && !webpage_url) {
       return new Response(
-        JSON.stringify({ error: 'Either image_base64 or image_url is required' }),
+        JSON.stringify({ error: 'Either image_base64, image_url, or webpage_url is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -47,16 +47,8 @@ serve(async (req) => {
       );
     }
 
-    // Determine MIME type
-    const mimeType = is_pdf ? 'application/pdf' : 'image/jpeg';
-
-    // Build the image content
-    const imageContent = image_base64 
-      ? { type: "image_url", image_url: { url: `data:${mimeType};base64,${image_base64}` } }
-      : { type: "image_url", image_url: { url: image_url } };
-
-    const systemPrompt = `You are an expert at reading waterski tournament results from images. 
-Your task is to extract athlete results from the image provided.
+    const systemPrompt = `You are an expert at reading waterski tournament results from images or webpage content. 
+Your task is to extract athlete results from the content provided.
 
 IMPORTANT RULES:
 1. For SLALOM scores: Use format "buoys@rope" (e.g., "2@43", "3.5@41", "4@39"). The @ separates buoys from rope length.
@@ -75,9 +67,8 @@ PERFORMANCE INDICATORS to look for:
 Extract ALL athletes you can see, even if some data is unclear.
 If you're unsure about something, add it to the notes field.`;
 
-    const userPrompt = `Analyze this waterski tournament results image.
-${discipline ? `Discipline: ${discipline}` : 'Detect the discipline from the image.'}
-${gender ? `Gender category: ${gender}` : 'Detect the gender category from the image.'}
+    const userPromptBase = `${discipline ? `Discipline: ${discipline}` : 'Detect the discipline from the content.'}
+${gender ? `Gender category: ${gender}` : 'Detect the gender category from the content.'}
 
 Return a JSON object with this exact structure:
 {
@@ -100,7 +91,78 @@ Return a JSON object with this exact structure:
 
 Return ONLY the JSON object, no other text.`;
 
-    console.log('Calling Lovable AI for image parsing...');
+    let messages: any[];
+
+    // Handle webpage URL - fetch content and use text-based analysis
+    if (webpage_url) {
+      console.log('Fetching webpage:', webpage_url);
+      
+      try {
+        const webResponse = await fetch(webpage_url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; TournamentParser/1.0)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+        });
+        
+        if (!webResponse.ok) {
+          throw new Error(`Failed to fetch webpage: ${webResponse.status}`);
+        }
+        
+        const html = await webResponse.text();
+        
+        // Extract text content from HTML (basic extraction)
+        const textContent = html
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 15000); // Limit content size
+        
+        console.log('Extracted text length:', textContent.length);
+        
+        messages = [
+          { role: 'system', content: systemPrompt },
+          { 
+            role: 'user', 
+            content: `Analyze this waterski tournament results webpage content and extract all athlete results.
+
+URL: ${webpage_url}
+
+WEBPAGE CONTENT:
+${textContent}
+
+${userPromptBase}`
+          }
+        ];
+      } catch (fetchError) {
+        console.error('Error fetching webpage:', fetchError);
+        return new Response(
+          JSON.stringify({ error: `Failed to fetch webpage: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      // Handle image-based parsing
+      const mimeType = is_pdf ? 'application/pdf' : 'image/jpeg';
+      const imageContent = image_base64 
+        ? { type: "image_url", image_url: { url: `data:${mimeType};base64,${image_base64}` } }
+        : { type: "image_url", image_url: { url: image_url } };
+
+      messages = [
+        { role: 'system', content: systemPrompt },
+        { 
+          role: 'user', 
+          content: [
+            { type: 'text', text: `Analyze this waterski tournament results image.\n\n${userPromptBase}` },
+            imageContent
+          ]
+        }
+      ];
+    }
+
+    console.log('Calling Lovable AI for parsing...');
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -110,16 +172,7 @@ Return ONLY the JSON object, no other text.`;
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { 
-            role: 'user', 
-            content: [
-              { type: 'text', text: userPrompt },
-              imageContent
-            ]
-          }
-        ],
+        messages,
         max_tokens: 4000,
       }),
     });
@@ -163,7 +216,6 @@ Return ONLY the JSON object, no other text.`;
     // Parse the JSON from AI response
     let parsed: ParseResponse;
     try {
-      // Try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsed = JSON.parse(jsonMatch[0]);
