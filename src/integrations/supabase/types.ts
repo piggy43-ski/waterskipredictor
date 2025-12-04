@@ -121,6 +121,8 @@ export type Database = {
       athletes: {
         Row: {
           bio: string | null
+          consecutive_finals: number | null
+          consecutive_podiums: number | null
           country: string
           country_code: string | null
           created_at: string
@@ -141,6 +143,7 @@ export type Database = {
           injury_flag: boolean | null
           iwwf_athlete_id: string | null
           manual_boost_factor: number | null
+          missed_events_count: number | null
           name: string
           performance_index_jump: number | null
           performance_index_slalom: number | null
@@ -152,6 +155,8 @@ export type Database = {
         }
         Insert: {
           bio?: string | null
+          consecutive_finals?: number | null
+          consecutive_podiums?: number | null
           country: string
           country_code?: string | null
           created_at?: string
@@ -172,6 +177,7 @@ export type Database = {
           injury_flag?: boolean | null
           iwwf_athlete_id?: string | null
           manual_boost_factor?: number | null
+          missed_events_count?: number | null
           name: string
           performance_index_jump?: number | null
           performance_index_slalom?: number | null
@@ -183,6 +189,8 @@ export type Database = {
         }
         Update: {
           bio?: string | null
+          consecutive_finals?: number | null
+          consecutive_podiums?: number | null
           country?: string
           country_code?: string | null
           created_at?: string
@@ -203,6 +211,7 @@ export type Database = {
           injury_flag?: boolean | null
           iwwf_athlete_id?: string | null
           manual_boost_factor?: number | null
+          missed_events_count?: number | null
           name?: string
           performance_index_jump?: number | null
           performance_index_slalom?: number | null
@@ -273,6 +282,248 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fantasy_config: {
+        Row: {
+          description: string | null
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
+      fantasy_entries: {
+        Row: {
+          created_at: string
+          id: string
+          pot_id: string
+          rank: number | null
+          team_name: string | null
+          total_points: number
+          total_team_value: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pot_id: string
+          rank?: number | null
+          team_name?: string | null
+          total_points?: number
+          total_team_value?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pot_id?: string
+          rank?: number | null
+          team_name?: string | null
+          total_points?: number
+          total_team_value?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fantasy_entries_pot_id_fkey"
+            columns: ["pot_id"]
+            isOneToOne: false
+            referencedRelation: "fantasy_pots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fantasy_entry_athletes: {
+        Row: {
+          athlete_id: string
+          created_at: string
+          discipline: string
+          entry_id: string
+          id: string
+          points_earned: number
+          price_at_selection: number
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string
+          discipline: string
+          entry_id: string
+          id?: string
+          points_earned?: number
+          price_at_selection: number
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string
+          discipline?: string
+          entry_id?: string
+          id?: string
+          points_earned?: number
+          price_at_selection?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fantasy_entry_athletes_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fantasy_entry_athletes_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "fantasy_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fantasy_pots: {
+        Row: {
+          created_at: string
+          created_by: string
+          discipline_scope: string[]
+          entry_fee_tokens: number
+          house_rake_percent: number
+          id: string
+          invite_code: string | null
+          max_entrants: number | null
+          name: string
+          payout_split: Json
+          payout_structure: string
+          pot_type: string
+          season_tier: number | null
+          season_tournaments: string[] | null
+          status: string
+          team_budget: number
+          tournament_id: string | null
+          updated_at: string
+          visibility: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          discipline_scope?: string[]
+          entry_fee_tokens: number
+          house_rake_percent?: number
+          id?: string
+          invite_code?: string | null
+          max_entrants?: number | null
+          name: string
+          payout_split?: Json
+          payout_structure?: string
+          pot_type: string
+          season_tier?: number | null
+          season_tournaments?: string[] | null
+          status?: string
+          team_budget?: number
+          tournament_id?: string | null
+          updated_at?: string
+          visibility?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          discipline_scope?: string[]
+          entry_fee_tokens?: number
+          house_rake_percent?: number
+          id?: string
+          invite_code?: string | null
+          max_entrants?: number | null
+          name?: string
+          payout_split?: Json
+          payout_structure?: string
+          pot_type?: string
+          season_tier?: number | null
+          season_tournaments?: string[] | null
+          status?: string
+          team_budget?: number
+          tournament_id?: string | null
+          updated_at?: string
+          visibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fantasy_pots_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fantasy_scoring_events: {
+        Row: {
+          athlete_id: string
+          breakdown: Json
+          created_at: string
+          discipline: string
+          entry_id: string
+          id: string
+          points_awarded: number
+          tournament_id: string
+        }
+        Insert: {
+          athlete_id: string
+          breakdown?: Json
+          created_at?: string
+          discipline: string
+          entry_id: string
+          id?: string
+          points_awarded?: number
+          tournament_id: string
+        }
+        Update: {
+          athlete_id?: string
+          breakdown?: Json
+          created_at?: string
+          discipline?: string
+          entry_id?: string
+          id?: string
+          points_awarded?: number
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fantasy_scoring_events_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fantasy_scoring_events_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "fantasy_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fantasy_scoring_events_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
             referencedColumns: ["id"]
           },
         ]
