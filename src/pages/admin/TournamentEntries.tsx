@@ -17,6 +17,8 @@ import type { Discipline } from '@/types';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
 
+const VALID_DISCIPLINES = ['slalom', 'trick', 'jump'] as const;
+
 interface ParsedParticipant {
   name: string;
   gender: 'male' | 'female';
@@ -201,12 +203,16 @@ export default function TournamentEntries() {
         return;
       }
 
-      // Auto-set discipline if detected
-      if (data.detected_discipline) {
+      // Auto-set discipline if detected AND valid
+      if (data.detected_discipline && VALID_DISCIPLINES.includes(data.detected_discipline)) {
         setDetectedDiscipline(data.detected_discipline);
         if (!selectedDiscipline) {
           setSelectedDiscipline(data.detected_discipline as Discipline);
         }
+      } else if (data.detected_discipline) {
+        // Invalid discipline detected (e.g., "waterski") - clear it
+        console.warn(`Invalid discipline detected: ${data.detected_discipline}`);
+        setDetectedDiscipline('');
       }
 
       // Match participants to athletes
@@ -246,8 +252,12 @@ export default function TournamentEntries() {
   // Mutation to directly save AI-matched entries to database
   const addAIEntriesMutation = useMutation({
     mutationFn: async (participants: MatchedParticipant[]) => {
-      if (!selectedDiscipline || !selectedTournamentId) {
-        throw new Error('Please select a tournament and discipline first');
+      if (!selectedTournamentId) {
+        throw new Error('Please select a tournament first');
+      }
+      
+      if (!selectedDiscipline || !VALID_DISCIPLINES.includes(selectedDiscipline)) {
+        throw new Error('Please select a valid discipline: slalom, trick, or jump');
       }
 
       const toAdd = participants.filter(m => m.selected && m.matchedAthlete);
