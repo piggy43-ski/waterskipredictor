@@ -797,6 +797,16 @@ export default function TournamentEntries() {
             </div>
           </div>
 
+          {/* Warning when no valid discipline is selected */}
+          {(!selectedDiscipline || !VALID_DISCIPLINES.includes(selectedDiscipline)) && (
+            <div className="flex items-center gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 mb-4">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+              <div className="text-sm">
+                <span className="font-medium">Discipline required:</span> Please select a discipline (slalom, trick, or jump) above before adding athletes.
+              </div>
+            </div>
+          )}
+
           <ScrollArea className="h-[50vh]">
             <div className="space-y-6">
               {maleParticipants.length > 0 && (
@@ -881,7 +891,15 @@ export default function TournamentEntries() {
             <Button variant="outline" onClick={() => setShowPreviewDialog(false)} disabled={addAIEntriesMutation.isPending}>
               Cancel
             </Button>
-            <Button onClick={handleApplyAIMatches} disabled={addAIEntriesMutation.isPending || matchedParticipants.filter(m => m.selected && m.matchedAthlete).length === 0}>
+            <Button 
+              onClick={handleApplyAIMatches} 
+              disabled={
+                addAIEntriesMutation.isPending || 
+                matchedParticipants.filter(m => m.selected && m.matchedAthlete).length === 0 ||
+                !selectedDiscipline || 
+                !VALID_DISCIPLINES.includes(selectedDiscipline)
+              }
+            >
               {addAIEntriesMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
