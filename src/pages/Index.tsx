@@ -120,7 +120,7 @@ const Index = () => {
         
         <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
           {/* Welcome Card */}
-          <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium">
+<Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium !bg-none" style={{ background: 'linear-gradient(135deg, hsl(186, 78%, 45%), hsl(186, 78%, 65%))' }}>
             <h2 className="text-2xl font-bold mb-2">Welcome to WaterSki Predictor</h2>
             <p className="opacity-90 mb-4">
               Predict tournament outcomes, earn tokens, and win exclusive rewards from top waterski brands and events.
@@ -161,7 +161,7 @@ const Index = () => {
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
         {/* Token Balance Card */}
-        <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium">
+        <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium !bg-none" style={{ background: 'linear-gradient(135deg, hsl(186, 78%, 45%), hsl(186, 78%, 65%))' }}>
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-sm opacity-90 mb-1">Your Balance</p>

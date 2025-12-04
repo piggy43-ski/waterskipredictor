@@ -90,6 +90,17 @@ All colors MUST be HSL.
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Preserve custom backgrounds on glass cards */
+.glass-card.bg-gradient-water,
+.glass-card.bg-gradient-card {
+  background: var(--tw-gradient-stops) !important;
+}
+
+.bg-gradient-water {
+  --tw-gradient-stops: hsl(186, 78%, 45%), hsl(186, 78%, 65%);
+  background: linear-gradient(135deg, var(--tw-gradient-stops));
+}
+
 .glass-card:hover {
   background: hsl(var(--card) / 0.7);
   box-shadow: 
