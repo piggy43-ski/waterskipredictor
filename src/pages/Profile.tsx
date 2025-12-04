@@ -358,6 +358,21 @@ const Profile = () => {
           </div>
         </Card>
 
+        {/* My Bets Quick Access */}
+        <Button 
+          variant="outline" 
+          className="w-full h-auto py-4"
+          onClick={() => navigate('/predictions')}
+        >
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              <span className="font-semibold">My Bets</span>
+            </div>
+            <span className="text-muted-foreground text-sm">View active & history →</span>
+          </div>
+        </Button>
+
         {/* Profile Form */}
         <Card className="p-6">
           <h2 className="text-lg font-bold mb-4">Profile Information</h2>
