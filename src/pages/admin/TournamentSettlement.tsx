@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { SettlementConfirmDialog } from '@/components/SettlementConfirmDialog';
-import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search, Upload, Sparkles, X, Eye, AlertTriangle } from 'lucide-react';
+import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search, Sparkles, X, Eye, AlertTriangle } from 'lucide-react';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { compareScores, isValidSlalomScore, normalizeSlalomScore } from '@/utils/waterskiScoring';
+import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
 import type { Discipline, Category } from '@/types';
 
 type ResultEntry = {
@@ -65,6 +66,7 @@ type AIParseResponse = {
   gender?: string;
   confidence: number;
   raw_text?: string;
+  source_file?: string;
 };
 
 const emptyResultEntry = (): ResultEntry => ({
@@ -86,13 +88,12 @@ export default function TournamentSettlement() {
   });
   const [settlementPreviews, setSettlementPreviews] = useState<SettlementPreview[]>([]);
   
-  // AI parsing state
+  // AI parsing state - batch processing
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isAIParsing, setIsAIParsing] = useState(false);
   const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
-  const [aiParsedResults, setAiParsedResults] = useState<AIParseResponse | null>(null);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [allParsedResults, setAllParsedResults] = useState<AIParseResponse[]>([]);
   const [aiParseGender, setAiParseGender] = useState<'male' | 'female'>('male');
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -286,76 +287,93 @@ export default function TournamentSettlement() {
     return null;
   };
 
-  // Handle image upload
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Convert to base64
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(',')[1];
-      setUploadedImage(reader.result as string);
-      parseImageWithAI(base64);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Parse image with AI
-  const parseImageWithAI = async (imageBase64: string) => {
+  // Batch parse all files with AI
+  const parseAllFiles = useCallback(async () => {
     if (!selectedTournament || !selectedDiscipline) {
       toast({ title: 'Please select a tournament and discipline first', variant: 'destructive' });
       return;
     }
 
+    const pendingFiles = uploadedFiles.filter(f => f.status === 'pending');
+    if (pendingFiles.length === 0) return;
+
     setIsAIParsing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('parse-tournament-scores', {
-        body: {
-          image_base64: imageBase64,
-          discipline: selectedDiscipline,
-          gender: aiParseGender,
-        },
-      });
+    const results: AIParseResponse[] = [];
+    const athletes = getAllAthletes(selectedDiscipline, aiParseGender);
 
-      if (error) throw error;
+    for (const file of pendingFiles) {
+      // Update file status to parsing
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === file.id ? { ...f, status: 'parsing' as const } : f)
+      );
 
-      // Match athletes to database
-      const athletes = getAllAthletes(selectedDiscipline, aiParseGender);
-      const matchedAthletes = data.athletes.map((parsed: ParsedAthlete) => {
-        const match = matchAthleteByName(parsed.name, athletes);
-        return {
-          ...parsed,
-          matched_athlete_id: match?.id || undefined,
-          match_confidence: match?.confidence || 0,
-        };
-      });
+      try {
+        const { data, error } = await supabase.functions.invoke('parse-tournament-scores', {
+          body: {
+            image_base64: file.base64,
+            discipline: selectedDiscipline,
+            gender: aiParseGender,
+            is_pdf: file.type === 'pdf',
+          },
+        });
 
-      setAiParsedResults({ ...data, athletes: matchedAthletes });
+        if (error) throw error;
+
+        // Match athletes to database
+        const matchedAthletes = data.athletes.map((parsed: ParsedAthlete) => {
+          const match = matchAthleteByName(parsed.name, athletes);
+          return {
+            ...parsed,
+            matched_athlete_id: match?.id || undefined,
+            match_confidence: match?.confidence || 0,
+          };
+        });
+
+        results.push({ ...data, athletes: matchedAthletes, source_file: file.name });
+        
+        // Update file status to done
+        setUploadedFiles(prev => 
+          prev.map(f => f.id === file.id ? { ...f, status: 'done' as const } : f)
+        );
+      } catch (err: any) {
+        console.error(`AI parsing error for ${file.name}:`, err);
+        
+        // Update file status to error
+        setUploadedFiles(prev => 
+          prev.map(f => f.id === file.id ? { ...f, status: 'error' as const, error: err.message } : f)
+        );
+      }
+    }
+
+    setIsAIParsing(false);
+
+    if (results.length > 0) {
+      setAllParsedResults(results);
       setAiPreviewOpen(true);
       
+      const totalAthletes = results.reduce((sum, r) => sum + r.athletes.length, 0);
       toast({ 
-        title: 'Image parsed successfully',
-        description: `Found ${matchedAthletes.length} athletes with ${Math.round(data.confidence * 100)}% confidence`
+        title: 'Parsing complete',
+        description: `Extracted ${totalAthletes} athletes from ${results.length} file(s)`
       });
-    } catch (err: any) {
-      console.error('AI parsing error:', err);
-      toast({ 
-        title: 'Failed to parse image', 
-        description: err.message || 'Unknown error',
-        variant: 'destructive' 
-      });
-    } finally {
-      setIsAIParsing(false);
     }
-  };
+  }, [selectedTournament, selectedDiscipline, uploadedFiles, aiParseGender, toast]);
 
-  // Apply AI results to form
+  // Apply all AI results to form
   const applyAIResults = () => {
-    if (!aiParsedResults) return;
+    if (allParsedResults.length === 0) return;
 
-    const newEntries: ResultEntry[] = aiParsedResults.athletes
-      .filter(a => a.matched_athlete_id)
+    // Combine all athletes from all parsed results
+    const allAthletes = allParsedResults.flatMap(r => r.athletes);
+    
+    // Dedupe by athlete_id (keep first occurrence)
+    const seenIds = new Set<string>();
+    const newEntries: ResultEntry[] = allAthletes
+      .filter(a => {
+        if (!a.matched_athlete_id || seenIds.has(a.matched_athlete_id)) return false;
+        seenIds.add(a.matched_athlete_id);
+        return true;
+      })
       .map(a => ({
         athlete_id: a.matched_athlete_id!,
         score: a.score,
@@ -376,8 +394,8 @@ export default function TournamentSettlement() {
     }));
 
     setAiPreviewOpen(false);
-    setAiParsedResults(null);
-    setUploadedImage(null);
+    setAllParsedResults([]);
+    setUploadedFiles([]);
     
     toast({ 
       title: 'Results applied',
@@ -695,7 +713,7 @@ export default function TournamentSettlement() {
         {selectedTournament && settlementPreviews.length === 0 && (
           <>
             {/* AI Image Upload Section */}
-            <Card className="border-dashed border-2">
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-primary" />
@@ -704,11 +722,11 @@ export default function TournamentSettlement() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Upload an image of tournament results and let AI extract the scores automatically.
+                  Upload images or PDFs of tournament results. You can drag & drop multiple files, paste from clipboard, or click to browse.
                 </p>
                 
-                <div className="flex gap-4 items-end">
-                  <div className="flex-1">
+                <div className="flex gap-4 items-end mb-4">
+                  <div className="flex-1 max-w-xs">
                     <Label>Gender Category</Label>
                     <Select value={aiParseGender} onValueChange={(v) => setAiParseGender(v as 'male' | 'female')}>
                       <SelectTrigger>
@@ -720,47 +738,15 @@ export default function TournamentSettlement() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
-                  
-                  <Button 
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isAIParsing}
-                    className="flex items-center gap-2"
-                  >
-                    {isAIParsing ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Parsing...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-4 h-4" />
-                        Upload & Parse Image
-                      </>
-                    )}
-                  </Button>
                 </div>
 
-                {uploadedImage && (
-                  <div className="relative w-full max-w-md">
-                    <img src={uploadedImage} alt="Uploaded results" className="rounded-lg border" />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute top-2 right-2 bg-background/80"
-                      onClick={() => setUploadedImage(null)}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                )}
+                <BatchImageUploader
+                  files={uploadedFiles}
+                  onFilesChange={setUploadedFiles}
+                  onParseAll={parseAllFiles}
+                  isParsing={isAIParsing}
+                  disabled={!selectedTournament || !selectedDiscipline}
+                />
               </CardContent>
             </Card>
 
@@ -1072,63 +1058,73 @@ export default function TournamentSettlement() {
           </DialogHeader>
           
           <ScrollArea className="max-h-[50vh]">
-            {aiParsedResults && (
-              <div className="space-y-4">
-                <div className="flex gap-4 text-sm">
-                  <Badge variant="outline">Discipline: {aiParsedResults.discipline || selectedDiscipline}</Badge>
-                  <Badge variant="outline">Gender: {aiParsedResults.gender || aiParseGender}</Badge>
-                  <Badge variant={aiParsedResults.confidence > 0.8 ? 'default' : 'secondary'}>
-                    Confidence: {Math.round(aiParsedResults.confidence * 100)}%
-                  </Badge>
-                </div>
-
-                <div className="space-y-2">
-                  {aiParsedResults.athletes.map((athlete, index) => (
-                    <div 
-                      key={index}
-                      className={`p-3 rounded-lg border ${
-                        athlete.matched_athlete_id 
-                          ? athlete.match_confidence === 1 ? 'bg-success/10 border-success/30' 
-                            : 'bg-warning/10 border-warning/30'
-                          : 'bg-destructive/10 border-destructive/30'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="font-medium">{athlete.name}</span>
-                          <span className="text-muted-foreground ml-2">Score: {athlete.score}</span>
-                          {athlete.position && <Badge variant="outline" className="ml-2">#{athlete.position}</Badge>}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {athlete.matched_athlete_id ? (
-                            <Badge variant="outline" className="text-success">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Matched ({Math.round((athlete.match_confidence || 0) * 100)}%)
-                            </Badge>
-                          ) : (
-                            <Badge variant="destructive">
-                              <AlertCircle className="w-3 h-3 mr-1" />
-                              No Match
-                            </Badge>
-                          )}
-                        </div>
+            {allParsedResults.length > 0 && (
+              <div className="space-y-6">
+                {allParsedResults.map((result, fileIndex) => (
+                  <div key={fileIndex} className="space-y-4">
+                    {allParsedResults.length > 1 && (
+                      <div className="flex items-center gap-2 pb-2 border-b">
+                        <Badge variant="secondary">{result.source_file || `File ${fileIndex + 1}`}</Badge>
+                        <Badge variant={result.confidence > 0.8 ? 'default' : 'secondary'}>
+                          {Math.round(result.confidence * 100)}% confidence
+                        </Badge>
                       </div>
-                      
-                      <div className="flex gap-3 mt-2 text-xs">
-                        {!athlete.made_finals && <Badge variant="outline">No Finals</Badge>}
-                        {athlete.missed_first_pass && <Badge variant="destructive">Missed 1st Pass</Badge>}
-                        {athlete.missed_gate && <Badge variant="destructive">Missed Gate</Badge>}
-                        {athlete.notes && <span className="text-muted-foreground">{athlete.notes}</span>}
-                      </div>
+                    )}
+                    
+                    <div className="flex gap-4 text-sm">
+                      <Badge variant="outline">Discipline: {result.discipline || selectedDiscipline}</Badge>
+                      <Badge variant="outline">Gender: {result.gender || aiParseGender}</Badge>
                     </div>
-                  ))}
-                </div>
 
-                {aiParsedResults.raw_text && (
-                  <div className="text-xs text-muted-foreground mt-4 p-2 bg-muted rounded">
-                    <strong>Raw extracted text:</strong> {aiParsedResults.raw_text}
+                    <div className="space-y-2">
+                      {result.athletes.map((athlete, index) => (
+                        <div 
+                          key={index}
+                          className={`p-3 rounded-lg border ${
+                            athlete.matched_athlete_id 
+                              ? athlete.match_confidence === 1 ? 'bg-green-500/10 border-green-500/30' 
+                                : 'bg-yellow-500/10 border-yellow-500/30'
+                              : 'bg-destructive/10 border-destructive/30'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-medium">{athlete.name}</span>
+                              <span className="text-muted-foreground ml-2">Score: {athlete.score}</span>
+                              {athlete.position && <Badge variant="outline" className="ml-2">#{athlete.position}</Badge>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {athlete.matched_athlete_id ? (
+                                <Badge variant="outline" className="text-green-600">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Matched ({Math.round((athlete.match_confidence || 0) * 100)}%)
+                                </Badge>
+                              ) : (
+                                <Badge variant="destructive">
+                                  <AlertCircle className="w-3 h-3 mr-1" />
+                                  No Match
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-3 mt-2 text-xs">
+                            {!athlete.made_finals && <Badge variant="outline">No Finals</Badge>}
+                            {athlete.missed_first_pass && <Badge variant="destructive">Missed 1st Pass</Badge>}
+                            {athlete.missed_gate && <Badge variant="destructive">Missed Gate</Badge>}
+                            {athlete.notes && <span className="text-muted-foreground">{athlete.notes}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {result.raw_text && (
+                      <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
+                        <strong>Raw text:</strong> {result.raw_text}
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
               </div>
             )}
           </ScrollArea>
@@ -1138,7 +1134,7 @@ export default function TournamentSettlement() {
               Cancel
             </Button>
             <Button onClick={applyAIResults}>
-              Apply {aiParsedResults?.athletes.filter(a => a.matched_athlete_id).length || 0} Matched Results
+              Apply {allParsedResults.flatMap(r => r.athletes).filter(a => a.matched_athlete_id).length} Matched Results
             </Button>
           </DialogFooter>
         </DialogContent>

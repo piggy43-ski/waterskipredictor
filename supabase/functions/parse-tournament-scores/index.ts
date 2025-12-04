@@ -29,7 +29,7 @@ serve(async (req) => {
   }
 
   try {
-    const { image_base64, image_url, discipline, gender } = await req.json();
+    const { image_base64, image_url, discipline, gender, is_pdf } = await req.json();
     
     if (!image_base64 && !image_url) {
       return new Response(
@@ -47,9 +47,12 @@ serve(async (req) => {
       );
     }
 
+    // Determine MIME type
+    const mimeType = is_pdf ? 'application/pdf' : 'image/jpeg';
+
     // Build the image content
     const imageContent = image_base64 
-      ? { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image_base64}` } }
+      ? { type: "image_url", image_url: { url: `data:${mimeType};base64,${image_base64}` } }
       : { type: "image_url", image_url: { url: image_url } };
 
     const systemPrompt = `You are an expert at reading waterski tournament results from images. 
