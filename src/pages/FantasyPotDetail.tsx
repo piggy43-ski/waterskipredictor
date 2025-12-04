@@ -87,7 +87,7 @@ const FantasyPotDetail = () => {
         .from('fantasy_pots')
         .select(`
           *,
-          tournament:tournament_id(id, name, location, start_date, disciplines)
+          tournament:tournaments!tournament_id(id, name, location, start_date, disciplines)
         `)
         .eq('id', potId)
         .single();

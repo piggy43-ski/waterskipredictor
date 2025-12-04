@@ -61,7 +61,7 @@ const FantasyTeamEdit = () => {
       // Fetch pot details with hint for tournament_id FK
       const { data: potData, error: potError } = await supabase
         .from('fantasy_pots')
-        .select(`*, tournament:tournament_id(id, name, start_datetime, end_datetime, start_date)`)
+        .select(`*, tournament:tournaments!tournament_id(id, name, start_datetime, end_datetime, start_date)`)
         .eq('id', potId)
         .single();
 

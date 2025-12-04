@@ -62,7 +62,7 @@ export default function AdminFantasyPots() {
         .from('fantasy_pots')
         .select(`
           *,
-          tournament:tournament_id(id, name, location, start_date)
+          tournament:tournaments!tournament_id(id, name, location, start_date)
         `)
         .order('created_at', { ascending: false });
       

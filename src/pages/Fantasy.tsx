@@ -100,7 +100,7 @@ const Fantasy = () => {
         .from('fantasy_pots')
         .select(`
           *,
-          tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
+          tournament:tournaments!tournament_id(name, location, start_date, start_datetime, end_datetime)
         `)
         .eq('status', 'open')
         .eq('visibility', 'public')
@@ -131,7 +131,7 @@ const Fantasy = () => {
         .from('fantasy_pots')
         .select(`
           *,
-          tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
+          tournament:tournaments!tournament_id(name, location, start_date, start_datetime, end_datetime)
         `)
         .eq('visibility', 'private')
         .eq('created_by', user!.id)
@@ -141,9 +141,9 @@ const Fantasy = () => {
       const { data: invitedPots } = await supabase
         .from('fantasy_invites')
         .select(`
-          pot:pot_id(
+          pot:fantasy_pots!pot_id(
             *,
-            tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
+            tournament:tournaments!tournament_id(name, location, start_date, start_datetime, end_datetime)
           )
         `)
         .eq('invited_user_id', user!.id)
@@ -172,9 +172,9 @@ const Fantasy = () => {
         .from('fantasy_entries')
         .select(`
           *,
-          pot:pot_id(
+          pot:fantasy_pots!pot_id(
             *,
-            tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
+            tournament:tournaments!tournament_id(name, location, start_date, start_datetime, end_datetime)
           )
         `)
         .eq('user_id', user!.id)

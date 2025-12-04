@@ -87,9 +87,9 @@ const FantasyTeamView = () => {
         .from('fantasy_entries')
         .select(`
           *,
-          pot:pot_id(
+          pot:fantasy_pots!pot_id(
             id, name, status, pot_type, entry_fee_tokens, payout_structure, tournament_id,
-            tournament:tournament_id(name, location, start_date, start_datetime, end_datetime)
+            tournament:tournaments!tournament_id(name, location, start_date, start_datetime, end_datetime)
           )
         `)
         .eq('id', entryId)
