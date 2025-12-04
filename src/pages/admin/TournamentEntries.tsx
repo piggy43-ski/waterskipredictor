@@ -243,34 +243,147 @@ export default function TournamentEntries() {
     }
   };
 
-  const handleApplyAIMatches = () => {
-    const toAdd = matchedParticipants
-      .filter(m => m.selected && m.matchedAthlete)
-      .map(m => m.matchedAthlete!.id);
-    
-    if (toAdd.length === 0) {
-      toast.error('No athletes selected to add');
-      return;
-    }
-
-    // Add to selected athletes
-    const newSelected = new Set(selectedAthletes);
-    toAdd.forEach(id => newSelected.add(id));
-    setSelectedAthletes(newSelected);
-    
-    // Auto-set gender from first matched athlete if not set
-    if (!selectedGender && matchedParticipants.length > 0) {
-      const firstGender = matchedParticipants.find(m => m.matchedAthlete)?.matchedAthlete?.gender;
-      if (firstGender === 'male' || firstGender === 'female') {
-        setSelectedGender(firstGender);
+  // Mutation to directly save AI-matched entries to database
+  const addAIEntriesMutation = useMutation({
+    mutationFn: async (participants: MatchedParticipant[]) => {
+      if (!selectedDiscipline || !selectedTournamentId) {
+        throw new Error('Please select a tournament and discipline first');
       }
-    }
-    
-    setShowPreviewDialog(false);
-    setAiFiles([]);
-    setMatchedParticipants([]);
-    
-    toast.success(`Added ${toAdd.length} athletes to selection`);
+
+      const toAdd = participants.filter(m => m.selected && m.matchedAthlete);
+      if (toAdd.length === 0) {
+        throw new Error('No athletes selected to add');
+      }
+
+      // Group by gender
+      const maleAthletes = toAdd.filter(m => m.matchedAthlete?.gender === 'male');
+      const femaleAthletes = toAdd.filter(m => m.matchedAthlete?.gender === 'female');
+
+      // Create entries for all selected athletes
+      const entriesToAdd = toAdd.map(m => {
+        const athlete = allAthletes?.find(a => a.id === m.matchedAthlete!.id);
+        const calculatedOdds = calculateDefaultOdds(athlete, selectedDiscipline);
+        return {
+          tournament_id: selectedTournamentId,
+          athlete_id: m.matchedAthlete!.id,
+          discipline: selectedDiscipline,
+          custom_odds: calculatedOdds,
+        };
+      });
+
+      const { error: entriesError } = await supabase
+        .from('tournament_entries')
+        .insert(entriesToAdd);
+      
+      if (entriesError) throw entriesError;
+
+      // Create markets for each gender that has athletes
+      const gendersToProcess = [];
+      if (maleAthletes.length > 0) gendersToProcess.push({ gender: 'male', category: 'open_men', athletes: maleAthletes });
+      if (femaleAthletes.length > 0) gendersToProcess.push({ gender: 'female', category: 'open_women', athletes: femaleAthletes });
+
+      for (const { category, athletes: genderAthletes } of gendersToProcess) {
+        // Create WINNER market
+        const { data: winnerMarket, error: winnerError } = await supabase
+          .from('markets')
+          .insert({
+            tournament_id: selectedTournamentId,
+            discipline: selectedDiscipline,
+            category,
+            market_type: 'WINNER',
+            name: `${selectedDiscipline} ${category} Winner`,
+          })
+          .select()
+          .single();
+
+        if (winnerError) throw winnerError;
+
+        // Create PODIUM market
+        const { data: podiumMarket, error: podiumError } = await supabase
+          .from('markets')
+          .insert({
+            tournament_id: selectedTournamentId,
+            discipline: selectedDiscipline,
+            category,
+            market_type: 'PODIUM',
+            name: `${selectedDiscipline} ${category} Podium`,
+          })
+          .select()
+          .single();
+
+        if (podiumError) throw podiumError;
+
+        // Create HIGHEST_SCORE market
+        const { data: scoreMarket, error: scoreError } = await supabase
+          .from('markets')
+          .insert({
+            tournament_id: selectedTournamentId,
+            discipline: selectedDiscipline,
+            category,
+            market_type: 'HIGHEST_SCORE',
+            name: `${selectedDiscipline} ${category} Highest Score`,
+          })
+          .select()
+          .single();
+
+        if (scoreError) throw scoreError;
+
+        // Create selections for athletes in this gender
+        for (const participant of genderAthletes) {
+          const athlete = allAthletes?.find(a => a.id === participant.matchedAthlete!.id);
+          if (!athlete) continue;
+
+          const entry = entriesToAdd.find(e => e.athlete_id === participant.matchedAthlete!.id);
+          const odds = entry?.custom_odds || 2.5;
+
+          const selections = [
+            {
+              market_id: winnerMarket.id,
+              athlete_id: participant.matchedAthlete!.id,
+              description: `${athlete.name} to win`,
+              decimal_odds: odds,
+            },
+            {
+              market_id: podiumMarket.id,
+              athlete_id: participant.matchedAthlete!.id,
+              description: `${athlete.name} podium finish`,
+              decimal_odds: odds * 0.7,
+            },
+            {
+              market_id: scoreMarket.id,
+              athlete_id: participant.matchedAthlete!.id,
+              description: `${athlete.name} highest score`,
+              decimal_odds: odds,
+            },
+          ];
+
+          const { error: selectionsError } = await supabase
+            .from('selections')
+            .insert(selections);
+
+          if (selectionsError) throw selectionsError;
+        }
+      }
+
+      return toAdd.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['markets'] });
+      queryClient.invalidateQueries({ queryKey: ['selections'] });
+      queryClient.invalidateQueries({ queryKey: ['athletes-for-tournament'] });
+      toast.success(`Added ${count} athletes and created markets`);
+      setShowPreviewDialog(false);
+      setAiFiles([]);
+      setMatchedParticipants([]);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to add athletes: ${error.message}`);
+    },
+  });
+
+  const handleApplyAIMatches = () => {
+    addAIEntriesMutation.mutate(matchedParticipants);
   };
 
   const addEntriesMutation = useMutation({
@@ -755,11 +868,18 @@ export default function TournamentEntries() {
           </ScrollArea>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPreviewDialog(false)}>
+            <Button variant="outline" onClick={() => setShowPreviewDialog(false)} disabled={addAIEntriesMutation.isPending}>
               Cancel
             </Button>
-            <Button onClick={handleApplyAIMatches}>
-              Add {matchedParticipants.filter(m => m.selected && m.matchedAthlete).length} Athletes
+            <Button onClick={handleApplyAIMatches} disabled={addAIEntriesMutation.isPending || matchedParticipants.filter(m => m.selected && m.matchedAthlete).length === 0}>
+              {addAIEntriesMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                `Add ${matchedParticipants.filter(m => m.selected && m.matchedAthlete).length} Athletes to Tournament`
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
