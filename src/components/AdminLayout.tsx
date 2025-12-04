@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database, DollarSign, UserCog } from 'lucide-react';
+import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database, DollarSign, UserCog, Crown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAdminCheck } from '@/hooks/useAdminCheck';
 
@@ -17,6 +17,7 @@ const navItems = [
   { path: '/admin/rankings-import', label: 'Manual Import', icon: TrendingUp },
   { path: '/admin/tournament-settlement', label: 'Results & Settlement', icon: FileCheck },
   { path: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
+  { path: '/admin/fantasy-pots', label: 'Fantasy Leagues', icon: Crown },
   { path: '/admin/markets', label: 'Markets', icon: TrendingUp },
   { path: '/admin/selections', label: 'Selections', icon: Trophy },
   { path: '/admin/rewards', label: 'Rewards', icon: Gift },
