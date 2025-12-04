@@ -29,7 +29,7 @@ export const PageHeader = ({ title, subtitle, showBack = false, action }: PageHe
               </Button>
             )}
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold truncate">{title}</h1>
+              <h1 className="text-xl font-elegant italic font-semibold truncate tracking-wide">{title}</h1>
               {subtitle && (
                 <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
               )}
