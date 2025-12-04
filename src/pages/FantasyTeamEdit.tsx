@@ -58,10 +58,10 @@ const FantasyTeamEdit = () => {
 
   const fetchData = async () => {
     try {
-      // Fetch pot details
+      // Fetch pot details with hint for tournament_id FK
       const { data: potData, error: potError } = await supabase
         .from('fantasy_pots')
-        .select(`*, tournament:tournaments(id, name, start_datetime, end_datetime, start_date)`)
+        .select(`*, tournament:tournament_id(id, name, start_datetime, end_datetime, start_date)`)
         .eq('id', potId)
         .single();
 
@@ -69,10 +69,10 @@ const FantasyTeamEdit = () => {
 
       // Check if locked
       const tournamentInfo: TournamentInfo | null = potData.tournament ? {
-        id: potData.tournament.id,
-        start_datetime: potData.tournament.start_datetime,
-        end_datetime: potData.tournament.end_datetime,
-        start_date: potData.tournament.start_date
+        id: (potData.tournament as any).id,
+        start_datetime: (potData.tournament as any).start_datetime,
+        end_datetime: (potData.tournament as any).end_datetime,
+        start_date: (potData.tournament as any).start_date
       } : null;
 
       if (isFantasyPotLocked({ id: potData.id, status: potData.status, pot_type: potData.pot_type, tournament_id: potData.tournament_id }, tournamentInfo)) {

@@ -399,6 +399,47 @@ export type Database = {
           },
         ]
       }
+      fantasy_invites: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          id: string
+          invite_code: string | null
+          invited_by: string
+          invited_user_id: string | null
+          pot_id: string
+          status: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          id?: string
+          invite_code?: string | null
+          invited_by: string
+          invited_user_id?: string | null
+          pot_id: string
+          status?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          id?: string
+          invite_code?: string | null
+          invited_by?: string
+          invited_user_id?: string | null
+          pot_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fantasy_invites_pot_id_fkey"
+            columns: ["pot_id"]
+            isOneToOne: false
+            referencedRelation: "fantasy_pots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fantasy_pots: {
         Row: {
           created_at: string
@@ -413,6 +454,7 @@ export type Database = {
           payout_split: Json
           payout_structure: string
           pot_type: string
+          scoring_starts_from: string | null
           season_tier: number | null
           season_tournaments: string[] | null
           status: string
@@ -434,6 +476,7 @@ export type Database = {
           payout_split?: Json
           payout_structure?: string
           pot_type: string
+          scoring_starts_from?: string | null
           season_tier?: number | null
           season_tournaments?: string[] | null
           status?: string
@@ -455,6 +498,7 @@ export type Database = {
           payout_split?: Json
           payout_structure?: string
           pot_type?: string
+          scoring_starts_from?: string | null
           season_tier?: number | null
           season_tournaments?: string[] | null
           status?: string
@@ -464,6 +508,13 @@ export type Database = {
           visibility?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "fantasy_pots_scoring_starts_from_fkey"
+            columns: ["scoring_starts_from"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fantasy_pots_tournament_id_fkey"
             columns: ["tournament_id"]
