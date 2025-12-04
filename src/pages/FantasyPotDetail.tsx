@@ -139,10 +139,35 @@ const FantasyPotDetail = () => {
       // Fetch athletes for the tournament/disciplines
       const disciplines = potData.discipline_scope || ['slalom', 'trick', 'jump'];
       
-      const { data: athletesData, error: athletesError } = await supabase
+      let athleteIds: string[] = [];
+      
+      // If pot is linked to a tournament, only show athletes entered in that tournament
+      if (potData.tournament_id) {
+        const { data: entriesData } = await supabase
+          .from('tournament_entries')
+          .select('athlete_id')
+          .eq('tournament_id', potData.tournament_id);
+        
+        athleteIds = [...new Set((entriesData || []).map(e => e.athlete_id))];
+        
+        if (athleteIds.length === 0) {
+          setAthletes([]);
+          return;
+        }
+      }
+      
+      // Build query for athletes
+      let athleteQuery = supabase
         .from('athletes')
         .select('id, name, country, country_code, gender, disciplines, fantasy_price_slalom, fantasy_price_trick, fantasy_price_jump, current_rank_slalom, current_rank_trick, current_rank_jump')
         .order('name');
+      
+      // If tournament linked, filter by entered athletes
+      if (athleteIds.length > 0) {
+        athleteQuery = athleteQuery.in('id', athleteIds);
+      }
+      
+      const { data: athletesData, error: athletesError } = await athleteQuery;
 
       if (athletesError) throw athletesError;
 
