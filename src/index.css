@@ -78,3 +78,23 @@ All colors MUST be HSL.
     0 1px 0 0 hsl(var(--foreground) / 0.03) inset,
     0 -1px 0 0 hsl(var(--background) / 0.5) inset;
 }
+
+.glass-card {
+  background: hsl(var(--card) / 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 
+    0 0 0 1px hsl(var(--foreground) / 0.05) inset,
+    0 1px 0 0 hsl(var(--foreground) / 0.05) inset,
+    0 8px 32px -8px hsl(var(--background) / 0.5);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  background: hsl(var(--card) / 0.7);
+  box-shadow: 
+    0 0 0 1px hsl(var(--foreground) / 0.08) inset,
+    0 1px 0 0 hsl(var(--foreground) / 0.08) inset,
+    0 16px 48px -12px hsl(var(--background) / 0.6);
+  transform: translateY(-2px);
+}
