@@ -1121,6 +1121,15 @@ export type Database = {
         Args: { amount: number; user_id_param: string }
         Returns: undefined
       }
+      is_pot_public: { Args: { _pot_id: string }; Returns: boolean }
+      user_has_accepted_invite: {
+        Args: { _pot_id: string; _user_id: string }
+        Returns: boolean
+      }
+      user_has_fantasy_entry: {
+        Args: { _pot_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
