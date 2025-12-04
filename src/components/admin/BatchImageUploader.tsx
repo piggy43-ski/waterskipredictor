@@ -1,16 +1,19 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, X, FileImage, FileText, Clipboard, Sparkles, Trash2, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Upload, X, FileImage, FileText, Link as LinkIcon, Sparkles, Trash2, CheckCircle, AlertCircle, Loader2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type UploadedFile = {
   id: string;
   name: string;
-  type: 'image' | 'pdf';
-  base64: string;
+  type: 'image' | 'pdf' | 'url';
+  base64?: string;
+  url?: string;
   preview?: string;
   status: 'pending' | 'parsing' | 'done' | 'error';
   error?: string;
@@ -32,9 +35,26 @@ export function BatchImageUploader({
   disabled,
 }: BatchImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pasteAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const generateId = () => Math.random().toString(36).substring(2, 9);
+
+  const isValidUrl = (str: string): boolean => {
+    try {
+      new URL(str);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const isImageUrl = (url: string): boolean => {
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+    const lowered = url.toLowerCase();
+    return imageExtensions.some(ext => lowered.includes(ext));
+  };
 
   const processFile = useCallback(async (file: File): Promise<UploadedFile | null> => {
     const isImage = file.type.startsWith('image/');
@@ -74,6 +94,21 @@ export function BatchImageUploader({
     }
   }, [files, onFilesChange, processFile]);
 
+  const addUrl = useCallback((url: string) => {
+    if (!isValidUrl(url)) return;
+    
+    const trimmedUrl = url.trim();
+    const newFile: UploadedFile = {
+      id: generateId(),
+      name: isImageUrl(trimmedUrl) ? 'Image URL' : new URL(trimmedUrl).hostname,
+      type: 'url',
+      url: trimmedUrl,
+      status: 'pending',
+    };
+    
+    onFilesChange([...files, newFile]);
+  }, [files, onFilesChange]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -96,20 +131,57 @@ export function BatchImageUploader({
     }
   }, [handleFiles]);
 
-  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+  // Handle paste in dedicated textarea
+  const handlePasteFromTextarea = useCallback(async (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    
     const items = e.clipboardData.items;
-    const files: File[] = [];
+    const imageFiles: File[] = [];
 
+    // Check for images first
     for (const item of items) {
-      if (item.type.startsWith('image/') || item.type === 'application/pdf') {
+      if (item.type.startsWith('image/')) {
         const file = item.getAsFile();
-        if (file) files.push(file);
+        if (file) imageFiles.push(file);
       }
     }
 
-    if (files.length > 0) {
-      handleFiles(files);
+    if (imageFiles.length > 0) {
+      handleFiles(imageFiles);
+      return;
     }
+
+    // Check for text (could be a URL)
+    const text = e.clipboardData.getData('text')?.trim();
+    if (text && isValidUrl(text)) {
+      addUrl(text);
+    }
+  }, [handleFiles, addUrl]);
+
+  // Global paste listener as fallback
+  useEffect(() => {
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      // Only handle if no input is focused
+      const activeElement = document.activeElement;
+      if (activeElement?.tagName === 'INPUT' && activeElement !== pasteAreaRef.current) {
+        return;
+      }
+      
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) handleFiles([file]);
+          return;
+        }
+      }
+    };
+
+    document.addEventListener('paste', handleGlobalPaste);
+    return () => document.removeEventListener('paste', handleGlobalPaste);
   }, [handleFiles]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,6 +189,13 @@ export function BatchImageUploader({
       handleFiles(e.target.files);
     }
   }, [handleFiles]);
+
+  const handleUrlSubmit = useCallback(() => {
+    if (urlInput.trim()) {
+      addUrl(urlInput.trim());
+      setUrlInput('');
+    }
+  }, [urlInput, addUrl]);
 
   const removeFile = useCallback((id: string) => {
     onFilesChange(files.filter(f => f.id !== id));
@@ -137,10 +216,8 @@ export function BatchImageUploader({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onPaste={handlePaste}
-        tabIndex={0}
         className={cn(
-          "border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary",
+          "border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer",
           isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50",
           disabled && "opacity-50 pointer-events-none"
         )}
@@ -155,18 +232,11 @@ export function BatchImageUploader({
           className="hidden"
         />
         
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Upload className="w-8 h-8" />
-          </div>
-          <div>
-            <p className="font-medium text-foreground">
-              Drop images or PDFs here, or click to browse
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Supports multiple files • Ctrl+V to paste from clipboard
-            </p>
-          </div>
+        <div className="flex flex-col items-center gap-2">
+          <Upload className="w-8 h-8 text-muted-foreground" />
+          <p className="font-medium text-foreground">
+            Drop images or PDFs here, or click to browse
+          </p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="outline" className="gap-1">
               <FileImage className="w-3 h-3" /> Images
@@ -174,11 +244,45 @@ export function BatchImageUploader({
             <Badge variant="outline" className="gap-1">
               <FileText className="w-3 h-3" /> PDF
             </Badge>
-            <Badge variant="outline" className="gap-1">
-              <Clipboard className="w-3 h-3" /> Paste
-            </Badge>
           </div>
         </div>
+      </div>
+
+      {/* Paste Area */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-foreground">Paste Area (Ctrl+V)</label>
+        <Textarea
+          ref={pasteAreaRef}
+          placeholder="Click here and press Ctrl+V to paste images or URLs..."
+          onPaste={handlePasteFromTextarea}
+          className="h-16 resize-none cursor-text"
+          readOnly
+        />
+      </div>
+
+      {/* URL Input */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-foreground">Add URL</label>
+        <div className="flex gap-2">
+          <Input
+            placeholder="https://example.com/results or image URL..."
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
+            className="flex-1"
+          />
+          <Button 
+            onClick={handleUrlSubmit}
+            disabled={!urlInput.trim() || !isValidUrl(urlInput.trim())}
+            variant="secondary"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Add
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Supports: Image URLs, Webpage URLs (AI will read page content)
+        </p>
       </div>
 
       {/* File List */}
@@ -245,6 +349,10 @@ export function BatchImageUploader({
                       alt={file.name}
                       className="w-full h-24 object-cover"
                     />
+                  ) : file.type === 'url' ? (
+                    <div className="w-full h-24 bg-muted flex items-center justify-center">
+                      <LinkIcon className="w-8 h-8 text-muted-foreground" />
+                    </div>
                   ) : (
                     <div className="w-full h-24 bg-muted flex items-center justify-center">
                       <FileText className="w-8 h-8 text-muted-foreground" />
@@ -281,6 +389,9 @@ export function BatchImageUploader({
                   {/* File Name */}
                   <div className="absolute bottom-0 left-0 right-0 bg-background/80 px-2 py-1">
                     <p className="text-xs truncate">{file.name}</p>
+                    {file.type === 'url' && file.url && (
+                      <p className="text-[10px] text-muted-foreground truncate">{file.url}</p>
+                    )}
                   </div>
 
                   {/* Status Badge */}
@@ -297,6 +408,13 @@ export function BatchImageUploader({
                       )}
                     </div>
                   )}
+
+                  {/* Type Badge */}
+                  <div className="absolute top-1 left-1">
+                    {file.status === 'pending' && file.type === 'url' && (
+                      <Badge variant="outline" className="text-xs px-1.5 py-0 bg-background/80">URL</Badge>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
