@@ -173,7 +173,7 @@ ${userPromptBase}`
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages,
-        max_tokens: 4000,
+        max_tokens: 16000,
       }),
     });
 
@@ -201,7 +201,7 @@ ${userPromptBase}`
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    let content = data.choices?.[0]?.message?.content;
 
     if (!content) {
       console.error('No content in AI response');
@@ -211,26 +211,64 @@ ${userPromptBase}`
       );
     }
 
-    console.log('AI raw response:', content);
+    // Strip markdown code fences if present
+    content = content.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+
+    console.log('AI response length:', content.length);
 
     // Parse the JSON from AI response
     let parsed: ParseResponse;
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
+      // Try direct parse first
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        // Try to extract JSON object
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No JSON found in response');
+        }
       }
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to parse AI response', 
-          raw_content: content 
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      
+      // Try to salvage truncated JSON by finding valid athletes array
+      try {
+        const athletesMatch = content.match(/"athletes"\s*:\s*\[([\s\S]*)/);
+        if (athletesMatch) {
+          let athletesStr = athletesMatch[1];
+          // Find the last complete object
+          const lastCompleteObject = athletesStr.lastIndexOf('}');
+          if (lastCompleteObject > 0) {
+            athletesStr = athletesStr.substring(0, lastCompleteObject + 1);
+            // Count brackets to ensure valid array
+            const bracketCount = (athletesStr.match(/\{/g) || []).length;
+            const closingCount = (athletesStr.match(/\}/g) || []).length;
+            if (bracketCount === closingCount) {
+              const fixedJson = `{"athletes":[${athletesStr}],"confidence":0.7,"raw_text":"Partial parse - some data may be missing"}`;
+              parsed = JSON.parse(fixedJson);
+              console.log('Salvaged partial JSON with', parsed.athletes?.length, 'athletes');
+            } else {
+              throw new Error('Could not repair truncated JSON');
+            }
+          } else {
+            throw new Error('No complete athlete objects found');
+          }
+        } else {
+          throw new Error('No athletes array found');
+        }
+      } catch (salvageError) {
+        console.error('Could not salvage truncated response:', salvageError);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to parse AI response - result may be too large', 
+            raw_content: content.substring(0, 500) + '...' 
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Validate and clean up the response
