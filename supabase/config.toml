@@ -26,3 +26,6 @@ verify_jwt = true
 
 [functions.run-settlement-test]
 verify_jwt = true
+
+[functions.parse-tournament-scores]
+verify_jwt = true

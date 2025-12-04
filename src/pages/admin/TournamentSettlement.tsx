@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -9,18 +9,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { SettlementConfirmDialog } from '@/components/SettlementConfirmDialog';
-import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search } from 'lucide-react';
+import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search, Upload, Sparkles, X, Eye, AlertTriangle } from 'lucide-react';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { compareScores, isValidSlalomScore, normalizeSlalomScore } from '@/utils/waterskiScoring';
 import type { Discipline, Category } from '@/types';
 
 type ResultEntry = {
   athlete_id: string;
-  position?: number; // Auto-calculated from score
+  position?: number;
   score: string;
+  made_finals: boolean;
+  missed_first_pass: boolean;
+  missed_gate: boolean;
+  notes?: string;
 };
 
 type DisciplineResults = {
@@ -40,6 +47,34 @@ type SettlementPreview = {
   affected_predictions: number;
 };
 
+type ParsedAthlete = {
+  name: string;
+  score: string;
+  position?: number;
+  made_finals: boolean;
+  missed_first_pass: boolean;
+  missed_gate: boolean;
+  notes?: string;
+  matched_athlete_id?: string;
+  match_confidence?: number;
+};
+
+type AIParseResponse = {
+  athletes: ParsedAthlete[];
+  discipline?: string;
+  gender?: string;
+  confidence: number;
+  raw_text?: string;
+};
+
+const emptyResultEntry = (): ResultEntry => ({
+  athlete_id: '',
+  score: '',
+  made_finals: true,
+  missed_first_pass: false,
+  missed_gate: false,
+});
+
 export default function TournamentSettlement() {
   const [selectedTournament, setSelectedTournament] = useState('');
   const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline>('slalom');
@@ -50,6 +85,15 @@ export default function TournamentSettlement() {
     jump: { male: [], female: [] },
   });
   const [settlementPreviews, setSettlementPreviews] = useState<SettlementPreview[]>([]);
+  
+  // AI parsing state
+  const [isAIParsing, setIsAIParsing] = useState(false);
+  const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
+  const [aiParsedResults, setAiParsedResults] = useState<AIParseResponse | null>(null);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [aiParseGender, setAiParseGender] = useState<'male' | 'female'>('male');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -71,7 +115,6 @@ export default function TournamentSettlement() {
     queryFn: async () => {
       if (!selectedTournament) return null;
 
-      // Fetch tournament with entries
       const { data: tournament, error: tournamentError } = await supabase
         .from('tournaments')
         .select('*, tournament_entries(*, athlete:athletes(*))')
@@ -79,7 +122,6 @@ export default function TournamentSettlement() {
 
       if (tournamentError) throw tournamentError;
 
-      // Fetch existing results
       const { data: existingResults, error: resultsError } = await supabase
         .from('athlete_results')
         .select('*, athlete:athletes(name)')
@@ -87,7 +129,6 @@ export default function TournamentSettlement() {
 
       if (resultsError) throw resultsError;
 
-      // Fetch markets and selections
       const { data: markets, error: marketsError } = await supabase
         .from('markets')
         .select('*, selections(*, athlete:athletes(name))')
@@ -103,14 +144,16 @@ export default function TournamentSettlement() {
           jump: { male: [], female: [] },
         };
 
-          for (const result of existingResults) {
+        for (const result of existingResults) {
           const discipline = result.discipline as Discipline;
           const genderKey = result.gender === 'male' ? 'male' : 'female';
           
           newResults[discipline][genderKey].push({
             athlete_id: result.athlete_id,
             score: result.score_raw?.toString() || '',
-            // Position will be auto-calculated
+            made_finals: result.made_finals ?? true,
+            missed_first_pass: result.missed_first_pass ?? false,
+            missed_gate: result.missed_gate ?? false,
           });
         }
 
@@ -122,7 +165,21 @@ export default function TournamentSettlement() {
     enabled: !!selectedTournament,
   });
 
-  // Get filtered athletes for a specific discipline and gender
+  // Get all athletes for a discipline/gender for matching
+  const getAllAthletes = (discipline: Discipline, gender: 'male' | 'female') => {
+    if (!tournamentData?.tournament?.tournament_entries) return [];
+    
+    const genderValue = gender === 'male' ? 'male' : 'female';
+    
+    return tournamentData.tournament.tournament_entries
+      .filter((entry: any) => 
+        entry.discipline === discipline &&
+        entry.athlete?.gender === genderValue
+      )
+      .map((entry: any) => entry.athlete)
+      .filter(Boolean);
+  };
+
   const getFilteredAthletes = (discipline: Discipline, gender: 'male' | 'female') => {
     if (!tournamentData?.tournament?.tournament_entries) return [];
     
@@ -140,18 +197,14 @@ export default function TournamentSettlement() {
       .filter(Boolean);
   };
 
-  // Auto-calculate positions based on scores
   const calculatePositions = (discipline: Discipline, gender: string, entries: ResultEntry[]): ResultEntry[] => {
-    // Filter entries with valid scores
     const validEntries = entries.filter(e => e.athlete_id && e.score);
     const invalidEntries = entries.filter(e => !e.athlete_id || !e.score);
 
-    // Sort by score (highest to lowest)
     const sorted = [...validEntries].sort((a, b) => 
       compareScores(b.score, a.score, discipline)
     );
 
-    // Assign positions
     const withPositions = sorted.map((entry, index) => ({
       ...entry,
       position: index + 1,
@@ -165,7 +218,7 @@ export default function TournamentSettlement() {
       ...prev,
       [discipline]: {
         ...prev[discipline],
-        [gender]: [...prev[discipline][gender], { athlete_id: '', score: '' }],
+        [gender]: [...prev[discipline][gender], emptyResultEntry()],
       },
     }));
   };
@@ -175,13 +228,12 @@ export default function TournamentSettlement() {
     gender: string,
     index: number,
     field: keyof ResultEntry,
-    value: string | number
+    value: string | number | boolean
   ) => {
     setResults(prev => {
       const updated = [...prev[discipline][gender]];
       updated[index] = { ...updated[index], [field]: value };
       
-      // Auto-calculate positions after update
       const withPositions = calculatePositions(discipline, gender, updated);
       
       return {
@@ -204,14 +256,142 @@ export default function TournamentSettlement() {
     }));
   };
 
+  // Fuzzy match athlete name to database
+  const matchAthleteByName = (name: string, athletes: any[]): { id: string; confidence: number } | null => {
+    if (!name || !athletes.length) return null;
+    
+    const normalizedName = name.toLowerCase().trim();
+    
+    // Exact match
+    const exactMatch = athletes.find(a => a.name.toLowerCase() === normalizedName);
+    if (exactMatch) return { id: exactMatch.id, confidence: 1 };
+    
+    // Partial match (name contains or is contained)
+    const partialMatch = athletes.find(a => 
+      a.name.toLowerCase().includes(normalizedName) || 
+      normalizedName.includes(a.name.toLowerCase())
+    );
+    if (partialMatch) return { id: partialMatch.id, confidence: 0.8 };
+    
+    // Word-based match
+    const nameWords = normalizedName.split(/\s+/);
+    for (const athlete of athletes) {
+      const athleteWords = athlete.name.toLowerCase().split(/\s+/);
+      const matchedWords = nameWords.filter(w => athleteWords.some(aw => aw.includes(w) || w.includes(aw)));
+      if (matchedWords.length >= Math.min(2, nameWords.length)) {
+        return { id: athlete.id, confidence: 0.6 };
+      }
+    }
+    
+    return null;
+  };
+
+  // Handle image upload
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      setUploadedImage(reader.result as string);
+      parseImageWithAI(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Parse image with AI
+  const parseImageWithAI = async (imageBase64: string) => {
+    if (!selectedTournament || !selectedDiscipline) {
+      toast({ title: 'Please select a tournament and discipline first', variant: 'destructive' });
+      return;
+    }
+
+    setIsAIParsing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('parse-tournament-scores', {
+        body: {
+          image_base64: imageBase64,
+          discipline: selectedDiscipline,
+          gender: aiParseGender,
+        },
+      });
+
+      if (error) throw error;
+
+      // Match athletes to database
+      const athletes = getAllAthletes(selectedDiscipline, aiParseGender);
+      const matchedAthletes = data.athletes.map((parsed: ParsedAthlete) => {
+        const match = matchAthleteByName(parsed.name, athletes);
+        return {
+          ...parsed,
+          matched_athlete_id: match?.id || undefined,
+          match_confidence: match?.confidence || 0,
+        };
+      });
+
+      setAiParsedResults({ ...data, athletes: matchedAthletes });
+      setAiPreviewOpen(true);
+      
+      toast({ 
+        title: 'Image parsed successfully',
+        description: `Found ${matchedAthletes.length} athletes with ${Math.round(data.confidence * 100)}% confidence`
+      });
+    } catch (err: any) {
+      console.error('AI parsing error:', err);
+      toast({ 
+        title: 'Failed to parse image', 
+        description: err.message || 'Unknown error',
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsAIParsing(false);
+    }
+  };
+
+  // Apply AI results to form
+  const applyAIResults = () => {
+    if (!aiParsedResults) return;
+
+    const newEntries: ResultEntry[] = aiParsedResults.athletes
+      .filter(a => a.matched_athlete_id)
+      .map(a => ({
+        athlete_id: a.matched_athlete_id!,
+        score: a.score,
+        made_finals: a.made_finals,
+        missed_first_pass: a.missed_first_pass,
+        missed_gate: a.missed_gate,
+        notes: a.notes,
+      }));
+
+    const withPositions = calculatePositions(selectedDiscipline, aiParseGender, newEntries);
+
+    setResults(prev => ({
+      ...prev,
+      [selectedDiscipline]: {
+        ...prev[selectedDiscipline],
+        [aiParseGender]: withPositions,
+      },
+    }));
+
+    setAiPreviewOpen(false);
+    setAiParsedResults(null);
+    setUploadedImage(null);
+    
+    toast({ 
+      title: 'Results applied',
+      description: `Added ${newEntries.length} entries. You can now review and modify them.`
+    });
+  };
+
   const validateResults = (): boolean => {
     let hasErrors = false;
 
-      for (const [discipline, genderData] of Object.entries(results)) {
+    for (const [discipline, genderData] of Object.entries(results)) {
       for (const [gender, entries] of Object.entries(genderData)) {
         for (const entry of entries) {
           if (entry.athlete_id && entry.score) {
-            // Validate slalom scores
             if (discipline === 'slalom' && !isValidSlalomScore(entry.score)) {
               toast({
                 title: 'Invalid slalom score',
@@ -245,15 +425,12 @@ export default function TournamentSettlement() {
 
       if (disciplineResults.length === 0) continue;
 
-      // Filter valid results (position is auto-calculated, so we only check for athlete and score)
       const validResults = disciplineResults.filter(r => r.athlete_id && r.score);
 
       let winningSelectionIds: string[] = [];
       let winningAthleteNames: string[] = [];
 
-      // Determine winners based on market type
       if (market.market_type === 'WINNER') {
-        // Find athlete in position 1
         const winner = validResults.find(r => r.position === 1);
         if (winner) {
           const selection = market.selections?.find(s => s.athlete_id === winner.athlete_id);
@@ -263,7 +440,6 @@ export default function TournamentSettlement() {
           }
         }
       } else if (market.market_type === 'PODIUM') {
-        // Find athletes in positions 1, 2, 3
         const podiumFinishers = validResults.filter(r => r.position >= 1 && r.position <= 3);
         for (const finisher of podiumFinishers) {
           const selection = market.selections?.find(s => s.athlete_id === finisher.athlete_id);
@@ -273,7 +449,6 @@ export default function TournamentSettlement() {
           }
         }
       } else if (market.market_type === 'HIGHEST_SCORE') {
-        // Sort by score using discipline-specific comparison
         const sortedByScore = [...validResults].sort((a, b) => 
           compareScores(b.score, a.score, discipline)
         );
@@ -288,7 +463,6 @@ export default function TournamentSettlement() {
         }
       }
 
-      // Fetch predictions to calculate totals
       const { data: predictions } = await supabase
         .from('predictions')
         .select('selection_id, staked_tokens, potential_payout')
@@ -325,7 +499,6 @@ export default function TournamentSettlement() {
         for (const [gender, entries] of Object.entries(genderData)) {
           for (const entry of entries) {
             if (entry.athlete_id && entry.score) {
-              // Normalize slalom scores
               const score = discipline === 'slalom'
                 ? normalizeSlalomScore(entry.score)
                 : entry.score;
@@ -335,21 +508,22 @@ export default function TournamentSettlement() {
                 athlete_id: entry.athlete_id,
                 discipline,
                 gender,
-                position: entry.position || 0, // Use auto-calculated position
+                position: entry.position || 0,
                 score_raw: score,
+                made_finals: entry.made_finals,
+                missed_first_pass: entry.missed_first_pass,
+                missed_gate: entry.missed_gate,
               });
             }
           }
         }
       }
 
-      // Delete existing results for this tournament first
       await supabase
         .from('athlete_results')
         .delete()
         .eq('tournament_id', selectedTournament);
 
-      // Insert new results
       const { error } = await supabase.from('athlete_results').insert(allResults);
       if (error) throw error;
     },
@@ -358,7 +532,6 @@ export default function TournamentSettlement() {
       toast({ title: 'Results saved successfully' });
       calculateSettlementPreview();
       
-      // Auto-trigger fantasy scoring
       try {
         console.log('Triggering fantasy scoring for tournament:', selectedTournament);
         const { data, error } = await supabase.functions.invoke('score-fantasy', {
@@ -390,7 +563,6 @@ export default function TournamentSettlement() {
 
   const settleMutation = useMutation({
     mutationFn: async () => {
-      // Build settlement payload
       const selections = settlementPreviews
         .flatMap(preview => 
           preview.winning_selection_ids.map(id => ({
@@ -400,7 +572,6 @@ export default function TournamentSettlement() {
         )
         .filter(s => s.selection_id);
 
-      // Mark all other selections as lost
       const allSelections = tournamentData?.markets.flatMap(m => m.selections || []) || [];
       const winningIds = selections.map(s => s.selection_id);
       const losingSelections = allSelections
@@ -420,7 +591,6 @@ export default function TournamentSettlement() {
       queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data'] });
       queryClient.invalidateQueries({ queryKey: ['settlement-tournaments'] });
       
-      // Show detailed results
       console.log('Settlement results:', data);
       
       if (data.settled_predictions === 0 && data.debug_info) {
@@ -436,9 +606,7 @@ export default function TournamentSettlement() {
         });
       }
       
-      // Auto-settle fantasy pots linked to this tournament
       try {
-        // Find fantasy pots linked to this tournament
         const { data: fantasyPots, error: potsError } = await supabase
           .from('fantasy_pots')
           .select('id, name, status')
@@ -494,8 +662,6 @@ export default function TournamentSettlement() {
     0
   );
 
-  // Not needed anymore - we'll settle all at once
-
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -528,6 +694,76 @@ export default function TournamentSettlement() {
 
         {selectedTournament && settlementPreviews.length === 0 && (
           <>
+            {/* AI Image Upload Section */}
+            <Card className="border-dashed border-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  AI Score Parser
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Upload an image of tournament results and let AI extract the scores automatically.
+                </p>
+                
+                <div className="flex gap-4 items-end">
+                  <div className="flex-1">
+                    <Label>Gender Category</Label>
+                    <Select value={aiParseGender} onValueChange={(v) => setAiParseGender(v as 'male' | 'female')}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Open Men</SelectItem>
+                        <SelectItem value="female">Open Women</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  
+                  <Button 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isAIParsing}
+                    className="flex items-center gap-2"
+                  >
+                    {isAIParsing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Parsing...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        Upload & Parse Image
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {uploadedImage && (
+                  <div className="relative w-full max-w-md">
+                    <img src={uploadedImage} alt="Uploaded results" className="rounded-lg border" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 bg-background/80"
+                      onClick={() => setUploadedImage(null)}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Enter Results by Discipline</CardTitle>
@@ -576,73 +812,131 @@ export default function TournamentSettlement() {
 
                             <div className="space-y-3">
                               {results[discipline]?.[gender]?.map((entry, index) => (
-                                <div key={index} className="grid grid-cols-12 gap-3 items-end">
-                                  <div className="col-span-5">
-                                    <Label>Athlete</Label>
-                                    <div className="relative">
-                                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                      <Select
-                                        value={entry.athlete_id}
-                                        onValueChange={(v) => updateResultRow(discipline, gender, index, 'athlete_id', v)}
+                                <div key={index} className="border rounded-lg p-4 space-y-3">
+                                  <div className="grid grid-cols-12 gap-3 items-end">
+                                    <div className="col-span-4">
+                                      <Label>Athlete</Label>
+                                      <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Select
+                                          value={entry.athlete_id}
+                                          onValueChange={(v) => updateResultRow(discipline, gender, index, 'athlete_id', v)}
+                                        >
+                                          <SelectTrigger className="pl-9">
+                                            <SelectValue placeholder="Select athlete" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <div className="p-2">
+                                              <Input
+                                                placeholder="Search athletes..."
+                                                value={athleteSearch[searchKey] || ''}
+                                                onChange={(e) => setAthleteSearch(prev => ({
+                                                  ...prev,
+                                                  [searchKey]: e.target.value
+                                                }))}
+                                                className="mb-2"
+                                              />
+                                            </div>
+                                            {athletes.map((athlete: any) => (
+                                              <SelectItem key={athlete.id} value={athlete.id}>
+                                                {athlete.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
+
+                                    <div className="col-span-2">
+                                      <Label>Position <span className="text-xs text-muted-foreground">(auto)</span></Label>
+                                      <div className="h-10 flex items-center justify-center bg-muted rounded-md border border-input">
+                                        <Badge variant={entry.position === 1 ? 'default' : entry.position && entry.position <= 3 ? 'secondary' : 'outline'}>
+                                          {entry.position ? `#${entry.position}` : '-'}
+                                        </Badge>
+                                      </div>
+                                    </div>
+
+                                    <div className="col-span-3">
+                                      <Label>
+                                        Score 
+                                        {discipline === 'slalom' && <span className="text-xs text-muted-foreground ml-1">(e.g., 2@43)</span>}
+                                      </Label>
+                                      <Input
+                                        value={entry.score}
+                                        onChange={(e) => updateResultRow(discipline, gender, index, 'score', e.target.value)}
+                                        placeholder={
+                                          discipline === 'slalom' ? '2@43' : 
+                                          discipline === 'trick' ? '10500' : 
+                                          '67.2'
+                                        }
+                                      />
+                                    </div>
+
+                                    <div className="col-span-2"></div>
+
+                                    <div className="col-span-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => removeResultRow(discipline, gender, index)}
                                       >
-                                        <SelectTrigger className="pl-9">
-                                          <SelectValue placeholder="Select athlete" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <div className="p-2">
-                                            <Input
-                                              placeholder="Search athletes..."
-                                              value={athleteSearch[searchKey] || ''}
-                                              onChange={(e) => setAthleteSearch(prev => ({
-                                                ...prev,
-                                                [searchKey]: e.target.value
-                                              }))}
-                                              className="mb-2"
-                                            />
-                                          </div>
-                                          {athletes.map((athlete: any) => (
-                                            <SelectItem key={athlete.id} value={athlete.id}>
-                                              {athlete.name}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
+                                        <X className="w-4 h-4" />
+                                      </Button>
                                     </div>
                                   </div>
 
-                                  <div className="col-span-2">
-                                    <Label>Position <span className="text-xs text-muted-foreground">(auto)</span></Label>
-                                    <div className="h-10 flex items-center justify-center bg-muted rounded-md border border-input">
-                                      <Badge variant={entry.position === 1 ? 'default' : entry.position && entry.position <= 3 ? 'secondary' : 'outline'}>
-                                        {entry.position ? `#${entry.position}` : '-'}
+                                  {/* Performance Flags */}
+                                  <div className="flex items-center gap-6 pt-2 border-t">
+                                    <div className="flex items-center gap-2">
+                                      <Switch
+                                        id={`finals-${index}`}
+                                        checked={entry.made_finals}
+                                        onCheckedChange={(v) => updateResultRow(discipline, gender, index, 'made_finals', v)}
+                                      />
+                                      <Label htmlFor={`finals-${index}`} className="text-sm cursor-pointer">
+                                        Made Finals
+                                      </Label>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2">
+                                      <Switch
+                                        id={`firstpass-${index}`}
+                                        checked={entry.missed_first_pass}
+                                        onCheckedChange={(v) => updateResultRow(discipline, gender, index, 'missed_first_pass', v)}
+                                      />
+                                      <Label htmlFor={`firstpass-${index}`} className="text-sm cursor-pointer text-destructive">
+                                        Missed 1st Pass
+                                      </Label>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2">
+                                      <Switch
+                                        id={`gate-${index}`}
+                                        checked={entry.missed_gate}
+                                        onCheckedChange={(v) => updateResultRow(discipline, gender, index, 'missed_gate', v)}
+                                      />
+                                      <Label htmlFor={`gate-${index}`} className="text-sm cursor-pointer text-destructive">
+                                        Missed Gate
+                                      </Label>
+                                    </div>
+
+                                    {/* Show warning badges */}
+                                    {!entry.made_finals && (
+                                      <Badge variant="outline" className="text-warning border-warning">
+                                        <AlertTriangle className="w-3 h-3 mr-1" />
+                                        No Finals
                                       </Badge>
-                                    </div>
-                                  </div>
-
-                                  <div className="col-span-4">
-                                    <Label>
-                                      Score 
-                                      {discipline === 'slalom' && <span className="text-xs text-muted-foreground ml-1">(e.g., 2@43)</span>}
-                                    </Label>
-                                    <Input
-                                      value={entry.score}
-                                      onChange={(e) => updateResultRow(discipline, gender, index, 'score', e.target.value)}
-                                      placeholder={
-                                        discipline === 'slalom' ? '2@43' : 
-                                        discipline === 'trick' ? '10500' : 
-                                        '67.2'
-                                      }
-                                    />
-                                  </div>
-
-                                  <div className="col-span-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => removeResultRow(discipline, gender, index)}
-                                    >
-                                      ×
-                                    </Button>
+                                    )}
+                                    {entry.missed_first_pass && (
+                                      <Badge variant="destructive">
+                                        0 First Pass
+                                      </Badge>
+                                    )}
+                                    {entry.missed_gate && (
+                                      <Badge variant="destructive">
+                                        Gate Miss
+                                      </Badge>
+                                    )}
                                   </div>
                                 </div>
                               ))}
@@ -764,6 +1058,91 @@ export default function TournamentSettlement() {
         )}
       </div>
 
+      {/* AI Preview Dialog */}
+      <Dialog open={aiPreviewOpen} onOpenChange={setAiPreviewOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              AI Parsed Results
+            </DialogTitle>
+            <DialogDescription>
+              Review the extracted results below. Athletes highlighted in yellow need manual matching.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-[50vh]">
+            {aiParsedResults && (
+              <div className="space-y-4">
+                <div className="flex gap-4 text-sm">
+                  <Badge variant="outline">Discipline: {aiParsedResults.discipline || selectedDiscipline}</Badge>
+                  <Badge variant="outline">Gender: {aiParsedResults.gender || aiParseGender}</Badge>
+                  <Badge variant={aiParsedResults.confidence > 0.8 ? 'default' : 'secondary'}>
+                    Confidence: {Math.round(aiParsedResults.confidence * 100)}%
+                  </Badge>
+                </div>
+
+                <div className="space-y-2">
+                  {aiParsedResults.athletes.map((athlete, index) => (
+                    <div 
+                      key={index}
+                      className={`p-3 rounded-lg border ${
+                        athlete.matched_athlete_id 
+                          ? athlete.match_confidence === 1 ? 'bg-success/10 border-success/30' 
+                            : 'bg-warning/10 border-warning/30'
+                          : 'bg-destructive/10 border-destructive/30'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-medium">{athlete.name}</span>
+                          <span className="text-muted-foreground ml-2">Score: {athlete.score}</span>
+                          {athlete.position && <Badge variant="outline" className="ml-2">#{athlete.position}</Badge>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {athlete.matched_athlete_id ? (
+                            <Badge variant="outline" className="text-success">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Matched ({Math.round((athlete.match_confidence || 0) * 100)}%)
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive">
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              No Match
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-3 mt-2 text-xs">
+                        {!athlete.made_finals && <Badge variant="outline">No Finals</Badge>}
+                        {athlete.missed_first_pass && <Badge variant="destructive">Missed 1st Pass</Badge>}
+                        {athlete.missed_gate && <Badge variant="destructive">Missed Gate</Badge>}
+                        {athlete.notes && <span className="text-muted-foreground">{athlete.notes}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {aiParsedResults.raw_text && (
+                  <div className="text-xs text-muted-foreground mt-4 p-2 bg-muted rounded">
+                    <strong>Raw extracted text:</strong> {aiParsedResults.raw_text}
+                  </div>
+                )}
+              </div>
+            )}
+          </ScrollArea>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAiPreviewOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={applyAIResults}>
+              Apply {aiParsedResults?.athletes.filter(a => a.matched_athlete_id).length || 0} Matched Results
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
