@@ -1,4 +1,4 @@
-import { Home, Trophy, Wallet, Gift, Target } from 'lucide-react';
+import { Home, Trophy, Wallet, Gift, Crown } from 'lucide-react';
 import { NavLink } from './NavLink';
 
 export const BottomNav = () => {
@@ -25,12 +25,12 @@ export const BottomNav = () => {
           </NavLink>
           
           <NavLink
-            to="/predictions"
+            to="/fantasy"
             className="flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all text-muted-foreground"
             activeClassName="!text-primary"
           >
-            <Target className="w-5 h-5" />
-            <span className="text-xs font-medium">Bets</span>
+            <Crown className="w-5 h-5" />
+            <span className="text-xs font-medium">Fantasy</span>
           </NavLink>
           
           <NavLink
