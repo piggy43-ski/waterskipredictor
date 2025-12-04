@@ -8,6 +8,7 @@ const corsHeaders = {
 interface ParsedAthlete {
   name: string;
   score: string;
+  gender: 'male' | 'female';
   position?: number;
   made_finals: boolean;
   missed_first_pass: boolean;
@@ -18,10 +19,49 @@ interface ParsedAthlete {
 interface ParseResponse {
   athletes: ParsedAthlete[];
   discipline?: string;
-  gender?: string;
   confidence: number;
   raw_text?: string;
 }
+
+// Validate and correct slalom flags based on score analysis
+const validateSlalomFlags = (athlete: ParsedAthlete, discipline: string): ParsedAthlete => {
+  if (discipline !== 'slalom' || !athlete.score) return athlete;
+  
+  const parts = athlete.score.split('@');
+  if (parts.length !== 2) return athlete;
+  
+  const buoys = parseFloat(parts[0]);
+  const rope = parseFloat(parts[1]);
+  
+  if (isNaN(buoys) || isNaN(rope)) return athlete;
+  
+  // Longest ropes in slalom (18.25m, 16m are typical starting ropes)
+  const isLongestRope = rope >= 16;
+  
+  // MISSED FIRST PASS DETECTION:
+  // - "0@18.25" = missed entry gate on first pass
+  // - "4@18.25" (any buoys < 6 at longest rope as FINAL score) = fell during first pass
+  if (isLongestRope && buoys < 6) {
+    athlete.missed_first_pass = true;
+    if (buoys === 0) {
+      athlete.notes = (athlete.notes ? athlete.notes + ' | ' : '') + 'Missed entry gate on first pass';
+    } else {
+      athlete.notes = (athlete.notes ? athlete.notes + ' | ' : '') + 'Fell during first pass';
+    }
+  }
+  
+  // MISSED GATE DETECTION for mid-run:
+  // - "0@[rope]" where rope is NOT the longest = missed entrance gates on that pass
+  if (buoys === 0 && !isLongestRope) {
+    athlete.missed_gate = true;
+    athlete.notes = (athlete.notes ? athlete.notes + ' | ' : '') + `Missed entrance gate at ${rope}m`;
+  }
+  
+  // "6@[rope]" where rope is not shortest (9.5m) could indicate exit gate miss
+  // But this is harder to detect without knowing full run context
+  
+  return athlete;
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -29,7 +69,7 @@ serve(async (req) => {
   }
 
   try {
-    const { image_base64, image_url, webpage_url, discipline, gender, is_pdf } = await req.json();
+    const { image_base64, image_url, webpage_url, discipline, is_pdf } = await req.json();
     
     if (!image_base64 && !image_url && !webpage_url) {
       return new Response(
@@ -50,25 +90,43 @@ serve(async (req) => {
     const systemPrompt = `You are an expert at reading waterski tournament results from images or webpage content. 
 Your task is to extract athlete results from the content provided.
 
-IMPORTANT RULES:
-1. For SLALOM scores: Use format "buoys@rope" (e.g., "2@43", "3.5@41", "4@39"). The @ separates buoys from rope length.
-2. For TRICK scores: Just the numeric points (e.g., "10850", "9200")
-3. For JUMP scores: Distance in meters (e.g., "68.4", "55.2")
+CRITICAL: DETECT GENDER FROM DOCUMENT
+- Look for section headers: "Men's Slalom", "Women's Trick", "Open Men", "Open Women", "Male", "Female"
+- Results pages often have separate tables/sections for each gender
+- ALWAYS assign gender to each athlete based on which section they appear in
+- If a single document has BOTH genders, return ALL athletes with their respective gender
 
-PERFORMANCE INDICATORS to look for:
-- "OPT" or "Opt" = athlete opted out / didn't make finals (made_finals: false)
-- "PRELIM" or just preliminary score = didn't make finals (made_finals: false)
-- "FINAL" or finals score present = made finals (made_finals: true)
-- "0" as first pass or "FALL" on first = missed_first_pass: true
-- "X" or crossed out score = missed_gate: true
-- "DNF" = Did Not Finish, missed_gate: true
-- "DNS" = Did Not Start, made_finals: false
+DISCIPLINE DETECTION:
+- Slalom: scores like "2@10.25", "3.5@11.25", buoys at rope length
+- Trick: numeric points (e.g., "10850", "9200")  
+- Jump: distance in meters (e.g., "68.4", "55.2")
 
-Extract ALL athletes you can see, even if some data is unclear.
-If you're unsure about something, add it to the notes field.`;
+SLALOM SCORING RULES (CRITICAL):
+- Format: "buoys@rope" where rope is in meters
+- Standard rope lengths (longest to shortest): 18.25, 16, 14.25, 13, 12, 11.25, 10.75, 10.25, 9.75, 9.5
+- Each pass has 6 buoys max. Completing 6 buoys = advance to shorter rope
 
-    const userPromptBase = `${discipline ? `Discipline: ${discipline}` : 'Detect the discipline from the content.'}
-${gender ? `Gender category: ${gender}` : 'Detect the gender category from the content.'}
+MISSED FIRST PASS DETECTION (set missed_first_pass: true):
+- Score is "0@18.25" or "0@[longest rope]" = missed entry gate on first pass
+- Score like "4@18.25" (any buoys < 6 at longest rope 18.25 or 16 as FINAL score) = fell during first pass
+- Basically: if their FINAL score is at the longest rope length (18.25m or 16m), they had issues on first pass
+
+MISSED GATE DETECTION (set missed_gate: true):
+- "0@[rope]" in middle of run (not first pass) = missed entrance gates on that pass
+- "6@[rope]" as FINAL score where the rope is not 9.5m = missed exit gate (completed 6 buoys but couldn't make the turn)
+
+OTHER PERFORMANCE INDICATORS:
+- "OPT" or "Opt" = opted out / didn't make finals (made_finals: false)
+- "PRELIM" = preliminary score only (made_finals: false)
+- "FINAL" = made finals (made_finals: true)
+- "DNF" = Did Not Finish (missed_gate: true)
+- "DNS" = Did Not Start (made_finals: false)
+
+Extract ALL athletes you can see. If unsure about something, add it to the notes field.`;
+
+    const userPromptBase = `${discipline ? `Discipline hint: ${discipline}` : 'Detect the discipline from the content.'}
+
+IMPORTANT: Detect gender from document sections (Men's/Women's headers) and assign to each athlete.
 
 Return a JSON object with this exact structure:
 {
@@ -76,6 +134,7 @@ Return a JSON object with this exact structure:
     {
       "name": "Athlete Name",
       "score": "score in proper format",
+      "gender": "male or female based on document section",
       "position": 1,
       "made_finals": true,
       "missed_first_pass": false,
@@ -84,10 +143,11 @@ Return a JSON object with this exact structure:
     }
   ],
   "discipline": "slalom|trick|jump",
-  "gender": "male|female",
   "confidence": 0.95,
   "raw_text": "any raw text you extracted that might be useful"
 }
+
+CRITICAL: Each athlete MUST have a "gender" field set to "male" or "female".
 
 Return ONLY the JSON object, no other text.`;
 
@@ -276,18 +336,33 @@ ${userPromptBase}`
       parsed.athletes = [];
     }
 
-    // Ensure all athletes have required fields
-    parsed.athletes = parsed.athletes.map((athlete, index) => ({
-      name: athlete.name || `Unknown ${index + 1}`,
-      score: athlete.score || '',
-      position: athlete.position || index + 1,
-      made_finals: athlete.made_finals ?? true,
-      missed_first_pass: athlete.missed_first_pass ?? false,
-      missed_gate: athlete.missed_gate ?? false,
-      notes: athlete.notes || undefined,
-    }));
+    const detectedDiscipline = parsed.discipline || discipline || 'slalom';
 
-    console.log('Parsed results:', JSON.stringify(parsed, null, 2));
+    // Ensure all athletes have required fields and validate slalom flags
+    parsed.athletes = parsed.athletes.map((athlete, index) => {
+      let processedAthlete: ParsedAthlete = {
+        name: athlete.name || `Unknown ${index + 1}`,
+        score: athlete.score || '',
+        gender: athlete.gender === 'female' ? 'female' : 'male', // Default to male if not specified
+        position: athlete.position || index + 1,
+        made_finals: athlete.made_finals ?? true,
+        missed_first_pass: athlete.missed_first_pass ?? false,
+        missed_gate: athlete.missed_gate ?? false,
+        notes: athlete.notes || undefined,
+      };
+      
+      // Post-process slalom scores to validate/correct flags
+      processedAthlete = validateSlalomFlags(processedAthlete, detectedDiscipline);
+      
+      return processedAthlete;
+    });
+
+    console.log('Parsed results:', JSON.stringify({
+      athleteCount: parsed.athletes.length,
+      maleCount: parsed.athletes.filter(a => a.gender === 'male').length,
+      femaleCount: parsed.athletes.filter(a => a.gender === 'female').length,
+      discipline: detectedDiscipline,
+    }));
 
     return new Response(
       JSON.stringify(parsed),

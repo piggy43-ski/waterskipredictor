@@ -51,6 +51,7 @@ type SettlementPreview = {
 type ParsedAthlete = {
   name: string;
   score: string;
+  gender: 'male' | 'female';
   position?: number;
   made_finals: boolean;
   missed_first_pass: boolean;
@@ -63,7 +64,6 @@ type ParsedAthlete = {
 type AIParseResponse = {
   athletes: ParsedAthlete[];
   discipline?: string;
-  gender?: string;
   confidence: number;
   raw_text?: string;
   source_file?: string;
@@ -93,7 +93,6 @@ export default function TournamentSettlement() {
   const [isAIParsing, setIsAIParsing] = useState(false);
   const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
   const [allParsedResults, setAllParsedResults] = useState<AIParseResponse[]>([]);
-  const [aiParseGender, setAiParseGender] = useState<'male' | 'female'>('male');
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -299,7 +298,10 @@ export default function TournamentSettlement() {
 
     setIsAIParsing(true);
     const results: AIParseResponse[] = [];
-    const athletes = getAllAthletes(selectedDiscipline, aiParseGender);
+    
+    // Get all athletes for both genders for matching
+    const maleAthletes = getAllAthletes(selectedDiscipline, 'male');
+    const femaleAthletes = getAllAthletes(selectedDiscipline, 'female');
 
     for (const file of pendingFiles) {
       // Update file status to parsing
@@ -308,10 +310,9 @@ export default function TournamentSettlement() {
       );
 
       try {
-        // Build request body based on file type
+        // Build request body based on file type - no gender passed, AI detects it
         const requestBody: Record<string, any> = {
           discipline: selectedDiscipline,
-          gender: aiParseGender,
         };
 
         if (file.type === 'url' && file.url) {
@@ -335,9 +336,10 @@ export default function TournamentSettlement() {
 
         if (error) throw error;
 
-        // Match athletes to database
+        // Match athletes to database based on their detected gender
         const matchedAthletes = data.athletes.map((parsed: ParsedAthlete) => {
-          const match = matchAthleteByName(parsed.name, athletes);
+          const athletePool = parsed.gender === 'female' ? femaleAthletes : maleAthletes;
+          const match = matchAthleteByName(parsed.name, athletePool);
           return {
             ...parsed,
             matched_athlete_id: match?.id || undefined,
@@ -368,12 +370,14 @@ export default function TournamentSettlement() {
       setAiPreviewOpen(true);
       
       const totalAthletes = results.reduce((sum, r) => sum + r.athletes.length, 0);
+      const maleCount = results.reduce((sum, r) => sum + r.athletes.filter(a => a.gender === 'male').length, 0);
+      const femaleCount = results.reduce((sum, r) => sum + r.athletes.filter(a => a.gender === 'female').length, 0);
       toast({ 
         title: 'Parsing complete',
-        description: `Extracted ${totalAthletes} athletes from ${results.length} file(s)`
+        description: `Extracted ${totalAthletes} athletes (${maleCount} male, ${femaleCount} female) from ${results.length} file(s)`
       });
     }
-  }, [selectedTournament, selectedDiscipline, uploadedFiles, aiParseGender, toast]);
+  }, [selectedTournament, selectedDiscipline, uploadedFiles, toast]);
 
   // Apply all AI results to form
   const applyAIResults = () => {
@@ -382,30 +386,40 @@ export default function TournamentSettlement() {
     // Combine all athletes from all parsed results
     const allAthletes = allParsedResults.flatMap(r => r.athletes);
     
-    // Dedupe by athlete_id (keep first occurrence)
-    const seenIds = new Set<string>();
-    const newEntries: ResultEntry[] = allAthletes
-      .filter(a => {
-        if (!a.matched_athlete_id || seenIds.has(a.matched_athlete_id)) return false;
-        seenIds.add(a.matched_athlete_id);
-        return true;
-      })
-      .map(a => ({
-        athlete_id: a.matched_athlete_id!,
-        score: a.score,
-        made_finals: a.made_finals,
-        missed_first_pass: a.missed_first_pass,
-        missed_gate: a.missed_gate,
-        notes: a.notes,
-      }));
+    // Split by gender
+    const maleAthletes = allAthletes.filter(a => a.gender === 'male');
+    const femaleAthletes = allAthletes.filter(a => a.gender === 'female');
+    
+    // Dedupe by athlete_id for each gender (keep first occurrence)
+    const createEntries = (athletes: ParsedAthlete[]): ResultEntry[] => {
+      const seenIds = new Set<string>();
+      return athletes
+        .filter(a => {
+          if (!a.matched_athlete_id || seenIds.has(a.matched_athlete_id)) return false;
+          seenIds.add(a.matched_athlete_id);
+          return true;
+        })
+        .map(a => ({
+          athlete_id: a.matched_athlete_id!,
+          score: a.score,
+          made_finals: a.made_finals,
+          missed_first_pass: a.missed_first_pass,
+          missed_gate: a.missed_gate,
+          notes: a.notes,
+        }));
+    };
 
-    const withPositions = calculatePositions(selectedDiscipline, aiParseGender, newEntries);
+    const maleEntries = createEntries(maleAthletes);
+    const femaleEntries = createEntries(femaleAthletes);
+
+    const maleWithPositions = calculatePositions(selectedDiscipline, 'male', maleEntries);
+    const femaleWithPositions = calculatePositions(selectedDiscipline, 'female', femaleEntries);
 
     setResults(prev => ({
       ...prev,
       [selectedDiscipline]: {
-        ...prev[selectedDiscipline],
-        [aiParseGender]: withPositions,
+        male: maleWithPositions.length > 0 ? maleWithPositions : prev[selectedDiscipline].male,
+        female: femaleWithPositions.length > 0 ? femaleWithPositions : prev[selectedDiscipline].female,
       },
     }));
 
@@ -415,7 +429,7 @@ export default function TournamentSettlement() {
     
     toast({ 
       title: 'Results applied',
-      description: `Added ${newEntries.length} entries. You can now review and modify them.`
+      description: `Added ${maleEntries.length} male and ${femaleEntries.length} female entries. You can now review and modify them.`
     });
   };
 
@@ -741,20 +755,13 @@ export default function TournamentSettlement() {
                   Upload images or PDFs of tournament results. You can drag & drop multiple files, paste from clipboard, or click to browse.
                 </p>
                 
-                <div className="flex gap-4 items-end mb-4">
-                  <div className="flex-1 max-w-xs">
-                    <Label>Gender Category</Label>
-                    <Select value={aiParseGender} onValueChange={(v) => setAiParseGender(v as 'male' | 'female')}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="male">Open Men</SelectItem>
-                        <SelectItem value="female">Open Women</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                <Alert className="mb-4">
+                  <Sparkles className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Auto-detection enabled:</strong> Gender and discipline are automatically detected from the document content. 
+                    Upload files with both men's and women's results - they'll be matched correctly.
+                  </AlertDescription>
+                </Alert>
 
                 <BatchImageUploader
                   files={uploadedFiles}
@@ -1089,7 +1096,12 @@ export default function TournamentSettlement() {
                     
                     <div className="flex gap-4 text-sm">
                       <Badge variant="outline">Discipline: {result.discipline || selectedDiscipline}</Badge>
-                      <Badge variant="outline">Gender: {result.gender || aiParseGender}</Badge>
+                      <Badge variant="outline" className="bg-blue-500/10 text-blue-700">
+                        {result.athletes.filter(a => a.gender === 'male').length} Male
+                      </Badge>
+                      <Badge variant="outline" className="bg-pink-500/10 text-pink-700">
+                        {result.athletes.filter(a => a.gender === 'female').length} Female
+                      </Badge>
                     </div>
 
                     <div className="space-y-2">
@@ -1104,10 +1116,16 @@ export default function TournamentSettlement() {
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <div>
+                            <div className="flex items-center gap-2">
+                              <Badge 
+                                variant="outline" 
+                                className={athlete.gender === 'female' ? 'bg-pink-500/20 text-pink-700' : 'bg-blue-500/20 text-blue-700'}
+                              >
+                                {athlete.gender === 'female' ? '♀' : '♂'}
+                              </Badge>
                               <span className="font-medium">{athlete.name}</span>
-                              <span className="text-muted-foreground ml-2">Score: {athlete.score}</span>
-                              {athlete.position && <Badge variant="outline" className="ml-2">#{athlete.position}</Badge>}
+                              <span className="text-muted-foreground">Score: {athlete.score}</span>
+                              {athlete.position && <Badge variant="outline">#{athlete.position}</Badge>}
                             </div>
                             <div className="flex items-center gap-2">
                               {athlete.matched_athlete_id ? (
@@ -1126,7 +1144,7 @@ export default function TournamentSettlement() {
                           
                           <div className="flex gap-3 mt-2 text-xs">
                             {!athlete.made_finals && <Badge variant="outline">No Finals</Badge>}
-                            {athlete.missed_first_pass && <Badge variant="destructive">Missed 1st Pass</Badge>}
+                            {athlete.missed_first_pass && <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-700">Missed 1st Pass</Badge>}
                             {athlete.missed_gate && <Badge variant="destructive">Missed Gate</Badge>}
                             {athlete.notes && <span className="text-muted-foreground">{athlete.notes}</span>}
                           </div>
