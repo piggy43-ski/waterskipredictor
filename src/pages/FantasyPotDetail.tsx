@@ -12,7 +12,7 @@ import { Trophy, Users, Coins, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { FANTASY_TEAM_BUDGET, FANTASY_ROSTER_LIMITS, getTotalRosterSize } from '@/utils/fantasyConfig';
+import { FANTASY_TEAM_BUDGET, FANTASY_ROSTER_LIMITS_BY_GENDER, getTotalRosterSize } from '@/utils/fantasyConfig';
 
 interface FantasyPot {
   id: string;
@@ -39,6 +39,7 @@ interface Athlete {
   name: string;
   country: string;
   country_code: string | null;
+  gender: string;
   disciplines: string[];
   fantasy_price_slalom: number | null;
   fantasy_price_trick: number | null;
@@ -140,7 +141,7 @@ const FantasyPotDetail = () => {
       
       const { data: athletesData, error: athletesError } = await supabase
         .from('athletes')
-        .select('id, name, country, country_code, disciplines, fantasy_price_slalom, fantasy_price_trick, fantasy_price_jump, current_rank_slalom, current_rank_trick, current_rank_jump')
+        .select('id, name, country, country_code, gender, disciplines, fantasy_price_slalom, fantasy_price_trick, fantasy_price_jump, current_rank_slalom, current_rank_trick, current_rank_jump')
         .order('name');
 
       if (athletesError) throw athletesError;
@@ -171,14 +172,20 @@ const FantasyPotDetail = () => {
         ? (athlete.fantasy_price_trick || 5000)
         : (athlete.fantasy_price_jump || 5000);
 
-    // Check if already in roster for this discipline
-    const existingInDiscipline = roster.filter(r => r.discipline === discipline);
-    const limit = FANTASY_ROSTER_LIMITS[discipline];
+    // Normalize gender
+    const gender = athlete.gender.toLowerCase() === 'male' || athlete.gender.toLowerCase() === 'm' ? 'men' : 'women';
     
-    if (existingInDiscipline.length >= limit) {
+    // Check if already in roster for this discipline and gender
+    const existingInDisciplineGender = roster.filter(r => 
+      r.discipline === discipline && 
+      (r.athlete.gender.toLowerCase() === 'male' || r.athlete.gender.toLowerCase() === 'm' ? 'men' : 'women') === gender
+    );
+    const limit = FANTASY_ROSTER_LIMITS_BY_GENDER[discipline][gender];
+    
+    if (existingInDisciplineGender.length >= limit) {
       toast({
         title: 'Roster Full',
-        description: `Maximum ${limit} athletes for ${discipline}`,
+        description: `Maximum ${limit} ${gender} athletes for ${discipline}`,
         variant: 'destructive'
       });
       return;

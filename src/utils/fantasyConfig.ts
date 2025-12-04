@@ -4,12 +4,35 @@
 // Team budget in tokens
 export const FANTASY_TEAM_BUDGET = 100_000;
 
-// Maximum athletes per discipline
+// Maximum athletes per discipline (legacy - total per discipline)
 export const FANTASY_ROSTER_LIMITS = {
-  slalom: 6,
-  trick: 4,
-  jump: 5,
+  slalom: 12,  // 6 men + 6 women
+  trick: 8,    // 4 men + 4 women
+  jump: 10,    // 5 men + 5 women
 } as const;
+
+// Roster limits by gender and discipline
+export const FANTASY_ROSTER_LIMITS_BY_GENDER = {
+  slalom: { men: 6, women: 6 },
+  trick: { men: 4, women: 4 },
+  jump: { men: 5, women: 5 },
+} as const;
+
+// Helper to get required count by discipline and gender
+export function getGenderRosterLimit(discipline: 'slalom' | 'trick' | 'jump', gender: 'men' | 'women'): number {
+  return FANTASY_ROSTER_LIMITS_BY_GENDER[discipline][gender];
+}
+
+// Get total required roster size
+export function getTotalRequiredRoster(): { men: number; women: number; total: number } {
+  const men = FANTASY_ROSTER_LIMITS_BY_GENDER.slalom.men + 
+              FANTASY_ROSTER_LIMITS_BY_GENDER.trick.men + 
+              FANTASY_ROSTER_LIMITS_BY_GENDER.jump.men;
+  const women = FANTASY_ROSTER_LIMITS_BY_GENDER.slalom.women + 
+                FANTASY_ROSTER_LIMITS_BY_GENDER.trick.women + 
+                FANTASY_ROSTER_LIMITS_BY_GENDER.jump.women;
+  return { men, women, total: men + women };
+}
 
 // Season tier entry fees (in tokens)
 export const SEASON_TIERS = {

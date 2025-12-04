@@ -11,7 +11,7 @@ import { Save, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { FANTASY_ROSTER_LIMITS, getTotalRosterSize } from '@/utils/fantasyConfig';
+import { FANTASY_ROSTER_LIMITS_BY_GENDER, getTotalRosterSize } from '@/utils/fantasyConfig';
 import { isFantasyPotLocked, type TournamentInfo } from '@/utils/fantasyLockRules';
 
 interface Athlete {
@@ -19,6 +19,7 @@ interface Athlete {
   name: string;
   country: string;
   country_code: string | null;
+  gender: string;
   disciplines: string[];
   fantasy_price_slalom: number | null;
   fantasy_price_trick: number | null;
@@ -123,8 +124,18 @@ const FantasyTeamEdit = () => {
 
   const addToRoster = (athlete: Athlete, discipline: 'slalom' | 'trick' | 'jump') => {
     const price = discipline === 'slalom' ? (athlete.fantasy_price_slalom || 5000) : discipline === 'trick' ? (athlete.fantasy_price_trick || 5000) : (athlete.fantasy_price_jump || 5000);
-    if (roster.filter(r => r.discipline === discipline).length >= FANTASY_ROSTER_LIMITS[discipline]) {
-      toast({ title: 'Roster Full', description: `Max ${FANTASY_ROSTER_LIMITS[discipline]} for ${discipline}`, variant: 'destructive' });
+    
+    // Normalize gender
+    const gender = athlete.gender.toLowerCase() === 'male' || athlete.gender.toLowerCase() === 'm' ? 'men' : 'women';
+    
+    const existingInDisciplineGender = roster.filter(r => 
+      r.discipline === discipline && 
+      (r.athlete.gender.toLowerCase() === 'male' || r.athlete.gender.toLowerCase() === 'm' ? 'men' : 'women') === gender
+    );
+    const limit = FANTASY_ROSTER_LIMITS_BY_GENDER[discipline][gender];
+    
+    if (existingInDisciplineGender.length >= limit) {
+      toast({ title: 'Roster Full', description: `Max ${limit} ${gender} for ${discipline}`, variant: 'destructive' });
       return;
     }
     if (roster.some(r => r.athlete.id === athlete.id && r.discipline === discipline)) return;
