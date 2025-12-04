@@ -15,7 +15,7 @@ export const PageHeader = ({
   action
 }: PageHeaderProps) => {
   const navigate = useNavigate();
-  return <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-lg border-b border-border">
+  return <header className="sticky top-0 z-40 glass-header border-b border-border/30">
       <div className="max-w-lg mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 flex-1">
