@@ -109,9 +109,24 @@ const FantasyTeamEdit = () => {
       }));
       setRoster(currentRoster);
 
-      // Fetch all athletes
-      const { data: athletesData } = await supabase.from('athletes').select('*').order('name');
+      // Fetch athletes - only from tournament if linked
       const disciplines = potData.discipline_scope || ['slalom', 'trick', 'jump'];
+      
+      let athleteIds: string[] = [];
+      if (potData.tournament_id) {
+        const { data: entriesData } = await supabase
+          .from('tournament_entries')
+          .select('athlete_id')
+          .eq('tournament_id', potData.tournament_id);
+        athleteIds = [...new Set((entriesData || []).map(e => e.athlete_id))];
+      }
+      
+      let athleteQuery = supabase.from('athletes').select('*').order('name');
+      if (athleteIds.length > 0) {
+        athleteQuery = athleteQuery.in('id', athleteIds);
+      }
+      
+      const { data: athletesData } = await athleteQuery;
       setAthletes((athletesData || []).filter(a => a.disciplines.some((d: string) => disciplines.includes(d))));
 
     } catch (error) {
