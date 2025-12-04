@@ -103,7 +103,7 @@ export default function AdminFantasyPots() {
       const pot = {
         name: formData.get('name') as string,
         pot_type: formData.get('pot_type') as string,
-        tournament_id: formData.get('tournament_id') as string || null,
+        tournament_id: (formData.get('tournament_id') as string) === 'none' ? null : formData.get('tournament_id') as string,
         entry_fee_tokens: parseInt(formData.get('entry_fee_tokens') as string) || 1000,
         max_entrants: parseInt(formData.get('max_entrants') as string) || null,
         team_budget: parseInt(formData.get('team_budget') as string) || FANTASY_TEAM_BUDGET,
@@ -182,7 +182,7 @@ export default function AdminFantasyPots() {
     const updates = {
       name: formData.get('name') as string,
       pot_type: formData.get('pot_type') as string,
-      tournament_id: formData.get('tournament_id') as string || null,
+      tournament_id: (formData.get('tournament_id') as string) === 'none' ? null : formData.get('tournament_id') as string,
       entry_fee_tokens: parseInt(formData.get('entry_fee_tokens') as string) || 1000,
       max_entrants: parseInt(formData.get('max_entrants') as string) || null,
       team_budget: parseInt(formData.get('team_budget') as string) || FANTASY_TEAM_BUDGET,
@@ -267,12 +267,12 @@ export default function AdminFantasyPots() {
 
                 <div>
                   <Label htmlFor="tournament_id">Linked Tournament (Optional)</Label>
-                  <Select name="tournament_id">
+                  <Select name="tournament_id" defaultValue="none">
                     <SelectTrigger>
                       <SelectValue placeholder="Select a tournament" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No tournament</SelectItem>
+                      <SelectItem value="none">No tournament</SelectItem>
                       {tournaments?.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
                           {t.name} ({t.location})
@@ -513,12 +513,12 @@ export default function AdminFantasyPots() {
 
               <div>
                 <Label htmlFor="edit-tournament_id">Linked Tournament</Label>
-                <Select name="tournament_id" defaultValue={editingPot?.tournament_id || ''}>
+                <Select name="tournament_id" defaultValue={editingPot?.tournament_id || 'none'}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a tournament" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No tournament</SelectItem>
+                    <SelectItem value="none">No tournament</SelectItem>
                     {tournaments?.map((t) => (
                       <SelectItem key={t.id} value={t.id}>
                         {t.name} ({t.location})
