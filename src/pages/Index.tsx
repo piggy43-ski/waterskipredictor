@@ -4,7 +4,7 @@ import { BottomNav } from '@/components/BottomNav';
 import { TournamentCard } from '@/components/TournamentCard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Coins, TrendingUp, Trophy, LogIn } from 'lucide-react';
+import { Coins, TrendingUp, Trophy, LogIn, CheckCircle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +16,7 @@ interface UserPrediction {
   staked_tokens: number;
   decimal_odds: number;
   potential_payout: number;
+  payout_tokens: number | null;
   athlete_name: string;
   tournament_name: string;
   status: string;
@@ -27,6 +28,7 @@ const Index = () => {
   const [walletBalance, setWalletBalance] = useState(0);
   const [featuredTournament, setFeaturedTournament] = useState<Tournament | null>(null);
   const [userPredictions, setUserPredictions] = useState<UserPrediction[]>([]);
+  const [settledPredictions, setSettledPredictions] = useState<UserPrediction[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -90,6 +92,29 @@ const Index = () => {
             staked_tokens: p.staked_tokens,
             decimal_odds: parseFloat(p.decimal_odds.toString()),
             potential_payout: p.potential_payout,
+            payout_tokens: p.payout_tokens,
+            athlete_name: p.athlete_name,
+            tournament_name: p.tournament_name,
+            status: p.status
+          })));
+        }
+
+        // Fetch user's recent settled predictions
+        const { data: settledData } = await supabase
+          .from('predictions')
+          .select('*')
+          .eq('user_id', user.id)
+          .in('status', ['WON', 'LOST'])
+          .order('settled_at', { ascending: false })
+          .limit(10);
+
+        if (settledData) {
+          setSettledPredictions(settledData.map(p => ({
+            id: p.id,
+            staked_tokens: p.staked_tokens,
+            decimal_odds: parseFloat(p.decimal_odds.toString()),
+            potential_payout: p.potential_payout,
+            payout_tokens: p.payout_tokens,
             athlete_name: p.athlete_name,
             tournament_name: p.tournament_name,
             status: p.status
@@ -218,6 +243,47 @@ const Index = () => {
             <span className="text-muted-foreground text-sm">View all →</span>
           </div>
         </Card>
+
+        {/* Settled Bets Summary Card */}
+        {settledPredictions.length > 0 && (
+          <Card 
+            className="p-4 cursor-pointer hover:bg-accent/50 transition-colors border-border/50"
+            onClick={() => navigate('/predictions')}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="font-semibold">Recent Results</p>
+              <span className="text-muted-foreground text-sm">View all →</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center">
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-green-500">
+                    {settledPredictions.filter(p => p.status === 'WON').length} Won
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    +{settledPredictions.filter(p => p.status === 'WON').reduce((sum, p) => sum + (p.payout_tokens || 0), 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center">
+                  <XCircle className="w-4 h-4 text-red-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-red-500">
+                    {settledPredictions.filter(p => p.status === 'LOST').length} Lost
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    -{settledPredictions.filter(p => p.status === 'LOST').reduce((sum, p) => sum + p.staked_tokens, 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Featured Tournament */}
         {featuredTournament && (
