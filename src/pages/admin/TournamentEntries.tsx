@@ -506,7 +506,10 @@ export default function TournamentEntries() {
 
       const { error } = await supabase
         .from('tournament_entries')
-        .insert(entriesToAdd);
+        .upsert(entriesToAdd, {
+          onConflict: 'tournament_id,athlete_id,discipline',
+          ignoreDuplicates: false
+        });
       
       if (error) throw error;
 
