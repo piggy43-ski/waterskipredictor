@@ -126,6 +126,7 @@ export default function TournamentEntries() {
   });
 
   const calculateDefaultOdds = (athlete: any, discipline: string) => {
+    if (!athlete) return 2.5;
     const rankField = `current_rank_${discipline}` as keyof typeof athlete;
     const rank = athlete[rankField] as number | undefined;
     if (!rank) return 2.5;
@@ -302,6 +303,10 @@ export default function TournamentEntries() {
     mutationFn: async (participants: MatchedParticipant[]) => {
       if (!selectedTournamentId) {
         throw new Error('Please select a tournament first');
+      }
+
+      if (!allAthletes || allAthletes.length === 0) {
+        throw new Error('Athletes data not loaded. Please wait and try again.');
       }
 
       const toAdd = participants.filter(m => m.selected && m.matchedAthlete && m.selectedDisciplines.length > 0);
