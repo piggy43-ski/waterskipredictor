@@ -376,14 +376,6 @@ export default function TournamentEntries() {
         disciplineGenderGroups.get(key)!.push(entry);
       }
 
-      // Check existing markets to avoid duplicates
-      const { data: existingMarkets } = await supabase
-        .from('markets')
-        .select('discipline, category, market_type')
-        .eq('tournament_id', selectedTournamentId);
-
-      const existingMarketSet = new Set(existingMarkets?.map(m => `${m.discipline}-${m.category}-${m.market_type}`) || []);
-
       for (const [key, groupEntries] of disciplineGenderGroups) {
         const [discipline, gender] = key.split('-');
         const category = gender === 'male' ? 'open_men' : 'open_women';
@@ -392,39 +384,24 @@ export default function TournamentEntries() {
         const marketIds: Record<string, string> = {};
 
         for (const marketType of marketTypes) {
-          const marketKey = `${discipline}-${category}-${marketType}`;
-          
-          if (!existingMarketSet.has(marketKey)) {
-            // Create new market
-            const { data: market, error: marketError } = await supabase
-              .from('markets')
-              .insert({
-                tournament_id: selectedTournamentId,
-                discipline,
-                category,
-                market_type: marketType,
-                name: `${discipline} ${category} ${marketType.replace('_', ' ')}`,
-              })
-              .select()
-              .single();
+          // Use upsert to create or get existing market
+          const { data: market, error: marketError } = await supabase
+            .from('markets')
+            .upsert({
+              tournament_id: selectedTournamentId,
+              discipline,
+              category,
+              market_type: marketType,
+              name: `${discipline} ${category} ${marketType.replace('_', ' ')}`,
+            }, {
+              onConflict: 'tournament_id,discipline,category,market_type',
+              ignoreDuplicates: false
+            })
+            .select()
+            .single();
 
-            if (marketError) throw marketError;
-            marketIds[marketType] = market.id;
-          } else {
-            // Get existing market ID
-            const { data: existingMarket } = await supabase
-              .from('markets')
-              .select('id')
-              .eq('tournament_id', selectedTournamentId)
-              .eq('discipline', discipline)
-              .eq('category', category)
-              .eq('market_type', marketType)
-              .single();
-            
-            if (existingMarket) {
-              marketIds[marketType] = existingMarket.id;
-            }
-          }
+          if (marketError) throw marketError;
+          if (market) marketIds[marketType] = market.id;
         }
 
         // Create selections for each athlete in this group
@@ -545,45 +522,54 @@ export default function TournamentEntries() {
       for (const gender of genders) {
         const category = gender === 'male' ? 'open_men' : 'open_women';
         
-        // Create WINNER market
+        // Create or get existing WINNER market
         const { data: winnerMarket, error: marketError } = await supabase
           .from('markets')
-          .insert({
+          .upsert({
             tournament_id: selectedTournamentId,
             discipline: selectedDiscipline,
             category,
             market_type: 'WINNER',
             name: `${selectedDiscipline} ${category} Winner`,
+          }, {
+            onConflict: 'tournament_id,discipline,category,market_type',
+            ignoreDuplicates: false
           })
           .select()
           .single();
 
         if (marketError) throw marketError;
 
-        // Create PODIUM market
+        // Create or get existing PODIUM market
         const { data: podiumMarket, error: podiumError } = await supabase
           .from('markets')
-          .insert({
+          .upsert({
             tournament_id: selectedTournamentId,
             discipline: selectedDiscipline,
             category,
             market_type: 'PODIUM',
             name: `${selectedDiscipline} ${category} Podium`,
+          }, {
+            onConflict: 'tournament_id,discipline,category,market_type',
+            ignoreDuplicates: false
           })
           .select()
           .single();
 
         if (podiumError) throw podiumError;
 
-        // Create HIGHEST_SCORE market
+        // Create or get existing HIGHEST_SCORE market
         const { data: scoreMarket, error: scoreError } = await supabase
           .from('markets')
-          .insert({
+          .upsert({
             tournament_id: selectedTournamentId,
             discipline: selectedDiscipline,
             category,
             market_type: 'HIGHEST_SCORE',
             name: `${selectedDiscipline} ${category} Highest Score`,
+          }, {
+            onConflict: 'tournament_id,discipline,category,market_type',
+            ignoreDuplicates: false
           })
           .select()
           .single();
