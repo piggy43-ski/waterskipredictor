@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Trash2, Pencil, Eye, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, AlertTriangle, Sparkles, Loader2 } from 'lucide-react';
 
 type Athlete = {
   id: string;
@@ -211,6 +211,31 @@ export default function AdminAthletes() {
           </div>
           
           <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={async () => {
+                toast({ title: 'Seeding athlete stats...', description: 'This may take a moment.' });
+                try {
+                  const { data, error } = await supabase.functions.invoke('seed-athlete-stats');
+                  if (error) throw error;
+                  queryClient.invalidateQueries({ queryKey: ['admin-athletes'] });
+                  toast({ 
+                    title: 'Seeding complete!', 
+                    description: `Updated ${data?.updated || 0} athletes with tiers and pricing.` 
+                  });
+                } catch (err: any) {
+                  toast({ 
+                    title: 'Seeding failed', 
+                    description: err.message, 
+                    variant: 'destructive' 
+                  });
+                }
+              }}
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Seed Stats & Prices
+            </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm">
