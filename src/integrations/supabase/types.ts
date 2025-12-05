@@ -120,6 +120,12 @@ export type Database = {
       }
       athletes: {
         Row: {
+          activity_decay_jump: number | null
+          activity_decay_slalom: number | null
+          activity_decay_trick: number | null
+          base_strength_jump: number | null
+          base_strength_slalom: number | null
+          base_strength_trick: number | null
           bio: string | null
           career_events_jump: number | null
           career_events_slalom: number | null
@@ -144,15 +150,22 @@ export type Database = {
           current_rank_jump: number | null
           current_rank_slalom: number | null
           current_rank_trick: number | null
+          current_rating_jump: number | null
+          current_rating_slalom: number | null
+          current_rating_trick: number | null
           disciplines: string[]
           fantasy_price_jump: number | null
           fantasy_price_slalom: number | null
           fantasy_price_trick: number | null
           federation: string
+          form_boost_jump: number | null
+          form_boost_slalom: number | null
+          form_boost_trick: number | null
           full_name: string | null
           gender: string
           id: string
           injury_flag: boolean | null
+          is_retired: boolean | null
           iwwf_athlete_id: string | null
           last_5_results_jump: Json | null
           last_5_results_slalom: Json | null
@@ -160,6 +173,7 @@ export type Database = {
           manual_boost_factor: number | null
           missed_events_count: number | null
           name: string
+          notes: string | null
           odds_strength_score_jump: number | null
           odds_strength_score_slalom: number | null
           odds_strength_score_trick: number | null
@@ -167,7 +181,11 @@ export type Database = {
           performance_index_slalom: number | null
           performance_index_trick: number | null
           popularity_index: number | null
+          pro_tour_titles_jump: number | null
+          pro_tour_titles_slalom: number | null
+          pro_tour_titles_trick: number | null
           profile_image_url: string | null
+          retired_date: string | null
           season_avg_place_jump: number | null
           season_avg_place_slalom: number | null
           season_avg_place_trick: number | null
@@ -187,6 +205,12 @@ export type Database = {
           year_of_birth: number
         }
         Insert: {
+          activity_decay_jump?: number | null
+          activity_decay_slalom?: number | null
+          activity_decay_trick?: number | null
+          base_strength_jump?: number | null
+          base_strength_slalom?: number | null
+          base_strength_trick?: number | null
           bio?: string | null
           career_events_jump?: number | null
           career_events_slalom?: number | null
@@ -211,15 +235,22 @@ export type Database = {
           current_rank_jump?: number | null
           current_rank_slalom?: number | null
           current_rank_trick?: number | null
+          current_rating_jump?: number | null
+          current_rating_slalom?: number | null
+          current_rating_trick?: number | null
           disciplines?: string[]
           fantasy_price_jump?: number | null
           fantasy_price_slalom?: number | null
           fantasy_price_trick?: number | null
           federation: string
+          form_boost_jump?: number | null
+          form_boost_slalom?: number | null
+          form_boost_trick?: number | null
           full_name?: string | null
           gender: string
           id?: string
           injury_flag?: boolean | null
+          is_retired?: boolean | null
           iwwf_athlete_id?: string | null
           last_5_results_jump?: Json | null
           last_5_results_slalom?: Json | null
@@ -227,6 +258,7 @@ export type Database = {
           manual_boost_factor?: number | null
           missed_events_count?: number | null
           name: string
+          notes?: string | null
           odds_strength_score_jump?: number | null
           odds_strength_score_slalom?: number | null
           odds_strength_score_trick?: number | null
@@ -234,7 +266,11 @@ export type Database = {
           performance_index_slalom?: number | null
           performance_index_trick?: number | null
           popularity_index?: number | null
+          pro_tour_titles_jump?: number | null
+          pro_tour_titles_slalom?: number | null
+          pro_tour_titles_trick?: number | null
           profile_image_url?: string | null
+          retired_date?: string | null
           season_avg_place_jump?: number | null
           season_avg_place_slalom?: number | null
           season_avg_place_trick?: number | null
@@ -254,6 +290,12 @@ export type Database = {
           year_of_birth: number
         }
         Update: {
+          activity_decay_jump?: number | null
+          activity_decay_slalom?: number | null
+          activity_decay_trick?: number | null
+          base_strength_jump?: number | null
+          base_strength_slalom?: number | null
+          base_strength_trick?: number | null
           bio?: string | null
           career_events_jump?: number | null
           career_events_slalom?: number | null
@@ -278,15 +320,22 @@ export type Database = {
           current_rank_jump?: number | null
           current_rank_slalom?: number | null
           current_rank_trick?: number | null
+          current_rating_jump?: number | null
+          current_rating_slalom?: number | null
+          current_rating_trick?: number | null
           disciplines?: string[]
           fantasy_price_jump?: number | null
           fantasy_price_slalom?: number | null
           fantasy_price_trick?: number | null
           federation?: string
+          form_boost_jump?: number | null
+          form_boost_slalom?: number | null
+          form_boost_trick?: number | null
           full_name?: string | null
           gender?: string
           id?: string
           injury_flag?: boolean | null
+          is_retired?: boolean | null
           iwwf_athlete_id?: string | null
           last_5_results_jump?: Json | null
           last_5_results_slalom?: Json | null
@@ -294,6 +343,7 @@ export type Database = {
           manual_boost_factor?: number | null
           missed_events_count?: number | null
           name?: string
+          notes?: string | null
           odds_strength_score_jump?: number | null
           odds_strength_score_slalom?: number | null
           odds_strength_score_trick?: number | null
@@ -301,7 +351,11 @@ export type Database = {
           performance_index_slalom?: number | null
           performance_index_trick?: number | null
           popularity_index?: number | null
+          pro_tour_titles_jump?: number | null
+          pro_tour_titles_slalom?: number | null
+          pro_tour_titles_trick?: number | null
           profile_image_url?: string | null
+          retired_date?: string | null
           season_avg_place_jump?: number | null
           season_avg_place_slalom?: number | null
           season_avg_place_trick?: number | null

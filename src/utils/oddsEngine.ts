@@ -1,11 +1,10 @@
 /**
  * Odds Engine for Waterski Predictions
  * 
- * Calculates American odds from athlete strength scores based on:
- * - Season performance (40%)
- * - Career performance (20%)
- * - Average placement (20%)
- * - Tier bonus (20%)
+ * Uses current_rating (0-100 scale) to calculate probabilities and odds.
+ * The rating combines: base_strength + form_boost - activity_decay
+ * 
+ * House edge is applied to ensure profitability.
  */
 
 import { TierLevel, getTierBonus } from './athleteTiers';
@@ -15,6 +14,7 @@ export interface AthleteStrengthInputs {
   careerPodiumRate: number;
   seasonAvgPlace: number | null;
   tier: TierLevel;
+  currentRating?: number; // 0-100 scale from database
 }
 
 export interface AthleteOddsData {
@@ -23,13 +23,22 @@ export interface AthleteOddsData {
   strengthScore: number;
   probability: number;
   americanOdds: number;
+  currentRating?: number;
 }
 
 /**
  * Calculate base strength score (0-1+ scale)
- * Formula: 0.4*season_podium + 0.2*career_podium + 0.2*(1/avg_place) + 0.2*tier_bonus
+ * 
+ * If currentRating is provided (from DB), use it directly (normalized to 0-1).
+ * Otherwise, fall back to the formula-based calculation.
  */
 export const calculateStrengthScore = (inputs: AthleteStrengthInputs): number => {
+  // If we have a currentRating from the database, use it (normalized)
+  if (inputs.currentRating !== undefined && inputs.currentRating > 0) {
+    return inputs.currentRating / 100;
+  }
+  
+  // Fallback to formula-based calculation
   const tierBonus = getTierBonus(inputs.tier);
   
   // For avg place: lower is better, so we invert it
@@ -47,6 +56,14 @@ export const calculateStrengthScore = (inputs: AthleteStrengthInputs): number =>
   
   // Ensure minimum score for everyone
   return Math.max(0.05, score);
+};
+
+/**
+ * Calculate strength score directly from current_rating
+ * Simpler version for when we just have the rating
+ */
+export const ratingToStrengthScore = (currentRating: number): number => {
+  return Math.max(0.05, currentRating / 100);
 };
 
 /**
@@ -133,6 +150,7 @@ export const calculateFieldOdds = (
   const scores = athletes.map(a => ({
     ...a,
     strengthScore: calculateStrengthScore(a.inputs),
+    currentRating: a.inputs.currentRating,
   }));
   
   // Normalize to probabilities
@@ -146,6 +164,40 @@ export const calculateFieldOdds = (
     strengthScore: athlete.strengthScore,
     probability: probabilities[i],
     americanOdds: probabilityToAmericanOdds(probabilities[i], houseEdge),
+    currentRating: athlete.currentRating,
+  }));
+};
+
+/**
+ * Calculate odds from current_rating values directly
+ * Simpler version that just uses ratings
+ */
+export const calculateFieldOddsFromRatings = (
+  athletes: Array<{
+    id: string;
+    name: string;
+    currentRating: number;
+  }>,
+  houseEdge: number = 0.10
+): AthleteOddsData[] => {
+  // Convert ratings to strength scores
+  const scores = athletes.map(a => ({
+    ...a,
+    strengthScore: ratingToStrengthScore(a.currentRating),
+  }));
+  
+  // Normalize to probabilities
+  const strengthScores = scores.map(s => s.strengthScore);
+  const probabilities = normalizeFieldProbabilities(strengthScores);
+  
+  // Convert to American odds
+  return scores.map((athlete, i) => ({
+    id: athlete.id,
+    name: athlete.name,
+    strengthScore: athlete.strengthScore,
+    probability: probabilities[i],
+    americanOdds: probabilityToAmericanOdds(probabilities[i], houseEdge),
+    currentRating: athlete.currentRating,
   }));
 };
 
