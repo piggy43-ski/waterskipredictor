@@ -1,7 +1,7 @@
 project_id = "mgcqkprehxtqjmfoqsro"
 
 [functions.check-data-integrity]
-verify_jwt = false
+verify_jwt = true
 
 [functions.fix-data-duplicates]
 verify_jwt = true
