@@ -525,7 +525,9 @@ Deno.serve(async (req) => {
       console.error('❌ Error in parlay settlement:', error);
     }
 
-    // Mark tournament as settled
+    // Mark tournament as settled and update athlete stats
+    let tournamentId: string | null = null;
+    
     if (result.settled_predictions > 0 && predictionsBySelection.size > 0) {
       try {
         // Get tournament_id from the first selection that had predictions
@@ -544,6 +546,8 @@ Deno.serve(async (req) => {
             .single();
 
           if (marketData && !marketError) {
+            tournamentId = marketData.tournament_id;
+            
             const { error: tournamentError } = await supabaseClient
               .from('tournaments')
               .update({ settled_at: new Date().toISOString() })
@@ -558,6 +562,161 @@ Deno.serve(async (req) => {
         }
       } catch (error) {
         console.error('⚠️  Error marking tournament as settled:', error);
+      }
+    }
+
+    // ============= ATHLETE STATS LEARNING =============
+    // Update athlete career/season stats and recalculate strength scores and fantasy prices
+    if (tournamentId) {
+      console.log(`\n📊 Updating athlete stats from tournament results...`);
+      
+      try {
+        // Fetch all results for this tournament
+        const { data: tournamentResults, error: resultsError } = await supabaseClient
+          .from('athlete_results')
+          .select('*')
+          .eq('tournament_id', tournamentId);
+        
+        if (resultsError) {
+          console.error('⚠️  Failed to fetch tournament results:', resultsError);
+        } else if (tournamentResults && tournamentResults.length > 0) {
+          console.log(`📋 Processing ${tournamentResults.length} athlete results`);
+          
+          // Tier bonuses for strength calculation
+          const TIER_BONUSES: Record<string, number> = {
+            tier1: 0.15,
+            tier2: 0.07,
+            tier3: 0.03,
+            unranked: 0,
+          };
+          
+          // Fantasy price bands
+          const FANTASY_PRICE_BANDS: Record<string, { base: number; maxMultiplier: number }> = {
+            tier1: { base: 12000, maxMultiplier: 1.5 },
+            tier2: { base: 8000, maxMultiplier: 1.3 },
+            tier3: { base: 5000, maxMultiplier: 1.2 },
+            unranked: { base: 3000, maxMultiplier: 1.1 },
+          };
+          
+          for (const resultRow of tournamentResults) {
+            const discipline = resultRow.discipline;
+            const position = resultRow.position;
+            const athleteId = resultRow.athlete_id;
+            
+            // Fetch current athlete data
+            const { data: athlete, error: athleteError } = await supabaseClient
+              .from('athletes')
+              .select('*')
+              .eq('id', athleteId)
+              .single();
+            
+            if (athleteError || !athlete) {
+              console.log(`⚠️  Could not find athlete ${athleteId}`);
+              continue;
+            }
+            
+            // Build update object for this discipline
+            const updates: Record<string, unknown> = {};
+            
+            // Increment event counts
+            const careerEventsKey = `career_events_${discipline}`;
+            const seasonEventsKey = `season_events_${discipline}`;
+            updates[careerEventsKey] = (athlete[careerEventsKey] || 0) + 1;
+            updates[seasonEventsKey] = (athlete[seasonEventsKey] || 0) + 1;
+            
+            // Handle wins and podiums
+            if (position === 1) {
+              const careerWinsKey = `career_wins_${discipline}`;
+              const seasonWinsKey = `season_wins_${discipline}`;
+              const careerPodiumsKey = `career_podiums_${discipline}`;
+              const seasonPodiumsKey = `season_podiums_${discipline}`;
+              
+              updates[careerWinsKey] = (athlete[careerWinsKey] || 0) + 1;
+              updates[seasonWinsKey] = (athlete[seasonWinsKey] || 0) + 1;
+              updates[careerPodiumsKey] = (athlete[careerPodiumsKey] || 0) + 1;
+              updates[seasonPodiumsKey] = (athlete[seasonPodiumsKey] || 0) + 1;
+            } else if (position && position <= 3) {
+              const careerPodiumsKey = `career_podiums_${discipline}`;
+              const seasonPodiumsKey = `season_podiums_${discipline}`;
+              
+              updates[careerPodiumsKey] = (athlete[careerPodiumsKey] || 0) + 1;
+              updates[seasonPodiumsKey] = (athlete[seasonPodiumsKey] || 0) + 1;
+            }
+            
+            // Handle top 8
+            if (position && position <= 8) {
+              const careerTop8Key = `career_top8_${discipline}`;
+              updates[careerTop8Key] = (athlete[careerTop8Key] || 0) + 1;
+            }
+            
+            // Update last 5 results
+            const last5Key = `last_5_results_${discipline}`;
+            const currentLast5 = (athlete[last5Key] as Array<{ position: number; score: number }>) || [];
+            const newLast5 = [
+              { position: position || 99, score: resultRow.score_raw || 0 },
+              ...currentLast5
+            ].slice(0, 5);
+            updates[last5Key] = newLast5;
+            
+            // Calculate season avg place from last 5
+            const avgPlace = newLast5.reduce((sum, r) => sum + (r.position || 20), 0) / newLast5.length;
+            const seasonAvgPlaceKey = `season_avg_place_${discipline}`;
+            updates[seasonAvgPlaceKey] = avgPlace;
+            
+            // Recalculate strength score
+            const tierKey = `strength_tier_${discipline}`;
+            const tier = (athlete[tierKey] as string) || 'unranked';
+            const tierBonus = TIER_BONUSES[tier] || 0;
+            
+            const seasonEvents = updates[seasonEventsKey] as number;
+            const seasonPodiums = (updates[`season_podiums_${discipline}`] as number) || 
+                                  (athlete[`season_podiums_${discipline}`] || 0);
+            const careerEvents = updates[careerEventsKey] as number;
+            const careerPodiums = (updates[`career_podiums_${discipline}`] as number) || 
+                                  (athlete[`career_podiums_${discipline}`] || 0);
+            
+            const seasonPodiumRate = seasonEvents > 0 ? seasonPodiums / seasonEvents : 0.15;
+            const careerPodiumRate = careerEvents > 0 ? careerPodiums / careerEvents : 0.15;
+            const avgPlaceScore = avgPlace > 0 ? Math.min(1, 1 / avgPlace) : 0.1;
+            
+            const strengthScore = Math.max(0.05, (
+              0.4 * seasonPodiumRate +
+              0.2 * careerPodiumRate +
+              0.2 * avgPlaceScore +
+              0.2 * tierBonus
+            ));
+            
+            const strengthScoreKey = `odds_strength_score_${discipline}`;
+            updates[strengthScoreKey] = strengthScore;
+            
+            // Recalculate fantasy price
+            const band = FANTASY_PRICE_BANDS[tier] || FANTASY_PRICE_BANDS.unranked;
+            const multiplier = 1 + (seasonPodiumRate * (band.maxMultiplier - 1));
+            let fantasyPrice = Math.round(band.base * multiplier);
+            fantasyPrice = Math.max(2000, Math.min(20000, fantasyPrice));
+            
+            const fantasyPriceKey = `fantasy_price_${discipline}`;
+            updates[fantasyPriceKey] = fantasyPrice;
+            
+            // Apply the updates
+            const { error: updateError } = await supabaseClient
+              .from('athletes')
+              .update(updates)
+              .eq('id', athleteId);
+            
+            if (updateError) {
+              console.error(`⚠️  Failed to update athlete ${athlete.name}: ${updateError.message}`);
+            } else {
+              console.log(`✅ Updated ${athlete.name} (${discipline}): strength=${strengthScore.toFixed(3)}, price=${fantasyPrice}`);
+            }
+          }
+          
+          console.log(`📊 Athlete stats update complete`);
+        } else {
+          console.log(`📋 No athlete results found for tournament ${tournamentId}`);
+        }
+      } catch (error) {
+        console.error('⚠️  Error updating athlete stats:', error);
       }
     }
 

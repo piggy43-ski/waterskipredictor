@@ -6,11 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, RefreshCw, ExternalLink } from 'lucide-react';
+import { ArrowLeft, RefreshCw, ExternalLink, TrendingUp, Trophy, Target } from 'lucide-react';
 import { calculatePerformanceIndex, calculateFantasyPrice } from '@/utils/athleteCalculations';
+import { formatAmericanOdds, probabilityToAmericanOdds } from '@/utils/oddsEngine';
 import type { AthleteResult } from '@/utils/athleteCalculations';
+import type { TierLevel } from '@/utils/athleteTiers';
 
 export default function AthleteDetail() {
   const { id } = useParams<{ id: string }>();
@@ -99,7 +103,7 @@ export default function AthleteDetail() {
     },
   });
 
-  const updateAthleteField = async (field: string, value: any) => {
+  const updateAthleteField = async (field: string, value: unknown) => {
     const { error } = await supabase
       .from('athletes')
       .update({ [field]: value })
@@ -111,6 +115,33 @@ export default function AthleteDetail() {
       queryClient.invalidateQueries({ queryKey: ['athlete-detail', id] });
       toast({ title: 'Updated successfully' });
     }
+  };
+
+  const getTierBadgeVariant = (tier: string | null) => {
+    switch (tier) {
+      case 'tier1': return 'default';
+      case 'tier2': return 'secondary';
+      case 'tier3': return 'outline';
+      default: return 'outline';
+    }
+  };
+
+  const getTierLabel = (tier: string | null) => {
+    switch (tier) {
+      case 'tier1': return 'Tier 1 (Elite)';
+      case 'tier2': return 'Tier 2';
+      case 'tier3': return 'Tier 3';
+      default: return 'Unranked';
+    }
+  };
+
+  // Calculate implied probability and American odds from strength score
+  const getImpliedOdds = (strengthScore: number | null) => {
+    if (!strengthScore || strengthScore <= 0) return { probability: 0, americanOdds: '+9999' };
+    // Assume a typical field strength of 1.0 total for display purposes
+    const probability = Math.min(0.9, Math.max(0.02, strengthScore));
+    const americanOdds = probabilityToAmericanOdds(probability, 0.10);
+    return { probability, americanOdds: formatAmericanOdds(americanOdds) };
   };
 
   if (isLoading) {
@@ -152,50 +183,144 @@ export default function AthleteDetail() {
           </Link>
         </div>
 
+        {/* Discipline Cards with new stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {(['slalom', 'trick', 'jump'] as const).map((discipline) => (
-            <Card key={discipline}>
-              <CardHeader>
-                <CardTitle className="capitalize">{discipline}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">World Rank</p>
-                  <p className="text-2xl font-bold">
-                    {athlete[`current_rank_${discipline}`] || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Points</p>
-                  <p className="text-xl font-semibold">
-                    {athlete[`current_points_${discipline}`]?.toFixed(2) || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Performance Index</p>
-                  <p className="text-xl font-semibold text-primary">
-                    {(athlete[`performance_index_${discipline}`] || 0).toFixed(3)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Fantasy Price</p>
-                  <p className="text-xl font-semibold text-accent">
-                    {athlete[`fantasy_price_${discipline}`] || 0} tokens
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => recalculateMutation.mutate(discipline)}
-                  disabled={recalculateMutation.isPending}
-                >
-                  <RefreshCw className="w-3 h-3 mr-2" />
-                  Recalculate
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+          {(['slalom', 'trick', 'jump'] as const).map((discipline) => {
+            const tier = athlete[`strength_tier_${discipline}`] as string | null;
+            const strengthScore = athlete[`odds_strength_score_${discipline}`] as number | null;
+            const { probability, americanOdds } = getImpliedOdds(strengthScore);
+            const seasonEvents = (athlete[`season_events_${discipline}`] as number) || 0;
+            const seasonPodiums = (athlete[`season_podiums_${discipline}`] as number) || 0;
+            const careerPodiums = (athlete[`career_podiums_${discipline}`] as number) || 0;
+            const careerEvents = (athlete[`career_events_${discipline}`] as number) || 0;
+
+            return (
+              <Card key={discipline}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="capitalize">{discipline}</CardTitle>
+                    <Badge variant={getTierBadgeVariant(tier)}>
+                      {getTierLabel(tier)}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* World Rank & Points */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">World Rank</p>
+                      <p className="text-xl font-bold">
+                        {athlete[`current_rank_${discipline}`] || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Points</p>
+                      <p className="text-lg font-semibold">
+                        {athlete[`current_points_${discipline}`]?.toFixed(1) || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Odds Engine Stats */}
+                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <TrendingUp className="w-4 h-4" />
+                      Odds Engine
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Strength Score</p>
+                        <p className="text-lg font-bold text-primary">
+                          {strengthScore?.toFixed(3) || '0.000'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Implied Odds</p>
+                        <p className="text-lg font-bold text-accent">
+                          {americanOdds}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Win Probability</p>
+                      <p className="text-sm font-medium">
+                        {(probability * 100).toFixed(1)}%
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Season/Career Stats */}
+                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <Trophy className="w-4 h-4" />
+                      Stats
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Season</p>
+                        <p className="font-medium">
+                          {seasonPodiums}/{seasonEvents} podiums
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          ({seasonEvents > 0 ? ((seasonPodiums / seasonEvents) * 100).toFixed(0) : 0}% rate)
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Career</p>
+                        <p className="font-medium">
+                          {careerPodiums}/{careerEvents} podiums
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          ({careerEvents > 0 ? ((careerPodiums / careerEvents) * 100).toFixed(0) : 0}% rate)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fantasy Price */}
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-1">
+                      <Target className="w-4 h-4" />
+                      Fantasy
+                    </div>
+                    <p className="text-2xl font-bold text-primary">
+                      {(athlete[`fantasy_price_${discipline}`] || 0).toLocaleString()} tokens
+                    </p>
+                  </div>
+
+                  {/* Tier Selection */}
+                  <div>
+                    <Label className="text-xs">Strength Tier</Label>
+                    <Select
+                      value={tier || 'unranked'}
+                      onValueChange={(value) => updateAthleteField(`strength_tier_${discipline}`, value)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tier1">Tier 1 (Elite)</SelectItem>
+                        <SelectItem value="tier2">Tier 2</SelectItem>
+                        <SelectItem value="tier3">Tier 3</SelectItem>
+                        <SelectItem value="unranked">Unranked</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => recalculateMutation.mutate(discipline)}
+                    disabled={recalculateMutation.isPending}
+                  >
+                    <RefreshCw className="w-3 h-3 mr-2" />
+                    Recalculate
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         <Card>

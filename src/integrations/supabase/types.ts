@@ -121,6 +121,18 @@ export type Database = {
       athletes: {
         Row: {
           bio: string | null
+          career_events_jump: number | null
+          career_events_slalom: number | null
+          career_events_trick: number | null
+          career_podiums_jump: number | null
+          career_podiums_slalom: number | null
+          career_podiums_trick: number | null
+          career_top8_jump: number | null
+          career_top8_slalom: number | null
+          career_top8_trick: number | null
+          career_wins_jump: number | null
+          career_wins_slalom: number | null
+          career_wins_trick: number | null
           consecutive_finals: number | null
           consecutive_podiums: number | null
           country: string
@@ -142,19 +154,52 @@ export type Database = {
           id: string
           injury_flag: boolean | null
           iwwf_athlete_id: string | null
+          last_5_results_jump: Json | null
+          last_5_results_slalom: Json | null
+          last_5_results_trick: Json | null
           manual_boost_factor: number | null
           missed_events_count: number | null
           name: string
+          odds_strength_score_jump: number | null
+          odds_strength_score_slalom: number | null
+          odds_strength_score_trick: number | null
           performance_index_jump: number | null
           performance_index_slalom: number | null
           performance_index_trick: number | null
           popularity_index: number | null
           profile_image_url: string | null
+          season_avg_place_jump: number | null
+          season_avg_place_slalom: number | null
+          season_avg_place_trick: number | null
+          season_events_jump: number | null
+          season_events_slalom: number | null
+          season_events_trick: number | null
+          season_podiums_jump: number | null
+          season_podiums_slalom: number | null
+          season_podiums_trick: number | null
+          season_wins_jump: number | null
+          season_wins_slalom: number | null
+          season_wins_trick: number | null
+          strength_tier_jump: string | null
+          strength_tier_slalom: string | null
+          strength_tier_trick: string | null
           updated_at: string
           year_of_birth: number
         }
         Insert: {
           bio?: string | null
+          career_events_jump?: number | null
+          career_events_slalom?: number | null
+          career_events_trick?: number | null
+          career_podiums_jump?: number | null
+          career_podiums_slalom?: number | null
+          career_podiums_trick?: number | null
+          career_top8_jump?: number | null
+          career_top8_slalom?: number | null
+          career_top8_trick?: number | null
+          career_wins_jump?: number | null
+          career_wins_slalom?: number | null
+          career_wins_trick?: number | null
           consecutive_finals?: number | null
           consecutive_podiums?: number | null
           country: string
@@ -176,19 +221,52 @@ export type Database = {
           id?: string
           injury_flag?: boolean | null
           iwwf_athlete_id?: string | null
+          last_5_results_jump?: Json | null
+          last_5_results_slalom?: Json | null
+          last_5_results_trick?: Json | null
           manual_boost_factor?: number | null
           missed_events_count?: number | null
           name: string
+          odds_strength_score_jump?: number | null
+          odds_strength_score_slalom?: number | null
+          odds_strength_score_trick?: number | null
           performance_index_jump?: number | null
           performance_index_slalom?: number | null
           performance_index_trick?: number | null
           popularity_index?: number | null
           profile_image_url?: string | null
+          season_avg_place_jump?: number | null
+          season_avg_place_slalom?: number | null
+          season_avg_place_trick?: number | null
+          season_events_jump?: number | null
+          season_events_slalom?: number | null
+          season_events_trick?: number | null
+          season_podiums_jump?: number | null
+          season_podiums_slalom?: number | null
+          season_podiums_trick?: number | null
+          season_wins_jump?: number | null
+          season_wins_slalom?: number | null
+          season_wins_trick?: number | null
+          strength_tier_jump?: string | null
+          strength_tier_slalom?: string | null
+          strength_tier_trick?: string | null
           updated_at?: string
           year_of_birth: number
         }
         Update: {
           bio?: string | null
+          career_events_jump?: number | null
+          career_events_slalom?: number | null
+          career_events_trick?: number | null
+          career_podiums_jump?: number | null
+          career_podiums_slalom?: number | null
+          career_podiums_trick?: number | null
+          career_top8_jump?: number | null
+          career_top8_slalom?: number | null
+          career_top8_trick?: number | null
+          career_wins_jump?: number | null
+          career_wins_slalom?: number | null
+          career_wins_trick?: number | null
           consecutive_finals?: number | null
           consecutive_podiums?: number | null
           country?: string
@@ -210,14 +288,35 @@ export type Database = {
           id?: string
           injury_flag?: boolean | null
           iwwf_athlete_id?: string | null
+          last_5_results_jump?: Json | null
+          last_5_results_slalom?: Json | null
+          last_5_results_trick?: Json | null
           manual_boost_factor?: number | null
           missed_events_count?: number | null
           name?: string
+          odds_strength_score_jump?: number | null
+          odds_strength_score_slalom?: number | null
+          odds_strength_score_trick?: number | null
           performance_index_jump?: number | null
           performance_index_slalom?: number | null
           performance_index_trick?: number | null
           popularity_index?: number | null
           profile_image_url?: string | null
+          season_avg_place_jump?: number | null
+          season_avg_place_slalom?: number | null
+          season_avg_place_trick?: number | null
+          season_events_jump?: number | null
+          season_events_slalom?: number | null
+          season_events_trick?: number | null
+          season_podiums_jump?: number | null
+          season_podiums_slalom?: number | null
+          season_podiums_trick?: number | null
+          season_wins_jump?: number | null
+          season_wins_slalom?: number | null
+          season_wins_trick?: number | null
+          strength_tier_jump?: string | null
+          strength_tier_slalom?: string | null
+          strength_tier_trick?: string | null
           updated_at?: string
           year_of_birth?: number
         }
