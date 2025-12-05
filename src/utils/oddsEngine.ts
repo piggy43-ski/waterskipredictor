@@ -67,6 +67,45 @@ export const ratingToStrengthScore = (currentRating: number): number => {
 };
 
 /**
+ * Convert rating (0-100) directly to decimal odds
+ * Higher rating = lower decimal odds = favorite
+ * This gives proper favorite odds (below 2.0) for strong athletes
+ */
+export const ratingToDecimalOdds = (rating: number, houseEdge: number = 0.10): number => {
+  // Map rating to decimal odds
+  // 99 rating → ~1.32 (heavy favorite, -312 American)
+  // 95 rating → ~1.40 (-250 American)
+  // 90 rating → ~1.80 (-125 American)
+  // 85 rating → ~2.20 (+120 American)
+  // 70 rating → ~4.50 (+350 American)
+  
+  let baseOdds: number;
+  
+  if (rating >= 95) {
+    // Elite tier: 1.30 - 1.50
+    baseOdds = 1.30 + (100 - rating) * 0.04;
+  } else if (rating >= 90) {
+    // Strong favorite: 1.50 - 1.80
+    baseOdds = 1.50 + (95 - rating) * 0.06;
+  } else if (rating >= 85) {
+    // Slight favorite: 1.80 - 2.20
+    baseOdds = 1.80 + (90 - rating) * 0.08;
+  } else if (rating >= 80) {
+    // Even/slight underdog: 2.20 - 2.80
+    baseOdds = 2.20 + (85 - rating) * 0.12;
+  } else if (rating >= 70) {
+    // Underdog: 2.80 - 4.30
+    baseOdds = 2.80 + (80 - rating) * 0.15;
+  } else {
+    // Longshot: 4.30+
+    baseOdds = 4.30 + (70 - rating) * 0.20;
+  }
+  
+  // Apply house edge (reduces payout slightly)
+  return baseOdds / (1 + houseEdge);
+};
+
+/**
  * Normalize strength scores to probabilities that sum to 1
  */
 export const normalizeFieldProbabilities = (strengthScores: number[]): number[] => {
