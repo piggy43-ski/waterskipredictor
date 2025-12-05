@@ -587,12 +587,12 @@ export default function TournamentEntries() {
 
         // Create selections for all markets
         const relevantEntries = entriesToAdd.filter(e => {
-          const athlete = athletes?.find(a => a.id === e.athlete_id);
+          const athlete = filteredAthletes.find(a => a.id === e.athlete_id);
           return athlete?.gender === gender;
         });
 
         for (const entry of relevantEntries) {
-          const athlete = athletes?.find(a => a.id === entry.athlete_id);
+          const athlete = filteredAthletes.find(a => a.id === entry.athlete_id);
           if (!athlete) continue;
 
           const selections = [
