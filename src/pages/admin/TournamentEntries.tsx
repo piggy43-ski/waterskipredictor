@@ -503,10 +503,12 @@ export default function TournamentEntries() {
 
   const addEntriesMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedDiscipline) return;
+      if (!selectedDiscipline || !athletes || athletes.length === 0) {
+        throw new Error('Please wait for athletes data to load and try again.');
+      }
 
       const entriesToAdd = Array.from(selectedAthletes).map(athleteId => {
-        const athlete = athletes?.find(a => a.id === athleteId);
+        const athlete = athletes.find(a => a.id === athleteId);
         const customOddsValue = customOdds[athleteId];
         const calculatedOdds = customOddsValue 
           ? parseFloat(customOddsValue) 
@@ -530,9 +532,10 @@ export default function TournamentEntries() {
       const tournament = tournaments?.find(t => t.id === selectedTournamentId);
       if (!tournament) return;
 
-      const genders = [...new Set(athletes?.filter(a => 
+      const filteredAthletes = athletes.filter(a => 
         entriesToAdd.some(e => e.athlete_id === a.id)
-      ).map(a => a.gender))];
+      );
+      const genders = [...new Set(filteredAthletes.map(a => a.gender))];
 
       for (const gender of genders) {
         const category = gender === 'male' ? 'open_men' : 'open_women';
