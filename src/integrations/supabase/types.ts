@@ -1258,6 +1258,96 @@ export type Database = {
           },
         ]
       }
+      tournament_results: {
+        Row: {
+          advanced_to_next_round: boolean | null
+          athlete_id: string
+          buoys: number | null
+          created_at: string | null
+          discipline: string
+          final_overall_rank: number | null
+          gender: string
+          id: string
+          jump_distance_m: number | null
+          line_length_m: number | null
+          made_finals: boolean | null
+          missed_first_pass: boolean | null
+          missed_gate: boolean | null
+          no_score: boolean | null
+          raw_score: number | null
+          round_rank: number | null
+          round_type: string
+          score_display: string | null
+          stood_both_passes: boolean | null
+          tournament_id: string
+          trick_points: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          advanced_to_next_round?: boolean | null
+          athlete_id: string
+          buoys?: number | null
+          created_at?: string | null
+          discipline: string
+          final_overall_rank?: number | null
+          gender: string
+          id?: string
+          jump_distance_m?: number | null
+          line_length_m?: number | null
+          made_finals?: boolean | null
+          missed_first_pass?: boolean | null
+          missed_gate?: boolean | null
+          no_score?: boolean | null
+          raw_score?: number | null
+          round_rank?: number | null
+          round_type: string
+          score_display?: string | null
+          stood_both_passes?: boolean | null
+          tournament_id: string
+          trick_points?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          advanced_to_next_round?: boolean | null
+          athlete_id?: string
+          buoys?: number | null
+          created_at?: string | null
+          discipline?: string
+          final_overall_rank?: number | null
+          gender?: string
+          id?: string
+          jump_distance_m?: number | null
+          line_length_m?: number | null
+          made_finals?: boolean | null
+          missed_first_pass?: boolean | null
+          missed_gate?: boolean | null
+          no_score?: boolean | null
+          raw_score?: number | null
+          round_rank?: number | null
+          round_type?: string
+          score_display?: string | null
+          stood_both_passes?: boolean | null
+          tournament_id?: string
+          trick_points?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_results_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_results_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tournaments: {
         Row: {
           allow_bet_modification_until: string | null
