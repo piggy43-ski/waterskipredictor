@@ -16,6 +16,8 @@ const corsHeaders = {
  * 
  * Activity decay:
  * - +0.5 per event missed
+ * 
+ * Also logs all adjustments to rating_adjustments table for AI learning
  */
 
 // Map rating to fantasy price
@@ -33,6 +35,32 @@ function ratingToFantasyPrice(rating: number): number {
   if (rating >= 72) return 6000;
   if (rating >= 70) return 5500;
   return 5000;
+}
+
+// Calculate expected position based on rating (for accuracy tracking)
+function expectedPositionFromRating(rating: number, fieldSize: number): number {
+  // Higher rating = lower expected position (1 = first place)
+  const normalizedRating = (rating - 50) / 50; // 0-1 scale
+  const expectedPosition = Math.round((1 - normalizedRating) * fieldSize);
+  return Math.max(1, Math.min(fieldSize, expectedPosition));
+}
+
+// Determine if an override was more accurate than the system prediction
+function wasOverrideAccurate(
+  overrideRating: number | null,
+  systemRating: number,
+  actualPosition: number,
+  fieldSize: number
+): boolean | null {
+  if (overrideRating === null) return null;
+  
+  const systemExpected = expectedPositionFromRating(systemRating, fieldSize);
+  const overrideExpected = expectedPositionFromRating(overrideRating, fieldSize);
+  
+  const systemError = Math.abs(systemExpected - actualPosition);
+  const overrideError = Math.abs(overrideExpected - actualPosition);
+  
+  return overrideError < systemError;
 }
 
 Deno.serve(async (req) => {
@@ -74,11 +102,36 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch results: ${resultsError.message}`);
     }
 
+    // Get tournament entries with override ratings
+    const { data: entries, error: entriesError } = await supabase
+      .from('tournament_entries')
+      .select('athlete_id, discipline, override_rating')
+      .eq('tournament_id', tournament_id);
+
+    if (entriesError) {
+      console.error('Failed to fetch entries:', entriesError.message);
+    }
+
+    // Create a map of override ratings
+    const overrideMap = new Map<string, number | null>();
+    for (const entry of entries || []) {
+      const key = `${entry.athlete_id}-${entry.discipline}`;
+      overrideMap.set(key, entry.override_rating);
+    }
+
+    // Calculate field sizes per discipline/gender
+    const fieldSizes = new Map<string, number>();
+    for (const result of results || []) {
+      const key = `${result.discipline}-${result.gender}`;
+      fieldSizes.set(key, (fieldSizes.get(key) || 0) + 1);
+    }
+
     console.log(`Found ${results?.length || 0} results to process`);
 
     const updates = {
       boosted: [] as string[],
       decayed: [] as string[],
+      adjustmentsLogged: 0,
       errors: [] as string[]
     };
 
@@ -94,21 +147,34 @@ Deno.serve(async (req) => {
         const currentFormBoost = athlete[`form_boost_${discipline}`] || 0;
         const baseStrength = athlete[`base_strength_${discipline}`] || 70;
         const activityDecay = athlete[`activity_decay_${discipline}`] || 0;
+        const currentRating = athlete[`current_rating_${discipline}`] || 70;
+
+        // Get override rating if set
+        const entryKey = `${result.athlete_id}-${discipline}`;
+        const overrideRating = overrideMap.get(entryKey) || null;
 
         // Calculate form boost adjustment
         let formBoostDelta = 0;
+        let adjustmentReason = '';
         const position = result.position;
 
         if (position === 1) {
-          formBoostDelta = 3; // Win
+          formBoostDelta = 3;
+          adjustmentReason = 'Win (+3)';
         } else if (position && position <= 3) {
-          formBoostDelta = 2; // Podium
+          formBoostDelta = 2;
+          adjustmentReason = 'Podium (+2)';
         } else if (result.made_finals || (position && position <= 8)) {
-          formBoostDelta = 1; // Made finals
+          formBoostDelta = 1;
+          adjustmentReason = 'Made finals (+1)';
         } else if (position && position > 10) {
-          formBoostDelta = -1; // Poor result
+          formBoostDelta = -1;
+          adjustmentReason = 'Poor result (-1)';
         } else if (result.missed_first_pass || result.missed_gate) {
-          formBoostDelta = -1; // Technical failure
+          formBoostDelta = -1;
+          adjustmentReason = 'Technical failure (-1)';
+        } else {
+          adjustmentReason = 'No change';
         }
 
         // Calculate new values
@@ -117,6 +183,39 @@ Deno.serve(async (req) => {
         const newCurrentRating = Math.max(50, Math.min(100, baseStrength + newFormBoost - resetDecay));
         const newFantasyPrice = ratingToFantasyPrice(newCurrentRating);
         const newOddsScore = newCurrentRating / 100;
+
+        // Get field size for accuracy calculation
+        const fieldKey = `${discipline}-${result.gender}`;
+        const fieldSize = fieldSizes.get(fieldKey) || 10;
+
+        // Log rating adjustment for AI learning
+        const { error: logError } = await supabase
+          .from('rating_adjustments')
+          .insert({
+            athlete_id: result.athlete_id,
+            tournament_id: tournament_id,
+            discipline,
+            rating_before: currentRating,
+            base_strength_before: baseStrength,
+            form_boost_before: currentFormBoost,
+            predicted_rating: currentRating, // System's prediction
+            override_rating: overrideRating,
+            actual_position: position,
+            made_finals: result.made_finals || (position && position <= 8) || false,
+            field_size: fieldSize,
+            rating_after: newCurrentRating,
+            adjustment_delta: formBoostDelta,
+            adjustment_reason: adjustmentReason,
+            override_was_accurate: position 
+              ? wasOverrideAccurate(overrideRating, currentRating, position, fieldSize)
+              : null
+          });
+
+        if (logError) {
+          console.error(`Failed to log adjustment for ${athlete.name}:`, logError.message);
+        } else {
+          updates.adjustmentsLogged++;
+        }
 
         // Update athlete
         const { error: updateError } = await supabase
@@ -144,7 +243,7 @@ Deno.serve(async (req) => {
     // Apply decay to athletes who didn't compete (if enabled)
     if (apply_decay_to_inactive) {
       // Get all tournament entries (athletes who were entered)
-      const { data: entries } = await supabase
+      const { data: allEntries } = await supabase
         .from('tournament_entries')
         .select('athlete_id, discipline')
         .eq('tournament_id', tournament_id);
@@ -154,7 +253,7 @@ Deno.serve(async (req) => {
       );
 
       // For athletes entered but didn't compete
-      for (const entry of entries || []) {
+      for (const entry of allEntries || []) {
         const key = `${entry.athlete_id}-${entry.discipline}`;
         if (!competedAthleteIds.has(key)) {
           const discipline = entry.discipline as 'slalom' | 'trick' | 'jump';
@@ -193,13 +292,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Rating updates complete: ${updates.boosted.length} boosted, ${updates.decayed.length} decayed`);
+    console.log(`Rating updates complete: ${updates.boosted.length} boosted, ${updates.decayed.length} decayed, ${updates.adjustmentsLogged} logged`);
 
     return new Response(JSON.stringify({
       success: true,
       tournament: tournament.name,
       boosted: updates.boosted,
       decayed: updates.decayed,
+      adjustmentsLogged: updates.adjustmentsLogged,
       errors: updates.errors.length > 0 ? updates.errors : undefined
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
