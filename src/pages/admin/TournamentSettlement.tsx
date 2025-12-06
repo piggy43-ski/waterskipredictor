@@ -1100,6 +1100,68 @@ export default function TournamentSettlement() {
               </CardContent>
             </Card>
 
+            {/* Rounds Summary Panel */}
+            <Card className="border-dashed">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Trophy className="w-4 h-4" />
+                  Results Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4">
+                  {(['qual', 'semi', 'final'] as RoundType[]).map((round) => {
+                    const entryCount = getRoundEntryCount(round);
+                    const hasData = entryCount > 0;
+                    
+                    // Count per discipline
+                    const disciplineCounts: Record<string, number> = {};
+                    const disciplines: Discipline[] = ['slalom', 'trick', 'jump'];
+                    const genders: ('male' | 'female')[] = ['male', 'female'];
+                    
+                    for (const discipline of disciplines) {
+                      let count = 0;
+                      for (const gender of genders) {
+                        count += results[round][discipline][gender].filter(e => e.athlete_id).length;
+                      }
+                      if (count > 0) disciplineCounts[discipline] = count;
+                    }
+                    
+                    return (
+                      <div 
+                        key={round} 
+                        className={`rounded-lg p-3 border ${hasData ? 'bg-success/5 border-success/20' : 'bg-muted/50 border-muted'}`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">{roundLabels[round]}</span>
+                          {hasData ? (
+                            <Badge variant="default" className="h-5">
+                              {entryCount}
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-muted-foreground">
+                              Empty
+                            </Badge>
+                          )}
+                        </div>
+                        {hasData ? (
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(disciplineCounts).map(([disc, count]) => (
+                              <Badge key={disc} variant="outline" className="text-xs capitalize">
+                                {disc}: {count}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No round for this event</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => saveResultsMutation.mutate()} disabled={saveResultsMutation.isPending}>
                 {saveResultsMutation.isPending ? 'Saving...' : 'Save All Rounds'}
