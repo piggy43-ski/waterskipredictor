@@ -236,7 +236,7 @@ const Index = () => {
               <div>
                 <p className="font-semibold">My Bets</p>
                 <p className="text-xs text-muted-foreground">
-                  {activePredictions.length} active · {activePredictions.reduce((sum, p) => sum + p.staked_tokens, 0).toLocaleString()} staked
+                  {activePredictions.length} active · {activePredictions.reduce((sum, p) => sum + p.staked_tokens, 0).toLocaleString()} staked · {activePredictions.reduce((sum, p) => sum + p.potential_payout, 0).toLocaleString()} potential
                 </p>
               </div>
             </div>
