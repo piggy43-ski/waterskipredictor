@@ -274,6 +274,21 @@ export default function TournamentSettlement() {
     return [...withRanks, ...zeroWithFlags, ...emptyEntries];
   };
 
+  // Count entries per round for visual indicators
+  const getRoundEntryCount = (roundType: RoundType): number => {
+    let count = 0;
+    const disciplines: Discipline[] = ['slalom', 'trick', 'jump'];
+    const genders: ('male' | 'female')[] = ['male', 'female'];
+    
+    for (const discipline of disciplines) {
+      for (const gender of genders) {
+        count += results[roundType][discipline][gender]
+          .filter(e => e.athlete_id).length;
+      }
+    }
+    return count;
+  };
+
   const addResultRow = (roundType: RoundType, discipline: Discipline, gender: string) => {
     setResults(prev => ({
       ...prev,
@@ -876,14 +891,33 @@ export default function TournamentSettlement() {
                   <Label className="whitespace-nowrap">Round:</Label>
                   <Tabs value={selectedRound} onValueChange={(v) => setSelectedRound(v as RoundType)} className="flex-1">
                     <TabsList className="grid grid-cols-3">
-                      {(['qual', 'semi', 'final'] as RoundType[]).map((round) => (
-                        <TabsTrigger key={round} value={round}>
-                          {roundLabels[round]}
-                        </TabsTrigger>
-                      ))}
+                      {(['qual', 'semi', 'final'] as RoundType[]).map((round) => {
+                        const entryCount = getRoundEntryCount(round);
+                        const hasData = entryCount > 0;
+                        
+                        return (
+                          <TabsTrigger key={round} value={round} className="relative gap-2">
+                            <span>{roundLabels[round]}</span>
+                            {hasData ? (
+                              <Badge variant="default" className="h-5 min-w-5 text-xs px-1.5">
+                                {entryCount}
+                              </Badge>
+                            ) : (
+                              <span className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+                            )}
+                          </TabsTrigger>
+                        );
+                      })}
                     </TabsList>
                   </Tabs>
                 </div>
+
+                <Alert className="mb-4 bg-muted/50 border-muted">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Tip:</strong> Leave rounds empty if they didn't exist for this tournament. Not all events have qualifying or semi-final rounds.
+                  </AlertDescription>
+                </Alert>
 
                 <Alert className="mb-4">
                   <CheckCircle className="h-4 w-4" />
