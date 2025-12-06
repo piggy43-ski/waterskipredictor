@@ -939,6 +939,81 @@ export type Database = {
         }
         Relationships: []
       }
+      rating_adjustments: {
+        Row: {
+          actual_position: number | null
+          adjustment_delta: number
+          adjustment_reason: string | null
+          athlete_id: string
+          base_strength_before: number
+          created_at: string | null
+          discipline: string
+          field_size: number | null
+          form_boost_before: number
+          id: string
+          made_finals: boolean | null
+          override_rating: number | null
+          override_was_accurate: boolean | null
+          predicted_rating: number | null
+          rating_after: number
+          rating_before: number
+          tournament_id: string
+        }
+        Insert: {
+          actual_position?: number | null
+          adjustment_delta: number
+          adjustment_reason?: string | null
+          athlete_id: string
+          base_strength_before: number
+          created_at?: string | null
+          discipline: string
+          field_size?: number | null
+          form_boost_before: number
+          id?: string
+          made_finals?: boolean | null
+          override_rating?: number | null
+          override_was_accurate?: boolean | null
+          predicted_rating?: number | null
+          rating_after: number
+          rating_before: number
+          tournament_id: string
+        }
+        Update: {
+          actual_position?: number | null
+          adjustment_delta?: number
+          adjustment_reason?: string | null
+          athlete_id?: string
+          base_strength_before?: number
+          created_at?: string | null
+          discipline?: string
+          field_size?: number | null
+          form_boost_before?: number
+          id?: string
+          made_finals?: boolean | null
+          override_rating?: number | null
+          override_was_accurate?: boolean | null
+          predicted_rating?: number | null
+          rating_after?: number
+          rating_before?: number
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rating_adjustments_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rating_adjustments_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       redemptions: {
         Row: {
           created_at: string
@@ -1145,6 +1220,7 @@ export type Database = {
           custom_odds: number | null
           discipline: string
           id: string
+          override_rating: number | null
           tournament_id: string
         }
         Insert: {
@@ -1153,6 +1229,7 @@ export type Database = {
           custom_odds?: number | null
           discipline: string
           id?: string
+          override_rating?: number | null
           tournament_id: string
         }
         Update: {
@@ -1161,6 +1238,7 @@ export type Database = {
           custom_odds?: number | null
           discipline?: string
           id?: string
+          override_rating?: number | null
           tournament_id?: string
         }
         Relationships: [

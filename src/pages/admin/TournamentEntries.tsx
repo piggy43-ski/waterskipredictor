@@ -38,8 +38,14 @@ interface MatchedParticipant extends ParsedParticipant {
       trick?: number;
       jump?: number;
     };
+    ratings: {
+      slalom?: number;
+      trick?: number;
+      jump?: number;
+    };
   };
   selectedDisciplines: string[]; // Which disciplines to add for this athlete
+  overrideRatings: Record<string, number | undefined>; // Override rating per discipline
   confidence: number;
   alternatives?: Array<{ id: string; name: string; country: string; disciplines: string[] }>;
   selected: boolean;
@@ -74,13 +80,13 @@ export default function TournamentEntries() {
     },
   });
 
-  // Fetch ALL athletes for matching with disciplines and rankings
+  // Fetch ALL athletes for matching with disciplines, rankings, and ratings
   const { data: allAthletes } = useQuery({
     queryKey: ['all-athletes-for-matching'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('athletes')
-        .select('id, name, country, gender, disciplines, current_rank_slalom, current_rank_trick, current_rank_jump');
+        .select('id, name, country, gender, disciplines, current_rank_slalom, current_rank_trick, current_rank_jump, current_rating_slalom, current_rating_trick, current_rating_jump');
       if (error) throw error;
       return data;
     },
@@ -243,6 +249,11 @@ export default function TournamentEntries() {
               slalom: match.current_rank_slalom || undefined,
               trick: match.current_rank_trick || undefined,
               jump: match.current_rank_jump || undefined,
+            },
+            ratings: {
+              slalom: match.current_rating_slalom || undefined,
+              trick: match.current_rating_trick || undefined,
+              jump: match.current_rating_jump || undefined,
             }
           } : undefined,
           // Pre-select all disciplines athlete competes in, or just detected if available
@@ -251,6 +262,7 @@ export default function TournamentEntries() {
                 ? [data.detected_discipline] 
                 : athleteDisciplines.filter(d => VALID_DISCIPLINES.includes(d as any)))
             : [],
+          overrideRatings: {}, // Start with no overrides
           confidence,
           alternatives,
           selected: confidence >= 0.7 && !!match
@@ -337,6 +349,7 @@ export default function TournamentEntries() {
         athlete_id: string;
         discipline: string;
         custom_odds: number;
+        override_rating: number | null;
       }> = [];
 
       for (const p of toAdd) {
@@ -345,11 +358,13 @@ export default function TournamentEntries() {
           const key = `${p.matchedAthlete!.id}-${discipline}`;
           if (!existingSet.has(key)) {
             const calculatedOdds = calculateDefaultOdds(athlete, discipline);
+            const overrideRating = p.overrideRatings[discipline];
             entriesToAdd.push({
               tournament_id: selectedTournamentId,
               athlete_id: p.matchedAthlete!.id,
               discipline,
               custom_odds: calculatedOdds,
+              override_rating: overrideRating !== undefined ? overrideRating : null,
             });
           }
         }
@@ -480,6 +495,18 @@ export default function TournamentEntries() {
     }
     // Auto-select if any discipline is selected
     p.selected = p.selectedDisciplines.length > 0 && !!p.matchedAthlete;
+    setMatchedParticipants(updated);
+  };
+
+  // Handle override rating change
+  const handleOverrideRatingChange = (participantIdx: number, discipline: string, value: string) => {
+    const updated = [...matchedParticipants];
+    const p = updated[participantIdx];
+    const numValue = value === '' ? undefined : parseInt(value, 10);
+    p.overrideRatings = {
+      ...p.overrideRatings,
+      [discipline]: numValue !== undefined && numValue >= 50 && numValue <= 100 ? numValue : undefined
+    };
     setMatchedParticipants(updated);
   };
 
@@ -937,6 +964,7 @@ export default function TournamentEntries() {
                             setMatchedParticipants(updated);
                           }}
                           onToggleDiscipline={(disc) => handleToggleDiscipline(globalIdx, disc)}
+                          onOverrideRatingChange={(disc, val) => handleOverrideRatingChange(globalIdx, disc, val)}
                           onSelectAlternative={(altId) => {
                             const alt = participant.alternatives?.find(a => a.id === altId);
                             const altAthlete = allAthletes?.find(a => a.id === altId);
@@ -951,9 +979,15 @@ export default function TournamentEntries() {
                                     slalom: altAthlete.current_rank_slalom || undefined,
                                     trick: altAthlete.current_rank_trick || undefined,
                                     jump: altAthlete.current_rank_jump || undefined,
+                                  },
+                                  ratings: {
+                                    slalom: altAthlete.current_rating_slalom || undefined,
+                                    trick: altAthlete.current_rating_trick || undefined,
+                                    jump: altAthlete.current_rating_jump || undefined,
                                   }
                                 },
                                 selectedDisciplines: alt.disciplines.filter(d => VALID_DISCIPLINES.includes(d as any)),
+                                overrideRatings: {},
                                 confidence: 0.8,
                                 selected: true
                               };
@@ -987,6 +1021,7 @@ export default function TournamentEntries() {
                             setMatchedParticipants(updated);
                           }}
                           onToggleDiscipline={(disc) => handleToggleDiscipline(globalIdx, disc)}
+                          onOverrideRatingChange={(disc, val) => handleOverrideRatingChange(globalIdx, disc, val)}
                           onSelectAlternative={(altId) => {
                             const alt = participant.alternatives?.find(a => a.id === altId);
                             const altAthlete = allAthletes?.find(a => a.id === altId);
@@ -1001,9 +1036,15 @@ export default function TournamentEntries() {
                                     slalom: altAthlete.current_rank_slalom || undefined,
                                     trick: altAthlete.current_rank_trick || undefined,
                                     jump: altAthlete.current_rank_jump || undefined,
+                                  },
+                                  ratings: {
+                                    slalom: altAthlete.current_rating_slalom || undefined,
+                                    trick: altAthlete.current_rating_trick || undefined,
+                                    jump: altAthlete.current_rating_jump || undefined,
                                   }
                                 },
                                 selectedDisciplines: alt.disciplines.filter(d => VALID_DISCIPLINES.includes(d as any)),
+                                overrideRatings: {},
                                 confidence: 0.8,
                                 selected: true
                               };
@@ -1052,12 +1093,14 @@ function ParticipantMatchRow({
   participant,
   onToggle,
   onToggleDiscipline,
+  onOverrideRatingChange,
   onSelectAlternative,
   allAthletes
 }: {
   participant: MatchedParticipant;
   onToggle: () => void;
   onToggleDiscipline: (discipline: string) => void;
+  onOverrideRatingChange: (discipline: string, value: string) => void;
   onSelectAlternative: (id: string) => void;
   allAthletes: any[] | undefined;
 }) {
@@ -1067,6 +1110,7 @@ function ParticipantMatchRow({
 
   const athleteDisciplines = participant.matchedAthlete?.disciplines || [];
   const rankings = participant.matchedAthlete?.rankings || {};
+  const ratings = participant.matchedAthlete?.ratings || {};
 
   return (
     <div className={`p-3 border rounded-lg ${participant.selected ? 'bg-accent/50 border-primary' : ''}`}>
@@ -1104,29 +1148,51 @@ function ParticipantMatchRow({
             </div>
           )}
 
-          {/* Discipline checkboxes */}
+          {/* Discipline checkboxes with override rating */}
           {participant.matchedAthlete && athleteDisciplines.length > 0 && (
-            <div className="flex items-center gap-3 mt-2">
-              <span className="text-xs text-muted-foreground">Events:</span>
-              {VALID_DISCIPLINES.map(disc => {
-                const canCompete = athleteDisciplines.includes(disc);
-                const isSelected = participant.selectedDisciplines.includes(disc);
-                
-                if (!canCompete) return null;
-                
-                return (
-                  <label key={disc} className="flex items-center gap-1 cursor-pointer">
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={() => onToggleDiscipline(disc)}
-                      className="h-3 w-3"
-                    />
-                    <span className={`text-xs capitalize ${isSelected ? 'font-medium' : 'text-muted-foreground'}`}>
-                      {disc}
-                    </span>
-                  </label>
-                );
-              })}
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-xs text-muted-foreground">Events:</span>
+                {VALID_DISCIPLINES.map(disc => {
+                  const canCompete = athleteDisciplines.includes(disc);
+                  const isSelected = participant.selectedDisciplines.includes(disc);
+                  const currentRating = ratings[disc as keyof typeof ratings];
+                  const overrideRating = participant.overrideRatings[disc];
+                  
+                  if (!canCompete) return null;
+                  
+                  return (
+                    <div key={disc} className="flex items-center gap-2">
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => onToggleDiscipline(disc)}
+                          className="h-3 w-3"
+                        />
+                        <span className={`text-xs capitalize ${isSelected ? 'font-medium' : 'text-muted-foreground'}`}>
+                          {disc}
+                        </span>
+                      </label>
+                      {isSelected && (
+                        <div className="flex items-center gap-1">
+                          <Badge variant="outline" className="text-[10px] px-1 py-0">
+                            {currentRating || 70}
+                          </Badge>
+                          <Input
+                            type="number"
+                            min="50"
+                            max="100"
+                            placeholder="Override"
+                            value={overrideRating ?? ''}
+                            onChange={(e) => onOverrideRatingChange(disc, e.target.value)}
+                            className={`h-6 w-16 text-xs ${overrideRating ? 'border-yellow-500 bg-yellow-500/10' : ''}`}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
               {athleteDisciplines.filter(d => VALID_DISCIPLINES.includes(d as any)).length === 0 && (
                 <span className="text-xs text-destructive">No valid disciplines</span>
               )}
