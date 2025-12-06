@@ -21,6 +21,9 @@ interface Athlete {
   current_rank_slalom: number | null;
   current_rank_trick: number | null;
   current_rank_jump: number | null;
+  current_rating_slalom: number | null;
+  current_rating_trick: number | null;
+  current_rating_jump: number | null;
 }
 
 interface RosterSelection {
@@ -66,6 +69,30 @@ export const TeamBuilder = ({
       case 'trick': return athlete.current_rank_trick;
       case 'jump': return athlete.current_rank_jump;
     }
+  };
+
+  const getRating = (athlete: Athlete, discipline: 'slalom' | 'trick' | 'jump'): number | null => {
+    switch (discipline) {
+      case 'slalom': return athlete.current_rating_slalom;
+      case 'trick': return athlete.current_rating_trick;
+      case 'jump': return athlete.current_rating_jump;
+    }
+  };
+
+  const getRatingBadgeVariant = (rating: number | null): "default" | "secondary" | "outline" | "destructive" => {
+    if (!rating) return "outline";
+    if (rating >= 95) return "default"; // Elite - primary color
+    if (rating >= 85) return "secondary"; // Strong
+    return "outline"; // Average/budget
+  };
+
+  const getRatingColor = (rating: number | null): string => {
+    if (!rating) return "text-muted-foreground";
+    if (rating >= 95) return "text-green-500";
+    if (rating >= 90) return "text-emerald-400";
+    if (rating >= 85) return "text-yellow-500";
+    if (rating >= 80) return "text-orange-400";
+    return "text-muted-foreground";
   };
 
   const normalizeGender = (gender: string): GenderKey => {
@@ -328,6 +355,19 @@ export const TeamBuilder = ({
                         </div>
                         
                         <div className="flex items-center gap-3">
+                          {/* Rating Badge */}
+                          {(() => {
+                            const rating = getRating(athlete, disc as 'slalom' | 'trick' | 'jump');
+                            return rating ? (
+                              <Badge 
+                                variant="outline" 
+                                className={`text-xs font-bold ${getRatingColor(rating)} border-current`}
+                              >
+                                {rating}
+                              </Badge>
+                            ) : null;
+                          })()}
+                          
                           <div className="text-right">
                             <p className={`font-bold ${!canAfford && !inRoster ? 'text-destructive' : ''}`}>
                               {price.toLocaleString()}

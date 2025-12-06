@@ -47,6 +47,9 @@ interface Athlete {
   current_rank_slalom: number | null;
   current_rank_trick: number | null;
   current_rank_jump: number | null;
+  current_rating_slalom: number | null;
+  current_rating_trick: number | null;
+  current_rating_jump: number | null;
 }
 
 interface RosterSelection {
@@ -159,7 +162,7 @@ const FantasyPotDetail = () => {
       // Build query for athletes
       let athleteQuery = supabase
         .from('athletes')
-        .select('id, name, country, country_code, gender, disciplines, fantasy_price_slalom, fantasy_price_trick, fantasy_price_jump, current_rank_slalom, current_rank_trick, current_rank_jump')
+        .select('id, name, country, country_code, gender, disciplines, fantasy_price_slalom, fantasy_price_trick, fantasy_price_jump, current_rank_slalom, current_rank_trick, current_rank_jump, current_rating_slalom, current_rating_trick, current_rating_jump')
         .order('name');
       
       // If tournament linked, filter by entered athletes
