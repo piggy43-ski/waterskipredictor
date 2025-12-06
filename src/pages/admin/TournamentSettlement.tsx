@@ -355,6 +355,18 @@ export default function TournamentSettlement() {
     }));
   };
 
+  const clearRound = (roundType: RoundType) => {
+    setResults(prev => ({
+      ...prev,
+      [roundType]: {
+        slalom: { male: [], female: [] },
+        trick: { male: [], female: [] },
+        jump: { male: [], female: [] },
+      },
+    }));
+    toast({ title: `${roundLabels[roundType]} round cleared` });
+  };
+
   // Fuzzy match athlete name
   const matchAthleteByName = (name: string, athletes: any[]): { id: string; confidence: number } | null => {
     if (!name || !athletes.length) return null;
@@ -910,6 +922,17 @@ export default function TournamentSettlement() {
                       })}
                     </TabsList>
                   </Tabs>
+                  {getRoundEntryCount(selectedRound) > 0 && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => clearRound(selectedRound)}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Clear Round
+                    </Button>
+                  )}
                 </div>
 
                 <Alert className="mb-4 bg-muted/50 border-muted">
