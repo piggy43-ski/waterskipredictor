@@ -2,14 +2,15 @@
  * Fantasy Pricing Engine for Waterski Fantasy
  * 
  * Dynamic pricing based on:
- * - Athlete tier
- * - Season performance
+ * - Athlete current_rating (0-100)
  * - Post-event adjustments
+ * 
+ * Higher rated athletes cost more tokens proportionally
  */
 
 import { TierLevel } from './athleteTiers';
 
-// Base price bands by tier
+// Base price bands by tier (legacy, kept for compatibility)
 export const FANTASY_PRICE_BANDS: Record<TierLevel, { base: number; maxMultiplier: number }> = {
   tier1: { base: 12000, maxMultiplier: 1.5 },
   tier2: { base: 8000, maxMultiplier: 1.3 },
@@ -36,26 +37,64 @@ export const EVENT_ADJUSTMENTS = {
 };
 
 /**
- * Calculate initial fantasy price from tier + performance
+ * Calculate fantasy price directly from current_rating (0-100)
  * 
- * @param tier - Athlete's strength tier
- * @param seasonPodiumRate - Season podium rate (0-1)
+ * Rating → Price mapping:
+ * - 99-100: 18,400 - 20,000 (elite superstars)
+ * - 95-98:  15,200 - 17,600 (top tier)
+ * - 90-94:  11,000 - 14,200 (strong favorites)
+ * - 85-89:   7,000 - 10,200 (solid performers)
+ * - 80-84:   4,600 -  6,400 (mid-tier)
+ * - 70-79:   2,800 -  4,200 (budget picks)
+ * - <70:     2,000 -  2,700 (longshots)
+ * 
+ * @param rating - Athlete's current_rating (0-100)
  * @returns Fantasy price in tokens
+ */
+export const calculateFantasyPriceFromRating = (rating: number): number => {
+  let price: number;
+  
+  if (rating >= 95) {
+    // Elite tier: 15,200 - 20,000
+    price = 15200 + (rating - 95) * 960;
+  } else if (rating >= 90) {
+    // Strong favorite: 11,000 - 14,200
+    price = 11000 + (rating - 90) * 640;
+  } else if (rating >= 85) {
+    // Solid performer: 7,000 - 10,200
+    price = 7000 + (rating - 85) * 640;
+  } else if (rating >= 80) {
+    // Mid-tier: 4,600 - 6,400
+    price = 4600 + (rating - 80) * 360;
+  } else if (rating >= 70) {
+    // Budget: 2,800 - 4,200
+    price = 2800 + (rating - 70) * 140;
+  } else {
+    // Longshot: 2,000 - 2,700
+    price = 2000 + Math.max(0, rating - 50) * 35;
+  }
+  
+  // Round to nearest 100 for cleaner display
+  price = Math.round(price / 100) * 100;
+  
+  // Clamp to min/max
+  return Math.max(
+    PRICE_CHANGE_CAPS.minPrice,
+    Math.min(PRICE_CHANGE_CAPS.maxPrice, price)
+  );
+};
+
+/**
+ * Legacy: Calculate initial fantasy price from tier + performance
+ * @deprecated Use calculateFantasyPriceFromRating instead
  */
 export const calculateFantasyPrice = (
   tier: TierLevel,
   seasonPodiumRate: number
 ): number => {
   const band = FANTASY_PRICE_BANDS[tier];
-  
-  // Multiplier increases with performance
-  // At 0% podium rate: multiplier = 1.0
-  // At 100% podium rate: multiplier = maxMultiplier
   const multiplier = 1 + (seasonPodiumRate * (band.maxMultiplier - 1));
-  
   const price = Math.round(band.base * multiplier);
-  
-  // Clamp to min/max
   return Math.max(
     PRICE_CHANGE_CAPS.minPrice,
     Math.min(PRICE_CHANGE_CAPS.maxPrice, price)
