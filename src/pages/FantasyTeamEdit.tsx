@@ -27,6 +27,9 @@ interface Athlete {
   current_rank_slalom: number | null;
   current_rank_trick: number | null;
   current_rank_jump: number | null;
+  current_rating_slalom: number | null;
+  current_rating_trick: number | null;
+  current_rating_jump: number | null;
 }
 
 interface RosterSelection {
