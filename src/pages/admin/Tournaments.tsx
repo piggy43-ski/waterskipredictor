@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { AdminLayout } from '@/components/AdminLayout';
@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +13,26 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, Trash2, Users } from 'lucide-react';
 import { format } from 'date-fns';
+
+// Helper to format database datetime to datetime-local input format
+const formatDatetimeForInput = (datetime: string | undefined | null): string => {
+  if (!datetime) return '';
+  try {
+    const date = new Date(datetime);
+    if (isNaN(date.getTime())) return '';
+    // Format as YYYY-MM-DDTHH:MM for datetime-local input
+    return date.toISOString().slice(0, 16);
+  } catch {
+    return '';
+  }
+};
+
+// Helper to get today's date with default time
+const getDefaultDatetime = (defaultHour: number): string => {
+  const now = new Date();
+  now.setHours(defaultHour, 0, 0, 0);
+  return now.toISOString().slice(0, 16);
+};
 
 type Tournament = {
   id: string;
@@ -34,9 +53,48 @@ export default function AdminTournaments() {
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   const [disciplines, setDisciplines] = useState<string[]>([]);
   const [editDisciplines, setEditDisciplines] = useState<string[]>([]);
+  
+  // Controlled state for create form datetime inputs
+  const [createStartDatetime, setCreateStartDatetime] = useState('');
+  const [createEndDatetime, setCreateEndDatetime] = useState('');
+  
+  // Controlled state for edit form datetime inputs
+  const [editStartDatetime, setEditStartDatetime] = useState('');
+  const [editEndDatetime, setEditEndDatetime] = useState('');
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  
+  // When edit dialog opens, populate the datetime fields
+  useEffect(() => {
+    if (editOpen && editingTournament) {
+      setEditStartDatetime(formatDatetimeForInput(editingTournament.start_datetime));
+      setEditEndDatetime(formatDatetimeForInput(editingTournament.end_datetime));
+    }
+  }, [editOpen, editingTournament]);
+  
+  // Auto-set default times when date portion changes
+  const handleStartDatetimeChange = (value: string, isEdit: boolean) => {
+    if (isEdit) {
+      setEditStartDatetime(value);
+    } else {
+      setCreateStartDatetime(value);
+      // If end datetime is empty or on a different day, auto-set end to same day at 6PM
+      if (!createEndDatetime || value.split('T')[0] !== createEndDatetime.split('T')[0]) {
+        const endValue = value.split('T')[0] + 'T18:00';
+        setCreateEndDatetime(endValue);
+      }
+    }
+  };
+  
+  const handleEndDatetimeChange = (value: string, isEdit: boolean) => {
+    if (isEdit) {
+      setEditEndDatetime(value);
+    } else {
+      setCreateEndDatetime(value);
+    }
+  };
 
   const { data: tournaments, isLoading } = useQuery({
     queryKey: ['admin-tournaments'],
@@ -53,8 +111,8 @@ export default function AdminTournaments() {
 
   const createMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const startDatetime = formData.get('start_datetime') as string || null;
-      const endDatetime = formData.get('end_datetime') as string || null;
+      const startDatetime = createStartDatetime || null;
+      const endDatetime = createEndDatetime || null;
       
       const tournament = {
         name: formData.get('name') as string,
@@ -75,6 +133,8 @@ export default function AdminTournaments() {
       queryClient.invalidateQueries({ queryKey: ['admin-tournaments'] });
       setOpen(false);
       setDisciplines([]);
+      setCreateStartDatetime('');
+      setCreateEndDatetime('');
       toast({ title: 'Tournament created successfully' });
     },
     onError: (error: Error) => {
@@ -133,8 +193,8 @@ export default function AdminTournaments() {
     if (!editingTournament) return;
 
     const formData = new FormData(e.currentTarget);
-    const startDatetime = formData.get('start_datetime') as string || null;
-    const endDatetime = formData.get('end_datetime') as string || null;
+    const startDatetime = editStartDatetime || null;
+    const endDatetime = editEndDatetime || null;
     
     const updates = {
       name: formData.get('name') as string,
@@ -161,7 +221,11 @@ export default function AdminTournaments() {
           
           <Dialog open={open} onOpenChange={(newOpen) => {
             setOpen(newOpen);
-            if (!newOpen) setDisciplines([]);
+            if (!newOpen) {
+              setDisciplines([]);
+              setCreateStartDatetime('');
+              setCreateEndDatetime('');
+            }
           }}>
             <DialogTrigger asChild>
               <Button>
@@ -188,10 +252,12 @@ export default function AdminTournaments() {
                     id="start_datetime" 
                     name="start_datetime" 
                     type="datetime-local" 
+                    value={createStartDatetime}
+                    onChange={(e) => handleStartDatetimeChange(e.target.value, false)}
                     required
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Betting locks at this time
+                    Betting locks at this time (defaults to 8:00 AM)
                   </p>
                 </div>
                 <div>
@@ -200,10 +266,12 @@ export default function AdminTournaments() {
                     id="end_datetime" 
                     name="end_datetime" 
                     type="datetime-local" 
+                    value={createEndDatetime}
+                    onChange={(e) => handleEndDatetimeChange(e.target.value, false)}
                     required
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Tournament status becomes "Finished" at this time
+                    Status becomes "Finished" at this time (defaults to 6:00 PM)
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -317,17 +385,19 @@ export default function AdminTournaments() {
         )}
 
         {/* Edit Dialog */}
-      <Dialog 
-        open={editOpen} 
-        onOpenChange={(open) => {
-          setEditOpen(open);
-          if (open && editingTournament) {
-            setEditDisciplines(editingTournament.disciplines || []);
-          } else {
-            setEditDisciplines([]);
-          }
-        }}
-      >
+        <Dialog 
+          open={editOpen} 
+          onOpenChange={(open) => {
+            setEditOpen(open);
+            if (open && editingTournament) {
+              setEditDisciplines(editingTournament.disciplines || []);
+            } else {
+              setEditDisciplines([]);
+              setEditStartDatetime('');
+              setEditEndDatetime('');
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Tournament</DialogTitle>
@@ -357,7 +427,8 @@ export default function AdminTournaments() {
                   id="edit-start-datetime" 
                   name="start_datetime" 
                   type="datetime-local" 
-                  defaultValue={editingTournament?.start_datetime || ''}
+                  value={editStartDatetime}
+                  onChange={(e) => handleStartDatetimeChange(e.target.value, true)}
                   required
                 />
                 <p className="text-xs text-muted-foreground mt-1">
@@ -370,11 +441,12 @@ export default function AdminTournaments() {
                   id="edit-end-datetime" 
                   name="end_datetime" 
                   type="datetime-local" 
-                  defaultValue={editingTournament?.end_datetime || ''}
+                  value={editEndDatetime}
+                  onChange={(e) => handleEndDatetimeChange(e.target.value, true)}
                   required
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Status becomes "Finished" at this time (auto-calculated)
+                  Status becomes "Finished" at this time
                 </p>
               </div>
               <div className="space-y-2">
