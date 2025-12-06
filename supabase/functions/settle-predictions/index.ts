@@ -571,11 +571,12 @@ Deno.serve(async (req) => {
       console.log(`\n📊 Updating athlete stats from tournament results...`);
       
       try {
-        // Fetch all results for this tournament
+        // Fetch all finals results for this tournament from tournament_results
         const { data: tournamentResults, error: resultsError } = await supabaseClient
-          .from('athlete_results')
+          .from('tournament_results')
           .select('*')
-          .eq('tournament_id', tournamentId);
+          .eq('tournament_id', tournamentId)
+          .eq('round_type', 'final');
         
         if (resultsError) {
           console.error('⚠️  Failed to fetch tournament results:', resultsError);
@@ -600,7 +601,7 @@ Deno.serve(async (req) => {
           
           for (const resultRow of tournamentResults) {
             const discipline = resultRow.discipline;
-            const position = resultRow.position;
+            const position = resultRow.final_overall_rank; // Use final_overall_rank instead of position
             const athleteId = resultRow.athlete_id;
             
             // Fetch current athlete data

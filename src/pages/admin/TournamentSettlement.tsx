@@ -14,25 +14,36 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { SettlementConfirmDialog } from '@/components/SettlementConfirmDialog';
-import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search, Sparkles, X, Eye, AlertTriangle } from 'lucide-react';
+import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search, Sparkles, X, AlertTriangle } from 'lucide-react';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
-import { compareScores, isValidSlalomScore, normalizeSlalomScore } from '@/utils/waterskiScoring';
+import { compareScores, isValidSlalomScore, normalizeSlalomScore, parseSlalomScore } from '@/utils/waterskiScoring';
 import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
 import type { Discipline, Category } from '@/types';
 
+type RoundType = 'qual' | 'semi' | 'final';
+
 type ResultEntry = {
   athlete_id: string;
-  position?: number;
+  round_rank?: number;
+  final_overall_rank?: number;
   score: string;
+  raw_score: number;
   made_finals: boolean;
+  advanced_to_next_round: boolean;
+  stood_both_passes: boolean; // For trick
   missed_first_pass: boolean;
   missed_gate: boolean;
-  notes?: string;
+  no_score: boolean;
 };
 
 type DisciplineResults = {
   [gender: string]: ResultEntry[];
+};
+
+type RoundResults = {
+  [roundType in RoundType]: {
+    [discipline in Discipline]: DisciplineResults;
+  };
 };
 
 type SettlementPreview = {
@@ -72,23 +83,59 @@ type AIParseResponse = {
 const emptyResultEntry = (): ResultEntry => ({
   athlete_id: '',
   score: '',
-  made_finals: true,
+  raw_score: 0,
+  made_finals: false,
+  advanced_to_next_round: false,
+  stood_both_passes: true,
   missed_first_pass: false,
   missed_gate: false,
+  no_score: false,
 });
 
-export default function TournamentSettlement() {
-  const [selectedTournament, setSelectedTournament] = useState('');
-  const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline>('slalom');
-  const [athleteSearch, setAthleteSearch] = useState<Record<string, string>>({});
-  const [results, setResults] = useState<Record<Discipline, DisciplineResults>>({
+const initializeRoundResults = (): RoundResults => ({
+  qual: {
     slalom: { male: [], female: [] },
     trick: { male: [], female: [] },
     jump: { male: [], female: [] },
-  });
+  },
+  semi: {
+    slalom: { male: [], female: [] },
+    trick: { male: [], female: [] },
+    jump: { male: [], female: [] },
+  },
+  final: {
+    slalom: { male: [], female: [] },
+    trick: { male: [], female: [] },
+    jump: { male: [], female: [] },
+  },
+});
+
+// Parse score and calculate raw_score for sorting
+const parseAndCalculateScore = (scoreStr: string, discipline: Discipline): { display: string; raw: number } => {
+  if (!scoreStr) return { display: '', raw: 0 };
+  
+  if (discipline === 'slalom') {
+    const parsed = parseSlalomScore(scoreStr);
+    if (parsed) {
+      return { display: normalizeSlalomScore(scoreStr), raw: parsed.value };
+    }
+    return { display: scoreStr, raw: 0 };
+  }
+  
+  // For trick and jump, score is just a number
+  const raw = parseFloat(scoreStr) || 0;
+  return { display: scoreStr, raw };
+};
+
+export default function TournamentSettlement() {
+  const [selectedTournament, setSelectedTournament] = useState('');
+  const [selectedRound, setSelectedRound] = useState<RoundType>('final');
+  const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline>('slalom');
+  const [athleteSearch, setAthleteSearch] = useState<Record<string, string>>({});
+  const [results, setResults] = useState<RoundResults>(initializeRoundResults());
   const [settlementPreviews, setSettlementPreviews] = useState<SettlementPreview[]>([]);
   
-  // AI parsing state - batch processing
+  // AI parsing state
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isAIParsing, setIsAIParsing] = useState(false);
   const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
@@ -122,8 +169,9 @@ export default function TournamentSettlement() {
 
       if (tournamentError) throw tournamentError;
 
+      // Fetch existing tournament_results
       const { data: existingResults, error: resultsError } = await supabase
-        .from('athlete_results')
+        .from('tournament_results')
         .select('*, athlete:athletes(name)')
         .eq('tournament_id', selectedTournament);
 
@@ -138,22 +186,27 @@ export default function TournamentSettlement() {
 
       // Pre-populate results from existing data
       if (existingResults && existingResults.length > 0) {
-        const newResults: Record<Discipline, DisciplineResults> = {
-          slalom: { male: [], female: [] },
-          trick: { male: [], female: [] },
-          jump: { male: [], female: [] },
-        };
+        const newResults = initializeRoundResults();
 
         for (const result of existingResults) {
+          const roundType = result.round_type as RoundType;
           const discipline = result.discipline as Discipline;
           const genderKey = result.gender === 'male' ? 'male' : 'female';
           
-          newResults[discipline][genderKey].push({
+          if (!newResults[roundType]) continue;
+          
+          newResults[roundType][discipline][genderKey].push({
             athlete_id: result.athlete_id,
-            score: result.score_raw?.toString() || '',
-            made_finals: result.made_finals ?? true,
+            score: result.score_display || result.raw_score?.toString() || '',
+            raw_score: result.raw_score || 0,
+            round_rank: result.round_rank || undefined,
+            final_overall_rank: result.final_overall_rank || undefined,
+            made_finals: result.made_finals ?? false,
+            advanced_to_next_round: result.advanced_to_next_round ?? false,
+            stood_both_passes: result.stood_both_passes ?? true,
             missed_first_pass: result.missed_first_pass ?? false,
             missed_gate: result.missed_gate ?? false,
+            no_score: result.no_score ?? false,
           });
         }
 
@@ -165,16 +218,13 @@ export default function TournamentSettlement() {
     enabled: !!selectedTournament,
   });
 
-  // Get all athletes for a discipline/gender for matching
   const getAllAthletes = (discipline: Discipline, gender: 'male' | 'female') => {
     if (!tournamentData?.tournament?.tournament_entries) return [];
-    
-    const genderValue = gender === 'male' ? 'male' : 'female';
     
     return tournamentData.tournament.tournament_entries
       .filter((entry: any) => 
         entry.discipline === discipline &&
-        entry.athlete?.gender === genderValue
+        entry.athlete?.gender === gender
       )
       .map((entry: any) => entry.athlete)
       .filter(Boolean);
@@ -183,47 +233,62 @@ export default function TournamentSettlement() {
   const getFilteredAthletes = (discipline: Discipline, gender: 'male' | 'female') => {
     if (!tournamentData?.tournament?.tournament_entries) return [];
     
-    const genderValue = gender === 'male' ? 'male' : 'female';
-    const searchKey = `${discipline}-${gender}`;
+    const searchKey = `${selectedRound}-${discipline}-${gender}`;
     const searchTerm = athleteSearch[searchKey]?.toLowerCase() || '';
     
     return tournamentData.tournament.tournament_entries
       .filter((entry: any) => 
         entry.discipline === discipline &&
-        entry.athlete?.gender === genderValue &&
+        entry.athlete?.gender === gender &&
         (!searchTerm || entry.athlete?.name?.toLowerCase().includes(searchTerm))
       )
       .map((entry: any) => entry.athlete)
       .filter(Boolean);
   };
 
-  const calculatePositions = (discipline: Discipline, gender: string, entries: ResultEntry[]): ResultEntry[] => {
-    const validEntries = entries.filter(e => e.athlete_id && e.score);
-    const invalidEntries = entries.filter(e => !e.athlete_id || !e.score);
+  // Calculate rankings based on score
+  const calculateRankings = (entries: ResultEntry[], discipline: Discipline, isFinal: boolean): ResultEntry[] => {
+    const validEntries = entries.filter(e => e.athlete_id && e.raw_score > 0);
+    const zeroScoreEntries = entries.filter(e => e.athlete_id && e.raw_score === 0);
+    const emptyEntries = entries.filter(e => !e.athlete_id);
 
-    const sorted = [...validEntries].sort((a, b) => 
-      compareScores(b.score, a.score, discipline)
-    );
+    // Sort by raw_score (higher is better for all disciplines)
+    const sorted = [...validEntries].sort((a, b) => b.raw_score - a.raw_score);
 
-    const withPositions = sorted.map((entry, index) => ({
+    const withRanks = sorted.map((entry, index) => ({
       ...entry,
-      position: index + 1,
+      round_rank: index + 1,
+      final_overall_rank: isFinal ? index + 1 : undefined,
+      made_finals: isFinal,
+      no_score: false,
     }));
 
-    return [...withPositions, ...invalidEntries];
+    // Mark zero score entries as no_score
+    const zeroWithFlags = zeroScoreEntries.map(entry => ({
+      ...entry,
+      no_score: true,
+      round_rank: undefined,
+      final_overall_rank: undefined,
+    }));
+
+    return [...withRanks, ...zeroWithFlags, ...emptyEntries];
   };
 
-  const addResultRow = (discipline: Discipline, gender: string) => {
+  const addResultRow = (roundType: RoundType, discipline: Discipline, gender: string) => {
     setResults(prev => ({
       ...prev,
-      [discipline]: {
-        ...prev[discipline],
-        [gender]: [...prev[discipline][gender], emptyResultEntry()],
+      [roundType]: {
+        ...prev[roundType],
+        [discipline]: {
+          ...prev[roundType][discipline],
+          [gender]: [...prev[roundType][discipline][gender], emptyResultEntry()],
+        },
       },
     }));
   };
 
   const updateResultRow = (
+    roundType: RoundType,
     discipline: Discipline,
     gender: string,
     index: number,
@@ -231,49 +296,65 @@ export default function TournamentSettlement() {
     value: string | number | boolean
   ) => {
     setResults(prev => {
-      const updated = [...prev[discipline][gender]];
-      updated[index] = { ...updated[index], [field]: value };
+      const updated = [...prev[roundType][discipline][gender]];
       
-      const withPositions = calculatePositions(discipline, gender, updated);
+      if (field === 'score') {
+        const parsed = parseAndCalculateScore(value as string, discipline);
+        updated[index] = { 
+          ...updated[index], 
+          score: parsed.display || (value as string),
+          raw_score: parsed.raw,
+          no_score: parsed.raw === 0, // Auto-set no_score when raw_score is 0
+        };
+      } else {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+      
+      // Recalculate rankings
+      const isFinal = roundType === 'final';
+      const withRanks = calculateRankings(updated, discipline, isFinal);
       
       return {
         ...prev,
-        [discipline]: {
-          ...prev[discipline],
-          [gender]: withPositions,
+        [roundType]: {
+          ...prev[roundType],
+          [discipline]: {
+            ...prev[roundType][discipline],
+            [gender]: withRanks,
+          },
         },
       };
     });
   };
 
-  const removeResultRow = (discipline: Discipline, gender: string, index: number) => {
+  const removeResultRow = (roundType: RoundType, discipline: Discipline, gender: string, index: number) => {
     setResults(prev => ({
       ...prev,
-      [discipline]: {
-        ...prev[discipline],
-        [gender]: prev[discipline][gender].filter((_, i) => i !== index),
+      [roundType]: {
+        ...prev[roundType],
+        [discipline]: {
+          ...prev[roundType][discipline],
+          [gender]: prev[roundType][discipline][gender].filter((_, i) => i !== index),
+        },
       },
     }));
   };
 
-  // Fuzzy match athlete name to database
+  // Fuzzy match athlete name
   const matchAthleteByName = (name: string, athletes: any[]): { id: string; confidence: number } | null => {
     if (!name || !athletes.length) return null;
     
     const normalizedName = name.toLowerCase().trim();
     
-    // Exact match
     const exactMatch = athletes.find(a => a.name.toLowerCase() === normalizedName);
     if (exactMatch) return { id: exactMatch.id, confidence: 1 };
     
-    // Partial match (name contains or is contained)
     const partialMatch = athletes.find(a => 
       a.name.toLowerCase().includes(normalizedName) || 
       normalizedName.includes(a.name.toLowerCase())
     );
     if (partialMatch) return { id: partialMatch.id, confidence: 0.8 };
     
-    // Word-based match
     const nameWords = normalizedName.split(/\s+/);
     for (const athlete of athletes) {
       const athleteWords = athlete.name.toLowerCase().split(/\s+/);
@@ -286,7 +367,6 @@ export default function TournamentSettlement() {
     return null;
   };
 
-  // Batch parse all files with AI
   const parseAllFiles = useCallback(async () => {
     if (!selectedTournament || !selectedDiscipline) {
       toast({ title: 'Please select a tournament and discipline first', variant: 'destructive' });
@@ -297,26 +377,20 @@ export default function TournamentSettlement() {
     if (pendingFiles.length === 0) return;
 
     setIsAIParsing(true);
-    const results: AIParseResponse[] = [];
+    const parseResults: AIParseResponse[] = [];
     
-    // Get all athletes for both genders for matching
     const maleAthletes = getAllAthletes(selectedDiscipline, 'male');
     const femaleAthletes = getAllAthletes(selectedDiscipline, 'female');
 
     for (const file of pendingFiles) {
-      // Update file status to parsing
       setUploadedFiles(prev => 
         prev.map(f => f.id === file.id ? { ...f, status: 'parsing' as const } : f)
       );
 
       try {
-        // Build request body based on file type - no gender passed, AI detects it
-        const requestBody: Record<string, any> = {
-          discipline: selectedDiscipline,
-        };
+        const requestBody: Record<string, any> = { discipline: selectedDiscipline };
 
         if (file.type === 'url' && file.url) {
-          // Check if it's a direct image URL or webpage
           const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
           const isImageUrl = imageExtensions.some(ext => file.url!.toLowerCase().includes(ext));
           
@@ -336,7 +410,6 @@ export default function TournamentSettlement() {
 
         if (error) throw error;
 
-        // Match athletes to database based on their detected gender
         const matchedAthletes = data.athletes.map((parsed: ParsedAthlete) => {
           const athletePool = parsed.gender === 'female' ? femaleAthletes : maleAthletes;
           const match = matchAthleteByName(parsed.name, athletePool);
@@ -347,16 +420,13 @@ export default function TournamentSettlement() {
           };
         });
 
-        results.push({ ...data, athletes: matchedAthletes, source_file: file.name });
+        parseResults.push({ ...data, athletes: matchedAthletes, source_file: file.name });
         
-        // Update file status to done
         setUploadedFiles(prev => 
           prev.map(f => f.id === file.id ? { ...f, status: 'done' as const } : f)
         );
       } catch (err: any) {
         console.error(`AI parsing error for ${file.name}:`, err);
-        
-        // Update file status to error
         setUploadedFiles(prev => 
           prev.map(f => f.id === file.id ? { ...f, status: 'error' as const, error: err.message } : f)
         );
@@ -365,32 +435,25 @@ export default function TournamentSettlement() {
 
     setIsAIParsing(false);
 
-    if (results.length > 0) {
-      setAllParsedResults(results);
+    if (parseResults.length > 0) {
+      setAllParsedResults(parseResults);
       setAiPreviewOpen(true);
       
-      const totalAthletes = results.reduce((sum, r) => sum + r.athletes.length, 0);
-      const maleCount = results.reduce((sum, r) => sum + r.athletes.filter(a => a.gender === 'male').length, 0);
-      const femaleCount = results.reduce((sum, r) => sum + r.athletes.filter(a => a.gender === 'female').length, 0);
+      const totalAthletes = parseResults.reduce((sum, r) => sum + r.athletes.length, 0);
       toast({ 
         title: 'Parsing complete',
-        description: `Extracted ${totalAthletes} athletes (${maleCount} male, ${femaleCount} female) from ${results.length} file(s)`
+        description: `Extracted ${totalAthletes} athletes from ${parseResults.length} file(s)`
       });
     }
   }, [selectedTournament, selectedDiscipline, uploadedFiles, toast]);
 
-  // Apply all AI results to form
   const applyAIResults = () => {
     if (allParsedResults.length === 0) return;
 
-    // Combine all athletes from all parsed results
     const allAthletes = allParsedResults.flatMap(r => r.athletes);
-    
-    // Split by gender
     const maleAthletes = allAthletes.filter(a => a.gender === 'male');
     const femaleAthletes = allAthletes.filter(a => a.gender === 'female');
     
-    // Dedupe by athlete_id for each gender (keep first occurrence)
     const createEntries = (athletes: ParsedAthlete[]): ResultEntry[] => {
       const seenIds = new Set<string>();
       return athletes
@@ -399,27 +462,37 @@ export default function TournamentSettlement() {
           seenIds.add(a.matched_athlete_id);
           return true;
         })
-        .map(a => ({
-          athlete_id: a.matched_athlete_id!,
-          score: a.score,
-          made_finals: a.made_finals,
-          missed_first_pass: a.missed_first_pass,
-          missed_gate: a.missed_gate,
-          notes: a.notes,
-        }));
+        .map(a => {
+          const parsed = parseAndCalculateScore(a.score, selectedDiscipline);
+          return {
+            athlete_id: a.matched_athlete_id!,
+            score: a.score,
+            raw_score: parsed.raw,
+            made_finals: a.made_finals,
+            advanced_to_next_round: false,
+            stood_both_passes: true,
+            missed_first_pass: a.missed_first_pass,
+            missed_gate: a.missed_gate,
+            no_score: parsed.raw === 0,
+          };
+        });
     };
 
     const maleEntries = createEntries(maleAthletes);
     const femaleEntries = createEntries(femaleAthletes);
 
-    const maleWithPositions = calculatePositions(selectedDiscipline, 'male', maleEntries);
-    const femaleWithPositions = calculatePositions(selectedDiscipline, 'female', femaleEntries);
+    const isFinal = selectedRound === 'final';
+    const maleWithRanks = calculateRankings(maleEntries, selectedDiscipline, isFinal);
+    const femaleWithRanks = calculateRankings(femaleEntries, selectedDiscipline, isFinal);
 
     setResults(prev => ({
       ...prev,
-      [selectedDiscipline]: {
-        male: maleWithPositions.length > 0 ? maleWithPositions : prev[selectedDiscipline].male,
-        female: femaleWithPositions.length > 0 ? femaleWithPositions : prev[selectedDiscipline].female,
+      [selectedRound]: {
+        ...prev[selectedRound],
+        [selectedDiscipline]: {
+          male: maleWithRanks.length > 0 ? maleWithRanks : prev[selectedRound][selectedDiscipline].male,
+          female: femaleWithRanks.length > 0 ? femaleWithRanks : prev[selectedRound][selectedDiscipline].female,
+        },
       },
     }));
 
@@ -429,24 +502,26 @@ export default function TournamentSettlement() {
     
     toast({ 
       title: 'Results applied',
-      description: `Added ${maleEntries.length} male and ${femaleEntries.length} female entries. You can now review and modify them.`
+      description: `Added ${maleEntries.length} male and ${femaleEntries.length} female entries to ${selectedRound} round.`
     });
   };
 
   const validateResults = (): boolean => {
     let hasErrors = false;
 
-    for (const [discipline, genderData] of Object.entries(results)) {
-      for (const [gender, entries] of Object.entries(genderData)) {
-        for (const entry of entries) {
-          if (entry.athlete_id && entry.score) {
-            if (discipline === 'slalom' && !isValidSlalomScore(entry.score)) {
-              toast({
-                title: 'Invalid slalom score',
-                description: `Score "${entry.score}" is not valid. Use format: buoy@rope (e.g., 2@43, 3.5@41)`,
-                variant: 'destructive',
-              });
-              hasErrors = true;
+    for (const [roundType, roundData] of Object.entries(results)) {
+      for (const [discipline, genderData] of Object.entries(roundData)) {
+        for (const [gender, entries] of Object.entries(genderData)) {
+          for (const entry of entries as ResultEntry[]) {
+            if (entry.athlete_id && entry.score) {
+              if (discipline === 'slalom' && !isValidSlalomScore(entry.score)) {
+                toast({
+                  title: 'Invalid slalom score',
+                  description: `Score "${entry.score}" is not valid. Use format: buoy@rope (e.g., 2@43, 3.5@41)`,
+                  variant: 'destructive',
+                });
+                hasErrors = true;
+              }
             }
           }
         }
@@ -466,20 +541,24 @@ export default function TournamentSettlement() {
 
     const previews: SettlementPreview[] = [];
 
+    // Get finals results for settlement
+    const finalsResults = results.final;
+
     for (const market of tournamentData.markets) {
       const discipline = market.discipline as Discipline;
       const genderKey = market.category.includes('men') ? 'male' : 'female';
-      const disciplineResults = results[discipline]?.[genderKey] || [];
+      const disciplineResults = finalsResults[discipline]?.[genderKey] || [];
 
       if (disciplineResults.length === 0) continue;
 
-      const validResults = disciplineResults.filter(r => r.athlete_id && r.score);
+      const validResults = disciplineResults.filter(r => r.athlete_id && r.raw_score > 0);
 
       let winningSelectionIds: string[] = [];
       let winningAthleteNames: string[] = [];
 
       if (market.market_type === 'WINNER') {
-        const winner = validResults.find(r => r.position === 1);
+        // Winner is final_overall_rank = 1
+        const winner = validResults.find(r => r.final_overall_rank === 1);
         if (winner) {
           const selection = market.selections?.find(s => s.athlete_id === winner.athlete_id);
           if (selection) {
@@ -488,7 +567,8 @@ export default function TournamentSettlement() {
           }
         }
       } else if (market.market_type === 'PODIUM') {
-        const podiumFinishers = validResults.filter(r => r.position >= 1 && r.position <= 3);
+        // Podium is final_overall_rank 1-3
+        const podiumFinishers = validResults.filter(r => r.final_overall_rank && r.final_overall_rank <= 3);
         for (const finisher of podiumFinishers) {
           const selection = market.selections?.find(s => s.athlete_id === finisher.athlete_id);
           if (selection) {
@@ -497,13 +577,22 @@ export default function TournamentSettlement() {
           }
         }
       } else if (market.market_type === 'HIGHEST_SCORE') {
-        const sortedByScore = [...validResults].sort((a, b) => 
-          compareScores(b.score, a.score, discipline)
-        );
+        // Highest score across ALL rounds
+        let maxScore = 0;
+        let highestScorerId = '';
         
-        if (sortedByScore.length > 0) {
-          const highestScorer = sortedByScore[0];
-          const selection = market.selections?.find(s => s.athlete_id === highestScorer.athlete_id);
+        for (const roundType of ['qual', 'semi', 'final'] as RoundType[]) {
+          const roundResults = results[roundType][discipline]?.[genderKey] || [];
+          for (const entry of roundResults) {
+            if (entry.raw_score > maxScore) {
+              maxScore = entry.raw_score;
+              highestScorerId = entry.athlete_id;
+            }
+          }
+        }
+        
+        if (highestScorerId) {
+          const selection = market.selections?.find(s => s.athlete_id === highestScorerId);
           if (selection) {
             winningSelectionIds = [selection.id];
             winningAthleteNames = [selection.athlete?.name || ''];
@@ -543,58 +632,80 @@ export default function TournamentSettlement() {
     mutationFn: async () => {
       const allResults: any[] = [];
 
-      for (const [discipline, genderData] of Object.entries(results)) {
-        for (const [gender, entries] of Object.entries(genderData)) {
-          for (const entry of entries) {
-            if (entry.athlete_id && entry.score) {
-              const score = discipline === 'slalom'
-                ? normalizeSlalomScore(entry.score)
-                : entry.score;
+      for (const [roundType, roundData] of Object.entries(results)) {
+        for (const [discipline, genderData] of Object.entries(roundData)) {
+          for (const [gender, entries] of Object.entries(genderData)) {
+            for (const entry of entries as ResultEntry[]) {
+              if (entry.athlete_id) {
+                // Get discipline-specific fields
+                let buoys = null;
+                let lineLengthM = null;
+                let trickPoints = null;
+                let jumpDistanceM = null;
 
-              allResults.push({
-                tournament_id: selectedTournament,
-                athlete_id: entry.athlete_id,
-                discipline,
-                gender,
-                position: entry.position || 0,
-                score_raw: score,
-                made_finals: entry.made_finals,
-                missed_first_pass: entry.missed_first_pass,
-                missed_gate: entry.missed_gate,
-              });
+                if (discipline === 'slalom' && entry.score) {
+                  const parsed = parseSlalomScore(entry.score);
+                  if (parsed) {
+                    buoys = parsed.buoys;
+                    lineLengthM = parseFloat(parsed.rope);
+                  }
+                } else if (discipline === 'trick') {
+                  trickPoints = entry.raw_score;
+                } else if (discipline === 'jump') {
+                  jumpDistanceM = entry.raw_score;
+                }
+
+                allResults.push({
+                  tournament_id: selectedTournament,
+                  athlete_id: entry.athlete_id,
+                  discipline,
+                  gender,
+                  round_type: roundType,
+                  raw_score: entry.raw_score,
+                  score_display: entry.score,
+                  round_rank: entry.round_rank || null,
+                  final_overall_rank: entry.final_overall_rank || null,
+                  made_finals: entry.made_finals,
+                  advanced_to_next_round: entry.advanced_to_next_round,
+                  stood_both_passes: entry.stood_both_passes,
+                  missed_first_pass: entry.missed_first_pass,
+                  missed_gate: entry.missed_gate,
+                  no_score: entry.no_score || entry.raw_score === 0,
+                  buoys,
+                  line_length_m: lineLengthM,
+                  trick_points: trickPoints,
+                  jump_distance_m: jumpDistanceM,
+                });
+              }
             }
           }
         }
       }
 
+      // Delete existing results for this tournament
       await supabase
-        .from('athlete_results')
+        .from('tournament_results')
         .delete()
         .eq('tournament_id', selectedTournament);
 
-      const { error } = await supabase.from('athlete_results').insert(allResults);
-      if (error) throw error;
+      if (allResults.length > 0) {
+        const { error } = await supabase.from('tournament_results').insert(allResults);
+        if (error) throw error;
+      }
     },
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data'] });
-      toast({ title: 'Results saved successfully' });
+      toast({ title: 'Results saved to tournament_results' });
       calculateSettlementPreview();
       
       try {
-        console.log('Triggering fantasy scoring for tournament:', selectedTournament);
         const { data, error } = await supabase.functions.invoke('score-fantasy', {
           body: { tournament_id: selectedTournament }
         });
         
         if (error) {
-          console.error('Fantasy scoring error:', error);
-          toast({ 
-            title: 'Fantasy scoring failed', 
-            description: error.message,
-            variant: 'destructive' 
-          });
+          toast({ title: 'Fantasy scoring failed', description: error.message, variant: 'destructive' });
         } else {
-          console.log('Fantasy scoring result:', data);
           toast({ 
             title: 'Fantasy scores updated',
             description: `Scored ${data?.entries_scored || 0} entries with ${data?.scoring_events || 0} events`
@@ -639,52 +750,37 @@ export default function TournamentSettlement() {
       queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data'] });
       queryClient.invalidateQueries({ queryKey: ['settlement-tournaments'] });
       
-      console.log('Settlement results:', data);
-      
-      if (data.settled_predictions === 0 && data.debug_info) {
+      if (data.settled_predictions === 0) {
         toast({
           title: 'Settlement completed with issues',
-          description: `Found ${data.debug_info.predictions_found} predictions but settled 0. Check console for details.`,
+          description: `Found ${data.debug_info?.predictions_found || 0} predictions but settled 0.`,
           variant: 'destructive',
         });
       } else {
         toast({
-          title: 'Settlement completed successfully',
-          description: `Settled ${data.settled_predictions} predictions, paid out ${data.total_payout.toLocaleString()} tokens to ${data.affected_users} users`,
+          title: 'Settlement completed',
+          description: `Settled ${data.settled_predictions} predictions, paid ${data.total_payout.toLocaleString()} tokens`,
         });
       }
       
+      // Settle fantasy pots
       try {
-        const { data: fantasyPots, error: potsError } = await supabase
+        const { data: fantasyPots } = await supabase
           .from('fantasy_pots')
-          .select('id, name, status')
+          .select('id, name')
           .eq('status', 'open')
           .or(`tournament_id.eq.${selectedTournament},season_tournaments.cs.{${selectedTournament}}`);
         
-        if (potsError) {
-          console.error('Error finding fantasy pots:', potsError);
-        } else if (fantasyPots && fantasyPots.length > 0) {
-          console.log(`Found ${fantasyPots.length} fantasy pots to settle`);
-          
+        if (fantasyPots && fantasyPots.length > 0) {
           for (const pot of fantasyPots) {
-            console.log(`Settling fantasy pot: ${pot.name} (${pot.id})`);
-            const { data: settleData, error: settleError } = await supabase.functions.invoke('settle-fantasy-pot', {
+            const { error: settleError } = await supabase.functions.invoke('settle-fantasy-pot', {
               body: { pot_id: pot.id }
             });
             
             if (settleError) {
-              console.error(`Error settling pot ${pot.id}:`, settleError);
-              toast({
-                title: `Fantasy pot "${pot.name}" settlement failed`,
-                description: settleError.message,
-                variant: 'destructive'
-              });
+              toast({ title: `Fantasy pot "${pot.name}" failed`, variant: 'destructive' });
             } else {
-              console.log(`Pot ${pot.id} settled:`, settleData);
-              toast({
-                title: `Fantasy pot "${pot.name}" settled`,
-                description: `Prize pool: ${settleData?.net_prize_pool?.toLocaleString() || 0} tokens`
-              });
+              toast({ title: `Fantasy pot "${pot.name}" settled` });
             }
           }
         }
@@ -693,11 +789,7 @@ export default function TournamentSettlement() {
       }
       
       setSelectedTournament('');
-      setResults({
-        slalom: { male: [], female: [] },
-        trick: { male: [], female: [] },
-        jump: { male: [], female: [] },
-      });
+      setResults(initializeRoundResults());
       setSettlementPreviews([]);
     },
     onError: (error: Error) => {
@@ -710,13 +802,19 @@ export default function TournamentSettlement() {
     0
   );
 
+  const roundLabels: Record<RoundType, string> = {
+    qual: 'Qualifying',
+    semi: 'Semi-Finals',
+    final: 'Finals',
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div>
           <h2 className="text-3xl font-bold text-foreground">Tournament Settlement</h2>
           <p className="text-muted-foreground mt-1">
-            Enter results and settle all predictions for a tournament
+            Enter results by round and settle all predictions
           </p>
         </div>
 
@@ -742,7 +840,7 @@ export default function TournamentSettlement() {
 
         {selectedTournament && settlementPreviews.length === 0 && (
           <>
-            {/* AI Image Upload Section */}
+            {/* AI Parser Section */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -751,15 +849,10 @@ export default function TournamentSettlement() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Upload images or PDFs of tournament results. You can drag & drop multiple files, paste from clipboard, or click to browse.
-                </p>
-                
-                <Alert className="mb-4">
+                <Alert>
                   <Sparkles className="h-4 w-4" />
                   <AlertDescription>
-                    <strong>Auto-detection enabled:</strong> Gender and discipline are automatically detected from the document content. 
-                    Upload files with both men's and women's results - they'll be matched correctly.
+                    Auto-detection enabled: Gender is automatically detected. Upload files with both men's and women's results.
                   </AlertDescription>
                 </Alert>
 
@@ -775,15 +868,31 @@ export default function TournamentSettlement() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Enter Results by Discipline</CardTitle>
+                <CardTitle>Enter Results</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {/* Round Selector */}
+                <div className="flex gap-4 items-center mb-4">
+                  <Label className="whitespace-nowrap">Round:</Label>
+                  <Tabs value={selectedRound} onValueChange={(v) => setSelectedRound(v as RoundType)} className="flex-1">
+                    <TabsList className="grid grid-cols-3">
+                      {(['qual', 'semi', 'final'] as RoundType[]).map((round) => (
+                        <TabsTrigger key={round} value={round}>
+                          {roundLabels[round]}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                </div>
+
                 <Alert className="mb-4">
                   <CheckCircle className="h-4 w-4" />
                   <AlertDescription>
-                    <strong>Positions are auto-calculated</strong> - Just enter the athlete and their score. The system will automatically rank them based on their performance.
+                    <strong>Auto-calculated:</strong> Positions are ranked by score. Athletes with 0 score are auto-flagged as no-shows (DNF/DNS/DQ).
                   </AlertDescription>
                 </Alert>
+
+                {/* Discipline Tabs */}
                 <Tabs value={selectedDiscipline} onValueChange={(v) => setSelectedDiscipline(v as Discipline)}>
                   <TabsList className="grid grid-cols-3 w-full">
                     {tournamentData?.tournament?.disciplines.map((discipline: Discipline) => (
@@ -797,15 +906,17 @@ export default function TournamentSettlement() {
                     <TabsContent key={discipline} value={discipline} className="space-y-6 mt-6">
                       {(['male', 'female'] as const).map((gender) => {
                         const athletes = getFilteredAthletes(discipline, gender);
-                        const searchKey = `${discipline}-${gender}`;
+                        const searchKey = `${selectedRound}-${discipline}-${gender}`;
+                        const roundResults = results[selectedRound][discipline][gender];
                         
                         return (
                           <div key={gender} className="space-y-4">
                             <div className="flex items-center justify-between">
-                              <h3 className="text-lg font-semibold">
+                              <h3 className="text-lg font-semibold flex items-center gap-2">
                                 {gender === 'male' ? 'Open Men' : 'Open Women'}
+                                <Badge variant="outline">{roundLabels[selectedRound]}</Badge>
                               </h3>
-                              <Button size="sm" onClick={() => addResultRow(discipline, gender)}>
+                              <Button size="sm" onClick={() => addResultRow(selectedRound, discipline, gender)}>
                                 Add Result
                               </Button>
                             </div>
@@ -814,54 +925,57 @@ export default function TournamentSettlement() {
                               <Alert>
                                 <AlertCircle className="h-4 w-4" />
                                 <AlertDescription>
-                                  No athletes entered for this discipline and gender. Add tournament entries first.
+                                  No athletes entered for this discipline. Add tournament entries first.
                                 </AlertDescription>
                               </Alert>
                             )}
 
                             <div className="space-y-3">
-                              {results[discipline]?.[gender]?.map((entry, index) => (
+                              {roundResults?.map((entry, index) => (
                                 <div key={index} className="border rounded-lg p-4 space-y-3">
                                   <div className="grid grid-cols-12 gap-3 items-end">
                                     <div className="col-span-4">
                                       <Label>Athlete</Label>
-                                      <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Select
-                                          value={entry.athlete_id}
-                                          onValueChange={(v) => updateResultRow(discipline, gender, index, 'athlete_id', v)}
-                                        >
-                                          <SelectTrigger className="pl-9">
-                                            <SelectValue placeholder="Select athlete" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <div className="p-2">
-                                              <Input
-                                                placeholder="Search athletes..."
-                                                value={athleteSearch[searchKey] || ''}
-                                                onChange={(e) => setAthleteSearch(prev => ({
-                                                  ...prev,
-                                                  [searchKey]: e.target.value
-                                                }))}
-                                                className="mb-2"
-                                              />
-                                            </div>
-                                            {athletes.map((athlete: any) => (
-                                              <SelectItem key={athlete.id} value={athlete.id}>
-                                                {athlete.name}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
+                                      <Select
+                                        value={entry.athlete_id}
+                                        onValueChange={(v) => updateResultRow(selectedRound, discipline, gender, index, 'athlete_id', v)}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select athlete" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <div className="p-2">
+                                            <Input
+                                              placeholder="Search..."
+                                              value={athleteSearch[searchKey] || ''}
+                                              onChange={(e) => setAthleteSearch(prev => ({
+                                                ...prev,
+                                                [searchKey]: e.target.value
+                                              }))}
+                                              className="mb-2"
+                                            />
+                                          </div>
+                                          {athletes.map((athlete: any) => (
+                                            <SelectItem key={athlete.id} value={athlete.id}>
+                                              {athlete.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
                                     </div>
 
                                     <div className="col-span-2">
-                                      <Label>Position <span className="text-xs text-muted-foreground">(auto)</span></Label>
-                                      <div className="h-10 flex items-center justify-center bg-muted rounded-md border border-input">
-                                        <Badge variant={entry.position === 1 ? 'default' : entry.position && entry.position <= 3 ? 'secondary' : 'outline'}>
-                                          {entry.position ? `#${entry.position}` : '-'}
-                                        </Badge>
+                                      <Label>Rank <span className="text-xs text-muted-foreground">(auto)</span></Label>
+                                      <div className="h-10 flex items-center justify-center bg-muted rounded-md border">
+                                        {entry.no_score ? (
+                                          <Badge variant="destructive">No Score</Badge>
+                                        ) : entry.round_rank ? (
+                                          <Badge variant={entry.round_rank <= 3 ? 'default' : 'secondary'}>
+                                            #{entry.round_rank}
+                                          </Badge>
+                                        ) : (
+                                          <span className="text-muted-foreground">-</span>
+                                        )}
                                       </div>
                                     </div>
 
@@ -872,7 +986,7 @@ export default function TournamentSettlement() {
                                       </Label>
                                       <Input
                                         value={entry.score}
-                                        onChange={(e) => updateResultRow(discipline, gender, index, 'score', e.target.value)}
+                                        onChange={(e) => updateResultRow(selectedRound, discipline, gender, index, 'score', e.target.value)}
                                         placeholder={
                                           discipline === 'slalom' ? '2@43' : 
                                           discipline === 'trick' ? '10500' : 
@@ -881,77 +995,66 @@ export default function TournamentSettlement() {
                                       />
                                     </div>
 
-                                    <div className="col-span-2"></div>
+                                    <div className="col-span-2">
+                                      {selectedRound === 'final' && entry.final_overall_rank && (
+                                        <Badge variant="outline" className="bg-primary/10">
+                                          Final: #{entry.final_overall_rank}
+                                        </Badge>
+                                      )}
+                                    </div>
 
                                     <div className="col-span-1">
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => removeResultRow(discipline, gender, index)}
+                                        onClick={() => removeResultRow(selectedRound, discipline, gender, index)}
                                       >
-                                        <X className="w-4 h-4" />
+                                        <X className="h-4 w-4" />
                                       </Button>
                                     </div>
                                   </div>
 
-                                  {/* Performance Flags */}
-                                  <div className="flex items-center gap-6 pt-2 border-t">
-                                    <div className="flex items-center gap-2">
-                                      <Switch
-                                        id={`finals-${index}`}
-                                        checked={entry.made_finals}
-                                        onCheckedChange={(v) => updateResultRow(discipline, gender, index, 'made_finals', v)}
-                                      />
-                                      <Label htmlFor={`finals-${index}`} className="text-sm cursor-pointer">
-                                        Made Finals
-                                      </Label>
+                                  {/* Trick-specific: Stood Both Passes */}
+                                  {discipline === 'trick' && (
+                                    <div className="flex items-center gap-4 pt-2 border-t">
+                                      <div className="flex items-center gap-2">
+                                        <Switch
+                                          id={`stood-${index}`}
+                                          checked={entry.stood_both_passes}
+                                          onCheckedChange={(v) => updateResultRow(selectedRound, discipline, gender, index, 'stood_both_passes', v)}
+                                        />
+                                        <Label htmlFor={`stood-${index}`} className="text-sm cursor-pointer">
+                                          Stood Both Passes
+                                        </Label>
+                                      </div>
+                                      {!entry.stood_both_passes && (
+                                        <Badge variant="secondary" className="bg-warning/20 text-warning">
+                                          Fall on Pass
+                                        </Badge>
+                                      )}
                                     </div>
-                                    
-                                    <div className="flex items-center gap-2">
-                                      <Switch
-                                        id={`firstpass-${index}`}
-                                        checked={entry.missed_first_pass}
-                                        onCheckedChange={(v) => updateResultRow(discipline, gender, index, 'missed_first_pass', v)}
-                                      />
-                                      <Label htmlFor={`firstpass-${index}`} className="text-sm cursor-pointer text-destructive">
-                                        Missed 1st Pass
-                                      </Label>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-2">
-                                      <Switch
-                                        id={`gate-${index}`}
-                                        checked={entry.missed_gate}
-                                        onCheckedChange={(v) => updateResultRow(discipline, gender, index, 'missed_gate', v)}
-                                      />
-                                      <Label htmlFor={`gate-${index}`} className="text-sm cursor-pointer text-destructive">
-                                        Missed Gate
-                                      </Label>
-                                    </div>
+                                  )}
 
-                                    {/* Show warning badges */}
-                                    {!entry.made_finals && (
-                                      <Badge variant="outline" className="text-warning border-warning">
+                                  {/* Status badges */}
+                                  <div className="flex flex-wrap gap-2 pt-2 border-t">
+                                    {entry.no_score && (
+                                      <Badge variant="destructive">
                                         <AlertTriangle className="w-3 h-3 mr-1" />
-                                        No Finals
+                                        DNF/DNS/DQ
                                       </Badge>
                                     )}
-                                    {entry.missed_first_pass && (
-                                      <Badge variant="destructive">
-                                        0 First Pass
-                                      </Badge>
-                                    )}
-                                    {entry.missed_gate && (
-                                      <Badge variant="destructive">
-                                        Gate Miss
+                                    {selectedRound === 'final' && entry.made_finals && (
+                                      <Badge variant="outline" className="bg-success/10 text-success">
+                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                        Made Finals
                                       </Badge>
                                     )}
                                   </div>
                                 </div>
                               ))}
 
-                              {results[discipline]?.[gender]?.length === 0 && (
-                                <p className="text-sm text-muted-foreground">No results entered yet</p>
+                              {roundResults?.length === 0 && (
+                                <p className="text-sm text-muted-foreground">No results entered for this round yet</p>
                               )}
                             </div>
                           </div>
@@ -965,7 +1068,7 @@ export default function TournamentSettlement() {
 
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => saveResultsMutation.mutate()} disabled={saveResultsMutation.isPending}>
-                {saveResultsMutation.isPending ? 'Saving...' : 'Save Results'}
+                {saveResultsMutation.isPending ? 'Saving...' : 'Save All Rounds'}
               </Button>
               <Button onClick={calculateSettlementPreview} disabled={saveResultsMutation.isPending}>
                 Preview Settlement
@@ -974,12 +1077,13 @@ export default function TournamentSettlement() {
           </>
         )}
 
+        {/* Settlement Preview */}
         {settlementPreviews.length > 0 && (
           <>
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Review settlement details below. Once confirmed, all predictions will be settled and payouts processed.
+                Review settlement details below. Once confirmed, all predictions will be settled.
               </AlertDescription>
             </Alert>
 
@@ -1058,9 +1162,8 @@ export default function TournamentSettlement() {
               <Button 
                 onClick={() => settleMutation.mutate()} 
                 disabled={settleMutation.isPending}
-                className="bg-primary hover:bg-primary/90"
               >
-                {settleMutation.isPending ? 'Processing...' : 'Confirm & Settle All Markets'}
+                {settleMutation.isPending ? 'Processing...' : 'Confirm & Settle'}
               </Button>
             </div>
           </>
@@ -1076,7 +1179,7 @@ export default function TournamentSettlement() {
               AI Parsed Results
             </DialogTitle>
             <DialogDescription>
-              Review the extracted results below. Athletes highlighted in yellow need manual matching.
+              Review extracted results. Yellow = needs manual matching.
             </DialogDescription>
           </DialogHeader>
           
@@ -1094,16 +1197,6 @@ export default function TournamentSettlement() {
                       </div>
                     )}
                     
-                    <div className="flex gap-4 text-sm">
-                      <Badge variant="outline">Discipline: {result.discipline || selectedDiscipline}</Badge>
-                      <Badge variant="outline" className="bg-blue-500/10 text-blue-700">
-                        {result.athletes.filter(a => a.gender === 'male').length} Male
-                      </Badge>
-                      <Badge variant="outline" className="bg-pink-500/10 text-pink-700">
-                        {result.athletes.filter(a => a.gender === 'female').length} Female
-                      </Badge>
-                    </div>
-
                     <div className="space-y-2">
                       {result.athletes.map((athlete, index) => (
                         <div 
@@ -1117,46 +1210,24 @@ export default function TournamentSettlement() {
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <Badge 
-                                variant="outline" 
-                                className={athlete.gender === 'female' ? 'bg-pink-500/20 text-pink-700' : 'bg-blue-500/20 text-blue-700'}
-                              >
+                              <Badge variant="outline" className={athlete.gender === 'female' ? 'bg-pink-500/20' : 'bg-blue-500/20'}>
                                 {athlete.gender === 'female' ? '♀' : '♂'}
                               </Badge>
                               <span className="font-medium">{athlete.name}</span>
                               <span className="text-muted-foreground">Score: {athlete.score}</span>
-                              {athlete.position && <Badge variant="outline">#{athlete.position}</Badge>}
                             </div>
-                            <div className="flex items-center gap-2">
-                              {athlete.matched_athlete_id ? (
-                                <Badge variant="outline" className="text-green-600">
-                                  <CheckCircle className="w-3 h-3 mr-1" />
-                                  Matched ({Math.round((athlete.match_confidence || 0) * 100)}%)
-                                </Badge>
-                              ) : (
-                                <Badge variant="destructive">
-                                  <AlertCircle className="w-3 h-3 mr-1" />
-                                  No Match
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <div className="flex gap-3 mt-2 text-xs">
-                            {!athlete.made_finals && <Badge variant="outline">No Finals</Badge>}
-                            {athlete.missed_first_pass && <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-700">Missed 1st Pass</Badge>}
-                            {athlete.missed_gate && <Badge variant="destructive">Missed Gate</Badge>}
-                            {athlete.notes && <span className="text-muted-foreground">{athlete.notes}</span>}
+                            {athlete.matched_athlete_id ? (
+                              <Badge variant="outline" className="text-green-600">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Matched
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive">No Match</Badge>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
-
-                    {result.raw_text && (
-                      <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
-                        <strong>Raw text:</strong> {result.raw_text}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -1168,7 +1239,7 @@ export default function TournamentSettlement() {
               Cancel
             </Button>
             <Button onClick={applyAIResults}>
-              Apply {allParsedResults.flatMap(r => r.athletes).filter(a => a.matched_athlete_id).length} Matched Results
+              Apply {allParsedResults.flatMap(r => r.athletes).filter(a => a.matched_athlete_id).length} Results
             </Button>
           </DialogFooter>
         </DialogContent>

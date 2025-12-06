@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// F1-style position points
+// F1-style position points (based on final_overall_rank)
 const POSITION_POINTS: Record<number, number> = {
   1: 25, 2: 18, 3: 15, 4: 12, 5: 10,
   6: 8, 7: 6, 8: 4, 9: 2, 10: 1
@@ -14,13 +14,14 @@ const POSITION_POINTS: Record<number, number> = {
 
 // Bonus points
 const BONUSES = {
-  highest_score: 5,
-  made_finals: 3,
+  highest_score: 5,  // Posted highest score across all rounds
+  made_finals: 3,    // Made it to finals
 };
 
 // Penalty points
 const PENALTIES = {
-  missed_finals: -2,
+  missed_finals: -2,    // Had results but didn't make finals
+  no_show: -50,         // DNF/DNS/DQ - no_score = true or no entry at all
   missed_first_pass: -5,
   missed_gate: -3,
 };
@@ -46,7 +47,6 @@ serve(async (req) => {
     // Verify user is authenticated and is an admin
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      console.error('No authorization header provided');
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
@@ -57,14 +57,12 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      console.error('Auth error:', authError);
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    // Check if user has admin role
     const { data: roleData, error: roleError } = await supabase
       .from('user_roles')
       .select('role')
@@ -73,22 +71,21 @@ serve(async (req) => {
       .maybeSingle();
 
     if (roleError || !roleData) {
-      console.error('User is not an admin:', user.id);
       return new Response(
         JSON.stringify({ error: 'Forbidden: Admin access required' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
       );
     }
 
-    // Get all athlete results for this tournament
-    const { data: results, error: resultsError } = await supabase
-      .from('athlete_results')
+    // Get ALL tournament_results for this tournament (all rounds)
+    const { data: allResults, error: resultsError } = await supabase
+      .from('tournament_results')
       .select('*')
       .eq('tournament_id', tournament_id);
 
     if (resultsError) throw resultsError;
 
-    if (!results || results.length === 0) {
+    if (!allResults || allResults.length === 0) {
       console.log('No results found for tournament');
       return new Response(JSON.stringify({ 
         success: true, 
@@ -98,17 +95,37 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Found ${results.length} athlete results`);
+    console.log(`Found ${allResults.length} tournament results across all rounds`);
 
-    // Find highest scores by discipline/gender
+    // Find highest scores by discipline/gender across ALL rounds
     const highestScores = new Map<string, { athlete_id: string; score: number }>();
-    for (const result of results) {
-      if (result.score_raw === null) continue;
+    for (const result of allResults) {
+      if (result.raw_score === null || result.raw_score === 0) continue;
       const key = `${result.discipline}_${result.gender}`;
       const current = highestScores.get(key);
-      if (!current || result.score_raw > current.score) {
-        highestScores.set(key, { athlete_id: result.athlete_id, score: result.score_raw });
+      if (!current || result.raw_score > current.score) {
+        highestScores.set(key, { athlete_id: result.athlete_id, score: result.raw_score });
       }
+    }
+
+    console.log(`Highest scores found:`, Object.fromEntries(highestScores));
+
+    // Get finals results only (for position points)
+    const finalsResults = allResults.filter(r => r.round_type === 'final');
+    console.log(`Found ${finalsResults.length} finals results`);
+
+    // Create lookup maps
+    const finalsMap = new Map<string, typeof finalsResults[0]>();
+    for (const result of finalsResults) {
+      const key = `${result.athlete_id}_${result.discipline}`;
+      finalsMap.set(key, result);
+    }
+
+    // Check if athlete had any result in any round
+    const athleteHasResult = new Map<string, boolean>();
+    for (const result of allResults) {
+      const key = `${result.athlete_id}_${result.discipline}`;
+      athleteHasResult.set(key, true);
     }
 
     // Get fantasy pots that include this tournament
@@ -124,9 +141,7 @@ serve(async (req) => {
     let totalEntriesScored = 0;
     let totalScoringEvents = 0;
 
-    // Process each pot
     for (const pot of pots || []) {
-      // Get all entries for this pot
       const { data: entries, error: entriesError } = await supabase
         .from('fantasy_entries')
         .select('id, user_id')
@@ -138,7 +153,6 @@ serve(async (req) => {
       }
 
       for (const entry of entries || []) {
-        // Get athletes in this entry's roster
         const { data: rosterAthletes, error: rosterError } = await supabase
           .from('fantasy_entry_athletes')
           .select('id, athlete_id, discipline')
@@ -152,53 +166,64 @@ serve(async (req) => {
         let entryTotalPoints = 0;
 
         for (const rosterAthlete of rosterAthletes || []) {
-          // Find this athlete's result for this tournament/discipline
-          const athleteResult = results.find(
-            r => r.athlete_id === rosterAthlete.athlete_id && 
-                 r.discipline === rosterAthlete.discipline
-          );
+          const lookupKey = `${rosterAthlete.athlete_id}_${rosterAthlete.discipline}`;
+          const finalsResult = finalsMap.get(lookupKey);
+          const hasAnyResult = athleteHasResult.get(lookupKey);
 
-          if (!athleteResult) continue;
-
-          // Calculate points
           let points = 0;
           const breakdown: Record<string, number> = {};
 
-          // Position points
-          if (athleteResult.position && POSITION_POINTS[athleteResult.position]) {
-            points += POSITION_POINTS[athleteResult.position];
-            breakdown.position = POSITION_POINTS[athleteResult.position];
-          }
+          // Check for no-show: athlete has no result at all OR has no_score = true
+          if (!hasAnyResult) {
+            // No entry at all - apply no-show penalty
+            points += PENALTIES.no_show;
+            breakdown.no_show = PENALTIES.no_show;
+            console.log(`Athlete ${rosterAthlete.athlete_id} has no entry - applying no-show penalty`);
+          } else if (finalsResult?.no_score) {
+            // Has entry but no_score = true (DNF/DNS/DQ)
+            points += PENALTIES.no_show;
+            breakdown.no_show = PENALTIES.no_show;
+            console.log(`Athlete ${rosterAthlete.athlete_id} has no_score=true - applying no-show penalty`);
+          } else if (finalsResult) {
+            // Has valid finals result - calculate points
 
-          // Highest score bonus
-          const categoryKey = `${athleteResult.discipline}_${athleteResult.gender}`;
-          const highestInCategory = highestScores.get(categoryKey);
-          if (highestInCategory?.athlete_id === athleteResult.athlete_id) {
-            points += BONUSES.highest_score;
-            breakdown.highest_score = BONUSES.highest_score;
-          }
+            // Position points based on final_overall_rank
+            if (finalsResult.final_overall_rank && POSITION_POINTS[finalsResult.final_overall_rank]) {
+              points += POSITION_POINTS[finalsResult.final_overall_rank];
+              breakdown.position = POSITION_POINTS[finalsResult.final_overall_rank];
+            }
 
-          // Made finals bonus
-          if (athleteResult.made_finals) {
-            points += BONUSES.made_finals;
-            breakdown.made_finals = BONUSES.made_finals;
-          } else if (athleteResult.position !== null) {
+            // Highest score bonus (across all rounds)
+            const categoryKey = `${finalsResult.discipline}_${finalsResult.gender}`;
+            const highestInCategory = highestScores.get(categoryKey);
+            if (highestInCategory?.athlete_id === rosterAthlete.athlete_id) {
+              points += BONUSES.highest_score;
+              breakdown.highest_score = BONUSES.highest_score;
+            }
+
+            // Made finals bonus
+            if (finalsResult.made_finals) {
+              points += BONUSES.made_finals;
+              breakdown.made_finals = BONUSES.made_finals;
+            }
+
+            // Penalties
+            if (finalsResult.missed_first_pass) {
+              points += PENALTIES.missed_first_pass;
+              breakdown.missed_first_pass = PENALTIES.missed_first_pass;
+            }
+            if (finalsResult.missed_gate) {
+              points += PENALTIES.missed_gate;
+              breakdown.missed_gate = PENALTIES.missed_gate;
+            }
+          } else {
+            // Has results in earlier rounds but didn't make finals
             points += PENALTIES.missed_finals;
             breakdown.missed_finals = PENALTIES.missed_finals;
           }
 
-          // Penalties
-          if (athleteResult.missed_first_pass) {
-            points += PENALTIES.missed_first_pass;
-            breakdown.missed_first_pass = PENALTIES.missed_first_pass;
-          }
-          if (athleteResult.missed_gate) {
-            points += PENALTIES.missed_gate;
-            breakdown.missed_gate = PENALTIES.missed_gate;
-          }
-
-          // Ensure non-negative
-          points = Math.max(0, points);
+          // Ensure non-negative (or allow negative for severe penalties)
+          // For no-shows, we might want to allow negative to really penalize
 
           // Update roster athlete points
           await supabase
