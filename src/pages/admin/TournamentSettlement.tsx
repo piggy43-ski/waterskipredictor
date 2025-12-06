@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -141,6 +141,9 @@ export default function TournamentSettlement() {
   const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
   const [allParsedResults, setAllParsedResults] = useState<AIParseResponse[]>([]);
   
+  // Track if we've loaded initial data for this tournament
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -184,39 +187,52 @@ export default function TournamentSettlement() {
 
       if (marketsError) throw marketsError;
 
-      // Pre-populate results from existing data
-      if (existingResults && existingResults.length > 0) {
-        const newResults = initializeRoundResults();
-
-        for (const result of existingResults) {
-          const roundType = result.round_type as RoundType;
-          const discipline = result.discipline as Discipline;
-          const genderKey = result.gender === 'male' ? 'male' : 'female';
-          
-          if (!newResults[roundType]) continue;
-          
-          newResults[roundType][discipline][genderKey].push({
-            athlete_id: result.athlete_id,
-            score: result.score_display || result.raw_score?.toString() || '',
-            raw_score: result.raw_score || 0,
-            round_rank: result.round_rank || undefined,
-            final_overall_rank: result.final_overall_rank || undefined,
-            made_finals: result.made_finals ?? false,
-            advanced_to_next_round: result.advanced_to_next_round ?? false,
-            stood_both_passes: result.stood_both_passes ?? true,
-            missed_first_pass: result.missed_first_pass ?? false,
-            missed_gate: result.missed_gate ?? false,
-            no_score: result.no_score ?? false,
-          });
-        }
-
-        setResults(newResults);
-      }
-
       return { tournament: tournament[0], existingResults, markets };
     },
     enabled: !!selectedTournament,
+    staleTime: 5 * 60 * 1000, // 5 minutes - prevents refetching while working
+    refetchOnWindowFocus: false, // Prevent refetch when switching tabs
   });
+
+  // Reset flag and results when tournament changes
+  useEffect(() => {
+    setHasLoadedInitialData(false);
+    setResults(initializeRoundResults());
+  }, [selectedTournament]);
+
+  // Load existing results only once per tournament
+  useEffect(() => {
+    if (!tournamentData?.existingResults || hasLoadedInitialData) return;
+    
+    if (tournamentData.existingResults.length > 0) {
+      const newResults = initializeRoundResults();
+
+      for (const result of tournamentData.existingResults) {
+        const roundType = result.round_type as RoundType;
+        const discipline = result.discipline as Discipline;
+        const genderKey = result.gender === 'male' ? 'male' : 'female';
+        
+        if (!newResults[roundType]) continue;
+        
+        newResults[roundType][discipline][genderKey].push({
+          athlete_id: result.athlete_id,
+          score: result.score_display || result.raw_score?.toString() || '',
+          raw_score: result.raw_score || 0,
+          round_rank: result.round_rank || undefined,
+          final_overall_rank: result.final_overall_rank || undefined,
+          made_finals: result.made_finals ?? false,
+          advanced_to_next_round: result.advanced_to_next_round ?? false,
+          stood_both_passes: result.stood_both_passes ?? true,
+          missed_first_pass: result.missed_first_pass ?? false,
+          missed_gate: result.missed_gate ?? false,
+          no_score: result.no_score ?? false,
+        });
+      }
+
+      setResults(newResults);
+    }
+    setHasLoadedInitialData(true);
+  }, [tournamentData?.existingResults, hasLoadedInitialData]);
 
   const getAllAthletes = (discipline: Discipline, gender: 'male' | 'female') => {
     if (!tournamentData?.tournament?.tournament_entries) return [];
