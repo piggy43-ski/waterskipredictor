@@ -41,40 +41,45 @@ export const SEASON_TIERS = {
   3: 25_000,   // Gold tier
 } as const;
 
-// F1-style position points
+// Position points for athletes who make the final
+// Based on final_position (overall placing in that discipline+gender)
 export const POSITION_POINTS = {
   1: 25,
-  2: 18,
-  3: 15,
-  4: 12,
-  5: 10,
-  6: 8,
-  7: 6,
-  8: 4,
-  9: 2,
-  10: 1,
+  2: 20,
+  3: 16,
+  4: 13,
+  5: 11,
+  6: 9,
+  7: 7,
+  8: 5,
+  9: 3,
+  10: 3,
+  11: 3,
+  12: 3,
+  // >12th in final
+  default_finalist: 1,
 } as const;
 
 // Bonus points
 export const FANTASY_BONUSES = {
-  highest_score: 5,      // Event's top score in discipline
-  made_finals: 3,        // Made it to finals round
-  personal_best: 2,      // Achieved a personal best
+  made_finals: 3,           // Made it to finals round
+  highest_score_event: 5,   // Highest score across all rounds in discipline+gender
+  podium_1st: 3,            // Extra bonus for 1st place
+  podium_2nd_3rd: 2,        // Extra bonus for 2nd or 3rd place
 } as const;
 
 // Penalty points
 export const FANTASY_PENALTIES = {
-  missed_finals: -2,       // Didn't make finals
-  missed_first_pass: -5,   // Failed first pass in slalom
-  missed_gate: -3,         // Missed a gate
-  dns: -10,                // Did not start
-  dsq: -8,                 // Disqualified
+  did_not_make_finals: -5,   // Started event but didn't make finals
+  missed_first_pass: -10,    // Failed first pass in slalom
+  missed_gate: -3,           // Missed a gate
+  no_show: -50,              // DNS/DNF/DQ - no valid result
 } as const;
 
-// Streak multipliers
+// Streak multipliers (consecutive events with positive fantasy points)
 export const STREAK_MULTIPLIERS = {
-  consecutive_podiums: 1.1,   // 10% bonus per consecutive podium
-  consecutive_finals: 1.05,  // 5% bonus per consecutive finals appearance
+  consecutive_2: 1.10,   // 2nd consecutive positive event: +10%
+  consecutive_3_plus: 1.20,  // 3rd+ consecutive positive event: +20% (capped)
 } as const;
 
 // Price change rules (for dynamic pricing)
@@ -153,57 +158,105 @@ export const POT_STATUS = {
 
 // Helper functions
 export function getPositionPoints(position: number): number {
-  return POSITION_POINTS[position as keyof typeof POSITION_POINTS] ?? 0;
+  if (position >= 1 && position <= 12) {
+    return POSITION_POINTS[position as keyof typeof POSITION_POINTS] ?? POSITION_POINTS.default_finalist;
+  }
+  // For positions >12 in finals, give minimum points
+  if (position > 12) {
+    return POSITION_POINTS.default_finalist;
+  }
+  return 0;
+}
+
+export function getPodiumBonus(position: number): number {
+  if (position === 1) return FANTASY_BONUSES.podium_1st;
+  if (position === 2 || position === 3) return FANTASY_BONUSES.podium_2nd_3rd;
+  return 0;
+}
+
+export function getStreakMultiplier(consecutivePositiveEvents: number): number {
+  if (consecutivePositiveEvents >= 3) return STREAK_MULTIPLIERS.consecutive_3_plus;
+  if (consecutivePositiveEvents === 2) return STREAK_MULTIPLIERS.consecutive_2;
+  return 1.0;
 }
 
 export function calculateFantasyScore(
-  position: number,
-  bonuses: (keyof typeof FANTASY_BONUSES)[] = [],
-  penalties: (keyof typeof FANTASY_PENALTIES)[] = [],
-  streakMultiplier: number = 1
-): number {
-  let score = getPositionPoints(position);
-  
-  // Add bonuses
-  for (const bonus of bonuses) {
-    score += FANTASY_BONUSES[bonus] ?? 0;
-  }
-  
-  // Apply penalties
-  for (const penalty of penalties) {
-    score += FANTASY_PENALTIES[penalty] ?? 0;
-  }
-  
-  // Apply streak multiplier
-  score = Math.round(score * streakMultiplier);
-  
-  return Math.max(0, score); // Never go negative
-}
+  position: number | null,
+  madeFinalsFlag: boolean,
+  isHighestScore: boolean,
+  penalties: {
+    didNotMakeFinals?: boolean;
+    missedFirstPass?: boolean;
+    missedGate?: boolean;
+    noShow?: boolean;
+  } = {},
+  consecutivePositiveEvents: number = 0
+): { rawPoints: number; finalPoints: number; breakdown: Record<string, number> } {
+  let points = 0;
+  const breakdown: Record<string, number> = {};
 
-export function calculatePriceChange(
-  currentPrice: number,
-  performanceIndex: number,
-  popularityIndex: number,
-  recentFormIndex: number
-): number {
-  const { performance_weight, popularity_weight, form_weight, max_increase_percent, max_decrease_percent } = PRICE_CHANGES;
-  
-  // Calculate weighted change factor (normalized around 1.0)
-  const changeFactor = 
-    (performanceIndex * performance_weight) +
-    (popularityIndex * popularity_weight) +
-    (recentFormIndex * form_weight);
-  
-  // Calculate percentage change
-  let percentChange = (changeFactor - 1) * 100;
-  
-  // Clamp to max increase/decrease
-  percentChange = Math.max(-max_decrease_percent, Math.min(max_increase_percent, percentChange));
-  
-  // Calculate new price
-  const newPrice = Math.round(currentPrice * (1 + percentChange / 100));
-  
-  return Math.max(100, newPrice); // Minimum price of 100 tokens
+  // Check for no-show first (DNS/DNF/DQ)
+  if (penalties.noShow) {
+    points += FANTASY_PENALTIES.no_show;
+    breakdown.no_show = FANTASY_PENALTIES.no_show;
+    return { rawPoints: points, finalPoints: points, breakdown };
+  }
+
+  // Check if athlete didn't make finals (but started the event)
+  if (penalties.didNotMakeFinals) {
+    points += FANTASY_PENALTIES.did_not_make_finals;
+    breakdown.did_not_make_finals = FANTASY_PENALTIES.did_not_make_finals;
+    // They can still have other penalties
+  }
+
+  // Position points (only for finalists)
+  if (madeFinalsFlag && position !== null && position > 0) {
+    const positionPts = getPositionPoints(position);
+    points += positionPts;
+    breakdown.position = positionPts;
+
+    // Podium bonus
+    const podiumBonus = getPodiumBonus(position);
+    if (podiumBonus > 0) {
+      points += podiumBonus;
+      breakdown.podium_bonus = podiumBonus;
+    }
+  }
+
+  // Made finals bonus
+  if (madeFinalsFlag) {
+    points += FANTASY_BONUSES.made_finals;
+    breakdown.made_finals = FANTASY_BONUSES.made_finals;
+  }
+
+  // Highest score bonus
+  if (isHighestScore) {
+    points += FANTASY_BONUSES.highest_score_event;
+    breakdown.highest_score = FANTASY_BONUSES.highest_score_event;
+  }
+
+  // Apply penalties
+  if (penalties.missedFirstPass) {
+    points += FANTASY_PENALTIES.missed_first_pass;
+    breakdown.missed_first_pass = FANTASY_PENALTIES.missed_first_pass;
+  }
+  if (penalties.missedGate) {
+    points += FANTASY_PENALTIES.missed_gate;
+    breakdown.missed_gate = FANTASY_PENALTIES.missed_gate;
+  }
+
+  const rawPoints = points;
+
+  // Apply streak multiplier (only if positive points)
+  let finalPoints = points;
+  if (points > 0 && consecutivePositiveEvents >= 2) {
+    const multiplier = getStreakMultiplier(consecutivePositiveEvents);
+    finalPoints = Math.round(points * multiplier);
+    breakdown.streak_multiplier = multiplier;
+    breakdown.streak_bonus = finalPoints - rawPoints;
+  }
+
+  return { rawPoints, finalPoints, breakdown };
 }
 
 export function getSeasonTierFee(tier: 1 | 2 | 3): number {

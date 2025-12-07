@@ -4,11 +4,12 @@
  */
 
 import { 
-  POSITION_POINTS, 
   FANTASY_BONUSES, 
   FANTASY_PENALTIES,
   STREAK_MULTIPLIERS,
-  getPositionPoints 
+  getPositionPoints,
+  getPodiumBonus,
+  getStreakMultiplier
 } from './fantasyConfig';
 
 export interface AthleteResult {
@@ -36,30 +37,37 @@ export interface ScoringBreakdown {
 export function calculateAthleteFantasyPoints(
   result: AthleteResult,
   isHighestScore: boolean = false,
-  consecutivePodiums: number = 0,
-  consecutiveFinals: number = 0
+  consecutivePositiveEvents: number = 0
 ): ScoringBreakdown {
   let positionPoints = 0;
   const bonuses: { type: string; points: number }[] = [];
   const penalties: { type: string; points: number }[] = [];
 
-  // Position points (F1 style)
-  if (result.position !== null && result.position > 0) {
+  // Position points (only for finalists)
+  if (result.made_finals && result.position !== null && result.position > 0) {
     positionPoints = getPositionPoints(result.position);
+    
+    // Podium bonus
+    const podiumBonus = getPodiumBonus(result.position);
+    if (podiumBonus > 0) {
+      bonuses.push({ type: 'podium_bonus', points: podiumBonus });
+    }
   }
 
-  // Bonuses
-  if (isHighestScore) {
-    bonuses.push({ type: 'highest_score', points: FANTASY_BONUSES.highest_score });
-  }
-
+  // Made finals bonus
   if (result.made_finals) {
     bonuses.push({ type: 'made_finals', points: FANTASY_BONUSES.made_finals });
   }
 
+  // Highest score bonus
+  if (isHighestScore) {
+    bonuses.push({ type: 'highest_score', points: FANTASY_BONUSES.highest_score_event });
+  }
+
   // Penalties
   if (!result.made_finals && result.position !== null) {
-    penalties.push({ type: 'missed_finals', points: FANTASY_PENALTIES.missed_finals });
+    // Started event but didn't make finals
+    penalties.push({ type: 'did_not_make_finals', points: FANTASY_PENALTIES.did_not_make_finals });
   }
 
   if (result.missed_first_pass) {
@@ -70,21 +78,21 @@ export function calculateAthleteFantasyPoints(
     penalties.push({ type: 'missed_gate', points: FANTASY_PENALTIES.missed_gate });
   }
 
-  // Calculate streak multiplier
-  let streakMultiplier = 1;
-  if (result.position !== null && result.position <= 3 && consecutivePodiums > 0) {
-    streakMultiplier *= Math.pow(STREAK_MULTIPLIERS.consecutive_podiums, consecutivePodiums);
-  }
-  if (result.made_finals && consecutiveFinals > 0) {
-    streakMultiplier *= Math.pow(STREAK_MULTIPLIERS.consecutive_finals, consecutiveFinals);
-  }
-
-  // Calculate total
+  // Calculate base total
   const bonusTotal = bonuses.reduce((sum, b) => sum + b.points, 0);
   const penaltyTotal = penalties.reduce((sum, p) => sum + p.points, 0);
   const basePoints = positionPoints + bonusTotal + penaltyTotal;
-  const totalPoints = Math.max(0, Math.round(basePoints * streakMultiplier));
 
+  // Calculate streak multiplier (only if positive points)
+  let streakMultiplier = 1;
+  let totalPoints = basePoints;
+
+  if (basePoints > 0 && consecutivePositiveEvents >= 2) {
+    streakMultiplier = getStreakMultiplier(consecutivePositiveEvents);
+    totalPoints = Math.round(basePoints * streakMultiplier);
+  }
+
+  // Allow negative points (don't cap at 0)
   return {
     positionPoints,
     bonuses,
