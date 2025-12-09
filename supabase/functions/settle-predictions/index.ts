@@ -5,11 +5,85 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface SelectionWithContext {
+  selection_id: string;
+  result: 'won' | 'lost' | 'void';
+  athlete_name?: string;
+  actual_results?: {
+    position_1st?: string;
+    position_2nd?: string;
+    position_3rd?: string;
+    winner_score?: string;
+    highest_scorer?: string;
+    highest_score?: string;
+  };
+}
+
 interface SettlementRequest {
-  selections: Array<{
-    selection_id: string;
-    result: 'won' | 'lost' | 'void';
-  }>;
+  selections: SelectionWithContext[];
+  tournament_name?: string;
+}
+
+// Build settlement explanation for a prediction
+function buildSettlementExplanation(
+  prediction: any,
+  selectionResult: 'won' | 'lost' | 'void',
+  actualResults?: SelectionWithContext['actual_results'],
+  tournamentName?: string
+): object {
+  const marketType = prediction.market_type;
+  const athleteName = prediction.athlete_name;
+  const discipline = prediction.discipline;
+  const category = prediction.category;
+  const stake = prediction.staked_tokens;
+  const odds = prediction.decimal_odds;
+  const payout = prediction.potential_payout;
+  
+  let explanation = '';
+  
+  if (selectionResult === 'won') {
+    if (marketType === 'WINNER') {
+      explanation = `You picked ${athleteName} to win ${category.replace('_', ' ')} ${discipline}. ${athleteName} won! Your bet WON.`;
+    } else if (marketType === 'PODIUM') {
+      explanation = `Your podium prediction for ${category.replace('_', ' ')} ${discipline} was correct! Your bet WON.`;
+    } else if (marketType === 'HIGHEST_SCORE') {
+      explanation = `You picked ${athleteName} to have the highest score in ${category.replace('_', ' ')} ${discipline}. They did! Your bet WON.`;
+    } else {
+      explanation = `Your prediction for ${athleteName} in ${discipline} was correct. Your bet WON.`;
+    }
+  } else if (selectionResult === 'lost') {
+    if (marketType === 'WINNER') {
+      const winner = actualResults?.position_1st || 'another athlete';
+      explanation = `You picked ${athleteName} to win ${category.replace('_', ' ')} ${discipline}. ${winner} won instead. Your bet LOST.`;
+    } else if (marketType === 'PODIUM') {
+      explanation = `Your podium prediction for ${category.replace('_', ' ')} ${discipline} was incorrect. Your bet LOST.`;
+    } else if (marketType === 'HIGHEST_SCORE') {
+      const scorer = actualResults?.highest_scorer || 'another athlete';
+      explanation = `You picked ${athleteName} for highest score. ${scorer} had the highest score instead. Your bet LOST.`;
+    } else {
+      explanation = `Your prediction for ${athleteName} in ${discipline} was incorrect. Your bet LOST.`;
+    }
+  } else {
+    explanation = `Your bet on ${athleteName} in ${discipline} was voided. Your stake has been refunded.`;
+  }
+
+  return {
+    status: selectionResult.toUpperCase(),
+    explanation,
+    tournament_name: tournamentName || prediction.tournament_name,
+    market_type: marketType,
+    discipline,
+    category,
+    athlete_picked: athleteName,
+    actual_results: actualResults || null,
+    payout_details: {
+      stake,
+      odds_decimal: odds,
+      payout: selectionResult === 'won' ? payout : (selectionResult === 'void' ? stake : 0),
+      profit: selectionResult === 'won' ? payout - stake : 0
+    },
+    settled_at: new Date().toISOString()
+  };
 }
 
 interface SettlementResult {
@@ -69,7 +143,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { selections }: SettlementRequest = await req.json();
+    const { selections, tournament_name: requestTournamentName }: SettlementRequest = await req.json();
+    
+    // Build a map of selection contexts for building explanations
+    const selectionContextMap = new Map<string, SelectionWithContext>();
+    selections.forEach(sel => {
+      selectionContextMap.set(String(sel.selection_id), sel);
+    });
 
     if (!selections || selections.length === 0) {
       return new Response(
@@ -165,8 +245,20 @@ Deno.serve(async (req) => {
         // Process each prediction
         for (const prediction of predictions) {
           affectedUserIds.add(prediction.user_id);
+          
+          // Get the selection context for building explanations
+          const selectionContext = selectionContextMap.get(selIdString);
+          const actualResults = selectionContext?.actual_results;
 
           if (selectionResult === 'won') {
+            // Build settlement explanation
+            const settlementMetadata = buildSettlementExplanation(
+              prediction,
+              'won',
+              actualResults,
+              requestTournamentName
+            );
+            
             // Update prediction to WON and set payout
             const { error: updateError } = await supabaseClient
               .from('predictions')
@@ -174,6 +266,7 @@ Deno.serve(async (req) => {
                 status: 'WON',
                 payout_tokens: prediction.potential_payout,
                 settled_at: new Date().toISOString(),
+                settlement_metadata: settlementMetadata,
               })
               .eq('id', prediction.id);
 
@@ -255,6 +348,14 @@ Deno.serve(async (req) => {
 
             console.log(`✅ WON: ${prediction.id} → +${prediction.potential_payout} tokens to user ${prediction.user_id}`);
           } else if (selectionResult === 'lost') {
+            // Build settlement explanation for LOST
+            const settlementMetadata = buildSettlementExplanation(
+              prediction,
+              'lost',
+              actualResults,
+              requestTournamentName
+            );
+            
             // Update prediction to LOST
             const { error: updateError } = await supabaseClient
               .from('predictions')
@@ -262,6 +363,7 @@ Deno.serve(async (req) => {
                 status: 'LOST',
                 payout_tokens: 0,
                 settled_at: new Date().toISOString(),
+                settlement_metadata: settlementMetadata,
               })
               .eq('id', prediction.id);
 
@@ -315,6 +417,14 @@ Deno.serve(async (req) => {
 
             console.log(`❌ LOST: ${prediction.id}`);
           } else if (selectionResult === 'void') {
+            // Build settlement explanation for VOID
+            const settlementMetadata = buildSettlementExplanation(
+              prediction,
+              'void',
+              actualResults,
+              requestTournamentName
+            );
+            
             // Refund stake for void predictions
             const { error: updateError } = await supabaseClient
               .from('predictions')
@@ -322,6 +432,7 @@ Deno.serve(async (req) => {
                 status: 'VOID',
                 payout_tokens: prediction.staked_tokens,
                 settled_at: new Date().toISOString(),
+                settlement_metadata: settlementMetadata,
               })
               .eq('id', prediction.id);
 
