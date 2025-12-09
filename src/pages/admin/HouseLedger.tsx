@@ -80,26 +80,38 @@ const HouseLedger = () => {
     },
   });
 
-  // Fetch House P/L data
+  // Fetch House P/L data - calculated from bet_slips for accuracy
+  // This avoids double-counting parlay legs which are stored as separate predictions
   const { data: housePL, isLoading: loadingPL } = useQuery({
     queryKey: ['house-ledger-pl'],
     queryFn: async () => {
-      const { data: predictions, error } = await supabase
-        .from('predictions')
-        .select('status, staked_tokens, payout_tokens');
+      // Use bet_slips as the source of truth for wagered and paid out
+      const { data: betSlips, error } = await supabase
+        .from('bet_slips')
+        .select('status, total_stake_tokens, actual_payout_tokens, type');
       if (error) throw error;
 
       let totalWagered = 0;
       let houseGain = 0; // Stakes from lost bets
-      let houseLoss = 0; // Payouts to winners
+      let houseLoss = 0; // Net payouts to winners (payout - stake)
 
-      predictions?.forEach((p) => {
-        totalWagered += p.staked_tokens || 0;
-        if (p.status === 'LOST') {
-          houseGain += p.staked_tokens || 0;
-        } else if (p.status === 'WON') {
-          houseLoss += p.payout_tokens || 0;
+      betSlips?.forEach((slip) => {
+        totalWagered += slip.total_stake_tokens || 0;
+        
+        if (slip.status === 'LOST') {
+          // House keeps the stake
+          houseGain += slip.total_stake_tokens || 0;
+        } else if (slip.status === 'WON') {
+          // House pays out (actual payout minus stake that was already collected)
+          const netPayout = (slip.actual_payout_tokens || 0) - (slip.total_stake_tokens || 0);
+          if (netPayout > 0) {
+            houseLoss += netPayout;
+          } else {
+            // If payout < stake, house still gains
+            houseGain += Math.abs(netPayout);
+          }
         }
+        // PENDING and VOID don't affect P/L
       });
 
       return {
@@ -111,20 +123,20 @@ const HouseLedger = () => {
     },
   });
 
-  // Fetch token flow data
+  // Fetch token flow data - use bet_slips for accurate wagered/paidOut
   const { data: tokenFlow, isLoading: loadingFlow } = useQuery({
     queryKey: ['house-ledger-flow'],
     queryFn: async () => {
-      // Total wagered
-      const { data: predictions } = await supabase
-        .from('predictions')
-        .select('staked_tokens, payout_tokens, status');
+      // Use bet_slips as source of truth
+      const { data: betSlips } = await supabase
+        .from('bet_slips')
+        .select('status, total_stake_tokens, actual_payout_tokens');
 
-      const wagered = predictions?.reduce((sum, p) => sum + (p.staked_tokens || 0), 0) || 0;
-      const paidOut = predictions?.filter(p => p.status === 'WON')
-        .reduce((sum, p) => sum + (p.payout_tokens || 0), 0) || 0;
-      const pendingStakes = predictions?.filter(p => p.status === 'PENDING')
-        .reduce((sum, p) => sum + (p.staked_tokens || 0), 0) || 0;
+      const wagered = betSlips?.reduce((sum, s) => sum + (s.total_stake_tokens || 0), 0) || 0;
+      const paidOut = betSlips?.filter(s => s.status === 'WON')
+        .reduce((sum, s) => sum + (s.actual_payout_tokens || 0), 0) || 0;
+      const pendingStakes = betSlips?.filter(s => s.status === 'PENDING')
+        .reduce((sum, s) => sum + (s.total_stake_tokens || 0), 0) || 0;
 
       // Bonuses given
       const { data: bonuses } = await supabase
