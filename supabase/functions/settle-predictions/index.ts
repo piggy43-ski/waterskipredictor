@@ -97,6 +97,8 @@ interface SettlementResult {
     predictions_found: number;
     selection_ids_with_predictions: string[];
     selection_ids_without_predictions: string[];
+    single_bets_settled: number;
+    parlays_settled: number;
   };
 }
 
@@ -175,17 +177,26 @@ Deno.serve(async (req) => {
         predictions_found: 0,
         selection_ids_with_predictions: [],
         selection_ids_without_predictions: [],
+        single_bets_settled: 0,
+        parlays_settled: 0,
       },
     };
 
     const affectedUserIds = new Set<string>();
+    
+    // Track which bet_slips need to be settled after predictions are processed
+    const betSlipsToSettle = new Map<string, { 
+      slip: any; 
+      predictions: any[];
+      allSettled: boolean;
+    }>();
 
     // BATCH FETCH: Get all pending predictions for all selections in ONE query
     console.log(`🔍 Fetching all pending predictions for ${selectionIds.length} selections...`);
     
     const { data: allPredictions, error: batchError } = await supabaseClient
       .from('predictions')
-      .select('*')
+      .select('*, bet_slip:bet_slips!bet_slip_id(*)')
       .in('selection_id', selectionIds)
       .eq('status', 'PENDING');
 
@@ -211,15 +222,27 @@ Deno.serve(async (req) => {
     
     if (allPredictions && allPredictions.length > 0) {
       allPredictions.forEach(pred => {
-        const selId = String(pred.selection_id); // Ensure string comparison
+        const selId = String(pred.selection_id);
         if (!predictionsBySelection.has(selId)) {
           predictionsBySelection.set(selId, []);
         }
         predictionsBySelection.get(selId)!.push(pred);
+        
+        // Track bet_slips for later settlement
+        if (pred.bet_slip_id && pred.bet_slip) {
+          if (!betSlipsToSettle.has(pred.bet_slip_id)) {
+            betSlipsToSettle.set(pred.bet_slip_id, {
+              slip: pred.bet_slip,
+              predictions: [],
+              allSettled: false,
+            });
+          }
+          betSlipsToSettle.get(pred.bet_slip_id)!.predictions.push(pred);
+        }
       });
 
       console.log(`📊 Grouped predictions across ${predictionsBySelection.size} unique selections`);
-      console.log(`🔑 Selection IDs with predictions:`, Array.from(predictionsBySelection.keys()).slice(0, 5));
+      console.log(`📋 Tracking ${betSlipsToSettle.size} bet_slips for settlement`);
     }
 
     // Process each selection
@@ -227,10 +250,6 @@ Deno.serve(async (req) => {
       const selIdString = String(selection_id);
       
       try {
-        // Note: we intentionally do NOT update selections.result here.
-        // That column has a DB CHECK constraint with a specific enum set,
-        // and settlement status is fully driven off predictions.status instead.
-
         // Get predictions for this selection from our pre-fetched batch
         const predictions = predictionsBySelection.get(selIdString) || [];
         if (predictions.length === 0) {
@@ -250,9 +269,10 @@ Deno.serve(async (req) => {
           const selectionContext = selectionContextMap.get(selIdString);
           const actualResults = selectionContext?.actual_results;
           
-          // Check if this prediction is part of a parlay (bet_slip with type='parlay')
-          // For parlays, we only mark the status - payouts happen at bet_slip level
-          const isPartOfParlay = prediction.bet_slip_id && prediction.parlay_leg_count && prediction.parlay_leg_count > 0;
+          // FIXED: Check if this is part of a parlay using bet_slip data
+          // A prediction is part of a parlay if its bet_slip has leg_count > 1 OR type === 'parlay'
+          const betSlip = prediction.bet_slip;
+          const isPartOfParlay = betSlip && (betSlip.leg_count > 1 || betSlip.type === 'parlay');
 
           if (selectionResult === 'won') {
             // Build settlement explanation
@@ -283,8 +303,9 @@ Deno.serve(async (req) => {
               continue;
             }
 
+            result.settled_predictions += 1;
+
             // Only credit wallet for SINGLE bets, not parlay legs
-            // Parlay payouts are handled in the bet_slip settlement section below
             if (!isPartOfParlay && payoutAmount > 0) {
               const { error: walletError } = await supabaseClient.rpc('increment_earned_tokens', {
                 user_id_param: prediction.user_id,
@@ -317,6 +338,7 @@ Deno.serve(async (req) => {
                 .single();
               
               if (walletData) {
+                const profit = payoutAmount - prediction.staked_tokens;
                 await supabaseClient.from('token_transactions').insert({
                   user_id: prediction.user_id,
                   type: 'bet_won',
@@ -324,13 +346,16 @@ Deno.serve(async (req) => {
                   balance_after: walletData.purchased_tokens + walletData.earned_tokens,
                   reference_type: 'prediction',
                   reference_id: prediction.id,
-                  description: `Won bet: ${prediction.athlete_name} - ${prediction.tournament_name}`,
+                  description: `Won bet on ${prediction.athlete_name} (${prediction.discipline}) - Staked ${prediction.staked_tokens}, won ${payoutAmount} (+${profit} profit)`,
                   metadata: {
                     tournament_name: prediction.tournament_name,
                     athlete_name: prediction.athlete_name,
+                    discipline: prediction.discipline,
+                    market_type: prediction.market_type,
                     staked: prediction.staked_tokens,
+                    odds: prediction.decimal_odds,
                     payout: payoutAmount,
-                    profit: payoutAmount - prediction.staked_tokens
+                    profit: profit
                   }
                 });
               }
@@ -354,7 +379,6 @@ Deno.serve(async (req) => {
                 }
               }
             }
-            
             
             console.log(`✅ WON: ${prediction.id} → +${isPartOfParlay ? 0 : payoutAmount} tokens (parlay leg: ${isPartOfParlay})`);
           } else if (selectionResult === 'lost') {
@@ -385,47 +409,52 @@ Deno.serve(async (req) => {
 
             result.settled_predictions += 1;
 
-            // Log transaction
+            // Log transaction with improved description
             const { data: walletData } = await supabaseClient
               .from('token_wallets')
               .select('purchased_tokens, earned_tokens')
               .eq('user_id', prediction.user_id)
               .single();
             
-            if (walletData) {
+            if (walletData && !isPartOfParlay) {
+              // Only log transaction for single bets, not parlay legs
               await supabaseClient.from('token_transactions').insert({
                 user_id: prediction.user_id,
                 type: 'bet_lost',
-                amount: 0,
+                amount: -prediction.staked_tokens, // Negative to show loss
                 balance_after: walletData.purchased_tokens + walletData.earned_tokens,
                 reference_type: 'prediction',
                 reference_id: prediction.id,
-                description: `Lost bet: ${prediction.athlete_name} - ${prediction.tournament_name}`,
+                description: `Lost bet on ${prediction.athlete_name} (${prediction.discipline}) - Lost ${prediction.staked_tokens} tokens`,
                 metadata: {
                   tournament_name: prediction.tournament_name,
                   athlete_name: prediction.athlete_name,
-                  staked: prediction.staked_tokens
+                  discipline: prediction.discipline,
+                  market_type: prediction.market_type,
+                  staked: prediction.staked_tokens,
+                  odds: prediction.decimal_odds,
+                  lost: prediction.staked_tokens
                 }
               });
-            }
 
-            // Update lifetime losses in profile
-            const { data: profileData } = await supabaseClient
-              .from('profiles')
-              .select('lifetime_losses')
-              .eq('id', prediction.user_id)
-              .single();
-            
-            if (profileData) {
-              await supabaseClient
+              // Update lifetime losses in profile
+              const { data: profileData } = await supabaseClient
                 .from('profiles')
-                .update({
-                  lifetime_losses: (profileData.lifetime_losses || 0) + prediction.staked_tokens
-                })
-                .eq('id', prediction.user_id);
+                .select('lifetime_losses')
+                .eq('id', prediction.user_id)
+                .single();
+              
+              if (profileData) {
+                await supabaseClient
+                  .from('profiles')
+                  .update({
+                    lifetime_losses: (profileData.lifetime_losses || 0) + prediction.staked_tokens
+                  })
+                  .eq('id', prediction.user_id);
+              }
             }
 
-            console.log(`❌ LOST: ${prediction.id}`);
+            console.log(`❌ LOST: ${prediction.id} (parlay leg: ${isPartOfParlay})`);
           } else if (selectionResult === 'void') {
             // Build settlement explanation for VOID
             const settlementMetadata = buildSettlementExplanation(
@@ -435,12 +464,12 @@ Deno.serve(async (req) => {
               requestTournamentName
             );
             
-            // Refund stake for void predictions
+            // Refund stake for void predictions (only single bets)
             const { error: updateError } = await supabaseClient
               .from('predictions')
               .update({
                 status: 'VOID',
-                payout_tokens: prediction.staked_tokens,
+                payout_tokens: isPartOfParlay ? 0 : prediction.staked_tokens,
                 settled_at: new Date().toISOString(),
                 settlement_metadata: settlementMetadata,
               })
@@ -452,56 +481,59 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Refund stake to wallet
-            const { error: walletError } = await supabaseClient.rpc('increment_earned_tokens', {
-              user_id_param: prediction.user_id,
-              amount: prediction.staked_tokens,
-            });
-
-            if (walletError) {
-              // Rollback
-              await supabaseClient
-                .from('predictions')
-                .update({
-                  status: 'PENDING',
-                  payout_tokens: null,
-                  settled_at: null,
-                })
-                .eq('id', prediction.id);
-
-              result.errors?.push(`Failed to refund for prediction ${prediction.id}: ${walletError.message}`);
-              console.error(`❌ Wallet error, rolled back:`, walletError);
-              continue;
-            }
-
-            result.total_payout += prediction.staked_tokens;
-            result.settled_predictions += 1;
-
-            // Log transaction
-            const { data: walletData } = await supabaseClient
-              .from('token_wallets')
-              .select('purchased_tokens, earned_tokens')
-              .eq('user_id', prediction.user_id)
-              .single();
-            
-            if (walletData) {
-              await supabaseClient.from('token_transactions').insert({
-                user_id: prediction.user_id,
-                type: 'bet_void',
+            // Refund stake to wallet only for single bets
+            if (!isPartOfParlay) {
+              const { error: walletError } = await supabaseClient.rpc('increment_earned_tokens', {
+                user_id_param: prediction.user_id,
                 amount: prediction.staked_tokens,
-                balance_after: walletData.purchased_tokens + walletData.earned_tokens,
-                reference_type: 'prediction',
-                reference_id: prediction.id,
-                description: `Voided bet (refunded): ${prediction.athlete_name} - ${prediction.tournament_name}`,
-                metadata: {
-                  tournament_name: prediction.tournament_name,
-                  athlete_name: prediction.athlete_name,
-                  refunded: prediction.staked_tokens
-                }
               });
+
+              if (walletError) {
+                // Rollback
+                await supabaseClient
+                  .from('predictions')
+                  .update({
+                    status: 'PENDING',
+                    payout_tokens: null,
+                    settled_at: null,
+                  })
+                  .eq('id', prediction.id);
+
+                result.errors?.push(`Failed to refund for prediction ${prediction.id}: ${walletError.message}`);
+                console.error(`❌ Wallet error, rolled back:`, walletError);
+                continue;
+              }
+
+              result.total_payout += prediction.staked_tokens;
+              result.settled_predictions += 1;
+
+              // Log transaction
+              const { data: walletData } = await supabaseClient
+                .from('token_wallets')
+                .select('purchased_tokens, earned_tokens')
+                .eq('user_id', prediction.user_id)
+                .single();
+              
+              if (walletData) {
+                await supabaseClient.from('token_transactions').insert({
+                  user_id: prediction.user_id,
+                  type: 'bet_void',
+                  amount: prediction.staked_tokens,
+                  balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                  reference_type: 'prediction',
+                  reference_id: prediction.id,
+                  description: `Voided bet on ${prediction.athlete_name} (${prediction.discipline}) - Refunded ${prediction.staked_tokens} tokens`,
+                  metadata: {
+                    tournament_name: prediction.tournament_name,
+                    athlete_name: prediction.athlete_name,
+                    discipline: prediction.discipline,
+                    refunded: prediction.staked_tokens
+                  }
+                });
+              }
             }
 
-            console.log(`🔄 VOID: ${prediction.id} → refunded ${prediction.staked_tokens} tokens to user ${prediction.user_id}`);
+            console.log(`🔄 VOID: ${prediction.id} → refunded ${isPartOfParlay ? 0 : prediction.staked_tokens} tokens (parlay leg: ${isPartOfParlay})`);
           }
         }
       } catch (error) {
@@ -513,25 +545,24 @@ Deno.serve(async (req) => {
 
     result.affected_users = affectedUserIds.size;
 
-    // PARLAY SETTLEMENT: Process bet_slips after individual predictions are settled
-    console.log(`\n🎯 Starting parlay settlement...`);
+    // BET SLIP SETTLEMENT: Process ALL bet_slips (both single and parlay)
+    console.log(`\n🎯 Starting bet_slip settlement...`);
     
     try {
-      // Fetch all pending parlay bet slips
-      const { data: parlaySlips, error: parlayFetchError } = await supabaseClient
+      // Fetch all pending bet slips that might have been affected
+      const { data: pendingSlips, error: slipsFetchError } = await supabaseClient
         .from('bet_slips')
         .select('*')
-        .eq('type', 'parlay')
         .eq('status', 'PENDING');
 
-      if (parlayFetchError) {
-        console.error('❌ Error fetching parlay slips:', parlayFetchError);
-      } else if (parlaySlips && parlaySlips.length > 0) {
-        console.log(`📋 Found ${parlaySlips.length} pending parlay slips to check`);
+      if (slipsFetchError) {
+        console.error('❌ Error fetching bet slips:', slipsFetchError);
+      } else if (pendingSlips && pendingSlips.length > 0) {
+        console.log(`📋 Found ${pendingSlips.length} pending bet slips to check`);
 
-        for (const slip of parlaySlips) {
+        for (const slip of pendingSlips) {
           try {
-            // Get all legs for this parlay
+            // Get all legs/predictions for this bet slip
             const { data: legs, error: legsError } = await supabaseClient
               .from('predictions')
               .select('*')
@@ -549,101 +580,203 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Check if any leg is LOST
-            const hasLostLeg = legs.some(leg => leg.status === 'LOST');
-            if (hasLostLeg) {
-              // Parlay loses if any leg loses
+            const isParlay = slip.type === 'parlay' || slip.leg_count > 1;
+
+            if (isParlay) {
+              // PARLAY LOGIC
+              // Check if any leg is LOST
+              const hasLostLeg = legs.some(leg => leg.status === 'LOST');
+              if (hasLostLeg) {
+                // Parlay loses if any leg loses
+                await supabaseClient
+                  .from('bet_slips')
+                  .update({
+                    status: 'LOST',
+                    actual_payout_tokens: 0,
+                    settled_at: new Date().toISOString()
+                  })
+                  .eq('id', slip.id);
+
+                // Log transaction for parlay loss
+                const { data: walletData } = await supabaseClient
+                  .from('token_wallets')
+                  .select('purchased_tokens, earned_tokens')
+                  .eq('user_id', slip.user_id)
+                  .single();
+                
+                if (walletData) {
+                  const athleteNames = legs.map(l => l.athlete_name).join(', ');
+                  await supabaseClient.from('token_transactions').insert({
+                    user_id: slip.user_id,
+                    type: 'bet_lost',
+                    amount: -slip.total_stake_tokens,
+                    balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                    reference_type: 'bet_slip',
+                    reference_id: slip.id,
+                    description: `Lost ${slip.leg_count}-leg parlay (${athleteNames}) - Lost ${slip.total_stake_tokens} tokens`,
+                    metadata: {
+                      bet_type: 'parlay',
+                      leg_count: slip.leg_count,
+                      staked: slip.total_stake_tokens,
+                      athletes: legs.map(l => l.athlete_name)
+                    }
+                  });
+                }
+
+                // Update lifetime losses
+                const { data: profileData } = await supabaseClient
+                  .from('profiles')
+                  .select('lifetime_losses')
+                  .eq('id', slip.user_id)
+                  .single();
+                
+                if (profileData) {
+                  await supabaseClient
+                    .from('profiles')
+                    .update({
+                      lifetime_losses: (profileData.lifetime_losses || 0) + slip.total_stake_tokens
+                    })
+                    .eq('id', slip.user_id);
+                }
+
+                result.debug_info!.parlays_settled++;
+                console.log(`❌ Parlay ${slip.id} LOST`);
+                continue;
+              }
+
+              // All legs are WON or VOID - parlay wins
+              // Recalculate odds treating VOID legs as 1.0
+              const adjustedOdds = legs.reduce((acc, leg) => {
+                if (leg.status === 'VOID') {
+                  return acc * 1.0;
+                }
+                return acc * leg.decimal_odds;
+              }, 1);
+
+              // Apply 5% house edge
+              const finalOdds = adjustedOdds * 0.95;
+              const actualPayout = Math.floor(slip.total_stake_tokens * finalOdds);
+
+              // Update slip to WON
               await supabaseClient
                 .from('bet_slips')
                 .update({
-                  status: 'LOST',
-                  actual_payout_tokens: 0,
+                  status: 'WON',
+                  actual_payout_tokens: actualPayout,
                   settled_at: new Date().toISOString()
                 })
                 .eq('id', slip.id);
 
-              console.log(`❌ Parlay ${slip.id} LOST (has losing leg)`);
-              continue;
-            }
+              // Credit user wallet
+              const { error: walletError } = await supabaseClient.rpc('increment_earned_tokens', {
+                user_id_param: slip.user_id,
+                amount: actualPayout
+              });
 
-            // All legs are WON or VOID
-            // Recalculate odds treating VOID legs as 1.0
-            const adjustedOdds = legs.reduce((acc, leg) => {
-              if (leg.status === 'VOID') {
-                return acc * 1.0; // Void legs don't affect odds
+              if (walletError) {
+                console.error(`❌ Failed to credit wallet for slip ${slip.id}:`, walletError);
+                await supabaseClient
+                  .from('bet_slips')
+                  .update({
+                    status: 'PENDING',
+                    actual_payout_tokens: null,
+                    settled_at: null
+                  })
+                  .eq('id', slip.id);
+                continue;
               }
-              return acc * leg.decimal_odds;
-            }, 1);
 
-            // Apply 5% house edge
-            const finalOdds = adjustedOdds * 0.95;
-            const actualPayout = Math.floor(slip.total_stake_tokens * finalOdds);
+              // Log transaction for parlay win
+              const { data: walletData } = await supabaseClient
+                .from('token_wallets')
+                .select('purchased_tokens, earned_tokens')
+                .eq('user_id', slip.user_id)
+                .single();
+              
+              if (walletData) {
+                const profit = actualPayout - slip.total_stake_tokens;
+                const athleteNames = legs.map(l => l.athlete_name).join(', ');
+                await supabaseClient.from('token_transactions').insert({
+                  user_id: slip.user_id,
+                  type: 'bet_won',
+                  amount: actualPayout,
+                  balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                  reference_type: 'bet_slip',
+                  reference_id: slip.id,
+                  description: `Won ${slip.leg_count}-leg parlay (${athleteNames}) - Staked ${slip.total_stake_tokens}, won ${actualPayout} (+${profit} profit)`,
+                  metadata: {
+                    bet_type: 'parlay',
+                    leg_count: slip.leg_count,
+                    staked: slip.total_stake_tokens,
+                    odds: finalOdds,
+                    payout: actualPayout,
+                    profit: profit,
+                    athletes: legs.map(l => l.athlete_name)
+                  }
+                });
+              }
 
-            // Update slip to WON
-            await supabaseClient
-              .from('bet_slips')
-              .update({
-                status: 'WON',
-                actual_payout_tokens: actualPayout,
-                settled_at: new Date().toISOString()
-              })
-              .eq('id', slip.id);
+              // Update lifetime winnings
+              const winAmount = actualPayout - slip.total_stake_tokens;
+              if (winAmount > 0) {
+                const { data: profileData } = await supabaseClient
+                  .from('profiles')
+                  .select('lifetime_winnings')
+                  .eq('id', slip.user_id)
+                  .single();
+                
+                if (profileData) {
+                  await supabaseClient
+                    .from('profiles')
+                    .update({
+                      lifetime_winnings: (profileData.lifetime_winnings || 0) + winAmount
+                    })
+                    .eq('id', slip.user_id);
+                }
+              }
 
-            // Credit user wallet
-            const { error: walletError } = await supabaseClient.rpc('increment_earned_tokens', {
-              user_id_param: slip.user_id,
-              amount: actualPayout
-            });
+              result.total_payout += actualPayout;
+              affectedUserIds.add(slip.user_id);
+              result.debug_info!.parlays_settled++;
 
-            if (walletError) {
-              console.error(`❌ Failed to credit wallet for slip ${slip.id}:`, walletError);
-              // Rollback
+              console.log(`✅ Parlay ${slip.id} WON → +${actualPayout} tokens (adjusted odds: ${finalOdds.toFixed(2)})`);
+            } else {
+              // SINGLE BET LOGIC - Just sync bet_slip status with the prediction
+              const prediction = legs[0];
+              
+              let slipStatus = prediction.status;
+              let actualPayout = 0;
+              
+              if (prediction.status === 'WON') {
+                actualPayout = prediction.payout_tokens || 0;
+              } else if (prediction.status === 'VOID') {
+                actualPayout = prediction.staked_tokens; // Refunded
+              }
+              
               await supabaseClient
                 .from('bet_slips')
                 .update({
-                  status: 'PENDING',
-                  actual_payout_tokens: null,
-                  settled_at: null
+                  status: slipStatus,
+                  actual_payout_tokens: actualPayout,
+                  settled_at: new Date().toISOString()
                 })
                 .eq('id', slip.id);
-              continue;
+
+              result.debug_info!.single_bets_settled++;
+              console.log(`✅ Single bet slip ${slip.id} → ${slipStatus} (payout: ${actualPayout})`);
             }
-
-            // Update lifetime winnings
-            const winAmount = actualPayout - slip.total_stake_tokens;
-            if (winAmount > 0) {
-              const { data: profileData } = await supabaseClient
-                .from('profiles')
-                .select('lifetime_winnings')
-                .eq('id', slip.user_id)
-                .single();
-              
-              if (profileData) {
-                await supabaseClient
-                  .from('profiles')
-                  .update({
-                    lifetime_winnings: (profileData.lifetime_winnings || 0) + winAmount
-                  })
-                  .eq('id', slip.user_id);
-              }
-            }
-
-            result.total_payout += actualPayout;
-            affectedUserIds.add(slip.user_id);
-
-            console.log(`✅ Parlay ${slip.id} WON → +${actualPayout} tokens (adjusted odds: ${finalOdds.toFixed(2)})`);
           } catch (error) {
-            console.error(`❌ Error processing parlay slip ${slip.id}:`, error);
+            console.error(`❌ Error processing bet slip ${slip.id}:`, error);
           }
         }
 
         result.affected_users = affectedUserIds.size;
-        console.log(`🎉 Parlay settlement complete`);
+        console.log(`🎉 Bet slip settlement complete`);
       } else {
-        console.log(`📋 No pending parlay slips to process`);
+        console.log(`📋 No pending bet slips to process`);
       }
     } catch (error) {
-      console.error('❌ Error in parlay settlement:', error);
+      console.error('❌ Error in bet slip settlement:', error);
     }
 
     // Mark tournament as settled and update athlete stats
@@ -687,12 +820,10 @@ Deno.serve(async (req) => {
     }
 
     // ============= ATHLETE STATS LEARNING =============
-    // Update athlete career/season stats and recalculate strength scores and fantasy prices
     if (tournamentId) {
       console.log(`\n📊 Updating athlete stats from tournament results...`);
       
       try {
-        // Fetch all finals results for this tournament from tournament_results
         const { data: tournamentResults, error: resultsError } = await supabaseClient
           .from('tournament_results')
           .select('*')
@@ -704,7 +835,6 @@ Deno.serve(async (req) => {
         } else if (tournamentResults && tournamentResults.length > 0) {
           console.log(`📋 Processing ${tournamentResults.length} athlete results`);
           
-          // Tier bonuses for strength calculation
           const TIER_BONUSES: Record<string, number> = {
             tier1: 0.15,
             tier2: 0.07,
@@ -712,7 +842,6 @@ Deno.serve(async (req) => {
             unranked: 0,
           };
           
-          // Fantasy price bands
           const FANTASY_PRICE_BANDS: Record<string, { base: number; maxMultiplier: number }> = {
             tier1: { base: 12000, maxMultiplier: 1.5 },
             tier2: { base: 8000, maxMultiplier: 1.3 },
@@ -722,10 +851,9 @@ Deno.serve(async (req) => {
           
           for (const resultRow of tournamentResults) {
             const discipline = resultRow.discipline;
-            const position = resultRow.final_overall_rank; // Use final_overall_rank instead of position
+            const position = resultRow.final_overall_rank;
             const athleteId = resultRow.athlete_id;
             
-            // Fetch current athlete data
             const { data: athlete, error: athleteError } = await supabaseClient
               .from('athletes')
               .select('*')
@@ -737,16 +865,13 @@ Deno.serve(async (req) => {
               continue;
             }
             
-            // Build update object for this discipline
             const updates: Record<string, unknown> = {};
             
-            // Increment event counts
             const careerEventsKey = `career_events_${discipline}`;
             const seasonEventsKey = `season_events_${discipline}`;
             updates[careerEventsKey] = (athlete[careerEventsKey] || 0) + 1;
             updates[seasonEventsKey] = (athlete[seasonEventsKey] || 0) + 1;
             
-            // Handle wins and podiums
             if (position === 1) {
               const careerWinsKey = `career_wins_${discipline}`;
               const seasonWinsKey = `season_wins_${discipline}`;
@@ -765,27 +890,23 @@ Deno.serve(async (req) => {
               updates[seasonPodiumsKey] = (athlete[seasonPodiumsKey] || 0) + 1;
             }
             
-            // Handle top 8
             if (position && position <= 8) {
               const careerTop8Key = `career_top8_${discipline}`;
               updates[careerTop8Key] = (athlete[careerTop8Key] || 0) + 1;
             }
             
-            // Update last 5 results
             const last5Key = `last_5_results_${discipline}`;
             const currentLast5 = (athlete[last5Key] as Array<{ position: number; score: number }>) || [];
             const newLast5 = [
-              { position: position || 99, score: resultRow.score_raw || 0 },
+              { position: position || 99, score: resultRow.raw_score || 0 },
               ...currentLast5
             ].slice(0, 5);
             updates[last5Key] = newLast5;
             
-            // Calculate season avg place from last 5
             const avgPlace = newLast5.reduce((sum, r) => sum + (r.position || 20), 0) / newLast5.length;
             const seasonAvgPlaceKey = `season_avg_place_${discipline}`;
             updates[seasonAvgPlaceKey] = avgPlace;
             
-            // Recalculate strength score
             const tierKey = `strength_tier_${discipline}`;
             const tier = (athlete[tierKey] as string) || 'unranked';
             const tierBonus = TIER_BONUSES[tier] || 0;
@@ -811,7 +932,6 @@ Deno.serve(async (req) => {
             const strengthScoreKey = `odds_strength_score_${discipline}`;
             updates[strengthScoreKey] = strengthScore;
             
-            // Recalculate fantasy price
             const band = FANTASY_PRICE_BANDS[tier] || FANTASY_PRICE_BANDS.unranked;
             const multiplier = 1 + (seasonPodiumRate * (band.maxMultiplier - 1));
             let fantasyPrice = Math.round(band.base * multiplier);
@@ -820,7 +940,6 @@ Deno.serve(async (req) => {
             const fantasyPriceKey = `fantasy_price_${discipline}`;
             updates[fantasyPriceKey] = fantasyPrice;
             
-            // Apply the updates
             const { error: updateError } = await supabaseClient
               .from('athletes')
               .update(updates)
@@ -846,8 +965,8 @@ Deno.serve(async (req) => {
     console.log(`   ✅ ${result.settled_predictions} predictions settled`);
     console.log(`   💰 ${result.total_payout} tokens paid out`);
     console.log(`   👥 ${result.affected_users} users affected`);
-    console.log(`   📋 ${result.debug_info!.selection_ids_with_predictions.length} selections had predictions`);
-    console.log(`   ⚠️  ${result.debug_info!.selection_ids_without_predictions.length} selections had no predictions`);
+    console.log(`   🎫 ${result.debug_info!.single_bets_settled} single bets settled`);
+    console.log(`   🎰 ${result.debug_info!.parlays_settled} parlays settled`);
     if (result.errors && result.errors.length > 0) {
       console.log(`   ❌ ${result.errors.length} errors occurred`);
     }
