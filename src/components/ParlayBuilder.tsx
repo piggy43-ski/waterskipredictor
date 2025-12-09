@@ -234,8 +234,17 @@ export function ParlayBuilder({
       if (slipError) throw slipError;
 
       // Create predictions for each selection in each leg
+      // IMPORTANT: For parlays, individual predictions should store their individual odds,
+      // NOT the combined parlay multiplier. Payouts are handled at the bet_slip level.
       const predictions = [];
+      const selectionsPerLeg = 5; // winner + 3 podium + highest score
+      const totalSelections = completeLegs.length * selectionsPerLeg;
+      
       for (const leg of completeLegs) {
+        // Each prediction in a parlay stores its own odds but payout is 0
+        // (parlay payout happens at bet_slip level, not individual predictions)
+        const perLegStake = Math.floor(stakeAmount / completeLegs.length);
+        
         if (leg.winner) {
           predictions.push({
             user_id: userId,
@@ -246,9 +255,9 @@ export function ParlayBuilder({
             discipline: leg.discipline,
             category: leg.category,
             market_type: 'WINNER',
-            staked_tokens: Math.floor(stakeAmount / (completeLegs.length * 3)), // Distribute evenly
-            decimal_odds: multiplier,
-            potential_payout: Math.floor(potentialPayout / (completeLegs.length * 3)),
+            staked_tokens: Math.floor(perLegStake / selectionsPerLeg),
+            decimal_odds: leg.winner.decimal_odds, // Use individual selection odds
+            potential_payout: 0, // Parlay payouts are at bet_slip level
             parlay_leg_count: completeLegs.length,
             status: 'PENDING'
           });
@@ -265,9 +274,9 @@ export function ParlayBuilder({
               discipline: leg.discipline,
               category: leg.category,
               market_type: 'PODIUM',
-              staked_tokens: Math.floor(stakeAmount / (completeLegs.length * 3)),
-              decimal_odds: multiplier,
-              potential_payout: Math.floor(potentialPayout / (completeLegs.length * 3)),
+              staked_tokens: Math.floor(perLegStake / selectionsPerLeg),
+              decimal_odds: sel.decimal_odds, // Use individual selection odds
+              potential_payout: 0, // Parlay payouts are at bet_slip level
               parlay_leg_count: completeLegs.length,
               status: 'PENDING'
             });
@@ -284,9 +293,9 @@ export function ParlayBuilder({
             discipline: leg.discipline,
             category: leg.category,
             market_type: 'HIGHEST_SCORE',
-            staked_tokens: Math.floor(stakeAmount / (completeLegs.length * 3)),
-            decimal_odds: multiplier,
-            potential_payout: Math.floor(potentialPayout / (completeLegs.length * 3)),
+            staked_tokens: Math.floor(perLegStake / selectionsPerLeg),
+            decimal_odds: leg.highestScore.decimal_odds, // Use individual selection odds
+            potential_payout: 0, // Parlay payouts are at bet_slip level
             parlay_leg_count: completeLegs.length,
             status: 'PENDING'
           });
