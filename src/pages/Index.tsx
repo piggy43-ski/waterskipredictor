@@ -99,25 +99,25 @@ const Index = () => {
           })));
         }
 
-        // Fetch user's recent settled predictions
+        // Fetch user's recent settled bet slips (not individual predictions to avoid parlay leg issues)
         const { data: settledData } = await supabase
-          .from('predictions')
-          .select('*')
+          .from('bet_slips')
+          .select('id, status, total_stake_tokens, actual_payout_tokens, settled_at')
           .eq('user_id', user.id)
           .in('status', ['WON', 'LOST'])
           .order('settled_at', { ascending: false })
           .limit(10);
 
         if (settledData) {
-          setSettledPredictions(settledData.map(p => ({
-            id: p.id,
-            staked_tokens: p.staked_tokens,
-            decimal_odds: parseFloat(p.decimal_odds.toString()),
-            potential_payout: p.potential_payout,
-            payout_tokens: p.payout_tokens,
-            athlete_name: p.athlete_name,
-            tournament_name: p.tournament_name,
-            status: p.status
+          setSettledPredictions(settledData.map(s => ({
+            id: s.id,
+            staked_tokens: s.total_stake_tokens,
+            decimal_odds: 0,
+            potential_payout: 0,
+            payout_tokens: s.actual_payout_tokens,
+            athlete_name: '',
+            tournament_name: '',
+            status: s.status
           })));
         }
       }
