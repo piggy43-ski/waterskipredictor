@@ -103,10 +103,12 @@ const Profile = () => {
   const fetchLifetimeStats = async () => {
     if (!user) return;
 
+    // Use bet_slips for accurate stats (avoids double-counting parlay legs)
     const { data, error } = await supabase
-      .from('predictions')
-      .select('status, staked_tokens, payout_tokens')
-      .eq('user_id', user.id);
+      .from('bet_slips')
+      .select('status, total_stake_tokens, actual_payout_tokens')
+      .eq('user_id', user.id)
+      .in('status', ['WON', 'LOST']);
 
     if (error) {
       console.error('Error fetching lifetime stats:', error);
@@ -122,16 +124,17 @@ const Profile = () => {
     let winnings = 0;
     let losses = 0;
 
-    for (const prediction of data) {
-      const status = String(prediction.status);
+    for (const slip of data) {
+      const status = String(slip.status);
       if (status === 'WON') {
-        const payout = prediction.payout_tokens ?? 0;
-        const winAmount = payout - prediction.staked_tokens;
-        if (winAmount > 0) {
-          winnings += winAmount;
+        const payout = slip.actual_payout_tokens ?? 0;
+        const stake = slip.total_stake_tokens ?? 0;
+        const profit = payout - stake;
+        if (profit > 0) {
+          winnings += profit;
         }
       } else if (status === 'LOST') {
-        losses += prediction.staked_tokens;
+        losses += slip.total_stake_tokens ?? 0;
       }
     }
 
