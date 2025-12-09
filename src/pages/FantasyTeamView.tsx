@@ -164,7 +164,7 @@ const FantasyTeamView = () => {
         })
       );
 
-      // Fetch leaderboard
+      // Fetch leaderboard with usernames from profiles
       const { data: leaderboardData, error: leaderboardError } = await supabase
         .from('fantasy_entries')
         .select(`
@@ -176,7 +176,25 @@ const FantasyTeamView = () => {
 
       if (leaderboardError) throw leaderboardError;
 
-      setLeaderboard(leaderboardData || []);
+      // Fetch usernames for leaderboard entries
+      const userIds = (leaderboardData || []).map(e => e.user_id);
+      let profilesMap = new Map<string, string>();
+      
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, username')
+          .in('id', userIds);
+        
+        (profilesData || []).forEach(p => {
+          profilesMap.set(p.id, p.username);
+        });
+      }
+
+      setLeaderboard((leaderboardData || []).map(lb => ({
+        ...lb,
+        profile: { username: profilesMap.get(lb.user_id) || 'Unknown' }
+      })));
 
     } catch (error) {
       console.error('Error fetching team data:', error);
@@ -379,7 +397,7 @@ const FantasyTeamView = () => {
           <TabsContent value="leaderboard" className="mt-4">
             <Card className="p-4">
               <div className="space-y-2">
-                {leaderboard.map((lb, index) => (
+                  {leaderboard.map((lb, index) => (
                   <div 
                     key={lb.id}
                     className={`flex items-center justify-between p-3 rounded-lg ${
@@ -397,7 +415,7 @@ const FantasyTeamView = () => {
                       </div>
                       <div>
                         <p className="font-medium text-sm">
-                          {lb.team_name || 'Team'}
+                          {lb.profile?.username || 'Unknown'}
                           {lb.id === entry.id && <span className="text-primary ml-1">(You)</span>}
                         </p>
                       </div>
