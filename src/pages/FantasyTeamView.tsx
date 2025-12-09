@@ -11,6 +11,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { isFantasyPotLocked, getLockStatusMessage, type TournamentInfo } from '@/utils/fantasyLockRules';
+import { FantasyPointsBreakdown, type PointsBreakdownData } from '@/components/fantasy/FantasyPointsBreakdown';
+
+interface ScoringEvent {
+  id: string;
+  athlete_id: string;
+  discipline: string;
+  points_awarded: number;
+  breakdown: PointsBreakdownData;
+}
 
 interface EntryAthlete {
   id: string;
@@ -24,6 +33,7 @@ interface EntryAthlete {
     country: string;
     country_code: string | null;
   };
+  scoringEvent?: ScoringEvent;
 }
 
 interface FantasyEntry {
@@ -73,6 +83,7 @@ const FantasyTeamView = () => {
   const [entry, setEntry] = useState<FantasyEntry | null>(null);
   const [athletes, setAthletes] = useState<EntryAthlete[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [scoringEvents, setScoringEvents] = useState<ScoringEvent[]>([]);
 
   useEffect(() => {
     if (entryId) {
@@ -116,11 +127,41 @@ const FantasyTeamView = () => {
 
       if (athletesError) throw athletesError;
 
+      // Fetch scoring events for detailed breakdown
+      const { data: scoringData, error: scoringError } = await supabase
+        .from('fantasy_scoring_events')
+        .select('*')
+        .eq('entry_id', entryId);
+
+      if (scoringError) {
+        console.error('Error fetching scoring events:', scoringError);
+      }
+
+      const scoringMap = new Map<string, ScoringEvent>();
+      (scoringData || []).forEach(se => {
+        // Key by athlete_id + discipline
+        const key = `${se.athlete_id}-${se.discipline}`;
+        scoringMap.set(key, {
+          id: se.id,
+          athlete_id: se.athlete_id,
+          discipline: se.discipline,
+          points_awarded: se.points_awarded,
+          breakdown: se.breakdown as unknown as PointsBreakdownData
+        });
+      });
+
+      // Store mapped scoring events (not raw data)
+      setScoringEvents(Array.from(scoringMap.values()));
+
       setAthletes(
-        (athletesData || []).map(a => ({
-          ...a,
-          athlete: a.athlete as EntryAthlete['athlete']
-        }))
+        (athletesData || []).map(a => {
+          const key = `${a.athlete_id}-${a.discipline}`;
+          return {
+            ...a,
+            athlete: a.athlete as EntryAthlete['athlete'],
+            scoringEvent: scoringMap.get(key)
+          };
+        })
       );
 
       // Fetch leaderboard
@@ -297,24 +338,28 @@ const FantasyTeamView = () => {
                     {discAthletes.map(a => (
                       <div 
                         key={a.id}
-                        className="flex items-center justify-between p-2 bg-muted/50 rounded-lg"
+                        className="p-3 bg-muted/50 rounded-lg"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-background rounded-full flex items-center justify-center">
-                            {a.athlete.country_code ? (
-                              <span>{getFlagEmoji(a.athlete.country_code)}</span>
-                            ) : (
-                              <User className="w-4 h-4 text-muted-foreground" />
-                            )}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-background rounded-full flex items-center justify-center">
+                              {a.athlete.country_code ? (
+                                <span>{getFlagEmoji(a.athlete.country_code)}</span>
+                              ) : (
+                                <User className="w-4 h-4 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{a.athlete.name}</p>
+                              <p className="text-xs text-muted-foreground">{a.athlete.country}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-sm">{a.athlete.name}</p>
-                            <p className="text-xs text-muted-foreground">{a.athlete.country}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-primary">{a.points_earned}</p>
-                          <p className="text-xs text-muted-foreground">pts</p>
+                          <FantasyPointsBreakdown
+                            athleteName={a.athlete.name}
+                            breakdown={a.scoringEvent?.breakdown || null}
+                            totalPoints={a.points_earned}
+                            compact
+                          />
                         </div>
                       </div>
                     ))}
