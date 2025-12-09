@@ -11,13 +11,14 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil } from 'lucide-react';
+import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info } from 'lucide-react';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 import { getBettingWindowStatus } from '@/utils/bettingWindows';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
+import { SettlementExplanation, type SettlementData } from '@/components/betting/SettlementExplanation';
 
 interface BetSlip {
   id: string;
@@ -39,6 +40,30 @@ interface BetSlip {
   legs?: Prediction[];
 }
 
+interface SettlementMetadata {
+  status: string;
+  explanation: string;
+  tournament_name?: string;
+  market_type?: string;
+  discipline?: string;
+  category?: string;
+  athlete_picked?: string;
+  actual_results?: {
+    position_1st?: string;
+    position_2nd?: string;
+    position_3rd?: string;
+    winner_score?: string;
+    highest_scorer?: string;
+    highest_score?: string;
+  };
+  payout_details?: {
+    stake: number;
+    odds_decimal: number;
+    payout: number;
+    profit: number;
+  };
+}
+
 interface Prediction {
   id: string;
   athlete_name: string;
@@ -48,6 +73,7 @@ interface Prediction {
   market_type: string;
   decimal_odds: number;
   status: string;
+  settlement_metadata?: SettlementMetadata | null;
   podium_selections?: {
     position_predicted: number;
     athletes: { name: string };
@@ -128,13 +154,19 @@ const Predictions = () => {
               .eq('bet_slip_id', slip.id)
               .order('created_at', { ascending: true });
 
+            // Convert settlement_metadata to proper type
+            const typedLegs = (legs || []).map((leg: any) => ({
+              ...leg,
+              settlement_metadata: leg.settlement_metadata as SettlementMetadata | null
+            }));
+
             return {
               ...slip,
               tournament_name: slip.tournaments?.name || 'Unknown Tournament',
               tournament_start_datetime: slip.tournaments?.start_datetime,
               tournament_end_datetime: slip.tournaments?.end_datetime,
               tournament_settled_at: slip.tournaments?.settled_at,
-              legs: legs || []
+              legs: typedLegs
             };
           })
         );
@@ -525,6 +557,19 @@ const Predictions = () => {
               </p>
             </div>
           </div>
+
+          {/* Settlement explanation for completed bets */}
+          {!isActive && slip.legs?.[0]?.settlement_metadata && (
+            <SettlementExplanation 
+              settlement={{
+                status: slip.legs[0].settlement_metadata.status as 'WON' | 'LOST' | 'VOID',
+                explanation: slip.legs[0].settlement_metadata.explanation,
+                actual_results: slip.legs[0].settlement_metadata.actual_results,
+                payout_details: slip.legs[0].settlement_metadata.payout_details
+              }}
+              className="mt-3"
+            />
+          )}
 
           {/* Edit and Cancel buttons for active bets with open betting window */}
           {canCancel && (

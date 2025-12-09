@@ -829,6 +829,7 @@ export type Database = {
           potential_payout: number
           selection_id: string
           settled_at: string | null
+          settlement_metadata: Json | null
           staked_tokens: number
           status: string
           tournament_name: string
@@ -850,6 +851,7 @@ export type Database = {
           potential_payout: number
           selection_id: string
           settled_at?: string | null
+          settlement_metadata?: Json | null
           staked_tokens: number
           status?: string
           tournament_name: string
@@ -871,6 +873,7 @@ export type Database = {
           potential_payout?: number
           selection_id?: string
           settled_at?: string | null
+          settlement_metadata?: Json | null
           staked_tokens?: number
           status?: string
           tournament_name?: string
