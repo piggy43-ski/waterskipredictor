@@ -356,28 +356,32 @@ const FantasyTeamView = () => {
                     {discAthletes.map(a => (
                       <div 
                         key={a.id}
-                        className="p-3 bg-muted/50 rounded-lg"
+                        className="p-3 bg-muted/50 rounded-lg relative"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-background rounded-full flex items-center justify-center">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="w-8 h-8 bg-background rounded-full flex items-center justify-center flex-shrink-0">
                               {a.athlete.country_code ? (
                                 <span>{getFlagEmoji(a.athlete.country_code)}</span>
                               ) : (
                                 <User className="w-4 h-4 text-muted-foreground" />
                               )}
                             </div>
-                            <div>
-                              <p className="font-medium text-sm">{a.athlete.name}</p>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm truncate">{a.athlete.name}</p>
+                              </div>
                               <p className="text-xs text-muted-foreground">{a.athlete.country}</p>
                             </div>
                           </div>
-                          <FantasyPointsBreakdown
-                            athleteName={a.athlete.name}
-                            breakdown={a.scoringEvent?.breakdown || null}
-                            totalPoints={a.points_earned}
-                            compact
-                          />
+                          <div className="flex-shrink-0 relative">
+                            <FantasyPointsBreakdown
+                              athleteName={a.athlete.name}
+                              breakdown={a.scoringEvent?.breakdown || null}
+                              totalPoints={a.points_earned}
+                              compact
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}

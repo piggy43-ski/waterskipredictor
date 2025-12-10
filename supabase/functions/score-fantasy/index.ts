@@ -26,7 +26,7 @@ const PENALTIES = {
   did_not_make_finals: -5,   // Started but didn't make finals
   missed_first_pass: -10,    // Failed first pass
   missed_gate: -3,           // Missed a gate
-  no_show: -50,              // DNS/DNF/DQ
+  no_show: -50,              // DNS/DNF/DQ - athlete was rostered but has NO results
 };
 
 // Streak multipliers
@@ -170,15 +170,26 @@ serve(async (req) => {
     
     console.log(`Using ${finalsResults.length} ${usingSemiFinals ? 'semi-final' : 'final'} results for scoring`);
 
-    // Create lookup maps
+    // Build a map of ALL athlete results by athlete+discipline (for checking participation)
+    // Key: athlete_id_discipline -> array of all results for that athlete
+    const athleteResultsMap = new Map<string, typeof allResults>();
+    for (const result of allResults) {
+      const key = `${result.athlete_id}_${result.discipline}`;
+      const existing = athleteResultsMap.get(key) || [];
+      existing.push(result);
+      athleteResultsMap.set(key, existing);
+    }
+
+    // Create lookup maps for finals/semi finalists
     // For each athlete/discipline, get their best result for position scoring
-    const bestResultMap = new Map<string, {
+    const finalistMap = new Map<string, {
       position: number | null;
       made_finals: boolean;
       no_score: boolean;
       missed_first_pass: boolean;
       missed_gate: boolean;
       gender: string;
+      best_score: number | null;
     }>();
 
     for (const result of finalsResults) {
@@ -188,29 +199,23 @@ serve(async (req) => {
       const position = result.final_overall_rank ?? result.round_rank;
       const made_finals = usingSemiFinals ? false : (result.made_finals ?? false);
       
-      const existing = bestResultMap.get(key);
+      const existing = finalistMap.get(key);
       
       // Keep the best position (lowest number)
       if (!existing || (position && (!existing.position || position < existing.position))) {
-        bestResultMap.set(key, {
+        finalistMap.set(key, {
           position,
           made_finals,
           no_score: result.no_score ?? false,
           missed_first_pass: result.missed_first_pass ?? false,
           missed_gate: result.missed_gate ?? false,
-          gender: result.gender
+          gender: result.gender,
+          best_score: result.raw_score
         });
       }
     }
 
-    console.log(`Best results map has ${bestResultMap.size} entries`);
-
-    // Check if athlete had any result in any round
-    const athleteHasResult = new Map<string, boolean>();
-    for (const result of allResults) {
-      const key = `${result.athlete_id}_${result.discipline}`;
-      athleteHasResult.set(key, true);
-    }
+    console.log(`Finalist map has ${finalistMap.size} entries`);
 
     // Get fantasy pots that include this tournament
     const { data: pots, error: potsError } = await supabase
@@ -251,101 +256,137 @@ serve(async (req) => {
 
         for (const rosterAthlete of rosterAthletes || []) {
           const lookupKey = `${rosterAthlete.athlete_id}_${rosterAthlete.discipline}`;
-          const bestResult = bestResultMap.get(lookupKey);
-          const hasAnyResult = athleteHasResult.get(lookupKey);
+          const finalistData = finalistMap.get(lookupKey);
+          const athleteResults = athleteResultsMap.get(lookupKey) || [];
+          const hasAnyResults = athleteResults.length > 0;
 
           let rawPoints = 0;
           let finalPoints = 0;
-          const breakdown: Record<string, number | string> = {};
+          const breakdown: Record<string, number | string | boolean> = {};
 
-          // Check for no-show: athlete has no result at all
-          if (!hasAnyResult) {
+          // CASE 1: No results at all - true "no show" (-50)
+          if (!hasAnyResults) {
             rawPoints = PENALTIES.no_show;
-            breakdown.no_show = PENALTIES.no_show;
+            breakdown.no_show_penalty = PENALTIES.no_show;
             breakdown.reason = 'No entry in tournament';
-            console.log(`Athlete ${rosterAthlete.athlete_id} has no entry - applying no-show penalty`);
-          } else if (bestResult?.no_score) {
-            // Has entry but no_score = true (DNF/DNS/DQ)
-            rawPoints = PENALTIES.no_show;
-            breakdown.no_show = PENALTIES.no_show;
-            breakdown.reason = 'DNF/DNS/DQ';
-            console.log(`Athlete ${rosterAthlete.athlete_id} has no_score=true - applying no-show penalty`);
-          } else if (bestResult) {
-            // Has valid result - calculate points
-            const position = bestResult.position;
+            console.log(`Athlete ${rosterAthlete.athlete_id} has no results - applying no-show penalty (-50)`);
+          }
+          // CASE 2: Has results but is in the finals/semi map
+          else if (finalistData) {
+            // Check if they had a no_score (DNF/DNS/DQ in finals)
+            if (finalistData.no_score) {
+              rawPoints = PENALTIES.no_show;
+              breakdown.no_show_penalty = PENALTIES.no_show;
+              breakdown.reason = 'DNF/DNS/DQ in finals';
+              console.log(`Athlete ${rosterAthlete.athlete_id} has no_score=true in finals - applying no-show penalty (-50)`);
+            } else {
+              // Has valid finals result - calculate full points
+              const position = finalistData.position;
+              breakdown.made_finals = true;
 
-            // Position points
-            if (position && position > 0) {
-              const positionPts = getPositionPoints(position);
-              rawPoints += positionPts;
-              breakdown.position = positionPts;
-              breakdown.final_position = position;
+              // Position points
+              if (position && position > 0) {
+                const positionPts = getPositionPoints(position);
+                rawPoints += positionPts;
+                breakdown.position_points = positionPts;
+                breakdown.final_position = position;
 
-              // Podium bonus
-              const podiumBonus = getPodiumBonus(position);
-              if (podiumBonus > 0) {
-                rawPoints += podiumBonus;
-                breakdown.podium_bonus = podiumBonus;
+                // Podium bonus
+                const podiumBonus = getPodiumBonus(position);
+                if (podiumBonus > 0) {
+                  rawPoints += podiumBonus;
+                  breakdown.podium_bonus = podiumBonus;
+                }
               }
-            }
 
-            // Made finals bonus (only if we have actual finals data)
-            if (bestResult.made_finals && !usingSemiFinals) {
-              rawPoints += BONUSES.made_finals;
-              breakdown.made_finals = BONUSES.made_finals;
-            }
+              // Made finals bonus (only if we have actual finals data)
+              if (finalistData.made_finals && !usingSemiFinals) {
+                rawPoints += BONUSES.made_finals;
+                breakdown.made_finals_bonus = BONUSES.made_finals;
+              }
 
-            // Highest score bonus (across all rounds)
-            const categoryKey = `${rosterAthlete.discipline}_${bestResult.gender}`;
-            const highestInCategory = highestScores.get(categoryKey);
-            if (highestInCategory?.athlete_id === rosterAthlete.athlete_id) {
-              rawPoints += BONUSES.highest_score_event;
-              breakdown.highest_score = BONUSES.highest_score_event;
-            }
-
-            // Penalties
-            if (bestResult.missed_first_pass) {
-              rawPoints += PENALTIES.missed_first_pass;
-              breakdown.missed_first_pass = PENALTIES.missed_first_pass;
-            }
-            if (bestResult.missed_gate) {
-              rawPoints += PENALTIES.missed_gate;
-              breakdown.missed_gate = PENALTIES.missed_gate;
-            }
-          } else {
-            // Has results in earlier rounds but not in finals/semi
-            rawPoints += PENALTIES.did_not_make_finals;
-            breakdown.did_not_make_finals = PENALTIES.did_not_make_finals;
-
-            // Check if they had the highest score even without making finals
-            const athleteResults = allResults.filter(
-              r => r.athlete_id === rosterAthlete.athlete_id && r.discipline === rosterAthlete.discipline
-            );
-            if (athleteResults.length > 0) {
-              const categoryKey = `${rosterAthlete.discipline}_${athleteResults[0].gender}`;
+              // Highest score bonus (across all rounds)
+              const categoryKey = `${rosterAthlete.discipline}_${finalistData.gender}`;
               const highestInCategory = highestScores.get(categoryKey);
               if (highestInCategory?.athlete_id === rosterAthlete.athlete_id) {
                 rawPoints += BONUSES.highest_score_event;
-                breakdown.highest_score = BONUSES.highest_score_event;
+                breakdown.highest_score_bonus = BONUSES.highest_score_event;
               }
 
-              // Still apply penalties from their runs
-              for (const result of athleteResults) {
-                if (result.missed_first_pass && !breakdown.missed_first_pass) {
-                  rawPoints += PENALTIES.missed_first_pass;
-                  breakdown.missed_first_pass = PENALTIES.missed_first_pass;
-                }
-                if (result.missed_gate && !breakdown.missed_gate) {
-                  rawPoints += PENALTIES.missed_gate;
-                  breakdown.missed_gate = PENALTIES.missed_gate;
-                }
+              // Find best score across all rounds for this athlete
+              const bestScore = Math.max(...athleteResults.map(r => r.raw_score || 0));
+              if (bestScore > 0) {
+                breakdown.best_score = bestScore;
+              }
+
+              // Penalties from their best run
+              if (finalistData.missed_first_pass) {
+                rawPoints += PENALTIES.missed_first_pass;
+                breakdown.missed_first_pass_penalty = PENALTIES.missed_first_pass;
+              }
+              if (finalistData.missed_gate) {
+                rawPoints += PENALTIES.missed_gate;
+                breakdown.missed_gate_penalty = PENALTIES.missed_gate;
+              }
+            }
+          }
+          // CASE 3: Has results in earlier rounds but NOT in finals/semi map
+          // This means they competed but didn't make finals - apply -5 penalty
+          else {
+            rawPoints += PENALTIES.did_not_make_finals;
+            breakdown.did_not_make_finals_penalty = PENALTIES.did_not_make_finals;
+            breakdown.made_finals = false;
+            
+            // Get gender from their results
+            const athleteGender = athleteResults[0]?.gender;
+            
+            // Find best score across all their rounds
+            const bestScore = Math.max(...athleteResults.map(r => r.raw_score || 0));
+            if (bestScore > 0) {
+              breakdown.best_score = bestScore;
+            }
+            
+            // Find their best round performance
+            const bestRound = athleteResults.reduce((best, r) => {
+              if (!best) return r;
+              if ((r.round_rank ?? 999) < (best.round_rank ?? 999)) return r;
+              return best;
+            }, athleteResults[0]);
+            
+            if (bestRound?.round_rank) {
+              breakdown.best_round_rank = bestRound.round_rank;
+              breakdown.best_round_type = bestRound.round_type;
+            }
+
+            console.log(`Athlete ${rosterAthlete.athlete_id} competed but didn't make finals - applying did_not_make_finals penalty (-5)`);
+
+            // Check if they had the highest score even without making finals
+            if (athleteGender) {
+              const categoryKey = `${rosterAthlete.discipline}_${athleteGender}`;
+              const highestInCategory = highestScores.get(categoryKey);
+              if (highestInCategory?.athlete_id === rosterAthlete.athlete_id) {
+                rawPoints += BONUSES.highest_score_event;
+                breakdown.highest_score_bonus = BONUSES.highest_score_event;
+              }
+            }
+
+            // Still apply penalties from their runs
+            for (const result of athleteResults) {
+              if (result.missed_first_pass && !breakdown.missed_first_pass_penalty) {
+                rawPoints += PENALTIES.missed_first_pass;
+                breakdown.missed_first_pass_penalty = PENALTIES.missed_first_pass;
+              }
+              if (result.missed_gate && !breakdown.missed_gate_penalty) {
+                rawPoints += PENALTIES.missed_gate;
+                breakdown.missed_gate_penalty = PENALTIES.missed_gate;
               }
             }
           }
 
           // Store raw points
-          breakdown.raw_total = rawPoints;
+          breakdown.raw_points = rawPoints;
           finalPoints = rawPoints;
+          breakdown.final_points = finalPoints;
 
           // Update roster athlete points
           await supabase
