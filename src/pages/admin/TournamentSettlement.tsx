@@ -805,7 +805,7 @@ export default function TournamentSettlement() {
       
       try {
         const { data, error } = await supabase.functions.invoke('score-fantasy', {
-          body: { tournament_id: selectedTournament }
+          body: { tournament_id: selectedTournament, rescore: true }
         });
         
         if (error) {
