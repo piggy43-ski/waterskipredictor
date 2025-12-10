@@ -26,7 +26,8 @@ const PENALTIES = {
   did_not_make_finals: -5,   // Started but didn't make finals
   missed_first_pass: -10,    // Failed first pass
   missed_gate: -3,           // Missed a gate
-  no_show: -50,              // DNS/DNF/DQ - athlete was rostered but has NO results
+  no_show: -50,              // DNS/DNF/DQ - athlete was rostered but NOT ENTERED in tournament_entries
+  did_not_stand_both_passes: -15, // For trick: athlete didn't stand both passes
 };
 
 // Streak multipliers
@@ -127,6 +128,21 @@ serve(async (req) => {
 
     if (resultsError) throw resultsError;
 
+    // Get tournament_entries to check who was actually entered
+    const { data: tournamentEntries, error: entriesError } = await supabase
+      .from('tournament_entries')
+      .select('athlete_id, discipline')
+      .eq('tournament_id', tournament_id);
+
+    if (entriesError) throw entriesError;
+
+    // Build a set of entered athletes by discipline
+    const enteredAthletes = new Set<string>();
+    for (const entry of tournamentEntries || []) {
+      enteredAthletes.add(`${entry.athlete_id}_${entry.discipline}`);
+    }
+    console.log(`Found ${enteredAthletes.size} athlete entries in tournament_entries`);
+
     if (!allResults || allResults.length === 0) {
       console.log('No results found for tournament');
       return new Response(JSON.stringify({ 
@@ -188,6 +204,7 @@ serve(async (req) => {
       no_score: boolean;
       missed_first_pass: boolean;
       missed_gate: boolean;
+      stood_both_passes: boolean;
       gender: string;
       best_score: number | null;
     }>();
@@ -209,6 +226,7 @@ serve(async (req) => {
           no_score: result.no_score ?? false,
           missed_first_pass: result.missed_first_pass ?? false,
           missed_gate: result.missed_gate ?? false,
+          stood_both_passes: result.stood_both_passes ?? true,
           gender: result.gender,
           best_score: result.raw_score
         });
@@ -259,26 +277,35 @@ serve(async (req) => {
           const finalistData = finalistMap.get(lookupKey);
           const athleteResults = athleteResultsMap.get(lookupKey) || [];
           const hasAnyResults = athleteResults.length > 0;
+          const isEnteredInTournament = enteredAthletes.has(lookupKey);
 
           let rawPoints = 0;
           let finalPoints = 0;
           const breakdown: Record<string, number | string | boolean> = {};
 
-          // CASE 1: No results at all - true "no show" (-50)
-          if (!hasAnyResults) {
+          // CASE 1: Athlete NOT entered in tournament_entries for this discipline
+          // This is a roster mistake - true "no show" (-50)
+          if (!isEnteredInTournament) {
             rawPoints = PENALTIES.no_show;
             breakdown.no_show_penalty = PENALTIES.no_show;
-            breakdown.reason = 'No entry in tournament';
-            console.log(`Athlete ${rosterAthlete.athlete_id} has no results - applying no-show penalty (-50)`);
+            breakdown.reason = 'Athlete not entered in tournament for this discipline';
+            console.log(`Athlete ${rosterAthlete.athlete_id} NOT in tournament_entries for ${rosterAthlete.discipline} - applying no-show penalty (-50)`);
           }
-          // CASE 2: Has results but is in the finals/semi map
+          // CASE 2: Entered but no results at all - benefit of doubt, treat as "did not make finals"
+          else if (!hasAnyResults) {
+            rawPoints = PENALTIES.did_not_make_finals;
+            breakdown.did_not_make_finals_penalty = PENALTIES.did_not_make_finals;
+            breakdown.reason = 'Entered but no results recorded (benefit of doubt)';
+            console.log(`Athlete ${rosterAthlete.athlete_id} entered but no results - applying did_not_make_finals penalty (-5)`);
+          }
+          // CASE 3: Has results and is in the finals/semi map
           else if (finalistData) {
             // Check if they had a no_score (DNF/DNS/DQ in finals)
             if (finalistData.no_score) {
-              rawPoints = PENALTIES.no_show;
-              breakdown.no_show_penalty = PENALTIES.no_show;
+              rawPoints = PENALTIES.did_not_make_finals;
+              breakdown.did_not_make_finals_penalty = PENALTIES.did_not_make_finals;
               breakdown.reason = 'DNF/DNS/DQ in finals';
-              console.log(`Athlete ${rosterAthlete.athlete_id} has no_score=true in finals - applying no-show penalty (-50)`);
+              console.log(`Athlete ${rosterAthlete.athlete_id} has no_score=true in finals - applying did_not_make_finals penalty (-5)`);
             } else {
               // Has valid finals result - calculate full points
               const position = finalistData.position;
@@ -328,9 +355,16 @@ serve(async (req) => {
                 rawPoints += PENALTIES.missed_gate;
                 breakdown.missed_gate_penalty = PENALTIES.missed_gate;
               }
+              
+              // Stood both passes penalty for TRICK discipline
+              if (rosterAthlete.discipline === 'trick' && !finalistData.stood_both_passes) {
+                rawPoints += PENALTIES.did_not_stand_both_passes;
+                breakdown.did_not_stand_both_passes_penalty = PENALTIES.did_not_stand_both_passes;
+                console.log(`Athlete ${rosterAthlete.athlete_id} did not stand both passes in trick - applying -15 penalty`);
+              }
             }
           }
-          // CASE 3: Has results in earlier rounds but NOT in finals/semi map
+          // CASE 4: Has results in earlier rounds but NOT in finals/semi map
           // This means they competed but didn't make finals - apply -5 penalty
           else {
             rawPoints += PENALTIES.did_not_make_finals;
@@ -379,6 +413,12 @@ serve(async (req) => {
               if (result.missed_gate && !breakdown.missed_gate_penalty) {
                 rawPoints += PENALTIES.missed_gate;
                 breakdown.missed_gate_penalty = PENALTIES.missed_gate;
+              }
+              // Check stood_both_passes for trick in earlier rounds too
+              if (rosterAthlete.discipline === 'trick' && result.stood_both_passes === false && !breakdown.did_not_stand_both_passes_penalty) {
+                rawPoints += PENALTIES.did_not_stand_both_passes;
+                breakdown.did_not_stand_both_passes_penalty = PENALTIES.did_not_stand_both_passes;
+                console.log(`Athlete ${rosterAthlete.athlete_id} did not stand both passes in trick (earlier round) - applying -15 penalty`);
               }
             }
           }
@@ -463,12 +503,10 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     console.error('Error in score-fantasy:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ 
-      error: errorMessage 
-    }), {
-      status: 500,
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
     });
   }
 });

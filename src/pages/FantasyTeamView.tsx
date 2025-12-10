@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { isFantasyPotLocked, getLockStatusMessage, type TournamentInfo } from '@/utils/fantasyLockRules';
 import { FantasyPointsBreakdown, type PointsBreakdownData } from '@/components/fantasy/FantasyPointsBreakdown';
+import { LeaderComparison } from '@/components/fantasy/LeaderComparison';
 
 interface ScoringEvent {
   id: string;
@@ -73,6 +74,19 @@ interface LeaderboardEntry {
   };
 }
 
+interface LeaderAthlete {
+  athlete_id: string;
+  discipline: string;
+  points_earned: number;
+  athlete: {
+    name: string;
+  };
+}
+
+interface LeaderData extends LeaderboardEntry {
+  athletes: LeaderAthlete[];
+}
+
 const FantasyTeamView = () => {
   const { potId, entryId } = useParams();
   const navigate = useNavigate();
@@ -84,6 +98,7 @@ const FantasyTeamView = () => {
   const [athletes, setAthletes] = useState<EntryAthlete[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [scoringEvents, setScoringEvents] = useState<ScoringEvent[]>([]);
+  const [leaderData, setLeaderData] = useState<LeaderData | null>(null);
 
   useEffect(() => {
     if (entryId) {
@@ -191,10 +206,38 @@ const FantasyTeamView = () => {
         });
       }
 
-      setLeaderboard((leaderboardData || []).map(lb => ({
+      const leaderboardWithProfiles = (leaderboardData || []).map(lb => ({
         ...lb,
         profile: { username: profilesMap.get(lb.user_id) || 'Unknown' }
-      })));
+      }));
+
+      setLeaderboard(leaderboardWithProfiles);
+
+      // Fetch leader's athletes if user is not the leader
+      const leader = leaderboardWithProfiles[0];
+      if (leader && leader.id !== entryId) {
+        const { data: leaderAthletesData } = await supabase
+          .from('fantasy_entry_athletes')
+          .select(`
+            athlete_id, discipline, points_earned,
+            athlete:athletes(name)
+          `)
+          .eq('entry_id', leader.id);
+
+        if (leaderAthletesData) {
+          setLeaderData({
+            ...leader,
+            athletes: leaderAthletesData.map(a => ({
+              athlete_id: a.athlete_id,
+              discipline: a.discipline,
+              points_earned: a.points_earned,
+              athlete: a.athlete as { name: string }
+            }))
+          });
+        }
+      } else {
+        setLeaderData(null);
+      }
 
     } catch (error) {
       console.error('Error fetching team data:', error);
@@ -403,6 +446,24 @@ const FantasyTeamView = () => {
               );
             })()}
           </Card>
+        )}
+
+        {/* Leader Comparison */}
+        {athletes.length > 0 && (
+          <LeaderComparison
+            userEntry={{
+              total_points: entry.total_points,
+              rank: entry.rank,
+              user_id: entry.user_id
+            }}
+            leaderData={leaderData}
+            userAthletes={athletes.map(a => ({
+              discipline: a.discipline,
+              points_earned: a.points_earned,
+              scoringEvent: a.scoringEvent
+            }))}
+            isLeader={entry.rank === 1}
+          />
         )}
 
         <Tabs defaultValue="roster" className="w-full">
