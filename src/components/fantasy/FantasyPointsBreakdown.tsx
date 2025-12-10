@@ -13,6 +13,7 @@ export interface PointsBreakdownData {
   missed_gate_penalty?: number;
   did_not_make_finals_penalty?: number;
   no_show_penalty?: number;
+  did_not_stand_both_passes_penalty?: number; // For trick: didn't stand both passes
   streak_multiplier?: number;
   raw_points?: number;
   final_points?: number;
@@ -50,6 +51,7 @@ function normalizeBreakdown(breakdown: PointsBreakdownData): {
   missedGatePenalty: number;
   didNotMakeFinalsPenalty: number;
   noShowPenalty: number;
+  didNotStandBothPassesPenalty: number;
   streakMultiplier: number;
   rawPoints: number;
   finalPoints: number;
@@ -69,6 +71,7 @@ function normalizeBreakdown(breakdown: PointsBreakdownData): {
     missedGatePenalty: breakdown.missed_gate_penalty ?? breakdown.missed_gate ?? 0,
     didNotMakeFinalsPenalty: breakdown.did_not_make_finals_penalty ?? breakdown.did_not_make_finals ?? 0,
     noShowPenalty: breakdown.no_show_penalty ?? breakdown.no_show ?? 0,
+    didNotStandBothPassesPenalty: breakdown.did_not_stand_both_passes_penalty ?? 0,
     streakMultiplier: breakdown.streak_multiplier ?? 1,
     rawPoints: breakdown.raw_points ?? breakdown.raw_total ?? 0,
     finalPoints: breakdown.final_points ?? breakdown.raw_points ?? breakdown.raw_total ?? 0,
@@ -362,6 +365,14 @@ function BreakdownContent({ normalized }: { normalized: ReturnType<typeof normal
             icon={<XCircle className="w-3.5 h-3.5" />}
             label="No Show Penalty"
             value={normalized.noShowPenalty}
+          />
+        )}
+
+        {normalized.didNotStandBothPassesPenalty < 0 && (
+          <BreakdownRow 
+            icon={<AlertTriangle className="w-3.5 h-3.5" />}
+            label="Did Not Stand Both Passes"
+            value={normalized.didNotStandBothPassesPenalty}
           />
         )}
 

@@ -962,6 +962,50 @@ export default function TournamentSettlement() {
           </CardContent>
         </Card>
 
+        {/* Re-settlement Options for already-settled tournaments */}
+        {selectedTournament && tournamentData?.tournament?.settled_at && (
+          <Card className="border-amber-500/50 bg-amber-500/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-amber-600">
+                <AlertTriangle className="w-5 h-5" />
+                Tournament Already Settled
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  This tournament was settled on {new Date(tournamentData.tournament.settled_at).toLocaleDateString()}.
+                  You can rescore fantasy entries or update results if needed.
+                </AlertDescription>
+              </Alert>
+              
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const { data, error } = await supabase.functions.invoke('score-fantasy', {
+                        body: { tournament_id: selectedTournament, rescore: true }
+                      });
+                      if (error) throw error;
+                      toast({
+                        title: 'Fantasy Rescored',
+                        description: `Rescored ${data?.entries_scored || 0} entries with ${data?.scoring_events || 0} events`
+                      });
+                    } catch (err: any) {
+                      toast({ title: 'Rescore Failed', description: err.message, variant: 'destructive' });
+                    }
+                  }}
+                >
+                  <Trophy className="w-4 h-4 mr-2" />
+                  Rescore Fantasy
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {selectedTournament && settlementPreviews.length === 0 && (
           <>
             {/* AI Parser Section */}
