@@ -54,6 +54,8 @@ type SettlementPreview = {
   category: Category;
   winning_selection_ids: string[];
   winning_athlete_names: string[];
+  winning_prediction_ids: string[];
+  losing_prediction_ids: string[];
   total_wagered: number;
   total_payout: number;
   affected_predictions: number;
@@ -583,9 +585,22 @@ export default function TournamentSettlement() {
     if (!validateResults()) return;
 
     const previews: SettlementPreview[] = [];
-
-    // Get finals results for settlement
     const finalsResults = results.final;
+
+    // Build a map of actual podium positions for each discipline/gender
+    const actualPodiumMap = new Map<string, Map<number, string>>(); // key: "discipline-gender", value: Map<position, athlete_id>
+    
+    for (const discipline of ['slalom', 'trick', 'jump'] as Discipline[]) {
+      for (const gender of ['male', 'female']) {
+        const disciplineResults = finalsResults[discipline]?.[gender] || [];
+        const validResults = disciplineResults.filter(r => r.athlete_id && r.final_overall_rank && r.final_overall_rank <= 3);
+        const positionMap = new Map<number, string>();
+        for (const result of validResults) {
+          positionMap.set(result.final_overall_rank!, result.athlete_id);
+        }
+        actualPodiumMap.set(`${discipline}-${gender}`, positionMap);
+      }
+    }
 
     for (const market of tournamentData.markets) {
       const discipline = market.discipline as Discipline;
@@ -600,7 +615,6 @@ export default function TournamentSettlement() {
       let winningAthleteNames: string[] = [];
 
       if (market.market_type === 'WINNER') {
-        // Winner is final_overall_rank = 1
         const winner = validResults.find(r => r.final_overall_rank === 1);
         if (winner) {
           const selection = market.selections?.find(s => s.athlete_id === winner.athlete_id);
@@ -610,7 +624,7 @@ export default function TournamentSettlement() {
           }
         }
       } else if (market.market_type === 'PODIUM') {
-        // Podium is final_overall_rank 1-3
+        // Individual PODIUM selections: athlete just needs to be in top 3
         const podiumFinishers = validResults.filter(r => r.final_overall_rank && r.final_overall_rank <= 3);
         for (const finisher of podiumFinishers) {
           const selection = market.selections?.find(s => s.athlete_id === finisher.athlete_id);
@@ -620,7 +634,6 @@ export default function TournamentSettlement() {
           }
         }
       } else if (market.market_type === 'HIGHEST_SCORE') {
-        // Highest score across ALL rounds
         let maxScore = 0;
         let highestScorerId = '';
         
@@ -643,15 +656,62 @@ export default function TournamentSettlement() {
         }
       }
 
+      // Fetch predictions with podium_selections for exact-order podium bets
       const { data: predictions } = await supabase
         .from('predictions')
-        .select('selection_id, staked_tokens, potential_payout')
+        .select(`
+          id, selection_id, staked_tokens, potential_payout, market_type, discipline, category,
+          podium_selections (
+            athlete_id,
+            position_predicted
+          )
+        `)
         .eq('status', 'PENDING')
         .in('selection_id', market.selections?.map(s => s.id) || []);
 
+      let winningPredictionIds: string[] = [];
+      let losingPredictionIds: string[] = [];
+
+      // Process each prediction to check if it wins
+      for (const prediction of predictions || []) {
+        const hasPodiumSelections = prediction.podium_selections && prediction.podium_selections.length > 0;
+        
+        if (prediction.market_type === 'PODIUM' && hasPodiumSelections) {
+          // EXACT-ORDER PODIUM BET: All predicted positions must match actual positions
+          const actualPositions = actualPodiumMap.get(`${discipline}-${genderKey}`);
+          
+          if (!actualPositions) {
+            losingPredictionIds.push(prediction.id);
+            continue;
+          }
+
+          let allMatch = true;
+          for (const ps of prediction.podium_selections) {
+            const actualAthleteAtPosition = actualPositions.get(ps.position_predicted);
+            if (actualAthleteAtPosition !== ps.athlete_id) {
+              allMatch = false;
+              break;
+            }
+          }
+
+          if (allMatch) {
+            winningPredictionIds.push(prediction.id);
+          } else {
+            losingPredictionIds.push(prediction.id);
+          }
+        } else {
+          // Standard bet: check if selection is in winning selections
+          if (winningSelectionIds.includes(prediction.selection_id)) {
+            winningPredictionIds.push(prediction.id);
+          } else {
+            losingPredictionIds.push(prediction.id);
+          }
+        }
+      }
+
       const totalWagered = predictions?.reduce((sum, p) => sum + p.staked_tokens, 0) || 0;
       const totalPayout = predictions
-        ?.filter(p => winningSelectionIds.includes(p.selection_id))
+        ?.filter(p => winningPredictionIds.includes(p.id))
         .reduce((sum, p) => sum + p.potential_payout, 0) || 0;
 
       previews.push({
@@ -662,6 +722,8 @@ export default function TournamentSettlement() {
         category: market.category as Category,
         winning_selection_ids: winningSelectionIds,
         winning_athlete_names: winningAthleteNames,
+        winning_prediction_ids: winningPredictionIds,
+        losing_prediction_ids: losingPredictionIds,
         total_wagered: totalWagered,
         total_payout: totalPayout,
         affected_predictions: predictions?.length || 0,
@@ -765,7 +827,25 @@ export default function TournamentSettlement() {
 
   const settleMutation = useMutation({
     mutationFn: async () => {
-      const selections = settlementPreviews
+      // Collect all winning and losing prediction IDs from previews
+      const winningPredictionIds = settlementPreviews.flatMap(p => p.winning_prediction_ids || []);
+      const losingPredictionIds = settlementPreviews.flatMap(p => p.losing_prediction_ids || []);
+
+      // Build settlements based on prediction IDs for accurate exact-order podium handling
+      const winningSettlements = winningPredictionIds.map(id => ({
+        prediction_id: id,
+        result: 'won' as const,
+      }));
+
+      const losingSettlements = losingPredictionIds.map(id => ({
+        prediction_id: id,
+        result: 'lost' as const,
+      }));
+
+      const allSettlements = [...winningSettlements, ...losingSettlements];
+
+      // Also build selection-based fallback for predictions without explicit IDs
+      const selectionWins = settlementPreviews
         .flatMap(preview => 
           preview.winning_selection_ids.map(id => ({
             selection_id: id,
@@ -775,15 +855,16 @@ export default function TournamentSettlement() {
         .filter(s => s.selection_id);
 
       const allSelections = tournamentData?.markets.flatMap(m => m.selections || []) || [];
-      const winningIds = selections.map(s => s.selection_id);
+      const winningSelectionIds = selectionWins.map(s => s.selection_id);
       const losingSelections = allSelections
-        .filter(s => !winningIds.includes(s.id))
+        .filter(s => !winningSelectionIds.includes(s.id))
         .map(s => ({ selection_id: s.id, result: 'lost' as const }));
 
-      const allSettlements = [...selections, ...losingSelections];
-
       const response = await supabase.functions.invoke('settle-predictions', {
-        body: { selections: allSettlements },
+        body: { 
+          selections: [...selectionWins, ...losingSelections],
+          prediction_overrides: allSettlements, // Send explicit prediction results
+        },
       });
 
       if (response.error) throw response.error;
