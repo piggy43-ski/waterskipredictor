@@ -19,8 +19,14 @@ interface SelectionWithContext {
   };
 }
 
+interface PredictionOverride {
+  prediction_id: string;
+  result: 'won' | 'lost' | 'void';
+}
+
 interface SettlementRequest {
   selections: SelectionWithContext[];
+  prediction_overrides?: PredictionOverride[];
   tournament_name?: string;
 }
 
@@ -145,13 +151,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { selections, tournament_name: requestTournamentName }: SettlementRequest = await req.json();
+    const { selections, prediction_overrides, tournament_name: requestTournamentName }: SettlementRequest = await req.json();
     
     // Build a map of selection contexts for building explanations
     const selectionContextMap = new Map<string, SelectionWithContext>();
     selections.forEach(sel => {
       selectionContextMap.set(String(sel.selection_id), sel);
     });
+
+    // Build a map of prediction overrides (for exact-order podium bets)
+    const predictionOverrideMap = new Map<string, 'won' | 'lost' | 'void'>();
+    if (prediction_overrides && prediction_overrides.length > 0) {
+      console.log(`📋 Processing ${prediction_overrides.length} prediction overrides (exact-order podium bets)`);
+      prediction_overrides.forEach(po => {
+        predictionOverrideMap.set(String(po.prediction_id), po.result);
+      });
+    }
 
     if (!selections || selections.length === 0) {
       return new Response(
@@ -274,7 +289,13 @@ Deno.serve(async (req) => {
           const betSlip = prediction.bet_slip;
           const isPartOfParlay = betSlip && (betSlip.leg_count > 1 || betSlip.type === 'parlay');
 
-          if (selectionResult === 'won') {
+          // Check for prediction override (exact-order podium bets have explicit results)
+          const overrideResult = predictionOverrideMap.get(String(prediction.id));
+          const effectiveResult = overrideResult || selectionResult;
+          
+          console.log(`📝 Prediction ${prediction.id}: override=${overrideResult}, selection=${selectionResult}, effective=${effectiveResult}`);
+
+          if (effectiveResult === 'won') {
             // Build settlement explanation
             const settlementMetadata = buildSettlementExplanation(
               prediction,
@@ -381,7 +402,7 @@ Deno.serve(async (req) => {
             }
             
             console.log(`✅ WON: ${prediction.id} → +${isPartOfParlay ? 0 : payoutAmount} tokens (parlay leg: ${isPartOfParlay})`);
-          } else if (selectionResult === 'lost') {
+          } else if (effectiveResult === 'lost') {
             // Build settlement explanation for LOST
             const settlementMetadata = buildSettlementExplanation(
               prediction,
@@ -455,7 +476,7 @@ Deno.serve(async (req) => {
             }
 
             console.log(`❌ LOST: ${prediction.id} (parlay leg: ${isPartOfParlay})`);
-          } else if (selectionResult === 'void') {
+          } else if (effectiveResult === 'void') {
             // Build settlement explanation for VOID
             const settlementMetadata = buildSettlementExplanation(
               prediction,
