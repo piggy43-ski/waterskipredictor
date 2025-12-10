@@ -335,6 +335,76 @@ const FantasyTeamView = () => {
           </Card>
         )}
 
+        {/* Points Summary Card */}
+        {athletes.length > 0 && (
+          <Card className="p-4">
+            <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-primary" />
+              Points Breakdown
+            </h3>
+            {(() => {
+              // Calculate totals from scoring events
+              let positionPoints = 0;
+              let podiumBonuses = 0;
+              let finalsBonuses = 0;
+              let highestScoreBonuses = 0;
+              let didNotMakeFinalsPenalties = 0;
+              let noShowPenalties = 0;
+
+              athletes.forEach(a => {
+                const breakdown = a.scoringEvent?.breakdown;
+                if (breakdown) {
+                  positionPoints += breakdown.position_points || 0;
+                  podiumBonuses += breakdown.podium_bonus || 0;
+                  finalsBonuses += breakdown.made_finals_bonus || 0;
+                  highestScoreBonuses += breakdown.highest_score_bonus || 0;
+                  didNotMakeFinalsPenalties += breakdown.did_not_make_finals_penalty || 0;
+                  noShowPenalties += breakdown.no_show_penalty || 0;
+                }
+              });
+
+              const totalBonuses = podiumBonuses + finalsBonuses + highestScoreBonuses;
+              const totalPenalties = didNotMakeFinalsPenalties + noShowPenalties;
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center py-1.5 border-b border-border/50">
+                    <span className="text-sm text-muted-foreground">Position Points</span>
+                    <span className="font-semibold text-foreground">+{positionPoints}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1.5 border-b border-border/50">
+                    <span className="text-sm text-muted-foreground">Bonuses</span>
+                    <span className="font-semibold text-emerald-500">+{totalBonuses}</span>
+                  </div>
+                  {totalBonuses > 0 && (
+                    <div className="pl-3 space-y-1 text-xs text-muted-foreground pb-1">
+                      {podiumBonuses > 0 && <div className="flex justify-between"><span>Podium</span><span>+{podiumBonuses}</span></div>}
+                      {finalsBonuses > 0 && <div className="flex justify-between"><span>Made Finals</span><span>+{finalsBonuses}</span></div>}
+                      {highestScoreBonuses > 0 && <div className="flex justify-between"><span>Highest Score</span><span>+{highestScoreBonuses}</span></div>}
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center py-1.5 border-b border-border/50">
+                    <span className="text-sm text-muted-foreground">Penalties</span>
+                    <span className={`font-semibold ${totalPenalties < 0 ? 'text-destructive' : 'text-foreground'}`}>
+                      {totalPenalties}
+                    </span>
+                  </div>
+                  {totalPenalties < 0 && (
+                    <div className="pl-3 space-y-1 text-xs text-muted-foreground pb-1">
+                      {didNotMakeFinalsPenalties < 0 && <div className="flex justify-between"><span>Did Not Make Finals</span><span>{didNotMakeFinalsPenalties}</span></div>}
+                      {noShowPenalties < 0 && <div className="flex justify-between"><span>No Show</span><span>{noShowPenalties}</span></div>}
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center pt-2 border-t border-border">
+                    <span className="font-semibold">Total</span>
+                    <span className="font-bold text-lg text-primary">{entry.total_points}</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </Card>
+        )}
+
         <Tabs defaultValue="roster" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="roster">My Roster</TabsTrigger>
