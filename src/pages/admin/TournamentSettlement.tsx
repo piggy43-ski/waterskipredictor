@@ -14,10 +14,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search, Sparkles, X, AlertTriangle } from 'lucide-react';
+import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search, Sparkles, X, AlertTriangle, Edit } from 'lucide-react';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { compareScores, isValidSlalomScore, normalizeSlalomScore, parseSlalomScore } from '@/utils/waterskiScoring';
 import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
+import { QuickResultsEditor } from '@/components/admin/QuickResultsEditor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { Discipline, Category } from '@/types';
 
 type RoundType = 'qual' | 'semi' | 'final';
@@ -976,7 +978,7 @@ export default function TournamentSettlement() {
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
                   This tournament was settled on {new Date(tournamentData.tournament.settled_at).toLocaleDateString()}.
-                  You can rescore fantasy entries or update results if needed.
+                  You can edit individual results or rescore fantasy entries.
                 </AlertDescription>
               </Alert>
               
@@ -1002,6 +1004,27 @@ export default function TournamentSettlement() {
                   Rescore Fantasy
                 </Button>
               </div>
+
+              {/* Quick Results Editor */}
+              <Collapsible className="border rounded-lg">
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between p-4 h-auto">
+                    <div className="flex items-center gap-2">
+                      <Edit className="w-4 h-4" />
+                      <span className="font-medium">Edit Individual Results</span>
+                    </div>
+                    <Badge variant="secondary">Click to expand</Badge>
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="p-4 pt-0 border-t">
+                  <QuickResultsEditor 
+                    tournamentId={selectedTournament}
+                    onResultUpdated={() => {
+                      queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data', selectedTournament] });
+                    }}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
             </CardContent>
           </Card>
         )}
