@@ -827,6 +827,49 @@ export default function TournamentSettlement() {
     },
   });
 
+  // Helper to get actual results for a market (discipline/category)
+  const getActualResultsForMarket = (discipline: Discipline, category: Category): {
+    position_1st?: string;
+    position_2nd?: string;
+    position_3rd?: string;
+    highest_scorer?: string;
+    highest_score?: string;
+  } => {
+    const gender = category === 'open_men' ? 'male' : 'female';
+    const finalsResults = results.final[discipline][gender]
+      .filter(r => r.athlete_id && r.final_overall_rank)
+      .sort((a, b) => (a.final_overall_rank || 999) - (b.final_overall_rank || 999));
+    
+    const getAthleteName = (athleteId: string) => {
+      const entry = tournamentData?.tournament?.tournament_entries?.find(
+        (e: any) => e.athlete_id === athleteId
+      );
+      return entry?.athlete?.name || 'Unknown';
+    };
+
+    const actualResults: {
+      position_1st?: string;
+      position_2nd?: string;
+      position_3rd?: string;
+      highest_scorer?: string;
+      highest_score?: string;
+    } = {};
+
+    if (finalsResults[0]) {
+      actualResults.position_1st = getAthleteName(finalsResults[0].athlete_id);
+      actualResults.highest_scorer = actualResults.position_1st;
+      actualResults.highest_score = finalsResults[0].score || finalsResults[0].raw_score?.toString();
+    }
+    if (finalsResults[1]) {
+      actualResults.position_2nd = getAthleteName(finalsResults[1].athlete_id);
+    }
+    if (finalsResults[2]) {
+      actualResults.position_3rd = getAthleteName(finalsResults[2].athlete_id);
+    }
+
+    return actualResults;
+  };
+
   const settleMutation = useMutation({
     mutationFn: async () => {
       // Collect all winning and losing prediction IDs from previews
@@ -846,25 +889,25 @@ export default function TournamentSettlement() {
 
       const allSettlements = [...winningSettlements, ...losingSettlements];
 
-      // Also build selection-based fallback for predictions without explicit IDs
-      const selectionWins = settlementPreviews
-        .flatMap(preview => 
-          preview.winning_selection_ids.map(id => ({
-            selection_id: id,
-            result: 'won' as const,
-          }))
-        )
-        .filter(s => s.selection_id);
-
-      const allSelections = tournamentData?.markets.flatMap(m => m.selections || []) || [];
-      const winningSelectionIds = selectionWins.map(s => s.selection_id);
-      const losingSelections = allSelections
-        .filter(s => !winningSelectionIds.includes(s.id))
-        .map(s => ({ selection_id: s.id, result: 'lost' as const }));
+      // Build selection-based settlements WITH actual results
+      const selectionsWithResults = settlementPreviews.flatMap(preview => {
+        const actualResults = getActualResultsForMarket(preview.discipline, preview.category);
+        
+        // Add actual_results to all selections (both winning and losing)
+        const allMarketSelections = tournamentData?.markets
+          .filter(m => m.id === preview.market_id)
+          .flatMap(m => m.selections || []) || [];
+        
+        return allMarketSelections.map(selection => ({
+          selection_id: selection.id,
+          result: preview.winning_selection_ids.includes(selection.id) ? 'won' as const : 'lost' as const,
+          actual_results: actualResults,
+        }));
+      });
 
       const response = await supabase.functions.invoke('settle-predictions', {
         body: { 
-          selections: [...selectionWins, ...losingSelections],
+          selections: selectionsWithResults,
           prediction_overrides: allSettlements, // Send explicit prediction results
         },
       });
