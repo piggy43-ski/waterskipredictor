@@ -1,4 +1,4 @@
-import { Trophy, XCircle, RefreshCw, Medal, Target } from 'lucide-react';
+import { Trophy, XCircle, RefreshCw, Medal, Target, ArrowRight } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -62,6 +62,21 @@ export function SettlementExplanation({ settlement, className }: Props) {
   const config = statusConfig[settlement.status];
   const Icon = config.icon;
 
+  // Check if this is a PODIUM bet with comparison data
+  const isPodiumWithComparison = settlement.your_pick?.market_type === 'PODIUM' && 
+    settlement.your_pick?.podium_picks && 
+    settlement.your_pick.podium_picks.length > 0 &&
+    settlement.actual_results?.position_1st;
+
+  const getMedalEmoji = (position: number) => {
+    switch (position) {
+      case 1: return '🥇';
+      case 2: return '🥈';
+      case 3: return '🥉';
+      default: return `#${position}`;
+    }
+  };
+
   return (
     <Card className={cn('p-3 border', config.bgClass, className)}>
       <div className="space-y-3">
@@ -74,8 +89,66 @@ export function SettlementExplanation({ settlement, className }: Props) {
         {/* Explanation */}
         <p className="text-sm text-foreground">{settlement.explanation}</p>
 
-        {/* Actual Results */}
-        {settlement.actual_results && (
+        {/* PODIUM Side-by-Side Comparison */}
+        {isPodiumWithComparison && (
+          <div className="space-y-2 pt-2 border-t border-border/50">
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 text-sm">
+              <div className="text-center">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  Your Picks
+                </p>
+              </div>
+              <div></div>
+              <div className="text-center">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  Actual Results
+                </p>
+              </div>
+            </div>
+            
+            {[1, 2, 3].map((pos) => {
+              const yourPick = settlement.your_pick?.podium_picks?.find(p => p.position === pos);
+              const actualAthlete = pos === 1 ? settlement.actual_results?.position_1st :
+                                    pos === 2 ? settlement.actual_results?.position_2nd :
+                                    settlement.actual_results?.position_3rd;
+              const isMatch = yourPick?.athlete && actualAthlete && 
+                yourPick.athlete.toLowerCase() === actualAthlete.toLowerCase();
+
+              return (
+                <div key={pos} className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center text-sm">
+                  <div className={cn(
+                    "text-right p-1.5 rounded",
+                    isMatch ? "bg-success/20" : "bg-muted/50"
+                  )}>
+                    <span className="mr-1">{getMedalEmoji(pos)}</span>
+                    <span className={cn(
+                      "font-medium",
+                      isMatch ? "text-success" : ""
+                    )}>
+                      {yourPick?.athlete || '—'}
+                    </span>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                  <div className={cn(
+                    "text-left p-1.5 rounded",
+                    isMatch ? "bg-success/20" : "bg-muted/50"
+                  )}>
+                    <span className="mr-1">{getMedalEmoji(pos)}</span>
+                    <span className={cn(
+                      "font-medium",
+                      isMatch ? "text-success" : ""
+                    )}>
+                      {actualAthlete || '—'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Actual Results (for non-PODIUM bets or when no comparison data) */}
+        {!isPodiumWithComparison && settlement.actual_results && (
           <div className="space-y-1">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Actual Results

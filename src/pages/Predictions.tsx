@@ -565,7 +565,15 @@ const Predictions = () => {
                 status: slip.legs[0].settlement_metadata.status as 'WON' | 'LOST' | 'VOID',
                 explanation: slip.legs[0].settlement_metadata.explanation,
                 actual_results: slip.legs[0].settlement_metadata.actual_results,
-                payout_details: slip.legs[0].settlement_metadata.payout_details
+                payout_details: slip.legs[0].settlement_metadata.payout_details,
+                your_pick: {
+                  athlete_name: slip.legs[0].athlete_name,
+                  market_type: slip.legs[0].market_type,
+                  podium_picks: slip.legs[0].podium_selections?.map(ps => ({
+                    position: ps.position_predicted,
+                    athlete: ps.athletes.name
+                  }))
+                }
               }}
               className="mt-3"
             />
