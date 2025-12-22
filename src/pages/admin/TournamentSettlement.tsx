@@ -19,6 +19,7 @@ import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { compareScores, isValidSlalomScore, normalizeSlalomScore, parseSlalomScore } from '@/utils/waterskiScoring';
 import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
 import { QuickResultsEditor } from '@/components/admin/QuickResultsEditor';
+import { SettlementAuditTable } from '@/components/admin/SettlementAuditTable';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { Discipline, Category } from '@/types';
 
@@ -1401,6 +1402,14 @@ export default function TournamentSettlement() {
               </Button>
             </div>
           </>
+        )}
+
+        {/* Settlement Audit Table - Show when tournament is settled */}
+        {selectedTournament && tournamentData?.tournament?.settled_at && (
+          <SettlementAuditTable 
+            tournamentId={selectedTournament} 
+            tournamentName={tournamentData.tournament.name}
+          />
         )}
 
         {/* Settlement Preview */}

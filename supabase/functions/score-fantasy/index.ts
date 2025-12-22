@@ -434,17 +434,40 @@ serve(async (req) => {
             .update({ points_earned: finalPoints })
             .eq('id', rosterAthlete.id);
 
-          // Create scoring event with full breakdown
-          await supabase
+          // Upsert scoring event (update if exists, insert if not)
+          // This prevents duplicate entries when rescoring
+          const { data: existingEvent } = await supabase
             .from('fantasy_scoring_events')
-            .insert({
-              entry_id: entry.id,
-              athlete_id: rosterAthlete.athlete_id,
-              tournament_id,
-              discipline: rosterAthlete.discipline,
-              points_awarded: finalPoints,
-              breakdown
-            });
+            .select('id')
+            .eq('entry_id', entry.id)
+            .eq('athlete_id', rosterAthlete.athlete_id)
+            .eq('tournament_id', tournament_id)
+            .eq('discipline', rosterAthlete.discipline)
+            .maybeSingle();
+
+          if (existingEvent) {
+            // Update existing scoring event
+            await supabase
+              .from('fantasy_scoring_events')
+              .update({ 
+                points_awarded: finalPoints, 
+                breakdown 
+              })
+              .eq('id', existingEvent.id);
+            console.log(`Updated existing scoring event for athlete ${rosterAthlete.athlete_id}`);
+          } else {
+            // Insert new scoring event
+            await supabase
+              .from('fantasy_scoring_events')
+              .insert({
+                entry_id: entry.id,
+                athlete_id: rosterAthlete.athlete_id,
+                tournament_id,
+                discipline: rosterAthlete.discipline,
+                points_awarded: finalPoints,
+                breakdown
+              });
+          }
 
           entryTotalPoints += finalPoints;
           totalScoringEvents++;
