@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { AdminLayout } from '@/components/AdminLayout';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { 
   Table, 
   TableBody, 
@@ -25,13 +27,17 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
-  BarChart3
+  BarChart3,
+  Eye,
+  X
 } from 'lucide-react';
 import { formatTokensWithUSD, formatPL, tokensToUSD, TOKENS_PER_USD } from '@/utils/tokenConversion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import { format, parseISO, startOfMonth, subMonths } from 'date-fns';
+import { SettlementAuditTable } from '@/components/admin/SettlementAuditTable';
 
 const HouseLedger = () => {
+  const [selectedTournament, setSelectedTournament] = useState<{ id: string; name: string } | null>(null);
   // Fetch total players
   const { data: totalPlayers, isLoading: loadingPlayers } = useQuery({
     queryKey: ['house-ledger-players'],
@@ -169,10 +175,17 @@ const HouseLedger = () => {
     },
   });
 
-  // Fetch per-tournament P/L
+  // Fetch per-tournament P/L with tournament IDs
   const { data: tournamentPL, isLoading: loadingTournamentPL } = useQuery({
     queryKey: ['house-ledger-tournament-pl'],
     queryFn: async () => {
+      // Get tournaments to get IDs
+      const { data: tournaments } = await supabase
+        .from('tournaments')
+        .select('id, name');
+      
+      const tournamentMap = new Map(tournaments?.map(t => [t.name, t.id]) || []);
+
       const { data: predictions, error } = await supabase
         .from('predictions')
         .select('tournament_name, status, staked_tokens, payout_tokens');
@@ -180,6 +193,7 @@ const HouseLedger = () => {
 
       const byTournament: Record<string, {
         name: string;
+        id: string;
         bets: number;
         wagered: number;
         paidOut: number;
@@ -188,7 +202,13 @@ const HouseLedger = () => {
       predictions?.forEach((p) => {
         const name = p.tournament_name;
         if (!byTournament[name]) {
-          byTournament[name] = { name, bets: 0, wagered: 0, paidOut: 0 };
+          byTournament[name] = { 
+            name, 
+            id: tournamentMap.get(name) || '', 
+            bets: 0, 
+            wagered: 0, 
+            paidOut: 0 
+          };
         }
         byTournament[name].bets++;
         byTournament[name].wagered += p.staked_tokens || 0;
@@ -650,6 +670,7 @@ const HouseLedger = () => {
                   <TableHead className="text-right">Wagered</TableHead>
                   <TableHead className="text-right">Paid Out</TableHead>
                   <TableHead className="text-right">House P/L</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -662,6 +683,16 @@ const HouseLedger = () => {
                     <TableCell className="text-right">
                       <PLBadge value={t.pl} />
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedTournament({ id: t.id, name: t.name })}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        View Bets
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -670,6 +701,30 @@ const HouseLedger = () => {
             <p className="text-muted-foreground text-center py-8">No tournament data yet</p>
           )}
         </Card>
+
+        {/* Tournament Drill-Down */}
+        {selectedTournament && (
+          <Card className="p-6 border-primary/20">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Target className="w-5 h-5" />
+                Bets for: {selectedTournament.name}
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedTournament(null)}
+              >
+                <X className="w-4 h-4 mr-1" />
+                Close
+              </Button>
+            </div>
+            <SettlementAuditTable 
+              tournamentId={selectedTournament.id} 
+              tournamentName={selectedTournament.name}
+            />
+          </Card>
+        )}
 
         {/* Per-Market Type P/L */}
         <Card className="p-6">

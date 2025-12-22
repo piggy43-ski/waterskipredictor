@@ -1148,10 +1148,13 @@ export type Database = {
           balance_after: number
           created_at: string
           description: string
+          fantasy_entry_id: string | null
           id: string
           metadata: Json | null
           reference_id: string | null
           reference_type: string | null
+          settlement_batch_id: string | null
+          tournament_id: string | null
           type: string
           user_id: string
         }
@@ -1160,10 +1163,13 @@ export type Database = {
           balance_after: number
           created_at?: string
           description: string
+          fantasy_entry_id?: string | null
           id?: string
           metadata?: Json | null
           reference_id?: string | null
           reference_type?: string | null
+          settlement_batch_id?: string | null
+          tournament_id?: string | null
           type: string
           user_id: string
         }
@@ -1172,14 +1178,32 @@ export type Database = {
           balance_after?: number
           created_at?: string
           description?: string
+          fantasy_entry_id?: string | null
           id?: string
           metadata?: Json | null
           reference_id?: string | null
           reference_type?: string | null
+          settlement_batch_id?: string | null
+          tournament_id?: string | null
           type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "token_transactions_fantasy_entry_id_fkey"
+            columns: ["fantasy_entry_id"]
+            isOneToOne: false
+            referencedRelation: "fantasy_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "token_transactions_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       token_wallets: {
         Row: {
