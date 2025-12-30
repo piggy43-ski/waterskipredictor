@@ -4,13 +4,12 @@ import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Coins, Award, ShoppingBag, Sparkles, Loader2 } from 'lucide-react';
+import { Coins, Award, ShoppingBag, Sparkles, Loader2, Package } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Reward } from '@/types';
 import { useWallet } from '@/hooks/useWallet';
 import {
   Dialog,
@@ -21,6 +20,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+type Reward = {
+  id: string;
+  name: string;
+  description: string;
+  required_tokens: number;
+  partner: string;
+  category: 'coaching' | 'gear' | 'experience';
+  image_url: string | null;
+  max_total: number | null;
+  max_per_user: number | null;
+};
+
 const Rewards = () => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -30,6 +41,9 @@ const Rewards = () => {
   const [loading, setLoading] = useState(true);
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
+  const [redemptionCounts, setRedemptionCounts] = useState<Record<string, number>>({});
+  const [userRedemptionCounts, setUserRedemptionCounts] = useState<Record<string, number>>({});
+
   useEffect(() => {
     if (!user) {
       navigate('/auth');
@@ -37,6 +51,7 @@ const Rewards = () => {
     }
     
     fetchRewards();
+    fetchRedemptionCounts();
   }, [user, navigate]);
 
   const fetchRewards = async () => {
@@ -56,7 +71,9 @@ const Rewards = () => {
         required_tokens: r.required_tokens,
         partner: r.partner,
         category: r.category as 'coaching' | 'gear' | 'experience',
-        image_url: r.image_url || ''
+        image_url: r.image_url || null,
+        max_total: r.max_total,
+        max_per_user: r.max_per_user,
       }));
 
       setRewards(mappedRewards);
@@ -71,9 +88,44 @@ const Rewards = () => {
     }
   };
 
+  const fetchRedemptionCounts = async () => {
+    if (!user) return;
+
+    try {
+      // Fetch total redemption counts per reward
+      const { data: totalData, error: totalError } = await supabase
+        .from('redemptions')
+        .select('reward_id');
+
+      if (totalError) throw totalError;
+
+      const totalCounts: Record<string, number> = {};
+      totalData?.forEach(r => {
+        totalCounts[r.reward_id] = (totalCounts[r.reward_id] || 0) + 1;
+      });
+      setRedemptionCounts(totalCounts);
+
+      // Fetch user-specific redemption counts
+      const { data: userData, error: userError } = await supabase
+        .from('redemptions')
+        .select('reward_id')
+        .eq('user_id', user.id);
+
+      if (userError) throw userError;
+
+      const userCounts: Record<string, number> = {};
+      userData?.forEach(r => {
+        userCounts[r.reward_id] = (userCounts[r.reward_id] || 0) + 1;
+      });
+      setUserRedemptionCounts(userCounts);
+    } catch (error) {
+      console.error('Error fetching redemption counts:', error);
+    }
+  };
+
   const walletBalance = wallet?.totalBalance ?? 0;
 
-  const handleRedeemClick = (reward: Reward) => {
+  const handleRedeemClick = async (reward: Reward) => {
     if (walletBalance < reward.required_tokens) {
       toast({
         title: "Insufficient Tokens",
@@ -82,6 +134,33 @@ const Rewards = () => {
       });
       return;
     }
+
+    // Check total limit
+    if (reward.max_total) {
+      const totalRedeemed = redemptionCounts[reward.id] || 0;
+      if (totalRedeemed >= reward.max_total) {
+        toast({
+          title: "Sold Out",
+          description: "This reward is no longer available",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Check per-user limit
+    if (reward.max_per_user) {
+      const userRedeemed = userRedemptionCounts[reward.id] || 0;
+      if (userRedeemed >= reward.max_per_user) {
+        toast({
+          title: "Limit Reached",
+          description: `You can only redeem this reward ${reward.max_per_user} time(s)`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setSelectedReward(reward);
   };
 
@@ -134,6 +213,16 @@ const Rewards = () => {
         description: `${selectedReward.name} - Check your email for details`,
       });
 
+      // Update local counts
+      setRedemptionCounts(prev => ({
+        ...prev,
+        [selectedReward.id]: (prev[selectedReward.id] || 0) + 1
+      }));
+      setUserRedemptionCounts(prev => ({
+        ...prev,
+        [selectedReward.id]: (prev[selectedReward.id] || 0) + 1
+      }));
+
       await refetchWallet();
       setSelectedReward(null);
     } catch (error: any) {
@@ -177,21 +266,53 @@ const Rewards = () => {
   const RewardCard = ({ reward }: { reward: Reward }) => {
     const Icon = getCategoryIcon(reward.category);
     const canAfford = walletBalance >= reward.required_tokens;
+    
+    const totalRedeemed = redemptionCounts[reward.id] || 0;
+    const userRedeemed = userRedemptionCounts[reward.id] || 0;
+    
+    const isSoldOut = reward.max_total ? totalRedeemed >= reward.max_total : false;
+    const isUserLimitReached = reward.max_per_user ? userRedeemed >= reward.max_per_user : false;
+    const remainingStock = reward.max_total ? reward.max_total - totalRedeemed : null;
+
+    const isDisabled = !canAfford || isSoldOut || isUserLimitReached;
+    
+    let buttonText = 'Redeem';
+    if (isSoldOut) buttonText = 'Sold Out';
+    else if (isUserLimitReached) buttonText = 'Limit Reached';
+    else if (!canAfford) buttonText = 'Not Enough';
 
     return (
       <Card className="p-4 bg-gradient-card border-border/50">
         <div className="flex gap-4">
-          <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center shrink-0">
-            <Icon className="w-10 h-10 text-primary" />
+          <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+            {reward.image_url ? (
+              <img 
+                src={reward.image_url} 
+                alt={reward.name} 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Icon className="w-10 h-10 text-primary" />
+            )}
           </div>
           
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div className="flex-1">
                 <h3 className="font-semibold mb-1">{reward.name}</h3>
-                <Badge variant="outline" className="text-xs capitalize mb-2">
-                  {reward.category}
-                </Badge>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  <Badge variant="outline" className="text-xs capitalize">
+                    {reward.category}
+                  </Badge>
+                  {remainingStock !== null && (
+                    <Badge 
+                      variant={remainingStock === 0 ? "destructive" : "secondary"} 
+                      className="text-xs"
+                    >
+                      {remainingStock === 0 ? 'Sold Out' : `${remainingStock} left`}
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
             
@@ -210,9 +331,10 @@ const Rewards = () => {
               <Button
                 size="sm"
                 onClick={() => handleRedeemClick(reward)}
-                disabled={!canAfford}
+                disabled={isDisabled}
+                variant={isSoldOut || isUserLimitReached ? "secondary" : "default"}
               >
-                {canAfford ? 'Redeem' : 'Not Enough'}
+                {buttonText}
               </Button>
             </div>
             
@@ -292,11 +414,19 @@ const Rewards = () => {
             <div className="space-y-4 py-4">
               {/* Reward Info */}
               <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  {(() => {
-                    const Icon = getCategoryIcon(selectedReward.category);
-                    return <Icon className="w-6 h-6 text-primary" />;
-                  })()}
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
+                  {selectedReward.image_url ? (
+                    <img 
+                      src={selectedReward.image_url} 
+                      alt={selectedReward.name} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    (() => {
+                      const Icon = getCategoryIcon(selectedReward.category);
+                      return <Icon className="w-6 h-6 text-primary" />;
+                    })()
+                  )}
                 </div>
                 <div>
                   <h4 className="font-semibold">{selectedReward.name}</h4>
