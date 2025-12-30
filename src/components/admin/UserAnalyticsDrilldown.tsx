@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,14 +7,27 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { formatTokensWithUSD, formatTokens } from '@/utils/tokenConversion';
 import { format } from 'date-fns';
-import { ArrowLeft, TrendingUp, TrendingDown, Trophy, Target, Coins, History } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Trophy, Target, Coins, History, Calendar } from 'lucide-react';
 
 interface UserAnalyticsDrilldownProps {
   userId: string;
   username: string;
   onBack: () => void;
+}
+
+interface TournamentGroup {
+  tournamentName: string;
+  bets: any[];
+  totalWagered: number;
+  totalPayout: number;
+  totalLost: number;
+  netPL: number;
+  wins: number;
+  losses: number;
+  pending: number;
 }
 
 export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyticsDrilldownProps) => {
@@ -38,7 +51,6 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
       
       const totalPayout = wonPredictions.reduce((sum, p) => sum + (p.payout_tokens || 0), 0);
       const totalLost = lostPredictions.reduce((sum, p) => sum + p.staked_tokens, 0);
-      const wonStakes = wonPredictions.reduce((sum, p) => sum + p.staked_tokens, 0);
       
       // Net P/L = total payouts - total wagered on settled bets
       const settledWagered = settledPredictions.reduce((sum, p) => sum + p.staked_tokens, 0);
@@ -90,6 +102,60 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
       return data;
     },
   });
+
+  // Group predictions by tournament
+  const tournamentGroups = useMemo<TournamentGroup[]>(() => {
+    if (!predictions) return [];
+    
+    const groups = new Map<string, TournamentGroup>();
+    
+    predictions.forEach(pred => {
+      const key = pred.tournament_name || 'Unknown Tournament';
+      
+      if (!groups.has(key)) {
+        groups.set(key, {
+          tournamentName: key,
+          bets: [],
+          totalWagered: 0,
+          totalPayout: 0,
+          totalLost: 0,
+          netPL: 0,
+          wins: 0,
+          losses: 0,
+          pending: 0,
+        });
+      }
+      
+      const group = groups.get(key)!;
+      group.bets.push(pred);
+      group.totalWagered += pred.staked_tokens;
+      
+      if (pred.status === 'WON') {
+        group.wins++;
+        group.totalPayout += pred.payout_tokens || 0;
+      } else if (pred.status === 'LOST') {
+        group.losses++;
+        group.totalLost += pred.staked_tokens;
+      } else if (pred.status === 'PENDING') {
+        group.pending++;
+      }
+    });
+    
+    // Calculate net P/L for each group
+    groups.forEach(group => {
+      const settledWagered = group.bets
+        .filter(b => b.status !== 'PENDING')
+        .reduce((sum, b) => sum + b.staked_tokens, 0);
+      group.netPL = group.totalPayout - settledWagered;
+    });
+    
+    // Sort by most recent bet first
+    return Array.from(groups.values()).sort((a, b) => {
+      const aDate = new Date(a.bets[0]?.created_at || 0);
+      const bDate = new Date(b.bets[0]?.created_at || 0);
+      return bDate.getTime() - aDate.getTime();
+    });
+  }, [predictions]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -197,6 +263,10 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
           <TabsTrigger value="bets">
             <Target className="h-4 w-4 mr-2" />
             All Bets
+          </TabsTrigger>
+          <TabsTrigger value="byTournament">
+            <Calendar className="h-4 w-4 mr-2" />
+            By Tournament
           </TabsTrigger>
           <TabsTrigger value="transactions">
             <History className="h-4 w-4 mr-2" />
@@ -306,6 +376,125 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
                   </TableBody>
                 </Table>
               </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="byTournament" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Bets by Tournament ({tournamentGroups.length} tournaments)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {predictionsLoading ? (
+                <div className="text-center py-8">Loading...</div>
+              ) : tournamentGroups.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">No bets found</div>
+              ) : (
+                <Accordion type="multiple" className="space-y-2">
+                  {tournamentGroups.map((group) => (
+                    <AccordionItem 
+                      key={group.tournamentName} 
+                      value={group.tournamentName}
+                      className={`border rounded-lg px-4 ${
+                        group.netPL > 0 ? 'bg-green-500/5 border-green-500/20' : 
+                        group.netPL < 0 ? 'bg-red-500/5 border-red-500/20' : 
+                        'bg-muted/30'
+                      }`}
+                    >
+                      <AccordionTrigger className="hover:no-underline py-4">
+                        <div className="flex items-center justify-between w-full pr-4">
+                          <div className="flex items-center gap-3">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-semibold">{group.tournamentName}</span>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm">
+                            <span className="text-muted-foreground">{group.bets.length} bets</span>
+                            <span className="text-muted-foreground">
+                              {group.wins}W / {group.losses}L
+                              {group.pending > 0 && ` / ${group.pending}P`}
+                            </span>
+                            <span className={`font-semibold ${
+                              group.netPL > 0 ? 'text-green-600' : 
+                              group.netPL < 0 ? 'text-red-600' : 
+                              'text-muted-foreground'
+                            }`}>
+                              {group.netPL >= 0 ? '+' : ''}{formatTokens(group.netPL)}
+                            </span>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        {/* Per-tournament summary stats */}
+                        <div className="grid grid-cols-4 gap-2 mb-4 pt-2">
+                          <div className="p-3 bg-background rounded-lg border">
+                            <p className="text-xs text-muted-foreground">Wagered</p>
+                            <p className="font-semibold">{formatTokens(group.totalWagered)}</p>
+                          </div>
+                          <div className="p-3 bg-background rounded-lg border">
+                            <p className="text-xs text-green-600">Won</p>
+                            <p className="font-semibold text-green-600">{formatTokens(group.totalPayout)}</p>
+                          </div>
+                          <div className="p-3 bg-background rounded-lg border">
+                            <p className="text-xs text-red-600">Lost</p>
+                            <p className="font-semibold text-red-600">{formatTokens(group.totalLost)}</p>
+                          </div>
+                          <div className="p-3 bg-background rounded-lg border">
+                            <p className="text-xs text-muted-foreground">Net P/L</p>
+                            <p className={`font-semibold ${group.netPL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {group.netPL >= 0 ? '+' : ''}{formatTokens(group.netPL)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Individual bets table */}
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Pick</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead className="text-right">Stake</TableHead>
+                              <TableHead className="text-right">Odds</TableHead>
+                              <TableHead>Result</TableHead>
+                              <TableHead className="text-right">Payout</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.bets.map((bet) => (
+                              <TableRow key={bet.id}>
+                                <TableCell className="text-sm">
+                                  {format(new Date(bet.created_at), 'MMM d')}
+                                </TableCell>
+                                <TableCell className="font-medium">{bet.athlete_name}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-xs">
+                                    {bet.market_type}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">{formatTokens(bet.staked_tokens)}</TableCell>
+                                <TableCell className="text-right">{bet.decimal_odds.toFixed(2)}</TableCell>
+                                <TableCell>{getStatusBadge(bet.status)}</TableCell>
+                                <TableCell className="text-right">
+                                  {bet.status === 'WON' ? (
+                                    <span className="text-green-600 font-medium">
+                                      +{formatTokens(bet.payout_tokens || 0)}
+                                    </span>
+                                  ) : bet.status === 'LOST' ? (
+                                    <span className="text-red-600">-{formatTokens(bet.staked_tokens)}</span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
