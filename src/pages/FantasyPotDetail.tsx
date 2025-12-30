@@ -453,14 +453,28 @@ const FantasyPotDetail = () => {
         </div>
 
         {/* Team Builder */}
-        <TeamBuilder
-          athletes={athletes}
-          roster={roster}
-          disciplines={pot.discipline_scope as ('slalom' | 'trick' | 'jump')[]}
-          remainingBudget={remainingBudget}
-          onAddAthlete={addToRoster}
-          onRemoveAthlete={removeFromRoster}
-        />
+        {athletes.length === 0 ? (
+          <Card className="p-6 text-center">
+            <Trophy className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="font-semibold mb-2">No Athletes Available</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Athletes haven't been entered for this tournament yet. 
+              The tournament organizer needs to add participants before you can build a team.
+            </p>
+            <Button variant="outline" onClick={() => navigate('/fantasy')}>
+              Browse Other Leagues
+            </Button>
+          </Card>
+        ) : (
+          <TeamBuilder
+            athletes={athletes}
+            roster={roster}
+            disciplines={pot.discipline_scope as ('slalom' | 'trick' | 'jump')[]}
+            remainingBudget={remainingBudget}
+            onAddAthlete={addToRoster}
+            onRemoveAthlete={removeFromRoster}
+          />
+        )}
 
         {/* Submit Button */}
         <Card className="p-4 bg-primary/10 border-primary/30">
