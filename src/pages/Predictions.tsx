@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info, RotateCcw } from 'lucide-react';
+import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info, RotateCcw, TrendingDown, Percent } from 'lucide-react';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 import { getBettingWindowStatus } from '@/utils/bettingWindows';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -718,11 +718,70 @@ const Predictions = () => {
     );
   }
 
+  // Calculate betting stats
+  const bettingStats = (() => {
+    const allSettledBets = completedBetSlips;
+    const totalWagered = allSettledBets.reduce((sum, slip) => sum + slip.total_stake_tokens, 0);
+    const totalWon = allSettledBets
+      .filter(slip => slip.status === 'WON')
+      .reduce((sum, slip) => sum + (slip.actual_payout_tokens || 0), 0);
+    const netProfit = totalWon - totalWagered;
+    const roi = totalWagered > 0 ? ((netProfit / totalWagered) * 100) : 0;
+    const winCount = allSettledBets.filter(slip => slip.status === 'WON').length;
+    const lossCount = allSettledBets.filter(slip => slip.status === 'LOST').length;
+    
+    return { totalWagered, totalWon, netProfit, roi, winCount, lossCount };
+  })();
+
   return (
     <div className="min-h-screen bg-background pb-20">
       <PageHeader title="My Bets" />
       
       <div className="max-w-lg mx-auto px-4 py-6">
+        {/* Stats Summary */}
+        {completedBetSlips.length > 0 && (
+          <Card className="p-4 mb-6 bg-muted/30">
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                  <Coins className="w-4 h-4" />
+                  <span className="text-xs">Wagered</span>
+                </div>
+                <p className="font-bold text-lg">{bettingStats.totalWagered.toLocaleString()}</p>
+              </div>
+              <div>
+                <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                  <TrendingUp className="w-4 h-4" />
+                  <span className="text-xs">Won</span>
+                </div>
+                <p className="font-bold text-lg text-success">{bettingStats.totalWon.toLocaleString()}</p>
+              </div>
+              <div>
+                <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                  <Percent className="w-4 h-4" />
+                  <span className="text-xs">ROI</span>
+                </div>
+                <p className={`font-bold text-lg ${bettingStats.roi >= 0 ? 'text-success' : 'text-destructive'}`}>
+                  {bettingStats.roi >= 0 ? '+' : ''}{bettingStats.roi.toFixed(1)}%
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-center gap-4 mt-3 pt-3 border-t border-border text-sm text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-success"></span>
+                {bettingStats.winCount} Won
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-destructive"></span>
+                {bettingStats.lossCount} Lost
+              </span>
+              <span className={`font-medium ${bettingStats.netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {bettingStats.netProfit >= 0 ? '+' : ''}{bettingStats.netProfit.toLocaleString()} net
+              </span>
+            </div>
+          </Card>
+        )}
+
         <Tabs defaultValue="active" className="w-full">
           <TabsList className="w-full grid grid-cols-2 mb-6">
             <TabsTrigger value="active">
