@@ -9,12 +9,17 @@ interface WalletData {
 }
 
 export const useWallet = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchWallet = useCallback(async () => {
+    // Don't fetch if auth is still loading
+    if (authLoading) {
+      return;
+    }
+
     if (!user) {
       setWallet(null);
       setLoading(false);
@@ -43,15 +48,16 @@ export const useWallet = () => {
       totalBalance: (data?.purchased_tokens ?? 0) + (data?.earned_tokens ?? 0)
     });
     setLoading(false);
-  }, [user]);
+  }, [user, authLoading]);
 
   useEffect(() => {
     fetchWallet();
   }, [fetchWallet]);
 
+  // Return loading true if auth is still loading OR wallet is loading
   return { 
     wallet, 
-    loading, 
+    loading: authLoading || loading, 
     error, 
     refetch: fetchWallet 
   };
