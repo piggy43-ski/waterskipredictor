@@ -7,6 +7,9 @@ import { Tournament } from '@/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Calendar, Radio, Trophy } from 'lucide-react';
 
 const Tournaments = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -77,9 +80,18 @@ const Tournaments = () => {
                 <TournamentCard key={tournament.id} tournament={tournament} />
               ))
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                No upcoming tournaments
-              </div>
+              <Card className="p-6 text-center">
+                <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <h3 className="font-semibold mb-2">No Upcoming Tournaments</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  New tournaments will be announced soon. Check back later or view past events.
+                </p>
+                {finishedTournaments.length > 0 && (
+                  <Button variant="outline" onClick={() => document.querySelector<HTMLButtonElement>('[value="finished"]')?.click()}>
+                    View Past Events
+                  </Button>
+                )}
+              </Card>
             )}
           </TabsContent>
           
@@ -91,9 +103,13 @@ const Tournaments = () => {
                 <TournamentCard key={tournament.id} tournament={tournament} />
               ))
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                No live tournaments at the moment
-              </div>
+              <Card className="p-6 text-center">
+                <Radio className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <h3 className="font-semibold mb-2">No Live Events Right Now</h3>
+                <p className="text-sm text-muted-foreground">
+                  There are no tournaments in progress at the moment. Check the upcoming schedule to see what's next.
+                </p>
+              </Card>
             )}
           </TabsContent>
 
@@ -105,9 +121,13 @@ const Tournaments = () => {
                 <TournamentCard key={tournament.id} tournament={tournament} />
               ))
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                No finished tournaments yet
-              </div>
+              <Card className="p-6 text-center">
+                <Trophy className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <h3 className="font-semibold mb-2">No Finished Tournaments Yet</h3>
+                <p className="text-sm text-muted-foreground">
+                  Tournament results will appear here once events are completed.
+                </p>
+              </Card>
             )}
           </TabsContent>
         </Tabs>
