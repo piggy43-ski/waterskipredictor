@@ -12,6 +12,7 @@ interface SelectionCardProps {
   mode?: 'single' | 'parlay';
   onAddToParlay?: (selection: Selection) => void;
   isInParlay?: boolean;
+  highlighted?: boolean;
 }
 
 const getFlagEmoji = (countryCode: string): string => {
@@ -37,7 +38,7 @@ const getFlagEmoji = (countryCode: string): string => {
   return countryFlags[countryCode] || '🏴';
 };
 
-export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single', onAddToParlay, isInParlay }: SelectionCardProps) => {
+export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single', onAddToParlay, isInParlay, highlighted }: SelectionCardProps) => {
   const americanOdds = decimalToAmerican(selection.decimal_odds);
   
   // Get the appropriate rank based on discipline
@@ -67,7 +68,7 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
   };
   
   return (
-    <Card className={`p-4 hover:shadow-glow transition-all ${isInParlay && mode === 'parlay' ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`}>
+    <Card className={`p-4 hover:shadow-glow transition-all ${isInParlay && mode === 'parlay' ? 'border-primary bg-primary/5' : 'hover:border-primary/50'} ${highlighted ? 'ring-2 ring-primary ring-offset-2 bg-primary/10' : ''}`}>
       <div className="flex justify-between items-center">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">

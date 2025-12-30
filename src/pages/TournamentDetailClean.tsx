@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { SelectionCard } from '@/components/SelectionCard';
@@ -25,8 +25,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 const TournamentDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  // Get highlighted athletes from "Bet Again" navigation
+  const betAgainAthletes: string[] = location.state?.betAgainAthletes || [];
   const [selectedSelection, setSelectedSelection] = useState<Selection | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -66,6 +70,16 @@ const TournamentDetail = () => {
     fetchTournamentData();
     fetchWalletBalance();
   }, [user, navigate, id]);
+
+  // Show toast if user came from "Bet Again"
+  useEffect(() => {
+    if (betAgainAthletes.length > 0 && !loading) {
+      toast({
+        title: "Previous picks highlighted",
+        description: `${betAgainAthletes.length} athlete(s) from your previous bet are highlighted below`
+      });
+    }
+  }, [betAgainAthletes.length, loading]);
 
   useEffect(() => {
     if (!tournament) return;
@@ -694,6 +708,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={handleSelectSelection}
                                 discipline={discipline}
+                                highlighted={betAgainAthletes.includes(selection.athlete.name)}
                               />
                             </div>
                           ))}
@@ -754,6 +769,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={handleSelectSelection}
                                 discipline={discipline}
+                                highlighted={betAgainAthletes.includes(selection.athlete.name)}
                               />
                             </div>
                           ))}
@@ -788,6 +804,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={handleSelectSelection}
                                 discipline={discipline}
+                                highlighted={betAgainAthletes.includes(selection.athlete.name)}
                               />
                             </div>
                           ))}
@@ -848,6 +865,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={handleSelectSelection}
                                 discipline={discipline}
+                                highlighted={betAgainAthletes.includes(selection.athlete.name)}
                               />
                             </div>
                           ))}

@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info } from 'lucide-react';
+import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info, RotateCcw } from 'lucide-react';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 import { getBettingWindowStatus } from '@/utils/bettingWindows';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -383,6 +383,80 @@ const Predictions = () => {
     }
   };
 
+  const handleBetAgain = async (slip: BetSlip) => {
+    try {
+      // Get athlete names from the bet legs
+      const athleteNames = slip.legs?.map(leg => leg.athlete_name) || [];
+      
+      if (athleteNames.length === 0) {
+        toast({
+          title: "No athletes found",
+          description: "Unable to find athletes from this bet",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Find upcoming tournaments with open betting
+      const now = new Date().toISOString();
+      const { data: upcomingTournaments, error: tournamentError } = await supabase
+        .from('tournaments')
+        .select('id, name, start_datetime, end_datetime, settled_at')
+        .or(`start_datetime.gt.${now},start_datetime.is.null`)
+        .is('settled_at', null)
+        .order('start_datetime', { ascending: true })
+        .limit(10);
+
+      if (tournamentError || !upcomingTournaments?.length) {
+        toast({
+          title: "No upcoming tournaments",
+          description: "Check back when new events are scheduled",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Find a tournament with open betting window
+      for (const tournament of upcomingTournaments) {
+        const bettingWindow = getBettingWindowStatus(
+          tournament.start_datetime,
+          tournament.end_datetime,
+          tournament.settled_at
+        );
+        
+        if (!bettingWindow.canBet) continue;
+
+        // Navigate to the tournament with athlete names in state
+        navigate(`/tournaments/${tournament.id}`, {
+          state: {
+            betAgainAthletes: athleteNames,
+            fromBetSlip: slip.id
+          }
+        });
+
+        toast({
+          title: "Tournament found!",
+          description: `Navigating to ${tournament.name}. Look for your previous picks!`
+        });
+        return;
+      }
+
+      // If no tournament with open betting found
+      toast({
+        title: "No open betting windows",
+        description: "All upcoming tournaments have closed betting",
+        variant: "destructive"
+      });
+    } catch (error) {
+      console.error('Error in bet again:', error);
+      toast({
+        title: "Something went wrong",
+        description: "Please try again",
+        variant: "destructive"
+      });
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'WON':
@@ -610,6 +684,21 @@ const Predictions = () => {
               <p className="text-xs text-muted-foreground text-center">
                 {bettingWindow.message}
               </p>
+            </div>
+          )}
+
+          {/* Bet Again button for settled bets */}
+          {!isActive && (
+            <div className="pt-3 border-t border-border">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full"
+                onClick={() => handleBetAgain(slip)}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Bet Again
+              </Button>
             </div>
           )}
         </div>
