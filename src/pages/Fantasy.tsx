@@ -74,6 +74,15 @@ const Fantasy = () => {
   const [inviteCode, setInviteCode] = useState('');
   const [joiningByCode, setJoiningByCode] = useState(false);
 
+  // Controlled form state for Create League
+  const [formName, setFormName] = useState('');
+  const [formTournamentId, setFormTournamentId] = useState('');
+  const [formEntryFee, setFormEntryFee] = useState('1000');
+  const [formMaxEntrants, setFormMaxEntrants] = useState('');
+  const [formPayoutStructure, setFormPayoutStructure] = useState('top_3_split');
+  const [formVisibility, setFormVisibility] = useState('private');
+  const [formDisciplines, setFormDisciplines] = useState<string[]>(['slalom', 'trick', 'jump']);
+
   useEffect(() => {
     if (user) {
       fetchData();
@@ -216,32 +225,47 @@ const Fantasy = () => {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
   };
 
+  const toggleDiscipline = (disc: string) => {
+    setFormDisciplines(prev => 
+      prev.includes(disc) 
+        ? prev.filter(d => d !== disc)
+        : [...prev, disc]
+    );
+  };
+
+  const resetForm = () => {
+    setFormName('');
+    setFormTournamentId('');
+    setFormEntryFee('1000');
+    setFormMaxEntrants('');
+    setFormPayoutStructure('top_3_split');
+    setFormVisibility('private');
+    setFormDisciplines(['slalom', 'trick', 'jump']);
+  };
+
   const handleCreatePot = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!user) return;
 
     setCreating(true);
-    const formData = new FormData(e.currentTarget);
 
     try {
-      const disciplineScope = formData.getAll('disciplines') as string[];
-      if (disciplineScope.length === 0) {
+      if (formDisciplines.length === 0) {
         throw new Error('Please select at least one discipline');
       }
 
-      const visibility = formData.get('visibility') as string || 'private';
-      const inviteCodeValue = visibility === 'private' ? generateInviteCode() : null;
+      const inviteCodeValue = formVisibility === 'private' ? generateInviteCode() : null;
 
       const pot = {
-        name: formData.get('name') as string,
+        name: formName,
         pot_type: 'tournament',
-        tournament_id: (formData.get('tournament_id') as string) || null,
-        entry_fee_tokens: parseInt(formData.get('entry_fee_tokens') as string) || 1000,
-        max_entrants: parseInt(formData.get('max_entrants') as string) || null,
+        tournament_id: formTournamentId || null,
+        entry_fee_tokens: parseInt(formEntryFee) || 1000,
+        max_entrants: formMaxEntrants ? parseInt(formMaxEntrants) : null,
         team_budget: FANTASY_TEAM_BUDGET,
-        payout_structure: formData.get('payout_structure') as string || 'top_3_split',
-        visibility: visibility,
-        discipline_scope: disciplineScope,
+        payout_structure: formPayoutStructure,
+        visibility: formVisibility,
+        discipline_scope: formDisciplines,
         created_by: user.id,
         status: 'open',
         invite_code: inviteCodeValue
@@ -257,10 +281,13 @@ const Fantasy = () => {
 
       toast({
         title: 'League Created!',
-        description: visibility === 'private' 
+        description: formVisibility === 'private' 
           ? `Your private league has been created. Share code: ${inviteCodeValue}`
           : 'Your fantasy league has been created successfully'
       });
+
+      // Reset form ONLY after successful submit
+      resetForm();
 
       // Refresh data
       fetchData();
@@ -619,7 +646,8 @@ const Fantasy = () => {
                   <Label htmlFor="name">League Name</Label>
                   <Input
                     id="name"
-                    name="name"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
                     placeholder="My Fantasy League"
                     required
                   />
@@ -627,7 +655,7 @@ const Fantasy = () => {
 
                 <div>
                   <Label htmlFor="tournament_id">Tournament</Label>
-                  <Select name="tournament_id">
+                  <Select value={formTournamentId} onValueChange={setFormTournamentId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a tournament" />
                     </SelectTrigger>
@@ -645,10 +673,10 @@ const Fantasy = () => {
                   <Label htmlFor="entry_fee_tokens">Entry Fee (tokens)</Label>
                   <Input
                     id="entry_fee_tokens"
-                    name="entry_fee_tokens"
                     type="number"
                     min="100"
-                    defaultValue="1000"
+                    value={formEntryFee}
+                    onChange={(e) => setFormEntryFee(e.target.value)}
                     required
                   />
                 </div>
@@ -657,16 +685,17 @@ const Fantasy = () => {
                   <Label htmlFor="max_entrants">Max Entrants (optional)</Label>
                   <Input
                     id="max_entrants"
-                    name="max_entrants"
                     type="number"
                     min="2"
+                    value={formMaxEntrants}
+                    onChange={(e) => setFormMaxEntrants(e.target.value)}
                     placeholder="Unlimited"
                   />
                 </div>
 
                 <div>
                   <Label htmlFor="payout_structure">Payout Structure</Label>
-                  <Select name="payout_structure" defaultValue="top_3_split">
+                  <Select value={formPayoutStructure} onValueChange={setFormPayoutStructure}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -681,7 +710,7 @@ const Fantasy = () => {
 
                 <div>
                   <Label htmlFor="visibility">Visibility</Label>
-                  <Select name="visibility" defaultValue="private">
+                  <Select value={formVisibility} onValueChange={setFormVisibility}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -702,9 +731,8 @@ const Fantasy = () => {
                       <label key={disc} className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          name="disciplines"
-                          value={disc}
-                          defaultChecked
+                          checked={formDisciplines.includes(disc)}
+                          onChange={() => toggleDiscipline(disc)}
                           className="rounded border-border"
                         />
                         <span className="capitalize">{disc}</span>
