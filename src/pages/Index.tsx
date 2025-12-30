@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament } from '@/types';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
+import { useWallet } from '@/hooks/useWallet';
 
 interface UserPrediction {
   id: string;
@@ -25,7 +26,7 @@ interface UserPrediction {
 const Index = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [walletBalance, setWalletBalance] = useState(0);
+  const { wallet } = useWallet();
   const [featuredTournament, setFeaturedTournament] = useState<Tournament | null>(null);
   const [userPredictions, setUserPredictions] = useState<UserPrediction[]>([]);
   const [settledPredictions, setSettledPredictions] = useState<UserPrediction[]>([]);
@@ -66,16 +67,6 @@ const Index = () => {
       setFeaturedTournament(liveTournament || upcomingTournament || null);
 
       if (user) {
-        // Fetch wallet balance
-        const { data: walletData } = await supabase
-          .from('token_wallets')
-          .select('purchased_tokens, earned_tokens')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (walletData) {
-          setWalletBalance(walletData.purchased_tokens + walletData.earned_tokens);
-        }
 
         // Fetch user's active predictions
         const { data: predictionsData } = await supabase
@@ -193,11 +184,11 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 <Coins className="w-6 h-6" />
                 <span className="text-3xl font-bold">
-                  {walletBalance.toLocaleString()}
+                  {(wallet?.totalBalance ?? 0).toLocaleString()}
                 </span>
               </div>
             </div>
-            <Button 
+            <Button
               variant="secondary" 
               onClick={() => navigate('/wallet')}
               className="bg-background/20 hover:bg-background/30 text-primary-foreground border-primary-foreground/20"

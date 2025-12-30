@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Coins, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { useWallet } from '@/hooks/useWallet';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Token pack calculation: base_tokens = price * 100 (1 token = 1 cent)
 // Then apply bonus percentage on top
@@ -25,38 +26,13 @@ const Wallet = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [purchasedTokens, setPurchasedTokens] = useState(0);
-  const [earnedTokens, setEarnedTokens] = useState(0);
-  const walletBalance = purchasedTokens + earnedTokens;
+  const { wallet, loading } = useWallet();
 
   useEffect(() => {
     if (!user) {
       navigate('/auth');
-      return;
     }
-    
-    fetchWalletBalance();
   }, [user, navigate]);
-
-  const fetchWalletBalance = async () => {
-    if (!user) return;
-    
-    const { data, error } = await supabase
-      .from('token_wallets')
-      .select('purchased_tokens, earned_tokens')
-      .eq('user_id', user.id)
-      .single();
-
-    if (error) {
-      console.error('Error fetching wallet:', error);
-      return;
-    }
-
-    if (data) {
-      setPurchasedTokens(data.purchased_tokens);
-      setEarnedTokens(data.earned_tokens);
-    }
-  };
 
   const handlePurchase = (pack: typeof tokenPacks[0]) => {
     toast({
@@ -64,6 +40,28 @@ const Wallet = () => {
       description: `Payment integration coming soon for ${pack.name} pack`,
     });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <PageHeader title="Token Wallet" />
+        <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+          <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium">
+            <Skeleton className="h-4 w-24 mb-2 bg-primary-foreground/20" />
+            <div className="flex items-center gap-3 mb-4">
+              <Skeleton className="w-10 h-10 rounded-full bg-primary-foreground/20" />
+              <Skeleton className="h-10 w-32 bg-primary-foreground/20" />
+            </div>
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-primary-foreground/20">
+              <Skeleton className="h-16 w-full bg-primary-foreground/20" />
+              <Skeleton className="h-16 w-full bg-primary-foreground/20" />
+            </div>
+          </Card>
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -76,18 +74,18 @@ const Wallet = () => {
           <div className="flex items-center gap-3 mb-4">
             <Coins className="w-10 h-10" />
             <span className="text-4xl font-bold">
-              {walletBalance.toLocaleString()}
+              {(wallet?.totalBalance ?? 0).toLocaleString()}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-4 pt-4 border-t border-primary-foreground/20">
             <div>
               <p className="text-xs opacity-75 mb-1">Purchased</p>
-              <p className="text-xl font-bold">{purchasedTokens.toLocaleString()}</p>
+              <p className="text-xl font-bold">{(wallet?.purchasedTokens ?? 0).toLocaleString()}</p>
               <p className="text-xs opacity-60 mt-0.5">For bets & fantasy</p>
             </div>
             <div>
               <p className="text-xs opacity-75 mb-1">Earned</p>
-              <p className="text-xl font-bold">{earnedTokens.toLocaleString()}</p>
+              <p className="text-xl font-bold">{(wallet?.earnedTokens ?? 0).toLocaleString()}</p>
               <p className="text-xs opacity-60 mt-0.5">For rewards only</p>
             </div>
           </div>

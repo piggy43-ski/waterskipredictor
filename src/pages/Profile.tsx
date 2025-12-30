@@ -13,17 +13,18 @@ import { useToast } from '@/hooks/use-toast';
 import { Coins, Upload, History, Gift, TrendingUp, TrendingDown, ArrowRightLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { useWallet } from '@/hooks/useWallet';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const Profile = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
+  const { wallet, loading: walletLoading } = useWallet();
   
   const [username, setUsername] = useState('');
   const [country, setCountry] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
-  const [purchasedTokens, setPurchasedTokens] = useState(0);
-  const [earnedTokens, setEarnedTokens] = useState(0);
   const [lifetimeDeposited, setLifetimeDeposited] = useState(0);
   const [lifetimeWinnings, setLifetimeWinnings] = useState(0);
   const [lifetimeLosses, setLifetimeLosses] = useState(0);
@@ -39,7 +40,6 @@ const Profile = () => {
     }
     
     fetchProfile();
-    fetchWallet();
     fetchLifetimeStats();
     checkAdminStatus();
     fetchRecentTransactions();
@@ -77,26 +77,6 @@ const Profile = () => {
       setCountry(data.country || '');
       setAvatarUrl(data.avatar_url || '');
       setLifetimeDeposited(data.lifetime_deposited || 0);
-    }
-  };
-
-  const fetchWallet = async () => {
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('token_wallets')
-      .select('purchased_tokens, earned_tokens')
-      .eq('user_id', user.id)
-      .single();
-
-    if (error) {
-      console.error('Error fetching wallet:', error);
-      return;
-    }
-
-    if (data) {
-      setPurchasedTokens(data.purchased_tokens);
-      setEarnedTokens(data.earned_tokens);
     }
   };
 
@@ -301,30 +281,38 @@ const Profile = () => {
         {/* Token Balance */}
         <Card className="p-6 bg-gradient-water text-primary-foreground">
           <h2 className="text-sm opacity-90 mb-4">Token Balance</h2>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2">
-                <Coins className="w-5 h-5" />
-                Purchased
-              </span>
-              <span className="text-2xl font-bold">{purchasedTokens.toLocaleString()}</span>
+          {walletLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-full bg-primary-foreground/20" />
+              <Skeleton className="h-8 w-full bg-primary-foreground/20" />
+              <Skeleton className="h-10 w-full bg-primary-foreground/20" />
             </div>
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2">
-                <Coins className="w-5 h-5" />
-                Earned
-              </span>
-              <span className="text-2xl font-bold">{earnedTokens.toLocaleString()}</span>
-            </div>
-            <div className="pt-2 border-t border-primary-foreground/20">
+          ) : (
+            <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="font-semibold">Total</span>
-                <span className="text-3xl font-bold">
-                  {(purchasedTokens + earnedTokens).toLocaleString()}
+                <span className="flex items-center gap-2">
+                  <Coins className="w-5 h-5" />
+                  Purchased
                 </span>
+                <span className="text-2xl font-bold">{(wallet?.purchasedTokens ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-2">
+                  <Coins className="w-5 h-5" />
+                  Earned
+                </span>
+                <span className="text-2xl font-bold">{(wallet?.earnedTokens ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="pt-2 border-t border-primary-foreground/20">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold">Total</span>
+                  <span className="text-3xl font-bold">
+                    {(wallet?.totalBalance ?? 0).toLocaleString()}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </Card>
 
         {/* Lifetime Stats */}
