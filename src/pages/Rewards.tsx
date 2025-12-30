@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Reward } from '@/types';
+import { useWallet } from '@/hooks/useWallet';
 import {
   Dialog,
   DialogContent,
@@ -24,8 +25,8 @@ const Rewards = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { wallet, loading: walletLoading, refetch: refetchWallet } = useWallet();
   const [rewards, setRewards] = useState<Reward[]>([]);
-  const [walletBalance, setWalletBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
@@ -37,7 +38,6 @@ const Rewards = () => {
     }
     
     fetchRewards();
-    fetchWalletBalance();
   }, [user, navigate]);
 
   const fetchRewards = async () => {
@@ -72,28 +72,7 @@ const Rewards = () => {
     }
   };
 
-  const fetchWalletBalance = async () => {
-    if (!user) return;
-    
-    const { data, error } = await supabase
-      .from('token_wallets')
-      .select('purchased_tokens, earned_tokens')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (error) {
-      toast({
-        title: "Error loading wallet",
-        description: "Please try again later",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (data) {
-      setWalletBalance(data.purchased_tokens + data.earned_tokens);
-    }
-  };
+  const walletBalance = wallet?.totalBalance ?? 0;
 
   const handleRedeemClick = (reward: Reward) => {
     if (walletBalance < reward.required_tokens) {
@@ -135,9 +114,11 @@ const Rewards = () => {
       if (walletFetchError) throw walletFetchError;
       if (!walletData) throw new Error('Wallet not found');
 
-      const newEarnedTokens = Math.max(0, walletData.earned_tokens - selectedReward.required_tokens);
-      const remaining = selectedReward.required_tokens - walletData.earned_tokens;
-      const newPurchasedTokens = remaining > 0 ? walletData.purchased_tokens - remaining : walletData.purchased_tokens;
+      const earnedTokens = walletData.earned_tokens ?? 0;
+      const purchasedTokens = walletData.purchased_tokens ?? 0;
+      const newEarnedTokens = Math.max(0, earnedTokens - selectedReward.required_tokens);
+      const remaining = selectedReward.required_tokens - earnedTokens;
+      const newPurchasedTokens = remaining > 0 ? purchasedTokens - remaining : purchasedTokens;
 
       const { error: walletUpdateError } = await supabase
         .from('token_wallets')
@@ -154,7 +135,7 @@ const Rewards = () => {
         description: `${selectedReward.name} - Check your email for details`,
       });
 
-      await fetchWalletBalance();
+      await refetchWallet();
       setSelectedReward(null);
     } catch (error) {
       toast({
@@ -238,7 +219,7 @@ const Rewards = () => {
     );
   };
 
-  if (loading) {
+  if (loading || walletLoading) {
     return (
       <div className="min-h-screen bg-background pb-20">
         <PageHeader title="Rewards Store" />
