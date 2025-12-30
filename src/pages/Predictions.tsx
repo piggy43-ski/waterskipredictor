@@ -336,7 +336,7 @@ const Predictions = () => {
         .eq('id', editSlip.id);
 
       // 6. Update predictions (for single bets, update the leg too)
-      if (editSlip.leg_count === 1 && editSlip.legs?.[0]) {
+      if ((editSlip.legs?.length || 0) === 1 && editSlip.legs?.[0]) {
         await supabase
           .from('predictions')
           .update({
@@ -399,7 +399,9 @@ const Predictions = () => {
   };
 
   const BetSlipCard = ({ slip, isActive }: { slip: BetSlip; isActive: boolean }) => {
-    const isParlayDisplay = slip.type === 'parlay' || slip.leg_count > 1;
+    // Use actual legs array length, not stale database field
+    const actualLegCount = slip.legs?.length || 0;
+    const isParlayDisplay = slip.type === 'parlay' || actualLegCount > 1;
     const americanOdds = decimalToAmerican(slip.total_odds_decimal);
     
     // Check if betting window is still open
@@ -467,7 +469,7 @@ const Predictions = () => {
               {isParlayDisplay && (
                 <>
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-lg">Parlay ({slip.leg_count} legs)</h3>
+                    <h3 className="font-semibold text-lg">Parlay ({actualLegCount} legs)</h3>
                     <Badge variant="secondary" className="text-xs">Parlay</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">{slip.tournament_name}</p>
@@ -483,7 +485,7 @@ const Predictions = () => {
               <AccordionItem value="legs" className="border-0">
                 <AccordionTrigger className="py-2 text-sm text-muted-foreground hover:no-underline">
                   <span className="flex items-center gap-1">
-                    View {slip.leg_count} legs
+                    View {actualLegCount} legs
                     <ChevronDown className="w-4 h-4" />
                   </span>
                 </AccordionTrigger>
