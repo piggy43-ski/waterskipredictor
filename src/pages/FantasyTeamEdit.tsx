@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Save, ArrowLeft, Trophy } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -223,7 +223,18 @@ const FantasyTeamEdit = () => {
           <Input value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="My Team" className="mt-1" />
         </div>
 
-        {pot && (
+        {pot && athletes.length === 0 ? (
+          <Card className="p-6 text-center">
+            <Trophy className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="font-semibold mb-2">No Athletes Available</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Athletes haven't been entered for this tournament yet.
+            </p>
+            <Button variant="outline" onClick={() => navigate(-1)}>
+              Go Back
+            </Button>
+          </Card>
+        ) : pot && (
           <TeamBuilder
             athletes={athletes}
             roster={roster}

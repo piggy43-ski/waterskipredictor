@@ -401,8 +401,23 @@ export const TeamBuilder = ({
                 })}
 
                 {filteredAthletes.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No {activeGender} athletes found for {activeDiscipline}
+                  <div className="text-center py-8 space-y-2">
+                    {athletes.length === 0 ? (
+                      <>
+                        <p className="text-muted-foreground font-medium">
+                          No athletes available for this league
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Athletes haven't been entered for this tournament yet. 
+                          Check back closer to the event or choose a different league.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        No {activeGender} athletes found for {activeDiscipline}
+                        {searchQuery && ` matching "${searchQuery}"`}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
