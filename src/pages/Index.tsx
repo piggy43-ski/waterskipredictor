@@ -4,7 +4,7 @@ import { BottomNav } from '@/components/BottomNav';
 import { TournamentCard } from '@/components/TournamentCard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Coins, TrendingUp, Trophy, LogIn, CheckCircle, XCircle } from 'lucide-react';
+import { Coins, TrendingUp, Trophy, LogIn, CheckCircle, XCircle, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -277,7 +277,7 @@ const Index = () => {
         )}
 
         {/* Featured Tournament */}
-        {featuredTournament && (
+        {featuredTournament ? (
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold flex items-center gap-2">
@@ -287,6 +287,17 @@ const Index = () => {
             </div>
             <TournamentCard tournament={featuredTournament} />
           </div>
+        ) : (
+          <Card className="p-6 text-center">
+            <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="font-semibold mb-2">No Events Scheduled</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              New tournaments will be announced soon. Stay tuned!
+            </p>
+            <Button variant="outline" onClick={() => navigate('/tournaments')}>
+              Browse All Tournaments
+            </Button>
+          </Card>
         )}
 
         {/* Active Predictions */}
