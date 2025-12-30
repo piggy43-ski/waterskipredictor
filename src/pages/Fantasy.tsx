@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Trophy, Users, Coins, Plus, Crown, Lock, CheckCircle, Link as LinkIcon, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -70,7 +70,7 @@ const Fantasy = () => {
   const [walletBalance, setWalletBalance] = useState(0);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [creating, setCreating] = useState(false);
-  const [joinCodeDialogOpen, setJoinCodeDialogOpen] = useState(false);
+  
   const [inviteCode, setInviteCode] = useState('');
   const [joiningByCode, setJoiningByCode] = useState(false);
 
@@ -356,7 +356,6 @@ const Fantasy = () => {
         }, { onConflict: 'pot_id,invited_user_id' });
 
       toast({ title: 'Code Accepted!', description: `You can now join ${pot.name}` });
-      setJoinCodeDialogOpen(false);
       setInviteCode('');
       
       // Navigate to pot
@@ -435,38 +434,31 @@ const Fantasy = () => {
           </div>
         </Card>
 
-        {/* Join by Code Button */}
-        <Dialog open={joinCodeDialogOpen} onOpenChange={setJoinCodeDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="w-full gap-2">
-              <LinkIcon className="w-4 h-4" />
-              Join Private League by Code
+        {/* Join by Code Card - Prominent CTA */}
+        <Card className="p-4 border-primary/30 bg-primary/5">
+          <div className="flex items-center gap-2 mb-3">
+            <LinkIcon className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold">Join Private League</h3>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter invite code"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+              maxLength={6}
+              className="flex-1 font-mono text-center tracking-widest"
+            />
+            <Button 
+              onClick={handleJoinByCode}
+              disabled={joiningByCode || inviteCode.length < 4}
+            >
+              {joiningByCode ? 'Joining...' : 'Join'}
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Join Private League</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Invite Code</Label>
-                <Input
-                  placeholder="Enter code (e.g., ABC123)"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                  maxLength={6}
-                />
-              </div>
-              <Button 
-                className="w-full" 
-                onClick={handleJoinByCode}
-                disabled={joiningByCode || !inviteCode.trim()}
-              >
-                {joiningByCode ? 'Joining...' : 'Join League'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Got an invite code? Enter it above to join a friend's league
+          </p>
+        </Card>
 
         <Tabs defaultValue="browse" className="w-full">
           <TabsList className="grid w-full grid-cols-4">
@@ -507,56 +499,78 @@ const Fantasy = () => {
                 </p>
               </Card>
             ) : (
-              myPrivatePots.map((pot) => (
-                <Card 
-                  key={pot.id} 
-                  className="p-4 cursor-pointer hover:shadow-glow transition-all bg-gradient-card border-border/50"
-                  onClick={() => navigate(`/fantasy/${pot.id}`)}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h3 className="font-bold">{pot.name}</h3>
-                      {pot.tournament && (
-                        <p className="text-sm text-muted-foreground">{pot.tournament.name}</p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
+              myPrivatePots.map((pot) => {
+                const hasEntry = userEntries.some(entry => entry.pot_id === pot.id);
+                
+                return (
+                  <Card 
+                    key={pot.id} 
+                    className="p-4 bg-gradient-card border-border/50"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <h3 className="font-bold">{pot.name}</h3>
+                        {pot.tournament && (
+                          <p className="text-sm text-muted-foreground">{pot.tournament.name}</p>
+                        )}
+                      </div>
                       <Badge variant="secondary">
                         <Lock className="w-3 h-3 mr-1" />
                         Private
                       </Badge>
                     </div>
-                  </div>
-                  {pot.invite_code && pot.created_by === user?.id && (
-                    <div className="flex items-center gap-2 mt-2 p-2 bg-muted/50 rounded">
-                      <span className="text-xs text-muted-foreground">Code:</span>
-                      <span className="font-mono font-bold">{pot.invite_code}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(pot.invite_code!);
-                          toast({ title: 'Copied!', description: 'Invite code copied to clipboard' });
-                        }}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
+                    
+                    {pot.invite_code && pot.created_by === user?.id && (
+                      <div className="flex items-center gap-2 mt-2 p-2 bg-muted/50 rounded">
+                        <span className="text-xs text-muted-foreground">Code:</span>
+                        <span className="font-mono font-bold">{pot.invite_code}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(pot.invite_code!);
+                            toast({ title: 'Copied!', description: 'Invite code copied to clipboard' });
+                          }}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-4 mt-3 text-sm">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-4 h-4 text-muted-foreground" />
+                        {pot.entrant_count || 0}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Coins className="w-4 h-4 text-muted-foreground" />
+                        {pot.entry_fee_tokens.toLocaleString()}
+                      </span>
                     </div>
-                  )}
-                  <div className="flex gap-4 mt-3 text-sm">
-                    <span className="flex items-center gap-1">
-                      <Users className="w-4 h-4 text-muted-foreground" />
-                      {pot.entrant_count || 0}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Coins className="w-4 h-4 text-muted-foreground" />
-                      {pot.entry_fee_tokens.toLocaleString()}
-                    </span>
-                  </div>
-                </Card>
-              ))
+                    
+                    {/* Explicit Action Button */}
+                    <Button 
+                      className="w-full mt-4"
+                      variant={hasEntry ? "outline" : "default"}
+                      onClick={() => navigate(`/fantasy/${pot.id}`)}
+                    >
+                      {hasEntry ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          View Team
+                        </>
+                      ) : (
+                        <>
+                          <Trophy className="w-4 h-4 mr-2" />
+                          Join League
+                        </>
+                      )}
+                    </Button>
+                  </Card>
+                );
+              })
             )}
           </TabsContent>
 
