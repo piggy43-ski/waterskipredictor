@@ -11,8 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Search, Plus, Flame, Users, Coins } from 'lucide-react';
-import { formatTokensWithUSD, tokensToUSD } from '@/utils/tokenConversion';
+import { Search, Plus, Flame, Users, Coins, Eye } from 'lucide-react';
+import { formatTokensWithUSD, tokensToUSD, formatTokens } from '@/utils/tokenConversion';
+import { UserAnalyticsDrilldown } from '@/components/admin/UserAnalyticsDrilldown';
 
 interface UserWithWallet {
   id: string;
@@ -20,6 +21,8 @@ interface UserWithWallet {
   username: string;
   earned_tokens: number;
   purchased_tokens: number;
+  totalWagered?: number;
+  netPL?: number;
 }
 
 const AdminUsers = () => {
@@ -30,6 +33,7 @@ const AdminUsers = () => {
   const [tokenAmount, setTokenAmount] = useState('');
   const [tokenType, setTokenType] = useState<'bonus' | 'adjustment'>('bonus');
   const [reason, setReason] = useState('');
+  const [drilldownUser, setDrilldownUser] = useState<{ id: string; username: string } | null>(null);
   const queryClient = useQueryClient();
 
   // Fetch users with their wallets
@@ -229,12 +233,25 @@ const AdminUsers = () => {
 
   const totalTokens = users?.reduce((sum, u) => sum + u.earned_tokens + u.purchased_tokens, 0) || 0;
 
+  // If viewing a specific user's drilldown
+  if (drilldownUser) {
+    return (
+      <AdminLayout>
+        <UserAnalyticsDrilldown
+          userId={drilldownUser.id}
+          username={drilldownUser.username}
+          onBack={() => setDrilldownUser(null)}
+        />
+      </AdminLayout>
+    );
+  }
+
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">User Management</h1>
-          <p className="text-muted-foreground">Manage user tokens and view balances</p>
+          <p className="text-muted-foreground">Manage user tokens, view balances, and betting analytics</p>
         </div>
 
         {/* Stats Cards */}
@@ -309,6 +326,14 @@ const AdminUsers = () => {
                         <TableCell className="text-right font-medium">{formatTokensWithUSD(totalBalance)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setDrilldownUser({ id: user.id, username: user.username })}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
                             <Dialog open={addDialogOpen && selectedUser?.id === user.id} onOpenChange={(open) => {
                               if (open) {
                                 setSelectedUser(user);
