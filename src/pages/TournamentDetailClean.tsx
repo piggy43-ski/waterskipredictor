@@ -13,7 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Selection, Tournament, Market } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, MapPin, Clock, AlertCircle } from 'lucide-react';
+import { Calendar, MapPin, Clock, AlertCircle, Users } from 'lucide-react';
+import { Card } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { ParlayBuilder } from '@/components/ParlayBuilder';
@@ -630,14 +631,27 @@ const TournamentDetail = () => {
         )}
 
         {/* Markets by Discipline */}
-        <Tabs defaultValue="slalom" className="w-full">
-          <TabsList className="w-full grid grid-cols-3 mb-6">
-            {tournament.disciplines.map((disc) => (
-              <TabsTrigger key={disc} value={disc} className="capitalize">
-                {disc}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        {selections.length === 0 ? (
+          <Card className="p-6 text-center">
+            <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="font-semibold mb-2">Athletes Coming Soon</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              We're waiting for the tournament organizer to confirm the athletes list. 
+              Check back closer to the event for betting markets.
+            </p>
+            <Button variant="outline" onClick={() => navigate('/tournaments')}>
+              Browse Other Events
+            </Button>
+          </Card>
+        ) : (
+          <Tabs defaultValue="slalom" className="w-full">
+            <TabsList className="w-full grid grid-cols-3 mb-6">
+              {tournament.disciplines.map((disc) => (
+                <TabsTrigger key={disc} value={disc} className="capitalize">
+                  {disc}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
           {tournament.disciplines.map((discipline) => {
             const currentGender = genderByDiscipline[discipline] || 'men';
@@ -845,6 +859,7 @@ const TournamentDetail = () => {
             );
           })}
         </Tabs>
+        )}
       </div>
 
       {/* Prediction Dialog */}
