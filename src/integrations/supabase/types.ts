@@ -1063,6 +1063,8 @@ export type Database = {
           description: string
           id: string
           image_url: string | null
+          max_per_user: number | null
+          max_total: number | null
           name: string
           partner: string
           required_tokens: number
@@ -1075,6 +1077,8 @@ export type Database = {
           description: string
           id?: string
           image_url?: string | null
+          max_per_user?: number | null
+          max_total?: number | null
           name: string
           partner: string
           required_tokens: number
@@ -1087,6 +1091,8 @@ export type Database = {
           description?: string
           id?: string
           image_url?: string | null
+          max_per_user?: number | null
+          max_total?: number | null
           name?: string
           partner?: string
           required_tokens?: number
