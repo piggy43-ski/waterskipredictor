@@ -4,13 +4,21 @@ import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Coins, Award, ShoppingBag, Sparkles } from 'lucide-react';
+import { Coins, Award, ShoppingBag, Sparkles, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Reward } from '@/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const Rewards = () => {
   const { toast } = useToast();
@@ -19,6 +27,8 @@ const Rewards = () => {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
+  const [isRedeeming, setIsRedeeming] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -85,66 +95,75 @@ const Rewards = () => {
     }
   };
 
-  const handleRedeem = async (reward: Reward) => {
-    if (!user) return;
-
-    if (walletBalance >= reward.required_tokens) {
-      try {
-        // Create redemption record
-        const { error: redemptionError } = await supabase
-          .from('redemptions')
-          .insert({
-            user_id: user.id,
-            reward_id: reward.id,
-            tokens_spent: reward.required_tokens,
-            status: 'pending'
-          });
-
-        if (redemptionError) throw redemptionError;
-
-        // Update wallet - deduct from earned_tokens first
-        const { data: walletData, error: walletFetchError } = await supabase
-          .from('token_wallets')
-          .select('purchased_tokens, earned_tokens')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (walletFetchError) throw walletFetchError;
-        if (!walletData) return;
-
-        const newEarnedTokens = Math.max(0, walletData.earned_tokens - reward.required_tokens);
-        const remaining = reward.required_tokens - walletData.earned_tokens;
-        const newPurchasedTokens = remaining > 0 ? walletData.purchased_tokens - remaining : walletData.purchased_tokens;
-
-        const { error: walletUpdateError } = await supabase
-          .from('token_wallets')
-          .update({
-            purchased_tokens: Math.max(0, newPurchasedTokens),
-            earned_tokens: newEarnedTokens
-          })
-          .eq('user_id', user.id);
-
-        if (walletUpdateError) throw walletUpdateError;
-
-        toast({
-          title: "Reward Redeemed!",
-          description: `${reward.name} - Check your email for details`,
-        });
-
-        await fetchWalletBalance();
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to redeem reward. Please try again.",
-          variant: "destructive"
-        });
-      }
-    } else {
+  const handleRedeemClick = (reward: Reward) => {
+    if (walletBalance < reward.required_tokens) {
       toast({
         title: "Insufficient Tokens",
         description: `You need ${reward.required_tokens - walletBalance} more tokens`,
         variant: "destructive",
       });
+      return;
+    }
+    setSelectedReward(reward);
+  };
+
+  const handleConfirmRedeem = async () => {
+    if (!user || !selectedReward || isRedeeming) return;
+
+    setIsRedeeming(true);
+
+    try {
+      // Create redemption record
+      const { error: redemptionError } = await supabase
+        .from('redemptions')
+        .insert({
+          user_id: user.id,
+          reward_id: selectedReward.id,
+          tokens_spent: selectedReward.required_tokens,
+          status: 'pending'
+        });
+
+      if (redemptionError) throw redemptionError;
+
+      // Update wallet - deduct from earned_tokens first
+      const { data: walletData, error: walletFetchError } = await supabase
+        .from('token_wallets')
+        .select('purchased_tokens, earned_tokens')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (walletFetchError) throw walletFetchError;
+      if (!walletData) throw new Error('Wallet not found');
+
+      const newEarnedTokens = Math.max(0, walletData.earned_tokens - selectedReward.required_tokens);
+      const remaining = selectedReward.required_tokens - walletData.earned_tokens;
+      const newPurchasedTokens = remaining > 0 ? walletData.purchased_tokens - remaining : walletData.purchased_tokens;
+
+      const { error: walletUpdateError } = await supabase
+        .from('token_wallets')
+        .update({
+          purchased_tokens: Math.max(0, newPurchasedTokens),
+          earned_tokens: newEarnedTokens
+        })
+        .eq('user_id', user.id);
+
+      if (walletUpdateError) throw walletUpdateError;
+
+      toast({
+        title: "Reward Redeemed!",
+        description: `${selectedReward.name} - Check your email for details`,
+      });
+
+      await fetchWalletBalance();
+      setSelectedReward(null);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to redeem reward. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRedeeming(false);
     }
   };
 
@@ -167,6 +186,58 @@ const Rewards = () => {
     }
   };
 
+  const RewardCard = ({ reward }: { reward: Reward }) => {
+    const Icon = getCategoryIcon(reward.category);
+    const canAfford = walletBalance >= reward.required_tokens;
+
+    return (
+      <Card className="p-4 bg-gradient-card border-border/50">
+        <div className="flex gap-4">
+          <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center shrink-0">
+            <Icon className="w-10 h-10 text-primary" />
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex-1">
+                <h3 className="font-semibold mb-1">{reward.name}</h3>
+                <Badge variant="outline" className="text-xs capitalize mb-2">
+                  {reward.category}
+                </Badge>
+              </div>
+            </div>
+            
+            <p className="text-sm text-muted-foreground mb-3">
+              {reward.description}
+            </p>
+            
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Coins className="w-4 h-4 text-primary" />
+                <span className="font-bold text-lg">
+                  {reward.required_tokens.toLocaleString()}
+                </span>
+              </div>
+              
+              <Button
+                size="sm"
+                onClick={() => handleRedeemClick(reward)}
+                disabled={!canAfford}
+                className={canAfford ? 'bg-primary hover:bg-primary/90' : ''}
+              >
+                {canAfford ? 'Redeem' : 'Not Enough'}
+              </Button>
+            </div>
+            
+            <p className="text-xs text-muted-foreground mt-2">
+              By {reward.partner}
+            </p>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
@@ -178,6 +249,10 @@ const Rewards = () => {
       </div>
     );
   }
+
+  const balanceAfterRedeem = selectedReward 
+    ? walletBalance - selectedReward.required_tokens 
+    : walletBalance;
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -201,108 +276,104 @@ const Rewards = () => {
           </TabsList>
 
           <TabsContent value="all" className="space-y-4">
-            {rewards.map((reward) => {
-              const Icon = getCategoryIcon(reward.category);
-              const canAfford = walletBalance >= reward.required_tokens;
-
-              return (
-                <Card key={reward.id} className="p-4 bg-gradient-card border-border/50">
-                  <div className="flex gap-4">
-                    <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <Icon className="w-10 h-10 text-primary" />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex-1">
-                          <h3 className="font-semibold mb-1">{reward.name}</h3>
-                          <Badge variant="outline" className="text-xs capitalize mb-2">
-                            {reward.category}
-                          </Badge>
-                        </div>
-                      </div>
-                      
-                      <p className="text-sm text-muted-foreground mb-3">
-                        {reward.description}
-                      </p>
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Coins className="w-4 h-4 text-primary" />
-                          <span className="font-bold text-lg">
-                            {reward.required_tokens.toLocaleString()}
-                          </span>
-                        </div>
-                        
-                        <Button
-                          size="sm"
-                          onClick={() => handleRedeem(reward)}
-                          disabled={!canAfford}
-                          className={canAfford ? 'bg-primary hover:bg-primary/90' : ''}
-                        >
-                          {canAfford ? 'Redeem' : 'Not Enough'}
-                        </Button>
-                      </div>
-                      
-                      <p className="text-xs text-muted-foreground mt-2">
-                        By {reward.partner}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
+            {rewards.map((reward) => (
+              <RewardCard key={reward.id} reward={reward} />
+            ))}
           </TabsContent>
 
           {Object.entries(categories).map(([category, categoryRewards]) => (
             <TabsContent key={category} value={category} className="space-y-4">
-              {categoryRewards.map((reward) => {
-                const Icon = getCategoryIcon(reward.category);
-                const canAfford = walletBalance >= reward.required_tokens;
-
-                return (
-                  <Card key={reward.id} className="p-4 bg-gradient-card border-border/50">
-                    <div className="flex gap-4">
-                      <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                        <Icon className="w-10 h-10 text-primary" />
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold mb-1">{reward.name}</h3>
-                        <p className="text-sm text-muted-foreground mb-3">
-                          {reward.description}
-                        </p>
-                        
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Coins className="w-4 h-4 text-primary" />
-                            <span className="font-bold text-lg">
-                              {reward.required_tokens.toLocaleString()}
-                            </span>
-                          </div>
-                          
-                          <Button
-                            size="sm"
-                            onClick={() => handleRedeem(reward)}
-                            disabled={!canAfford}
-                            className={canAfford ? 'bg-primary hover:bg-primary/90' : ''}
-                          >
-                            {canAfford ? 'Redeem' : 'Not Enough'}
-                          </Button>
-                        </div>
-                        
-                        <p className="text-xs text-muted-foreground mt-2">
-                          By {reward.partner}
-                        </p>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
+              {categoryRewards.map((reward) => (
+                <RewardCard key={reward.id} reward={reward} />
+              ))}
             </TabsContent>
           ))}
         </Tabs>
       </div>
+
+      {/* Confirmation Modal */}
+      <Dialog open={!!selectedReward} onOpenChange={(open) => !open && !isRedeeming && setSelectedReward(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Redemption</DialogTitle>
+            <DialogDescription>
+              Review your reward redemption before confirming.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedReward && (
+            <div className="space-y-4 py-4">
+              {/* Reward Info */}
+              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                  {(() => {
+                    const Icon = getCategoryIcon(selectedReward.category);
+                    return <Icon className="w-6 h-6 text-primary" />;
+                  })()}
+                </div>
+                <div>
+                  <h4 className="font-semibold">{selectedReward.name}</h4>
+                  <p className="text-sm text-muted-foreground">By {selectedReward.partner}</p>
+                </div>
+              </div>
+
+              {/* Token breakdown */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Cost</span>
+                  <div className="flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-primary" />
+                    <span className="font-semibold text-red-600">
+                      -{selectedReward.required_tokens.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Current Balance</span>
+                  <div className="flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-primary" />
+                    <span className="font-semibold">{walletBalance.toLocaleString()}</span>
+                  </div>
+                </div>
+                
+                <div className="border-t pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Balance After</span>
+                    <div className="flex items-center gap-2">
+                      <Coins className="w-4 h-4 text-primary" />
+                      <span className="font-bold text-lg">{balanceAfterRedeem.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button 
+              variant="outline" 
+              onClick={() => setSelectedReward(null)}
+              disabled={isRedeeming}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleConfirmRedeem}
+              disabled={isRedeeming}
+            >
+              {isRedeeming ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Redeeming...
+                </>
+              ) : (
+                'Confirm Redemption'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <BottomNav />
     </div>
