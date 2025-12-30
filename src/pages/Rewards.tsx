@@ -30,6 +30,16 @@ const Rewards = () => {
   const [loading, setLoading] = useState(true);
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
+  const [userRedemptions, setUserRedemptions] = useState<string[]>([]);
+
+  const fetchUserRedemptions = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('redemptions')
+      .select('reward_id')
+      .eq('user_id', user.id);
+    setUserRedemptions(data?.map(r => r.reward_id) || []);
+  };
 
   useEffect(() => {
     if (!user) {
@@ -38,6 +48,7 @@ const Rewards = () => {
     }
     
     fetchRewards();
+    fetchUserRedemptions();
   }, [user, navigate]);
 
   const fetchRewards = async () => {
@@ -75,6 +86,15 @@ const Rewards = () => {
   const walletBalance = wallet?.totalBalance ?? 0;
 
   const handleRedeemClick = (reward: Reward) => {
+    if (userRedemptions.includes(reward.id)) {
+      toast({
+        title: "Already Redeemed",
+        description: "You have already redeemed this reward",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (walletBalance < reward.required_tokens) {
       toast({
         title: "Insufficient Tokens",
@@ -135,12 +155,24 @@ const Rewards = () => {
         description: `${selectedReward.name} - Check your email for details`,
       });
 
+      setUserRedemptions(prev => [...prev, selectedReward.id]);
       await refetchWallet();
       setSelectedReward(null);
-    } catch (error) {
+    } catch (error: any) {
+      let errorMessage = "Failed to redeem reward. Please try again.";
+      
+      if (error?.message?.includes('Wallet not found')) {
+        errorMessage = "Wallet not found. Please refresh and try again.";
+      } else if (error?.code === '23505') {
+        errorMessage = "This reward has already been redeemed.";
+        fetchUserRedemptions();
+      } else if (!navigator.onLine) {
+        errorMessage = "Network error. Please check your connection.";
+      }
+      
       toast({
-        title: "Error",
-        description: "Failed to redeem reward. Please try again.",
+        title: "Redemption Failed",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -170,6 +202,7 @@ const Rewards = () => {
   const RewardCard = ({ reward }: { reward: Reward }) => {
     const Icon = getCategoryIcon(reward.category);
     const canAfford = walletBalance >= reward.required_tokens;
+    const isAlreadyRedeemed = userRedemptions.includes(reward.id);
 
     return (
       <Card className="p-4 bg-gradient-card border-border/50">
@@ -203,10 +236,10 @@ const Rewards = () => {
               <Button
                 size="sm"
                 onClick={() => handleRedeemClick(reward)}
-                disabled={!canAfford}
-                className={canAfford ? 'bg-primary hover:bg-primary/90' : ''}
+                disabled={!canAfford || isAlreadyRedeemed}
+                variant={isAlreadyRedeemed ? "secondary" : "default"}
               >
-                {canAfford ? 'Redeem' : 'Not Enough'}
+                {isAlreadyRedeemed ? 'Redeemed' : canAfford ? 'Redeem' : 'Not Enough'}
               </Button>
             </div>
             
@@ -276,7 +309,7 @@ const Rewards = () => {
       <Dialog open={!!selectedReward} onOpenChange={(open) => !open && !isRedeeming && setSelectedReward(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirm Redemption</DialogTitle>
+            <DialogTitle>Confirm Reward Redemption</DialogTitle>
             <DialogDescription>
               Review your reward redemption before confirming.
             </DialogDescription>
@@ -294,6 +327,9 @@ const Rewards = () => {
                 </div>
                 <div>
                   <h4 className="font-semibold">{selectedReward.name}</h4>
+                  <Badge variant="outline" className="text-xs capitalize mt-1">
+                    {selectedReward.category}
+                  </Badge>
                   <p className="text-sm text-muted-foreground">By {selectedReward.partner}</p>
                 </div>
               </div>
@@ -349,7 +385,7 @@ const Rewards = () => {
                   Redeeming...
                 </>
               ) : (
-                'Confirm Redemption'
+                'Confirm Redeem'
               )}
             </Button>
           </DialogFooter>
