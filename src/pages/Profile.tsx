@@ -10,11 +10,22 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, Upload, History, Gift, TrendingUp, TrendingDown, ArrowRightLeft } from 'lucide-react';
+import { Coins, Upload, History, Gift, TrendingUp, TrendingDown, ArrowRightLeft, Package, Clock, CheckCircle, Truck, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { useWallet } from '@/hooks/useWallet';
 import { Skeleton } from '@/components/ui/skeleton';
+
+type Redemption = {
+  id: string;
+  reward_id: string;
+  tokens_spent: number;
+  status: string;
+  created_at: string;
+  reward_name?: string;
+  reward_image_url?: string | null;
+  fulfillment_status?: string;
+};
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -32,7 +43,8 @@ const Profile = () => {
   const [uploading, setUploading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
-
+  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
+  const [redemptionsLoading, setRedemptionsLoading] = useState(true);
   useEffect(() => {
     if (!user) {
       navigate('/auth');
@@ -43,6 +55,7 @@ const Profile = () => {
     fetchLifetimeStats();
     checkAdminStatus();
     fetchRecentTransactions();
+    fetchRedemptions();
   }, [user, navigate]);
 
   const checkAdminStatus = async () => {
@@ -142,6 +155,61 @@ const Profile = () => {
     }
   };
 
+  const fetchRedemptions = async () => {
+    if (!user) return;
+    setRedemptionsLoading(true);
+
+    try {
+      // Fetch redemptions
+      const { data: redemptionsData, error: redemptionsError } = await supabase
+        .from('redemptions')
+        .select('id, reward_id, tokens_spent, status, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (redemptionsError) throw redemptionsError;
+
+      if (!redemptionsData || redemptionsData.length === 0) {
+        setRedemptions([]);
+        return;
+      }
+
+      // Get reward details
+      const rewardIds = [...new Set(redemptionsData.map(r => r.reward_id))];
+      const { data: rewardsData } = await supabase
+        .from('rewards')
+        .select('id, name, image_url')
+        .in('id', rewardIds);
+
+      // Get fulfillment statuses from liabilities
+      const redemptionIds = redemptionsData.map(r => r.id);
+      const { data: liabilitiesData } = await supabase
+        .from('house_rewards_liability')
+        .select('redemption_id, status')
+        .in('redemption_id', redemptionIds);
+
+      const rewardsMap = new Map(rewardsData?.map(r => [r.id, r]) || []);
+      const liabilitiesMap = new Map(liabilitiesData?.map(l => [l.redemption_id, l.status]) || []);
+
+      const mappedRedemptions: Redemption[] = redemptionsData.map(r => ({
+        id: r.id,
+        reward_id: r.reward_id,
+        tokens_spent: r.tokens_spent,
+        status: r.status,
+        created_at: r.created_at,
+        reward_name: rewardsMap.get(r.reward_id)?.name || 'Unknown Reward',
+        reward_image_url: rewardsMap.get(r.reward_id)?.image_url,
+        fulfillment_status: liabilitiesMap.get(r.id) || 'pending',
+      }));
+
+      setRedemptions(mappedRedemptions);
+    } catch (error) {
+      console.error('Error fetching redemptions:', error);
+    } finally {
+      setRedemptionsLoading(false);
+    }
+  };
+
   const getTransactionIcon = (type: string) => {
     switch (type) {
       case 'bonus': return <Gift className="w-4 h-4" />;
@@ -159,6 +227,25 @@ const Profile = () => {
       case 'loss':
       case 'bet': return 'destructive';
       default: return 'secondary';
+    }
+  };
+
+  const getFulfillmentStatusDisplay = (status: string) => {
+    switch (status) {
+      case 'unfulfilled':
+        return { label: 'Processing', icon: Clock, variant: 'secondary' as const };
+      case 'ordered':
+        return { label: 'Ordered', icon: Package, variant: 'default' as const };
+      case 'shipped':
+        return { label: 'Shipped', icon: Truck, variant: 'default' as const };
+      case 'delivered':
+        return { label: 'Delivered', icon: CheckCircle, variant: 'default' as const };
+      case 'closed':
+        return { label: 'Completed', icon: CheckCircle, variant: 'default' as const };
+      case 'cancelled':
+        return { label: 'Cancelled', icon: XCircle, variant: 'destructive' as const };
+      default:
+        return { label: 'Pending', icon: Clock, variant: 'secondary' as const };
     }
   };
 
@@ -349,7 +436,76 @@ const Profile = () => {
           </div>
         </Card>
 
-        {/* My Bets Quick Access */}
+        {/* My Redemptions */}
+        <Card className="p-6">
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <Gift className="w-5 h-5 text-primary" />
+            My Redemptions
+          </h2>
+          {redemptionsLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : redemptions.length === 0 ? (
+            <div className="text-center py-6">
+              <Gift className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground text-sm">No redemptions yet</p>
+              <Button 
+                variant="outline" 
+                className="mt-3"
+                onClick={() => navigate('/rewards')}
+              >
+                Browse Rewards
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {redemptions.map((redemption) => {
+                const statusDisplay = getFulfillmentStatusDisplay(redemption.fulfillment_status || 'pending');
+                const StatusIcon = statusDisplay.icon;
+                
+                return (
+                  <div 
+                    key={redemption.id} 
+                    className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                      {redemption.reward_image_url ? (
+                        <img 
+                          src={redemption.reward_image_url} 
+                          alt={redemption.reward_name} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Gift className="w-6 h-6 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{redemption.reward_name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant={statusDisplay.variant} className="text-xs">
+                          <StatusIcon className="w-3 h-3 mr-1" />
+                          {statusDisplay.label}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {format(new Date(redemption.created_at), 'MMM d, yyyy')}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-sm font-semibold text-destructive">
+                        -{redemption.tokens_spent.toLocaleString()}
+                      </span>
+                      <p className="text-xs text-muted-foreground">tokens</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
         <Button 
           variant="outline" 
           className="w-full h-auto py-4"
