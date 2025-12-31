@@ -1015,6 +1015,7 @@ export type Database = {
           lifetime_deposited: number | null
           lifetime_losses: number | null
           lifetime_winnings: number | null
+          notification_preferences: Json | null
           updated_at: string
           username: string
         }
@@ -1027,6 +1028,7 @@ export type Database = {
           lifetime_deposited?: number | null
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
+          notification_preferences?: Json | null
           updated_at?: string
           username: string
         }
@@ -1039,6 +1041,7 @@ export type Database = {
           lifetime_deposited?: number | null
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
+          notification_preferences?: Json | null
           updated_at?: string
           username?: string
         }
@@ -1255,6 +1258,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      system_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json
+          processed: boolean
+          processed_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       token_transactions: {
         Row: {
@@ -1584,6 +1617,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      emit_event: {
+        Args: { p_event_type: string; p_payload?: Json; p_user_id: string }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
