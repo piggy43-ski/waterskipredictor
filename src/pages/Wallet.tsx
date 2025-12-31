@@ -14,10 +14,10 @@ import { supabase } from '@/integrations/supabase/client';
 // Token pack calculation: base_tokens = price * 100 (1 token = 1 cent)
 // Then apply bonus percentage on top
 const tokenPacks = [
-  { name: 'Starter', price: 25, baseTokens: 2500, bonus: 0, popular: false, priceId: 'price_1RT87oHr2gN6HFNdFEi6lrkM' },
-  { name: 'Standard', price: 50, baseTokens: 5000, bonus: 10, popular: true, priceId: 'price_1RT87xHr2gN6HFNdpEhNGDQO' },
-  { name: 'Pro', price: 100, baseTokens: 10000, bonus: 15, popular: false, priceId: 'price_1RT883Hr2gN6HFNdM1JGqtNX' },
-  { name: 'Elite', price: 250, baseTokens: 25000, bonus: 25, popular: false, priceId: 'price_1RT888Hr2gN6HFNdKOvKjqN3' },
+  { name: 'Starter', price: 25, baseTokens: 2500, bonus: 0, popular: false, priceId: 'price_1SkXDEEAfaxCjGuCf7d35ZeX' },
+  { name: 'Standard', price: 50, baseTokens: 5000, bonus: 10, popular: true, priceId: 'price_1SkXE2EAfaxCjGuCNIxDFA2i' },
+  { name: 'Pro', price: 100, baseTokens: 10000, bonus: 15, popular: false, priceId: 'price_1SkXEJEAfaxCjGuC98ukOdmv' },
+  { name: 'Elite', price: 250, baseTokens: 25000, bonus: 25, popular: false, priceId: 'price_1SkXFNEAfaxCjGuCOm5daj3o' },
 ].map(pack => ({
   ...pack,
   tokens: Math.floor(pack.baseTokens * (1 + pack.bonus / 100))
