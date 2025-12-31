@@ -1,22 +1,23 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Coins, Sparkles } from 'lucide-react';
+import { Coins, Sparkles, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWallet } from '@/hooks/useWallet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { supabase } from '@/integrations/supabase/client';
 
 // Token pack calculation: base_tokens = price * 100 (1 token = 1 cent)
 // Then apply bonus percentage on top
 const tokenPacks = [
-  { name: 'Starter', price: 25, baseTokens: 2500, bonus: 0, popular: false },
-  { name: 'Standard', price: 50, baseTokens: 5000, bonus: 10, popular: true },
-  { name: 'Pro', price: 100, baseTokens: 10000, bonus: 15, popular: false },
-  { name: 'Elite', price: 250, baseTokens: 25000, bonus: 25, popular: false },
+  { name: 'Starter', price: 25, baseTokens: 2500, bonus: 0, popular: false, priceId: 'price_1RT87oHr2gN6HFNdFEi6lrkM' },
+  { name: 'Standard', price: 50, baseTokens: 5000, bonus: 10, popular: true, priceId: 'price_1RT87xHr2gN6HFNdpEhNGDQO' },
+  { name: 'Pro', price: 100, baseTokens: 10000, bonus: 15, popular: false, priceId: 'price_1RT883Hr2gN6HFNdM1JGqtNX' },
+  { name: 'Elite', price: 250, baseTokens: 25000, bonus: 25, popular: false, priceId: 'price_1RT888Hr2gN6HFNdKOvKjqN3' },
 ].map(pack => ({
   ...pack,
   tokens: Math.floor(pack.baseTokens * (1 + pack.bonus / 100))
@@ -27,6 +28,7 @@ const Wallet = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { wallet, loading } = useWallet();
+  const [purchasingPack, setPurchasingPack] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -34,11 +36,34 @@ const Wallet = () => {
     }
   }, [user, navigate]);
 
-  const handlePurchase = (pack: typeof tokenPacks[0]) => {
-    toast({
-      title: "Purchase Initiated",
-      description: `Payment integration coming soon for ${pack.name} pack`,
-    });
+  const handlePurchase = async (pack: typeof tokenPacks[0]) => {
+    setPurchasingPack(pack.name);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('create-token-checkout', {
+        body: {
+          priceId: pack.priceId,
+          tokenAmount: pack.tokens,
+          packName: pack.name,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL returned');
+      }
+    } catch (error) {
+      console.error('Purchase error:', error);
+      toast({
+        title: "Purchase Failed",
+        description: error instanceof Error ? error.message : "Failed to initiate checkout",
+        variant: "destructive",
+      });
+      setPurchasingPack(null);
+    }
   };
 
   if (loading) {
@@ -140,13 +165,18 @@ const Wallet = () => {
                     </div>
                     <Button
                       onClick={() => handlePurchase(pack)}
+                      disabled={purchasingPack !== null}
                       className={
                         pack.popular
                           ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
                           : ''
                       }
                     >
-                      Purchase
+                      {purchasingPack === pack.name ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        'Purchase'
+                      )}
                     </Button>
                   </div>
                 </div>
