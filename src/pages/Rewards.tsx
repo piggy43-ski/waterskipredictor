@@ -30,6 +30,8 @@ type Reward = {
   image_url: string | null;
   max_total: number | null;
   max_per_user: number | null;
+  fulfillment_type: string | null;
+  usd_cost: number | null;
 };
 
 const Rewards = () => {
@@ -74,6 +76,8 @@ const Rewards = () => {
         image_url: r.image_url || null,
         max_total: r.max_total,
         max_per_user: r.max_per_user,
+        fulfillment_type: r.fulfillment_type || 'digital',
+        usd_cost: r.usd_cost,
       }));
 
       setRewards(mappedRewards);
@@ -171,14 +175,16 @@ const Rewards = () => {
 
     try {
       // Create redemption record
-      const { error: redemptionError } = await supabase
+      const { data: redemptionData, error: redemptionError } = await supabase
         .from('redemptions')
         .insert({
           user_id: user.id,
           reward_id: selectedReward.id,
           tokens_spent: selectedReward.required_tokens,
           status: 'pending'
-        });
+        })
+        .select('id')
+        .single();
 
       if (redemptionError) throw redemptionError;
 
@@ -197,6 +203,7 @@ const Rewards = () => {
       const newEarnedTokens = Math.max(0, earnedTokens - selectedReward.required_tokens);
       const remaining = selectedReward.required_tokens - earnedTokens;
       const newPurchasedTokens = remaining > 0 ? purchasedTokens - remaining : purchasedTokens;
+      const newBalance = newEarnedTokens + Math.max(0, newPurchasedTokens);
 
       const { error: walletUpdateError } = await supabase
         .from('token_wallets')
@@ -207,6 +214,33 @@ const Rewards = () => {
         .eq('user_id', user.id);
 
       if (walletUpdateError) throw walletUpdateError;
+
+      // Create token transaction record for the ledger
+      await supabase.from('token_transactions').insert({
+        user_id: user.id,
+        type: 'redeem',
+        amount: -selectedReward.required_tokens,
+        balance_after: newBalance,
+        source_id: selectedReward.id,
+        source_type: 'reward',
+        counterparty: 'house',
+        transaction_status: 'completed',
+        description: `Redeemed: ${selectedReward.name}`,
+        reference_id: redemptionData.id,
+        reference_type: 'redemption'
+      });
+
+      // Create house liability record
+      await supabase.from('house_rewards_liability').insert({
+        redemption_id: redemptionData.id,
+        reward_id: selectedReward.id,
+        user_id: user.id,
+        token_cost: selectedReward.required_tokens,
+        usd_estimated_cost: selectedReward.usd_cost,
+        fulfillment_type: selectedReward.fulfillment_type || 'digital',
+        partner: selectedReward.partner,
+        status: 'unfulfilled'
+      });
 
       toast({
         title: "Reward Redeemed!",
