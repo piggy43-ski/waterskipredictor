@@ -37,6 +37,7 @@ import FantasyTeamView from "./pages/FantasyTeamView";
 import FantasyTeamEdit from "./pages/FantasyTeamEdit";
 import AdminFantasyPots from "./pages/admin/FantasyPots";
 import AdminSettlementTest from "./pages/admin/SettlementTest";
+import AdminLiabilities from "./pages/admin/Liabilities";
 
 const queryClient = new QueryClient();
 
@@ -80,6 +81,7 @@ const App = () => (
             <Route path="/admin/house-ledger" element={<AdminHouseLedger />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/settlement-test" element={<AdminSettlementTest />} />
+            <Route path="/admin/liabilities" element={<AdminLiabilities />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

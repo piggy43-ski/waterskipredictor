@@ -732,6 +732,72 @@ export type Database = {
           },
         ]
       }
+      house_rewards_liability: {
+        Row: {
+          created_at: string
+          fulfilled_at: string | null
+          fulfilled_by: string | null
+          fulfillment_type: string
+          id: string
+          notes: string | null
+          partner: string
+          redemption_id: string
+          reward_id: string
+          status: string
+          token_cost: number
+          updated_at: string
+          usd_estimated_cost: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          fulfilled_at?: string | null
+          fulfilled_by?: string | null
+          fulfillment_type?: string
+          id?: string
+          notes?: string | null
+          partner: string
+          redemption_id: string
+          reward_id: string
+          status?: string
+          token_cost: number
+          updated_at?: string
+          usd_estimated_cost?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          fulfilled_at?: string | null
+          fulfilled_by?: string | null
+          fulfillment_type?: string
+          id?: string
+          notes?: string | null
+          partner?: string
+          redemption_id?: string
+          reward_id?: string
+          status?: string
+          token_cost?: number
+          updated_at?: string
+          usd_estimated_cost?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "house_rewards_liability_redemption_id_fkey"
+            columns: ["redemption_id"]
+            isOneToOne: false
+            referencedRelation: "redemptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "house_rewards_liability_reward_id_fkey"
+            columns: ["reward_id"]
+            isOneToOne: false
+            referencedRelation: "rewards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       markets: {
         Row: {
           category: string
@@ -1061,6 +1127,7 @@ export type Database = {
           category: string
           created_at: string
           description: string
+          fulfillment_type: string | null
           id: string
           image_url: string | null
           max_per_user: number | null
@@ -1069,12 +1136,14 @@ export type Database = {
           partner: string
           required_tokens: number
           updated_at: string
+          usd_cost: number | null
         }
         Insert: {
           available?: boolean
           category: string
           created_at?: string
           description: string
+          fulfillment_type?: string | null
           id?: string
           image_url?: string | null
           max_per_user?: number | null
@@ -1083,12 +1152,14 @@ export type Database = {
           partner: string
           required_tokens: number
           updated_at?: string
+          usd_cost?: number | null
         }
         Update: {
           available?: boolean
           category?: string
           created_at?: string
           description?: string
+          fulfillment_type?: string | null
           id?: string
           image_url?: string | null
           max_per_user?: number | null
@@ -1097,6 +1168,7 @@ export type Database = {
           partner?: string
           required_tokens?: number
           updated_at?: string
+          usd_cost?: number | null
         }
         Relationships: []
       }
@@ -1152,6 +1224,7 @@ export type Database = {
         Row: {
           amount: number
           balance_after: number
+          counterparty: string | null
           created_at: string
           description: string
           fantasy_entry_id: string | null
@@ -1160,13 +1233,17 @@ export type Database = {
           reference_id: string | null
           reference_type: string | null
           settlement_batch_id: string | null
+          source_id: string | null
+          source_type: string | null
           tournament_id: string | null
+          transaction_status: string | null
           type: string
           user_id: string
         }
         Insert: {
           amount: number
           balance_after: number
+          counterparty?: string | null
           created_at?: string
           description: string
           fantasy_entry_id?: string | null
@@ -1175,13 +1252,17 @@ export type Database = {
           reference_id?: string | null
           reference_type?: string | null
           settlement_batch_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
           tournament_id?: string | null
+          transaction_status?: string | null
           type: string
           user_id: string
         }
         Update: {
           amount?: number
           balance_after?: number
+          counterparty?: string | null
           created_at?: string
           description?: string
           fantasy_entry_id?: string | null
@@ -1190,7 +1271,10 @@ export type Database = {
           reference_id?: string | null
           reference_type?: string | null
           settlement_batch_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
           tournament_id?: string | null
+          transaction_status?: string | null
           type?: string
           user_id?: string
         }

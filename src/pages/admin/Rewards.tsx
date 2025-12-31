@@ -25,6 +25,8 @@ type Reward = {
   image_url: string | null;
   max_total: number | null;
   max_per_user: number | null;
+  fulfillment_type: string | null;
+  usd_cost: number | null;
 };
 
 export default function AdminRewards() {
@@ -129,6 +131,9 @@ export default function AdminRewards() {
         maxPerUser = perUserValue ? parseInt(perUserValue) : null;
       }
 
+      const fulfillmentType = formData.get('fulfillment_type') as string;
+      const usdCostValue = formData.get('usd_cost') as string;
+
       const reward = {
         name: formData.get('name') as string,
         description: formData.get('description') as string,
@@ -139,6 +144,8 @@ export default function AdminRewards() {
         image_url: imageUrl,
         max_total: maxTotal,
         max_per_user: maxPerUser,
+        fulfillment_type: fulfillmentType || 'digital',
+        usd_cost: usdCostValue ? parseFloat(usdCostValue) : null,
       };
 
       const { error } = await supabase.from('rewards').insert(reward);
@@ -287,10 +294,46 @@ export default function AdminRewards() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Fulfillment Type */}
                 <div>
-                  <Label htmlFor="required_tokens">Required Tokens</Label>
-                  <Input id="required_tokens" name="required_tokens" type="number" min="1" required />
+                  <Label>Fulfillment Type</Label>
+                  <Select name="fulfillment_type" defaultValue="digital">
+                    <SelectTrigger className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="digital">Digital</SelectItem>
+                      <SelectItem value="physical">Physical (shipped)</SelectItem>
+                      <SelectItem value="coaching">Coaching Session</SelectItem>
+                      <SelectItem value="vip">VIP Experience</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    How this reward will be fulfilled
+                  </p>
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="required_tokens">Required Tokens</Label>
+                    <Input id="required_tokens" name="required_tokens" type="number" min="1" required />
+                  </div>
+                  <div>
+                    <Label htmlFor="usd_cost">Est. USD Cost (optional)</Label>
+                    <Input 
+                      id="usd_cost" 
+                      name="usd_cost" 
+                      type="number" 
+                      min="0" 
+                      step="0.01" 
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground -mt-2">
+                  USD cost helps track house liability for fulfillment
+                </p>
 
                 {/* Limit Type Selection */}
                 <div>
