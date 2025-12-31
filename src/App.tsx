@@ -38,6 +38,8 @@ import FantasyTeamEdit from "./pages/FantasyTeamEdit";
 import AdminFantasyPots from "./pages/admin/FantasyPots";
 import AdminSettlementTest from "./pages/admin/SettlementTest";
 import AdminLiabilities from "./pages/admin/Liabilities";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCanceled from "./pages/PaymentCanceled";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +60,8 @@ const App = () => (
             <Route path="/tournaments" element={<Tournaments />} />
             <Route path="/tournaments/:id" element={<TournamentDetail />} />
             <Route path="/wallet" element={<Wallet />} />
+            <Route path="/payment-success" element={<PaymentSuccess />} />
+            <Route path="/payment-canceled" element={<PaymentCanceled />} />
             <Route path="/predictions" element={<Predictions />} />
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/athletes/:id" element={<AthleteProfile />} />

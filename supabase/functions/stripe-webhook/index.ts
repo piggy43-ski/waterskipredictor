@@ -1,0 +1,145 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import Stripe from "https://esm.sh/stripe@18.5.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+
+const logStep = (step: string, details?: any) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
+};
+
+serve(async (req) => {
+  try {
+    logStep("Webhook received");
+
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+    
+    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
+    if (!webhookSecret) throw new Error("STRIPE_WEBHOOK_SECRET is not set");
+
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+    const signature = req.headers.get("stripe-signature");
+    if (!signature) {
+      logStep("No Stripe signature found");
+      return new Response("No signature", { status: 400 });
+    }
+
+    const body = await req.text();
+    let event: Stripe.Event;
+
+    try {
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+      logStep("Webhook signature verified", { eventType: event.type, eventId: event.id });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logStep("Webhook signature verification failed", { error: errorMessage });
+      return new Response(`Webhook Error: ${errorMessage}`, { status: 400 });
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      logStep("Processing checkout.session.completed", { sessionId: session.id });
+
+      const userId = session.metadata?.user_id;
+      const tokenAmount = parseInt(session.metadata?.token_amount || "0", 10);
+      const packName = session.metadata?.pack_name || "Token Pack";
+
+      if (!userId || tokenAmount <= 0) {
+        logStep("Invalid metadata", { userId, tokenAmount });
+        return new Response("Invalid metadata", { status: 400 });
+      }
+
+      logStep("Extracted metadata", { userId, tokenAmount, packName });
+
+      // Initialize Supabase client with service role key for admin operations
+      const supabaseClient = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+        { auth: { persistSession: false } }
+      );
+
+      // Get current wallet balance
+      const { data: wallet, error: walletError } = await supabaseClient
+        .from("token_wallets")
+        .select("purchased_tokens, earned_tokens")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (walletError) {
+        logStep("Error fetching wallet", { error: walletError.message });
+        throw new Error(`Failed to fetch wallet: ${walletError.message}`);
+      }
+
+      const currentPurchased = wallet?.purchased_tokens ?? 0;
+      const currentEarned = wallet?.earned_tokens ?? 0;
+      const newPurchased = currentPurchased + tokenAmount;
+      const newBalance = newPurchased + currentEarned;
+
+      logStep("Wallet calculation", { currentPurchased, tokenAmount, newPurchased, newBalance });
+
+      // Update wallet
+      const { error: updateError } = await supabaseClient
+        .from("token_wallets")
+        .update({ 
+          purchased_tokens: newPurchased,
+          updated_at: new Date().toISOString()
+        })
+        .eq("user_id", userId);
+
+      if (updateError) {
+        logStep("Error updating wallet", { error: updateError.message });
+        throw new Error(`Failed to update wallet: ${updateError.message}`);
+      }
+
+      logStep("Wallet updated successfully", { newPurchased });
+
+      // Create transaction record
+      const { error: transactionError } = await supabaseClient
+        .from("token_transactions")
+        .insert({
+          user_id: userId,
+          type: "purchase",
+          amount: tokenAmount,
+          balance_after: newBalance,
+          description: `Purchased ${packName} - ${tokenAmount} tokens`,
+          reference_type: "stripe_payment",
+          reference_id: session.payment_intent as string,
+        });
+
+      if (transactionError) {
+        logStep("Error creating transaction", { error: transactionError.message });
+        // Don't throw here - wallet is already updated
+      } else {
+        logStep("Transaction record created");
+      }
+
+      // Update profile lifetime_deposited
+      const { data: profile } = await supabaseClient
+        .from("profiles")
+        .select("lifetime_deposited")
+        .eq("id", userId)
+        .single();
+
+      const currentDeposited = profile?.lifetime_deposited ?? 0;
+      await supabaseClient
+        .from("profiles")
+        .update({ lifetime_deposited: currentDeposited + tokenAmount })
+        .eq("id", userId);
+
+      logStep("Checkout session processed successfully", { userId, tokenAmount });
+    }
+
+    return new Response(JSON.stringify({ received: true }), {
+      headers: { "Content-Type": "application/json" },
+      status: 200,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logStep("ERROR", { message: errorMessage });
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      headers: { "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+});
