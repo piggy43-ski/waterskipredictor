@@ -438,13 +438,25 @@ const AdminUsers = () => {
                                   </div>
                                   <div className="space-y-2">
                                     <Label>Amount to Burn</Label>
-                                    <Input
-                                      type="number"
-                                      placeholder="Enter token amount"
-                                      value={tokenAmount}
-                                      onChange={(e) => setTokenAmount(e.target.value)}
-                                      max={totalBalance}
-                                    />
+                                    <div className="flex gap-2">
+                                      <Input
+                                        type="number"
+                                        placeholder="Enter token amount"
+                                        value={tokenAmount}
+                                        onChange={(e) => setTokenAmount(e.target.value)}
+                                        max={totalBalance}
+                                        className="flex-1"
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setTokenAmount(totalBalance.toString())}
+                                        disabled={totalBalance === 0}
+                                      >
+                                        Burn All
+                                      </Button>
+                                    </div>
                                     {tokenAmount && !isNaN(parseInt(tokenAmount)) && (
                                       <p className="text-sm text-muted-foreground">
                                         = ${tokensToUSD(parseInt(tokenAmount)).toFixed(2)} USD
