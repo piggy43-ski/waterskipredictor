@@ -242,6 +242,25 @@ const Rewards = () => {
         status: 'unfulfilled'
       });
 
+      // Send redemption receipt email
+      try {
+        await supabase.functions.invoke('send-email', {
+          body: {
+            type: 'redemption_receipt',
+            to: user.email,
+            userId: user.id,
+            data: {
+              rewardName: selectedReward.name,
+              tokensSpent: selectedReward.required_tokens,
+              redemptionId: redemptionData.id,
+            }
+          }
+        });
+        console.log('Redemption receipt email sent');
+      } catch (emailError) {
+        console.error('Failed to send redemption email:', emailError);
+      }
+
       toast({
         title: "Reward Redeemed!",
         description: `${selectedReward.name} - Check your email for details`,
