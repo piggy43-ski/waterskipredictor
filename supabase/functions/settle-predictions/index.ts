@@ -982,12 +982,117 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ============= EMAIL NOTIFICATIONS =============
+    console.log(`\n📧 Sending bet result emails to ${affectedUserIds.size} users...`);
+    let emailsSent = 0;
+    let emailsFailed = 0;
+
+    try {
+      // Get all settled predictions with user data
+      const { data: settledPredictions, error: settledError } = await supabaseClient
+        .from('predictions')
+        .select(`
+          id,
+          user_id,
+          athlete_name,
+          tournament_name,
+          discipline,
+          staked_tokens,
+          payout_tokens,
+          status
+        `)
+        .in('user_id', Array.from(affectedUserIds))
+        .in('status', ['WON', 'LOST', 'VOID'])
+        .order('settled_at', { ascending: false });
+
+      if (settledError) {
+        console.error('❌ Error fetching settled predictions for emails:', settledError);
+      } else if (settledPredictions && settledPredictions.length > 0) {
+        // Get user emails
+        const { data: profiles, error: profilesError } = await supabaseClient
+          .from('profiles')
+          .select('id, email, username')
+          .in('id', Array.from(affectedUserIds));
+
+        if (profilesError) {
+          console.error('❌ Error fetching user profiles for emails:', profilesError);
+        } else if (profiles) {
+          const profileMap = new Map(profiles.map(p => [p.id, p]));
+          
+          // Group predictions by user to avoid spamming
+          const predictionsByUser = new Map<string, typeof settledPredictions>();
+          for (const pred of settledPredictions) {
+            if (!predictionsByUser.has(pred.user_id)) {
+              predictionsByUser.set(pred.user_id, []);
+            }
+            predictionsByUser.get(pred.user_id)!.push(pred);
+          }
+
+          // Send emails to each user (limit to first 3 predictions per user to avoid spam)
+          for (const [userId, userPredictions] of predictionsByUser) {
+            const profile = profileMap.get(userId);
+            if (!profile || !profile.email) {
+              console.log(`⚠️  No email found for user ${userId}, skipping`);
+              continue;
+            }
+
+            // Send email for the most significant result (prioritize wins)
+            const winPred = userPredictions.find(p => p.status === 'WON');
+            const predToEmail = winPred || userPredictions[0];
+            
+            try {
+              const emailResponse = await fetch(
+                `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                  },
+                  body: JSON.stringify({
+                    type: 'bet_result',
+                    to: profile.email,
+                    userId: userId,
+                    data: {
+                      username: profile.username || 'Champion',
+                      athleteName: predToEmail.athlete_name,
+                      tournamentName: predToEmail.tournament_name || requestTournamentName || 'Tournament',
+                      result: predToEmail.status.toLowerCase(),
+                      stakedTokens: predToEmail.staked_tokens,
+                      payoutTokens: predToEmail.payout_tokens || 0,
+                    }
+                  }),
+                }
+              );
+
+              if (emailResponse.ok) {
+                emailsSent++;
+                console.log(`✅ Email sent to ${profile.email} (${predToEmail.status})`);
+              } else {
+                emailsFailed++;
+                const errorText = await emailResponse.text();
+                console.error(`❌ Failed to send email to ${profile.email}:`, errorText);
+              }
+            } catch (emailError) {
+              emailsFailed++;
+              console.error(`❌ Email error for ${profile.email}:`, emailError);
+            }
+          }
+        }
+      }
+    } catch (emailBatchError) {
+      console.error('❌ Error in email notification batch:', emailBatchError);
+    }
+
+    console.log(`📧 Email notifications: ${emailsSent} sent, ${emailsFailed} failed`);
+
     console.log(`\n🎉 Settlement complete:`);
     console.log(`   ✅ ${result.settled_predictions} predictions settled`);
     console.log(`   💰 ${result.total_payout} tokens paid out`);
     console.log(`   👥 ${result.affected_users} users affected`);
     console.log(`   🎫 ${result.debug_info!.single_bets_settled} single bets settled`);
     console.log(`   🎰 ${result.debug_info!.parlays_settled} parlays settled`);
+    console.log(`   📧 ${emailsSent} emails sent`);
     if (result.errors && result.errors.length > 0) {
       console.log(`   ❌ ${result.errors.length} errors occurred`);
     }
