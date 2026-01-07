@@ -41,3 +41,9 @@ verify_jwt = true
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.update-athlete-ratings]
+verify_jwt = true
+
+[functions.send-email]
+verify_jwt = false
