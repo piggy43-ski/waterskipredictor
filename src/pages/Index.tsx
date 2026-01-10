@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
-import { PromoBannerCarousel } from '@/components/PromoBannerCarousel';
+import { TournamentCard } from '@/components/TournamentCard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Coins, TrendingUp, Trophy, LogIn, CheckCircle, XCircle, Calendar, ChevronRight } from 'lucide-react';
@@ -27,7 +27,7 @@ const Index = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { wallet } = useWallet();
-  const [featuredTournaments, setFeaturedTournaments] = useState<Tournament[]>([]);
+  const [featuredTournament, setFeaturedTournament] = useState<Tournament | null>(null);
   const [userPredictions, setUserPredictions] = useState<UserPrediction[]>([]);
   const [settledPredictions, setSettledPredictions] = useState<UserPrediction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,7 @@ const Index = () => {
 
   const fetchData = async () => {
     try {
-      // Fetch tournaments - prioritize live, then upcoming
+      // Fetch featured tournament - prioritize live, then upcoming
       let { data: tournamentData } = await supabase
         .from('tournaments')
         .select('*')
@@ -60,12 +60,11 @@ const Index = () => {
         })
       );
 
-      // Get live tournaments first, then upcoming (limit to 3 for carousel)
-      const liveTournaments = tournamentsWithStatus.filter(t => t.status === 'live');
-      const upcomingTournaments = tournamentsWithStatus.filter(t => t.status === 'upcoming');
-      const featured = [...liveTournaments, ...upcomingTournaments].slice(0, 3);
+      // Prioritize live tournaments, then upcoming
+      const liveTournament = tournamentsWithStatus.find(t => t.status === 'live');
+      const upcomingTournament = tournamentsWithStatus.find(t => t.status === 'upcoming');
       
-      setFeaturedTournaments(featured);
+      setFeaturedTournament(liveTournament || upcomingTournament || null);
 
       if (user) {
 
@@ -136,11 +135,6 @@ const Index = () => {
         <PageHeader title="WaterSki Predictor" showBalance={false} />
         
         <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-          {/* Promo Banner Carousel */}
-          {featuredTournaments.length > 0 && (
-            <PromoBannerCarousel tournaments={featuredTournaments} />
-          )}
-
           {/* Welcome Card */}
           <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium rounded-2xl">
             <h2 className="text-2xl font-display font-bold mb-2">Welcome to WaterSki Predictor</h2>
@@ -155,6 +149,14 @@ const Index = () => {
               Get Started
             </Button>
           </Card>
+
+          {/* Featured Tournament Preview */}
+          {featuredTournament && (
+            <div>
+              <p className="section-title mb-3">UPCOMING EVENT</p>
+              <TournamentCard tournament={featuredTournament} />
+            </div>
+          )}
         </div>
 
         <BottomNav />
@@ -169,11 +171,6 @@ const Index = () => {
       <PageHeader title="WaterSki Predictor" />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        {/* Promo Banner Carousel */}
-        {featuredTournaments.length > 0 && (
-          <PromoBannerCarousel tournaments={featuredTournaments} />
-        )}
-
         {/* Stats Overview Cards */}
         <div className="grid grid-cols-2 gap-3">
           <Card className="p-4 rounded-2xl border-border/30">
@@ -261,6 +258,25 @@ const Index = () => {
                 </div>
               </div>
             </div>
+          </Card>
+        )}
+
+        {/* Featured Tournament */}
+        {featuredTournament ? (
+          <div>
+            <p className="section-title mb-3">FEATURED EVENT</p>
+            <TournamentCard tournament={featuredTournament} />
+          </div>
+        ) : (
+          <Card className="p-6 text-center rounded-2xl">
+            <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="font-display font-bold mb-2">No Events Scheduled</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              New tournaments will be announced soon. Stay tuned!
+            </p>
+            <Button variant="outline" onClick={() => navigate('/tournaments')} className="rounded-xl">
+              Browse All Tournaments
+            </Button>
           </Card>
         )}
 
