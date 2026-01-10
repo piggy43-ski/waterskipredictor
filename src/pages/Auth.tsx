@@ -1,19 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
-import { Waves, Mail } from 'lucide-react';
+import { Waves, ArrowLeft, Mail } from 'lucide-react';
+
+type AuthView = 'landing' | 'signin' | 'signup';
+
 const Auth = () => {
   const navigate = useNavigate();
-  const {
-    user,
-    signIn,
-    signUp
-  } = useAuth();
+  const { user, signIn, signUp } = useAuth();
+  
+  const [view, setView] = useState<AuthView>('landing');
   const [signInEmail, setSignInEmail] = useState('');
   const [signInPassword, setSignInPassword] = useState('');
   const [signUpEmail, setSignUpEmail] = useState('');
@@ -21,97 +20,238 @@ const Auth = () => {
   const [username, setUsername] = useState('');
   const [country, setCountry] = useState('');
   const [loading, setLoading] = useState(false);
+
   useEffect(() => {
     if (user) {
       navigate('/');
     }
   }, [user, navigate]);
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     await signIn(signInEmail, signInPassword);
     setLoading(false);
   };
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     await signUp(signUpEmail, signUpPassword, username, country);
     setLoading(false);
   };
-  return <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md p-8">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
-            <Waves className="w-8 h-8 text-primary-foreground" />
-          </div>
-          <h1 className="text-2xl font-bold">WaterSki Predictor</h1>
-          <p className="text-muted-foreground text-center mt-2">Where every pass matters</p>
+
+  const handleBack = () => {
+    setView('landing');
+  };
+
+  // Landing View
+  if (view === 'landing') {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
+        {/* Logo */}
+        <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mb-12">
+          <Waves className="w-10 h-10 text-primary-foreground" />
         </div>
 
-        <Tabs defaultValue="signin" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="signin">Sign In</TabsTrigger>
-            <TabsTrigger value="signup">Sign Up</TabsTrigger>
-          </TabsList>
+        {/* Hero Text */}
+        <div className="text-center mb-16">
+          <h1 className="text-4xl sm:text-5xl font-black uppercase tracking-tight leading-tight">
+            <span className="text-primary">WHERE EVERY</span>
+            <br />
+            <span className="text-primary">PASS MATTERS</span>
+          </h1>
+          <p className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-foreground mt-2">
+            PREDICT THE TOUR
+          </p>
+        </div>
 
-          <TabsContent value="signin">
-            <form onSubmit={handleSignIn} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signin-email" className="flex items-center gap-2">
-                  <Mail className="w-4 h-4" />
-                  Email Address
-                </Label>
-                <Input id="signin-email" type="email" placeholder="your@email.com" value={signInEmail} onChange={e => setSignInEmail(e.target.value)} required />
-                <p className="text-xs text-muted-foreground">
-                  Use the email you signed up with, not your username
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="signin-password">Password</Label>
-                <Input id="signin-password" type="password" placeholder="••••••••" value={signInPassword} onChange={e => setSignInPassword(e.target.value)} required />
-              </div>
-              <div className="text-right">
-                <Link to="/reset-password" className="text-sm text-primary hover:underline">
-                  Forgot your password?
-                </Link>
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Signing in...' : 'Sign In'}
-              </Button>
-            </form>
-          </TabsContent>
+        {/* Action Buttons */}
+        <div className="w-full max-w-sm space-y-4">
+          <Button 
+            onClick={() => setView('signup')} 
+            className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full"
+          >
+            Sign Up
+          </Button>
+          <Button 
+            onClick={() => setView('signin')} 
+            variant="outline"
+            className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full border-2"
+          >
+            Log In
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
-          <TabsContent value="signup">
-            <form onSubmit={handleSignUp} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signup-email" className="flex items-center gap-2">
-                  <Mail className="w-4 h-4" />
-                  Email Address
-                </Label>
-                <Input id="signup-email" type="email" placeholder="your@email.com" value={signUpEmail} onChange={e => setSignUpEmail(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <Input id="username" type="text" placeholder="your_username" value={username} onChange={e => setUsername(e.target.value)} required />
-                <p className="text-xs text-muted-foreground">
-                  This will be your display name in the app
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="country">Country (Optional)</Label>
-                <Input id="country" type="text" placeholder="USA" value={country} onChange={e => setCountry(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="signup-password">Password</Label>
-                <Input id="signup-password" type="password" placeholder="••••••••" value={signUpPassword} onChange={e => setSignUpPassword(e.target.value)} required />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Creating account...' : 'Sign Up'}
-              </Button>
-            </form>
-          </TabsContent>
-        </Tabs>
-      </Card>
-    </div>;
+  // Sign In View
+  if (view === 'signin') {
+    return (
+      <div className="min-h-screen bg-background flex flex-col px-6 py-8">
+        {/* Back Button */}
+        <button 
+          onClick={handleBack}
+          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          <span className="font-medium">Back</span>
+        </button>
+
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-black uppercase tracking-tight text-foreground">
+            LOG IN
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Welcome back to WaterSki Predictor
+          </p>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSignIn} className="space-y-6 flex-1">
+          <div className="space-y-2">
+            <Label htmlFor="signin-email" className="flex items-center gap-2 text-sm font-medium">
+              <Mail className="w-4 h-4" />
+              Email Address
+            </Label>
+            <Input 
+              id="signin-email" 
+              type="email" 
+              placeholder="your@email.com" 
+              value={signInEmail} 
+              onChange={e => setSignInEmail(e.target.value)} 
+              required 
+              className="h-12 rounded-xl"
+            />
+            <p className="text-xs text-muted-foreground">
+              Use the email you signed up with
+            </p>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="signin-password" className="text-sm font-medium">Password</Label>
+            <Input 
+              id="signin-password" 
+              type="password" 
+              placeholder="••••••••" 
+              value={signInPassword} 
+              onChange={e => setSignInPassword(e.target.value)} 
+              required 
+              className="h-12 rounded-xl"
+            />
+          </div>
+
+          <div className="text-right">
+            <Link to="/reset-password" className="text-sm text-primary hover:underline">
+              Forgot your password?
+            </Link>
+          </div>
+
+          <Button 
+            type="submit" 
+            className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full mt-8" 
+            disabled={loading}
+          >
+            {loading ? 'Signing in...' : 'Log In'}
+          </Button>
+        </form>
+      </div>
+    );
+  }
+
+  // Sign Up View
+  return (
+    <div className="min-h-screen bg-background flex flex-col px-6 py-8">
+      {/* Back Button */}
+      <button 
+        onClick={handleBack}
+        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
+      >
+        <ArrowLeft className="w-5 h-5" />
+        <span className="font-medium">Back</span>
+      </button>
+
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-black uppercase tracking-tight text-foreground">
+          SIGN UP
+        </h1>
+        <p className="text-muted-foreground mt-2">
+          Create your WaterSki Predictor account
+        </p>
+      </div>
+
+      {/* Form */}
+      <form onSubmit={handleSignUp} className="space-y-5 flex-1">
+        <div className="space-y-2">
+          <Label htmlFor="signup-email" className="flex items-center gap-2 text-sm font-medium">
+            <Mail className="w-4 h-4" />
+            Email Address
+          </Label>
+          <Input 
+            id="signup-email" 
+            type="email" 
+            placeholder="your@email.com" 
+            value={signUpEmail} 
+            onChange={e => setSignUpEmail(e.target.value)} 
+            required 
+            className="h-12 rounded-xl"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="username" className="text-sm font-medium">Username</Label>
+          <Input 
+            id="username" 
+            type="text" 
+            placeholder="your_username" 
+            value={username} 
+            onChange={e => setUsername(e.target.value)} 
+            required 
+            className="h-12 rounded-xl"
+          />
+          <p className="text-xs text-muted-foreground">
+            This will be your display name
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="country" className="text-sm font-medium">Country (Optional)</Label>
+          <Input 
+            id="country" 
+            type="text" 
+            placeholder="USA" 
+            value={country} 
+            onChange={e => setCountry(e.target.value)} 
+            className="h-12 rounded-xl"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="signup-password" className="text-sm font-medium">Password</Label>
+          <Input 
+            id="signup-password" 
+            type="password" 
+            placeholder="••••••••" 
+            value={signUpPassword} 
+            onChange={e => setSignUpPassword(e.target.value)} 
+            required 
+            className="h-12 rounded-xl"
+          />
+        </div>
+
+        <Button 
+          type="submit" 
+          className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full mt-4" 
+          disabled={loading}
+        >
+          {loading ? 'Creating account...' : 'Sign Up'}
+        </Button>
+      </form>
+    </div>
+  );
 };
+
 export default Auth;
