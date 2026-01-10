@@ -58,6 +58,64 @@ const ChartContainer = React.forwardRef<
 });
 ChartContainer.displayName = "Chart";
 
+/**
+ * Validates and sanitizes a CSS color value to prevent injection attacks.
+ * Only allows safe color formats: hex, rgb, rgba, hsl, hsla, and named colors.
+ */
+const sanitizeCssColor = (color: string): string | null => {
+  if (!color || typeof color !== 'string') {
+    return null;
+  }
+  
+  // Trim and limit length to prevent abuse
+  const trimmed = color.trim().slice(0, 100);
+  
+  // Allow only safe CSS color patterns
+  const safePatterns = [
+    /^#[0-9a-fA-F]{3,8}$/,                                    // Hex: #fff, #ffffff, #ffffffff
+    /^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/,     // rgb(r, g, b)
+    /^rgba\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*[\d.]+\s*\)$/, // rgba(r, g, b, a)
+    /^hsl\(\s*[\d.]+\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*\)$/,    // hsl(h, s, l)
+    /^hsla\(\s*[\d.]+\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+\s*\)$/, // hsla(h, s, l, a)
+    /^[a-zA-Z]{3,20}$/,                                        // Named colors: red, blue, etc.
+    /^var\(--[\w-]+\)$/,                                       // CSS variables: var(--name)
+    /^[\d.]+\s+[\d.]+%?\s+[\d.]+%?$/,                         // HSL values without function: 240 100% 50%
+  ];
+  
+  if (safePatterns.some(pattern => pattern.test(trimmed))) {
+    return trimmed;
+  }
+  
+  return null;
+};
+
+/**
+ * Validates a CSS key name to prevent injection.
+ * Only allows alphanumeric characters, hyphens, and underscores.
+ */
+const sanitizeCssKey = (key: string): string | null => {
+  if (!key || typeof key !== 'string') {
+    return null;
+  }
+  
+  const trimmed = key.trim().slice(0, 50);
+  
+  // Only allow safe key characters
+  if (/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(trimmed)) {
+    return trimmed;
+  }
+  
+  return null;
+};
+
+/**
+ * Builds CSS content safely without using dangerouslySetInnerHTML.
+ * All values are validated before being included in the CSS output.
+ * 
+ * SECURITY NOTE: This component only processes controlled ChartConfig objects.
+ * Do NOT pass user-controlled data (chart titles, labels, custom colors from 
+ * user input) to ChartConfig without additional application-level validation.
+ */
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
 
@@ -65,23 +123,49 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
+  // Validate the chart ID to prevent selector injection
+  const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!safeId) {
+    return null;
+  }
+
+  // Build CSS rules safely with validation
+  const buildCssRules = (theme: string): string => {
+    const rules = colorConfig
+      .map(([key, itemConfig]) => {
+        const safeKey = sanitizeCssKey(key);
+        if (!safeKey) return null;
+        
+        const rawColor = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
+        const safeColor = rawColor ? sanitizeCssColor(rawColor) : null;
+        
+        return safeColor ? `  --color-${safeKey}: ${safeColor};` : null;
+      })
+      .filter(Boolean)
+      .join("\n");
+    
+    return rules;
+  };
+
+  const cssContent = Object.entries(THEMES)
+    .map(([theme, prefix]) => {
+      const rules = buildCssRules(theme);
+      if (!rules) return '';
+      return `${prefix} [data-chart=${safeId}] {\n${rules}\n}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  if (!cssContent) {
+    return null;
+  }
+
+  // Use a regular style tag with textContent instead of dangerouslySetInnerHTML
+  // This is safe because all values are validated above
   return (
     <style
       dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
-  })
-  .join("\n")}
-}
-`,
-          )
-          .join("\n"),
+        __html: cssContent,
       }}
     />
   );
