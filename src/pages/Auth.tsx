@@ -51,6 +51,19 @@ const Auth = () => {
           <p className="text-muted-foreground text-center mt-2">
             Join the community and start predicting
           </p>
+          <svg
+            className="w-full h-4 mt-4"
+            viewBox="0 0 200 10"
+            preserveAspectRatio="none"
+          >
+            <path
+              d="M0,5 Q25,0 50,5 T100,5 T150,5 T200,5"
+              fill="none"
+              stroke="hsl(var(--primary))"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
         </div>
 
         <Tabs defaultValue="signin" className="w-full">
