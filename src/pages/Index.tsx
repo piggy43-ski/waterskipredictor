@@ -31,6 +31,33 @@ const Index = () => {
   const [userPredictions, setUserPredictions] = useState<UserPrediction[]>([]);
   const [settledPredictions, setSettledPredictions] = useState<UserPrediction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [displayedBalance, setDisplayedBalance] = useState(0);
+
+  // Animate balance counting up
+  useEffect(() => {
+    const targetBalance = wallet?.totalBalance ?? 0;
+    if (targetBalance === 0) {
+      setDisplayedBalance(0);
+      return;
+    }
+    
+    const duration = 1000; // 1 second animation
+    const steps = 30;
+    const increment = targetBalance / steps;
+    let current = 0;
+    
+    const timer = setInterval(() => {
+      current += increment;
+      if (current >= targetBalance) {
+        setDisplayedBalance(targetBalance);
+        clearInterval(timer);
+      } else {
+        setDisplayedBalance(Math.floor(current));
+      }
+    }, duration / steps);
+    
+    return () => clearInterval(timer);
+  }, [wallet?.totalBalance]);
 
   useEffect(() => {
     fetchData();
@@ -179,7 +206,7 @@ const Index = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground mb-1">Your Balance</p>
-              <p className="text-4xl font-display font-bold">{(wallet?.totalBalance ?? 0).toLocaleString()}</p>
+              <p className="text-4xl font-display font-bold">{displayedBalance.toLocaleString()}</p>
               <p className="text-sm text-muted-foreground">tokens</p>
             </div>
             <Button 
