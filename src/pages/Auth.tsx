@@ -48,14 +48,14 @@ const Auth = () => {
   // Landing View
   if (view === 'landing') {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 animate-fade-in">
         {/* Logo */}
-        <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mb-12">
+        <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mb-12 animate-scale-in">
           <Waves className="w-10 h-10 text-primary-foreground" />
         </div>
 
         {/* Hero Text */}
-        <div className="text-center mb-16">
+        <div className="text-center mb-16 animate-fade-in" style={{ animationDelay: '100ms' }}>
           <h1 className="text-4xl sm:text-5xl font-black uppercase tracking-tight leading-tight">
             <span className="text-primary">WHERE EVERY</span>
             <br />
@@ -67,17 +67,17 @@ const Auth = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="w-full max-w-sm space-y-4">
+        <div className="w-full max-w-sm space-y-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
           <Button 
             onClick={() => setView('signup')} 
-            className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full"
+            className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full transition-transform hover:scale-[1.02] active:scale-[0.98]"
           >
             Sign Up
           </Button>
           <Button 
             onClick={() => setView('signin')} 
             variant="outline"
-            className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full border-2"
+            className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full border-2 transition-transform hover:scale-[1.02] active:scale-[0.98]"
           >
             Log In
           </Button>
@@ -89,18 +89,18 @@ const Auth = () => {
   // Sign In View
   if (view === 'signin') {
     return (
-      <div className="min-h-screen bg-background flex flex-col px-6 py-8">
+      <div className="min-h-screen bg-background flex flex-col px-6 py-8 animate-fade-in">
         {/* Back Button */}
         <button 
           onClick={handleBack}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
+          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8 hover:-translate-x-1 transition-transform"
         >
           <ArrowLeft className="w-5 h-5" />
           <span className="font-medium">Back</span>
         </button>
 
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-8 animate-fade-in" style={{ animationDelay: '50ms' }}>
           <h1 className="text-3xl font-black uppercase tracking-tight text-foreground">
             LOG IN
           </h1>
@@ -110,7 +110,7 @@ const Auth = () => {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSignIn} className="space-y-6 flex-1">
+        <form onSubmit={handleSignIn} className="space-y-6 flex-1 animate-fade-in" style={{ animationDelay: '100ms' }}>
           <div className="space-y-2">
             <Label htmlFor="signin-email" className="flex items-center gap-2 text-sm font-medium">
               <Mail className="w-4 h-4" />
@@ -123,7 +123,7 @@ const Auth = () => {
               value={signInEmail} 
               onChange={e => setSignInEmail(e.target.value)} 
               required 
-              className="h-12 rounded-xl"
+              className="h-12 rounded-xl transition-shadow focus:shadow-md"
             />
             <p className="text-xs text-muted-foreground">
               Use the email you signed up with
@@ -139,19 +139,19 @@ const Auth = () => {
               value={signInPassword} 
               onChange={e => setSignInPassword(e.target.value)} 
               required 
-              className="h-12 rounded-xl"
+              className="h-12 rounded-xl transition-shadow focus:shadow-md"
             />
           </div>
 
           <div className="text-right">
-            <Link to="/reset-password" className="text-sm text-primary hover:underline">
+            <Link to="/reset-password" className="text-sm text-primary hover:underline transition-colors">
               Forgot your password?
             </Link>
           </div>
 
           <Button 
             type="submit" 
-            className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full mt-8" 
+            className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full mt-8 transition-transform hover:scale-[1.02] active:scale-[0.98]" 
             disabled={loading}
           >
             {loading ? 'Signing in...' : 'Log In'}
@@ -163,18 +163,18 @@ const Auth = () => {
 
   // Sign Up View
   return (
-    <div className="min-h-screen bg-background flex flex-col px-6 py-8">
+    <div className="min-h-screen bg-background flex flex-col px-6 py-8 animate-fade-in">
       {/* Back Button */}
       <button 
         onClick={handleBack}
-        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
+        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8 hover:-translate-x-1 transition-transform"
       >
         <ArrowLeft className="w-5 h-5" />
         <span className="font-medium">Back</span>
       </button>
 
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-8 animate-fade-in" style={{ animationDelay: '50ms' }}>
         <h1 className="text-3xl font-black uppercase tracking-tight text-foreground">
           SIGN UP
         </h1>
@@ -184,7 +184,7 @@ const Auth = () => {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSignUp} className="space-y-5 flex-1">
+      <form onSubmit={handleSignUp} className="space-y-5 flex-1 animate-fade-in" style={{ animationDelay: '100ms' }}>
         <div className="space-y-2">
           <Label htmlFor="signup-email" className="flex items-center gap-2 text-sm font-medium">
             <Mail className="w-4 h-4" />
@@ -197,7 +197,7 @@ const Auth = () => {
             value={signUpEmail} 
             onChange={e => setSignUpEmail(e.target.value)} 
             required 
-            className="h-12 rounded-xl"
+            className="h-12 rounded-xl transition-shadow focus:shadow-md"
           />
         </div>
 
@@ -210,7 +210,7 @@ const Auth = () => {
             value={username} 
             onChange={e => setUsername(e.target.value)} 
             required 
-            className="h-12 rounded-xl"
+            className="h-12 rounded-xl transition-shadow focus:shadow-md"
           />
           <p className="text-xs text-muted-foreground">
             This will be your display name
@@ -225,7 +225,7 @@ const Auth = () => {
             placeholder="USA" 
             value={country} 
             onChange={e => setCountry(e.target.value)} 
-            className="h-12 rounded-xl"
+            className="h-12 rounded-xl transition-shadow focus:shadow-md"
           />
         </div>
 
@@ -238,13 +238,13 @@ const Auth = () => {
             value={signUpPassword} 
             onChange={e => setSignUpPassword(e.target.value)} 
             required 
-            className="h-12 rounded-xl"
+            className="h-12 rounded-xl transition-shadow focus:shadow-md"
           />
         </div>
 
         <Button 
           type="submit" 
-          className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full mt-4" 
+          className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full mt-4 transition-transform hover:scale-[1.02] active:scale-[0.98]" 
           disabled={loading}
         >
           {loading ? 'Creating account...' : 'Sign Up'}
