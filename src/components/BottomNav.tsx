@@ -3,8 +3,8 @@ import { NavLink } from './NavLink';
 
 export const BottomNav = () => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-      <div className="max-w-lg mx-auto px-2 py-2">
+<nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-lg border-t border-border/50 z-50">
+      <div className="max-w-lg mx-auto px-2 py-2.5">
         <div className="flex justify-around items-center">
           <NavLink
             to="/"

@@ -1,39 +1,67 @@
 import { ReactNode } from 'react';
-import { ChevronLeft, User } from 'lucide-react';
+import { ChevronLeft, User, Coins } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
+import { useWallet } from '@/hooks/useWallet';
+import { useAuth } from '@/contexts/AuthContext';
+
 interface PageHeaderProps {
   title: string;
   subtitle?: string;
   showBack?: boolean;
   action?: ReactNode;
+  showBalance?: boolean;
 }
+
 export const PageHeader = ({
   title,
   subtitle,
   showBack = false,
-  action
+  action,
+  showBalance = true
 }: PageHeaderProps) => {
   const navigate = useNavigate();
-  return <header className="sticky top-0 z-40 glass-header border-b border-border/30">
-      <div className="max-w-lg mx-auto px-4 py-4">
+  const { wallet } = useWallet();
+  const { user } = useAuth();
+
+  return (
+    <header className="sticky top-0 z-40 glass-header border-b border-border/30">
+      <div className="max-w-lg mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 flex-1">
-            {showBack && <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="shrink-0">
+          <div className="flex items-center gap-3">
+            {showBack && (
+              <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="shrink-0 -ml-2">
                 <ChevronLeft className="w-5 h-5" />
-              </Button>}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-medium tracking-tight text-center bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent truncate">{title}</h1>
-              {subtitle && <p className="text-sm text-muted-foreground truncate">{subtitle}</p>}
+              </Button>
+            )}
+            <div>
+              <h1 className="text-xl font-display font-bold tracking-tight text-foreground">{title}</h1>
+              {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
             </div>
           </div>
-          <div className="flex items-center gap-2 ml-4 shrink-0">
+          
+          <div className="flex items-center gap-2">
+            {user && showBalance && wallet && (
+              <div 
+                className="flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1.5 rounded-full cursor-pointer hover:bg-primary/20 transition-colors"
+                onClick={() => navigate('/wallet')}
+              >
+                <Coins className="w-4 h-4" />
+                <span className="text-sm font-bold">{(wallet.totalBalance ?? 0).toLocaleString()}</span>
+              </div>
+            )}
             {action}
-            <Button variant="ghost" size="icon" onClick={() => navigate('/profile')} className="shrink-0">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => navigate('/profile')} 
+              className="shrink-0 w-9 h-9 rounded-full"
+            >
               <User className="w-5 h-5" />
             </Button>
           </div>
         </div>
       </div>
-    </header>;
+    </header>
+  );
 };
