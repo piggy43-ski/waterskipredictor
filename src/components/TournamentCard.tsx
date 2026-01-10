@@ -3,7 +3,7 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Calendar, MapPin, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getBettingWindowStatus } from '@/utils/bettingWindows';
+import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { useState, useEffect } from 'react';
 
 interface TournamentCardProps {
@@ -15,11 +15,11 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
   const startTime = tournament.start_datetime || tournament.start_date;
   const endTime = tournament.end_datetime || tournament.end_date;
   
-  const [bettingWindow, setBettingWindow] = useState(getBettingWindowStatus(startTime, endTime, tournament.settled_at));
+  const [predictionWindow, setPredictionWindow] = useState(getPredictionWindowStatus(startTime, endTime, tournament.settled_at));
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setBettingWindow(getBettingWindowStatus(startTime, endTime, tournament.settled_at));
+      setPredictionWindow(getPredictionWindowStatus(startTime, endTime, tournament.settled_at));
     }, 1000);
 
     return () => clearInterval(interval);
@@ -78,18 +78,18 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
         ))}
       </div>
 
-      {/* Betting Window Status */}
+      {/* Prediction Window Status */}
       <div className="mt-4 pt-3 border-t border-border/50">
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-muted-foreground" />
           <span className={`text-sm font-medium ${
-            bettingWindow.canBet 
+            predictionWindow.canPredict 
               ? 'text-primary' 
-              : bettingWindow.status === 'upcoming' 
+              : predictionWindow.status === 'upcoming' 
                 ? 'text-muted-foreground' 
                 : 'text-destructive'
           }`}>
-            {bettingWindow.message}
+            {predictionWindow.message}
           </span>
         </div>
       </div>

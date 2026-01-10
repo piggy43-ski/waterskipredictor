@@ -56,7 +56,7 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-primary" />
-            Parlay Bet
+            Parlay Prediction
             <Badge variant="secondary">{selections.length} Legs</Badge>
             {hasMaxLegs && (
               <Badge variant="destructive">Max {PARLAY_CONFIG.MAX_LEGS}</Badge>
@@ -77,7 +77,7 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Selected Bets */}
+        {/* Selected Predictions */}
         <div className="space-y-2">
           {selections.map((selection) => {
             const marketType = getMarketType(selection);
@@ -146,7 +146,7 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
               onClick={onPlaceParlay}
               disabled={!hasMinLegs || hasMaxLegs}
             >
-              Place Parlay Bet
+              Place Parlay Prediction
             </Button>
             {onExitParlayMode && (
               <Button 

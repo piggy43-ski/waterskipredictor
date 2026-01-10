@@ -55,7 +55,7 @@ export const PodiumPredictionDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Confirm Podium Bet</DialogTitle>
+          <DialogTitle>Confirm Podium Prediction</DialogTitle>
           <DialogDescription>
             {tournamentName} • {discipline.charAt(0).toUpperCase() + discipline.slice(1)} • {gender === 'men' ? 'Men' : 'Women'}
           </DialogDescription>
@@ -133,7 +133,7 @@ export const PodiumPredictionDialog = ({
             disabled={!stakeAmount || Number(stakeAmount) <= 0 || Number(stakeAmount) > walletBalance}
             className="flex-1"
           >
-            Place Bet
+            Place Prediction
           </Button>
         </div>
       </DialogContent>

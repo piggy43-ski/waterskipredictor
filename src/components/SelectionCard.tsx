@@ -93,7 +93,7 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
             </span>
           </div>
           
-          {/* Single Bet Mode - Show only Place Bet */}
+          {/* Single Mode - Show only Place Prediction */}
           {mode === 'single' && (
             <Button 
               size="sm" 
@@ -104,7 +104,7 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
                 onSelect(selection);
               }}
             >
-              Place Bet
+              Place Prediction
             </Button>
           )}
           

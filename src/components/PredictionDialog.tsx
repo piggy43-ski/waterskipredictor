@@ -73,7 +73,7 @@ export const PredictionDialog = ({
       <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
           <DialogTitle>
-            {isParlay ? `Confirm Parlay Bet` : 'Confirm Bet'}
+            {isParlay ? `Confirm Parlay Prediction` : 'Confirm Prediction'}
           </DialogTitle>
           <DialogDescription>
             {marketContext && (
@@ -88,7 +88,7 @@ export const PredictionDialog = ({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Bet Summary for single bets */}
+          {/* Prediction Summary for single predictions */}
           {!isParlay && marketContext && (
             <div className="bg-muted/50 rounded-lg p-3 space-y-1">
               <div className="text-xs text-muted-foreground">Market Type</div>
