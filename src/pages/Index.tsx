@@ -184,7 +184,7 @@ const Index = () => {
             </div>
             <Button 
               size="icon"
-              className="w-14 h-14 rounded-full bg-gradient-water shadow-premium hover:scale-105 transition-transform duration-200 animate-pulse"
+              className="w-14 h-14 rounded-full bg-gradient-water shadow-[0_0_20px_hsl(var(--primary)/0.5)] hover:shadow-[0_0_30px_hsl(var(--primary)/0.7)] hover:scale-105 transition-all duration-200"
               onClick={(e) => {
                 e.stopPropagation();
                 navigate('/wallet');
