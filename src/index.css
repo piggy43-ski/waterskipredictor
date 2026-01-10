@@ -78,3 +78,32 @@ All colors MUST be HSL.
     0 1px 0 0 hsl(var(--foreground) / 0.03) inset,
     0 -1px 0 0 hsl(var(--background) / 0.5) inset;
 }
+
+/* Modern typography utilities */
+.section-title {
+  @apply text-xs font-bold uppercase tracking-wider text-muted-foreground;
+}
+
+.heading-bold {
+  @apply font-display font-bold tracking-tight;
+}
+
+/* Pill badge styles */
+.pill-badge {
+  @apply px-3 py-1.5 rounded-full text-sm font-semibold;
+}
+
+/* Card enhancements */
+.card-modern {
+  @apply rounded-2xl border-border/30 shadow-lg;
+}
+
+/* Horizontal scroll container */
+.scroll-horizontal {
+  @apply flex gap-3 overflow-x-auto pb-2 -mx-4 px-4;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-horizontal::-webkit-scrollbar {
+  display: none;
+}
