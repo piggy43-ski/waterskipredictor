@@ -184,13 +184,13 @@ const Index = () => {
             </div>
             <Button 
               size="icon"
-              className="w-12 h-12 rounded-full bg-primary hover:bg-primary/90"
+              className="w-14 h-14 rounded-full bg-gradient-water shadow-premium hover:scale-105 transition-transform duration-200 animate-pulse"
               onClick={(e) => {
                 e.stopPropagation();
                 navigate('/wallet');
               }}
             >
-              <Coins className="w-5 h-5" />
+              <span className="text-2xl font-bold text-primary-foreground">+</span>
             </Button>
           </div>
         </Card>
