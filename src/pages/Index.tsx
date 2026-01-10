@@ -171,56 +171,93 @@ const Index = () => {
       <PageHeader title="WaterSki Predictor" />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        {/* Stats Overview Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="p-4 rounded-2xl border-border/30">
-            <p className="text-xs text-muted-foreground mb-1">Active Bets</p>
-            <p className="text-2xl font-display font-bold">{activePredictions.length}</p>
-          </Card>
-          <Card className="p-4 rounded-2xl border-border/30">
-            <p className="text-xs text-muted-foreground mb-1">Potential Win</p>
-            <p className="text-2xl font-display font-bold text-primary">
-              {activePredictions.reduce((sum, p) => sum + p.potential_payout, 0).toLocaleString()}
-            </p>
-          </Card>
+      {/* Quick Actions - Wallet Only */}
+        <Card 
+          className="p-4 cursor-pointer hover:bg-accent/50 transition-colors rounded-2xl border-border/30"
+          onClick={() => navigate('/wallet')}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <Coins className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <p className="font-display font-bold text-sm">Wallet</p>
+              <p className="text-xs text-muted-foreground">{(wallet?.totalBalance ?? 0).toLocaleString()} tokens</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+        </Card>
+
+        {/* Entries Section - Consolidated betting info */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="section-title">ENTRIES</p>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-xs text-primary h-auto p-0"
+              onClick={() => navigate('/predictions')}
+            >
+              View All
+            </Button>
+          </div>
+
+          {/* Entries Summary */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <Card className="p-4 rounded-2xl border-border/30">
+              <p className="text-xs text-muted-foreground mb-1">Active Entries</p>
+              <p className="text-2xl font-display font-bold">{activePredictions.length}</p>
+            </Card>
+            <Card className="p-4 rounded-2xl border-border/30">
+              <p className="text-xs text-muted-foreground mb-1">Potential Win</p>
+              <p className="text-2xl font-display font-bold text-primary">
+                {activePredictions.reduce((sum, p) => sum + p.potential_payout, 0).toLocaleString()}
+              </p>
+            </Card>
+          </div>
+
+          {/* Active Entries - Horizontal Scroll */}
+          {activePredictions.length > 0 ? (
+            <div className="scroll-horizontal">
+              {activePredictions.map((prediction) => (
+                <Card key={prediction.id} className="p-4 bg-gradient-card border-border/30 rounded-2xl min-w-[280px] flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="font-display font-bold mb-1">
+                        {prediction.athlete_name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {prediction.tournament_name}
+                      </p>
+                    </div>
+                    <div className="text-right ml-4">
+                      <p className="font-display font-bold text-lg text-primary">
+                        {prediction.potential_payout.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Staked: {prediction.staked_tokens}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card className="p-6 text-center rounded-2xl border-border/30">
+              <p className="text-sm text-muted-foreground mb-3">No active entries yet</p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="rounded-xl"
+                onClick={() => navigate('/tournaments')}
+              >
+                Place Your First Entry
+              </Button>
+            </Card>
+          )}
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-3">
-          <Card 
-            className="p-4 cursor-pointer hover:bg-accent/50 transition-colors rounded-2xl border-border/30"
-            onClick={() => navigate('/predictions')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-primary" />
-              </div>
-              <div className="flex-1">
-                <p className="font-display font-bold text-sm">My Bets</p>
-                <p className="text-xs text-muted-foreground">{activePredictions.length} active</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </div>
-          </Card>
-
-          <Card 
-            className="p-4 cursor-pointer hover:bg-accent/50 transition-colors rounded-2xl border-border/30"
-            onClick={() => navigate('/wallet')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Coins className="w-5 h-5 text-primary" />
-              </div>
-              <div className="flex-1">
-                <p className="font-display font-bold text-sm">Wallet</p>
-                <p className="text-xs text-muted-foreground">{(wallet?.totalBalance ?? 0).toLocaleString()} tokens</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </div>
-          </Card>
-        </div>
-
-        {/* Settled Bets Summary */}
+        {/* Settled Entries Summary */}
         {settledPredictions.length > 0 && (
           <Card 
             className="p-4 cursor-pointer hover:bg-accent/50 transition-colors rounded-2xl border-border/30"
@@ -259,66 +296,6 @@ const Index = () => {
               </div>
             </div>
           </Card>
-        )}
-
-        {/* Featured Tournament */}
-        {featuredTournament ? (
-          <div>
-            <p className="section-title mb-3">FEATURED EVENT</p>
-            <TournamentCard tournament={featuredTournament} />
-          </div>
-        ) : (
-          <Card className="p-6 text-center rounded-2xl">
-            <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <h3 className="font-display font-bold mb-2">No Events Scheduled</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              New tournaments will be announced soon. Stay tuned!
-            </p>
-            <Button variant="outline" onClick={() => navigate('/tournaments')} className="rounded-xl">
-              Browse All Tournaments
-            </Button>
-          </Card>
-        )}
-
-        {/* Active Predictions - Horizontal Scroll */}
-        {activePredictions.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <p className="section-title">YOUR ACTIVE PREDICTIONS</p>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="text-xs text-primary h-auto p-0"
-                onClick={() => navigate('/predictions')}
-              >
-                View All
-              </Button>
-            </div>
-            <div className="scroll-horizontal">
-              {activePredictions.map((prediction) => (
-                <Card key={prediction.id} className="p-4 bg-gradient-card border-border/30 rounded-2xl min-w-[280px] flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="font-display font-bold mb-1">
-                        {prediction.athlete_name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {prediction.tournament_name}
-                      </p>
-                    </div>
-                    <div className="text-right ml-4">
-                      <p className="font-display font-bold text-lg text-primary">
-                        {prediction.potential_payout.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Staked: {prediction.staked_tokens}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
         )}
 
         {/* Upcoming Events */}
