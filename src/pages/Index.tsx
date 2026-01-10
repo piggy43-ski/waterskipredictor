@@ -171,20 +171,27 @@ const Index = () => {
       <PageHeader title="WaterSki Predictor" />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-      {/* Quick Actions - Wallet Only */}
+        {/* Big Token Balance */}
         <Card 
-          className="p-4 cursor-pointer hover:bg-accent/50 transition-colors rounded-2xl border-border/30"
+          className="p-6 cursor-pointer hover:bg-accent/50 transition-colors rounded-2xl border-border/30 bg-gradient-card"
           onClick={() => navigate('/wallet')}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <Coins className="w-5 h-5 text-primary" />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Your Balance</p>
+              <p className="text-4xl font-display font-bold">{(wallet?.totalBalance ?? 0).toLocaleString()}</p>
+              <p className="text-sm text-muted-foreground">tokens</p>
             </div>
-            <div className="flex-1">
-              <p className="font-display font-bold text-sm">Wallet</p>
-              <p className="text-xs text-muted-foreground">{(wallet?.totalBalance ?? 0).toLocaleString()} tokens</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <Button 
+              size="icon"
+              className="w-12 h-12 rounded-full bg-primary hover:bg-primary/90"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate('/wallet');
+              }}
+            >
+              <Coins className="w-5 h-5" />
+            </Button>
           </div>
         </Card>
 
@@ -205,7 +212,7 @@ const Index = () => {
           {/* Entries Summary */}
           <div className="grid grid-cols-2 gap-3 mb-4">
             <Card className="p-4 rounded-2xl border-border/30">
-              <p className="text-xs text-muted-foreground mb-1">Active Entries</p>
+              <p className="text-xs text-muted-foreground mb-1">Active</p>
               <p className="text-2xl font-display font-bold">{activePredictions.length}</p>
             </Card>
             <Card className="p-4 rounded-2xl border-border/30">
@@ -257,7 +264,7 @@ const Index = () => {
           )}
         </div>
 
-        {/* Settled Entries Summary */}
+        {/* Recent Results */}
         {settledPredictions.length > 0 && (
           <Card 
             className="p-4 cursor-pointer hover:bg-accent/50 transition-colors rounded-2xl border-border/30"
@@ -298,26 +305,24 @@ const Index = () => {
           </Card>
         )}
 
-        {/* Upcoming Events */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <p className="section-title">UPCOMING EVENTS</p>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              className="text-xs text-primary h-auto p-0"
-              onClick={() => navigate('/tournaments')}
-            >
-              View All
-            </Button>
+        {/* Featured Event */}
+        {featuredTournament && (
+          <div>
+            <p className="section-title mb-3">FEATURED EVENT</p>
+            <TournamentCard tournament={featuredTournament} />
           </div>
+        )}
+
+        {/* Browse All Tournaments */}
+        <div>
+          <p className="section-title mb-3">BROWSE TOURNAMENTS</p>
           <Button 
             variant="outline" 
             className="w-full rounded-xl h-12 font-bold"
             onClick={() => navigate('/tournaments')}
           >
             <Trophy className="w-4 h-4 mr-2" />
-            Browse All Tournaments
+            View All Tournaments
           </Button>
         </div>
       </div>
