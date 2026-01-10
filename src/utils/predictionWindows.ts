@@ -1,10 +1,10 @@
 /**
- * Calculate betting window status for a tournament
+ * Calculate prediction window status for a tournament
  */
-export interface BettingWindow {
+export interface PredictionWindow {
   status: 'upcoming' | 'open' | 'closed' | 'finished';
   message: string;
-  canBet: boolean;
+  canPredict: boolean;
   countdown?: {
     days: number;
     hours: number;
@@ -14,39 +14,39 @@ export interface BettingWindow {
 }
 
 /**
- * Get betting window status for a tournament
+ * Get prediction window status for a tournament
  * @param startDatetime - Tournament start datetime (or fallback date)
  * @param endDatetime - Tournament end datetime (or fallback date)
  * @param settledAt - Tournament settlement timestamp
- * @returns Betting window information
+ * @returns Prediction window information
  */
-export const getBettingWindowStatus = (
+export const getPredictionWindowStatus = (
   startDatetime?: string, 
   endDatetime?: string,
   settledAt?: string | null
-): BettingWindow => {
+): PredictionWindow => {
   const now = new Date();
   
   if (!startDatetime) {
     return {
       status: 'upcoming',
       message: 'Tournament dates TBD',
-      canBet: false
+      canPredict: false
     };
   }
   
   const start = new Date(startDatetime);
   const end = endDatetime ? new Date(endDatetime) : null;
   
-  // Betting opens 24 hours before tournament start
-  const bettingOpens = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+  // Predictions open 24 hours before tournament start
+  const predictionsOpen = new Date(start.getTime() - 24 * 60 * 60 * 1000);
   
   // Tournament has been settled
   if (settledAt) {
     return {
       status: 'finished',
       message: 'Tournament settled',
-      canBet: false
+      canPredict: false
     };
   }
   
@@ -55,56 +55,56 @@ export const getBettingWindowStatus = (
     return {
       status: 'finished',
       message: 'Tournament finished',
-      canBet: false
+      canPredict: false
     };
   }
   
-  // Tournament has started (betting LOCKED)
+  // Tournament has started (predictions LOCKED)
   if (now >= start) {
     return {
       status: 'closed',
-      message: 'Betting locked – event in progress',
-      canBet: false
+      message: 'Predictions locked – event in progress',
+      canPredict: false
     };
   }
   
-  // Betting window is open (within 24h before start)
-  if (now >= bettingOpens && now < start) {
+  // Prediction window is open (within 24h before start)
+  if (now >= predictionsOpen && now < start) {
     const timeLeft = start.getTime() - now.getTime();
     const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
     const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
     
     const message = days > 0 
-      ? `Betting open – Starts in ${days}d ${hours}h`
+      ? `Predictions open – Starts in ${days}d ${hours}h`
       : hours > 0
-        ? `Betting open – Starts in ${hours}h ${minutes}m`
-        : `Betting open – Starts in ${minutes}m`;
+        ? `Predictions open – Starts in ${hours}h ${minutes}m`
+        : `Predictions open – Starts in ${minutes}m`;
     
     return {
       status: 'open',
       message,
-      canBet: true
+      canPredict: true
     };
   }
   
-  // Too early - betting not yet open
-  const timeUntilOpen = bettingOpens.getTime() - now.getTime();
+  // Too early - predictions not yet open
+  const timeUntilOpen = predictionsOpen.getTime() - now.getTime();
   const days = Math.floor(timeUntilOpen / (1000 * 60 * 60 * 24));
   const hours = Math.floor((timeUntilOpen % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const minutes = Math.floor((timeUntilOpen % (1000 * 60 * 60)) / (1000 * 60));
   const seconds = Math.floor((timeUntilOpen % (1000 * 60)) / 1000);
   
   const message = days > 0 
-    ? `Betting opens in ${days}d ${hours}h`
+    ? `Predictions open in ${days}d ${hours}h`
     : hours > 0
-      ? `Betting opens in ${hours}h ${minutes}m`
-      : `Betting opens in ${minutes}m`;
+      ? `Predictions open in ${hours}h ${minutes}m`
+      : `Predictions open in ${minutes}m`;
   
   return {
     status: 'upcoming',
     message,
-    canBet: false,
+    canPredict: false,
     countdown: { days, hours, minutes, seconds }
   };
 };

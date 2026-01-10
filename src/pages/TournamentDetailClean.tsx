@@ -19,7 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { ParlayBuilder } from '@/components/ParlayBuilder';
 import { Button } from '@/components/ui/button';
-import { getBettingWindowStatus } from '@/utils/bettingWindows';
+import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const TournamentDetail = () => {
@@ -38,7 +38,7 @@ const TournamentDetail = () => {
   const [markets, setMarkets] = useState<Market[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [loading, setLoading] = useState(true);
-  const [bettingWindow, setBettingWindow] = useState<ReturnType<typeof getBettingWindowStatus> | null>(null);
+  const [predictionWindow, setPredictionWindow] = useState<ReturnType<typeof getPredictionWindowStatus> | null>(null);
   const [athleteResults, setAthleteResults] = useState<any[]>([]);
   const [userPredictions, setUserPredictions] = useState<any[]>([]);
   
@@ -71,12 +71,12 @@ const TournamentDetail = () => {
     fetchWalletBalance();
   }, [user, navigate, id]);
 
-  // Show toast if user came from "Bet Again"
+  // Show toast if user came from "Predict Again"
   useEffect(() => {
     if (betAgainAthletes.length > 0 && !loading) {
       toast({
         title: "Previous picks highlighted",
-        description: `${betAgainAthletes.length} athlete(s) from your previous bet are highlighted below`
+        description: `${betAgainAthletes.length} athlete(s) from your previous prediction are highlighted below`
       });
     }
   }, [betAgainAthletes.length, loading]);
@@ -84,14 +84,14 @@ const TournamentDetail = () => {
   useEffect(() => {
     if (!tournament) return;
 
-    const updateBettingWindow = () => {
+    const updatePredictionWindow = () => {
       const startTime = tournament.start_datetime || tournament.start_date;
       const endTime = tournament.end_datetime || tournament.end_date;
-      setBettingWindow(getBettingWindowStatus(startTime, endTime, tournament.settled_at));
+      setPredictionWindow(getPredictionWindowStatus(startTime, endTime, tournament.settled_at));
     };
 
-    updateBettingWindow();
-    const interval = setInterval(updateBettingWindow, 1000);
+    updatePredictionWindow();
+    const interval = setInterval(updatePredictionWindow, 1000);
 
     return () => clearInterval(interval);
   }, [tournament]);
@@ -233,10 +233,10 @@ const TournamentDetail = () => {
   const womenMarkets = markets.filter(m => m.category === 'open_women');
 
   const handleSelectSelection = (selection: Selection) => {
-    if (!bettingWindow?.canBet) {
+    if (!predictionWindow?.canPredict) {
       toast({
-        title: "Betting Closed",
-        description: bettingWindow?.message || "Betting is not available for this tournament",
+        title: "Predictions Closed",
+        description: predictionWindow?.message || "Predictions are not available for this tournament",
         variant: "destructive"
       });
       return;
@@ -431,7 +431,7 @@ const TournamentDetail = () => {
       });
 
       toast({
-        title: "Podium Bet Placed!",
+        title: "Podium Prediction Placed!",
         description: `${stakeAmount} tokens staked on podium prediction`,
       });
 
@@ -447,7 +447,7 @@ const TournamentDetail = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to place podium bet. Please try again.",
+        description: "Failed to place podium prediction. Please try again.",
         variant: "destructive"
       });
     }
@@ -552,7 +552,7 @@ const TournamentDetail = () => {
       });
 
       toast({
-        title: "Bet Placed!",
+        title: "Prediction Placed!",
         description: `${stakeAmount} tokens staked on ${selectedSelection.athlete.name}`,
       });
 
@@ -562,7 +562,7 @@ const TournamentDetail = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to place bet. Please try again.",
+        description: "Failed to place prediction. Please try again.",
         variant: "destructive"
       });
     }
@@ -594,19 +594,19 @@ const TournamentDetail = () => {
             </span>
           </div>
           
-          {/* Betting Window Status */}
-          {bettingWindow && (
+          {/* Prediction Window Status */}
+          {predictionWindow && (
             <Alert className={
-              bettingWindow.canBet 
+              predictionWindow.canPredict 
                 ? 'border-primary/50 bg-primary/10' 
-                : bettingWindow.status === 'upcoming'
+                : predictionWindow.status === 'upcoming'
                   ? 'border-border bg-muted/30'
                   : 'border-destructive/50 bg-destructive/10'
             }>
               <Clock className="h-4 w-4" />
               <AlertDescription className="flex items-center justify-between">
-                <span className="font-medium">{bettingWindow.message}</span>
-                {!bettingWindow.canBet && bettingWindow.status !== 'upcoming' && (
+                <span className="font-medium">{predictionWindow.message}</span>
+                {!predictionWindow.canPredict && predictionWindow.status !== 'upcoming' && (
                   <AlertCircle className="h-4 w-4 text-destructive" />
                 )}
               </AlertDescription>
@@ -615,14 +615,14 @@ const TournamentDetail = () => {
         </div>
 
         {/* Parlay Builder Button */}
-        {tournament.status !== 'finished' && bettingWindow?.canBet && (
+        {tournament.status !== 'finished' && predictionWindow?.canPredict && (
           <div className="mb-6 flex items-center justify-center">
             <Button 
               onClick={() => setParlayBuilderOpen(true)}
               size="lg"
               className="w-full max-w-md"
             >
-              Build Parlay Bet
+              Build Parlay Prediction
             </Button>
           </div>
         )}
@@ -703,7 +703,7 @@ const TournamentDetail = () => {
                           })
                           .sort((a, b) => a.decimal_odds - b.decimal_odds)
                           .map((selection) => (
-                            <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                            <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
                                 selection={selection}
                                 onSelect={handleSelectSelection}
@@ -728,7 +728,7 @@ const TournamentDetail = () => {
                           const podiumState = getPodiumState(discipline, 'men');
                           
                           return podiumMarket ? (
-                            <div className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                            <div className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <PodiumSelectionCard
                                 athletes={podiumSelections}
                                 selectedAthletes={podiumState.selectedAthletes}
@@ -764,7 +764,7 @@ const TournamentDetail = () => {
                           })
                           .sort((a, b) => a.decimal_odds - b.decimal_odds)
                           .map((selection) => (
-                            <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                            <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
                                 selection={selection}
                                 onSelect={handleSelectSelection}
@@ -799,7 +799,7 @@ const TournamentDetail = () => {
                           })
                           .sort((a, b) => a.decimal_odds - b.decimal_odds)
                           .map((selection) => (
-                            <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                            <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
                                 selection={selection}
                                 onSelect={handleSelectSelection}
@@ -824,7 +824,7 @@ const TournamentDetail = () => {
                           const podiumState = getPodiumState(discipline, 'women');
                           
                           return podiumMarket ? (
-                            <div className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                            <div className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <PodiumSelectionCard
                                 athletes={podiumSelections}
                                 selectedAthletes={podiumState.selectedAthletes}
@@ -860,7 +860,7 @@ const TournamentDetail = () => {
                           })
                           .sort((a, b) => a.decimal_odds - b.decimal_odds)
                           .map((selection) => (
-                            <div key={selection.id} className={!bettingWindow?.canBet ? 'opacity-50 pointer-events-none' : ''}>
+                            <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
                                 selection={selection}
                                 onSelect={handleSelectSelection}

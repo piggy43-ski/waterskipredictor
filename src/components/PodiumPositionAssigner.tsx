@@ -161,7 +161,7 @@ export const PodiumPositionAssigner = ({
             disabled={!first || !second || !third}
             className="flex-1"
           >
-            Continue to Bet
+            Continue to Predict
           </Button>
         </div>
       </CardContent>

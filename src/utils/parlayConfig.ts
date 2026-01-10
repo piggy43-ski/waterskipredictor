@@ -1,14 +1,14 @@
 /**
- * Configuration constants for the parlay betting system
+ * Configuration constants for the parlay prediction system
  */
 export const PARLAY_CONFIG = {
-  /** Minimum number of legs required for a parlay bet (now 1 leg = winner + podium + highest) */
+  /** Minimum number of legs required for a parlay prediction (now 1 leg = winner + podium + highest) */
   MIN_LEGS: 1,
   
-  /** Maximum number of legs allowed in a parlay bet (3 disciplines × 2 genders) */
+  /** Maximum number of legs allowed in a parlay prediction (3 disciplines × 2 genders) */
   MAX_LEGS: 6,
   
-  /** Maximum stake amount in tokens for any parlay bet */
+  /** Maximum stake amount in tokens for any parlay prediction */
   MAX_STAKE: 10000,
   
   /** House edge applied to parlay odds (0 for progressive cap system) */

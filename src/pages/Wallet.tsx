@@ -191,11 +191,11 @@ const Wallet = () => {
           <ul className="text-sm text-muted-foreground space-y-2">
             <li className="flex items-start gap-2">
               <span className="text-primary font-bold">•</span>
-              <span><strong>Purchased tokens</strong> can be used for bets and fantasy entries</span>
+              <span><strong>Purchased tokens</strong> can be used for predictions and fantasy entries</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-success font-bold">•</span>
-              <span><strong>Earned tokens</strong> (from winnings) can be used for bets, fantasy, AND rewards redemptions</span>
+              <span><strong>Earned tokens</strong> (from winnings) can be used for predictions, fantasy, AND rewards redemptions</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-muted-foreground">•</span>

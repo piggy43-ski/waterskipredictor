@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info, RotateCcw, TrendingDown, Percent } from 'lucide-react';
 import { decimalToAmerican } from '@/utils/oddsConverter';
-import { getBettingWindowStatus } from '@/utils/bettingWindows';
+import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -179,7 +179,7 @@ const Predictions = () => {
       }
     } catch (error) {
       toast({
-        title: "Error loading bets",
+        title: "Error loading predictions",
         description: "Please try again later",
         variant: "destructive"
       });
@@ -202,17 +202,17 @@ const Predictions = () => {
     
     setIsDeleting(true);
     try {
-      // Check betting window is still open (double-check before delete)
-      const bettingWindow = getBettingWindowStatus(
+      // Check prediction window is still open (double-check before delete)
+      const predictionWindow = getPredictionWindowStatus(
         deleteSlip.tournament_start_datetime,
         deleteSlip.tournament_end_datetime,
         deleteSlip.tournament_settled_at
       );
       
-      if (!bettingWindow.canBet) {
+      if (!predictionWindow.canPredict) {
         toast({
-          title: "Cannot cancel bet",
-          description: "Betting window has closed",
+          title: "Cannot cancel prediction",
+          description: "Prediction window has closed",
           variant: "destructive"
         });
         return;
@@ -255,7 +255,7 @@ const Predictions = () => {
       }
       
       toast({
-        title: "Bet cancelled",
+        title: "Prediction cancelled",
         description: `${deleteSlip.total_stake_tokens} tokens refunded to your wallet`
       });
       
@@ -263,7 +263,7 @@ const Predictions = () => {
       fetchBetSlips();
     } catch (error) {
       toast({
-        title: "Error cancelling bet",
+        title: "Error cancelling prediction",
         description: "Please try again",
         variant: "destructive"
       });
@@ -278,17 +278,17 @@ const Predictions = () => {
     
     setIsEditing(true);
     try {
-      // 1. Check betting window is still open
-      const bettingWindow = getBettingWindowStatus(
+      // 1. Check prediction window is still open
+      const predictionWindow = getPredictionWindowStatus(
         editSlip.tournament_start_datetime,
         editSlip.tournament_end_datetime,
         editSlip.tournament_settled_at
       );
       
-      if (!bettingWindow.canBet) {
+      if (!predictionWindow.canPredict) {
         toast({
-          title: "Cannot edit bet",
-          description: "Betting window has closed",
+          title: "Cannot edit prediction",
+          description: "Prediction window has closed",
           variant: "destructive"
         });
         return;
@@ -358,9 +358,9 @@ const Predictions = () => {
       }
 
       toast({
-        title: "Bet updated",
+        title: "Prediction updated",
         description: stakeDiff > 0 
-          ? `Added ${stakeDiff} tokens to your bet`
+          ? `Added ${stakeDiff} tokens to your prediction`
           : `Refunded ${Math.abs(stakeDiff)} tokens to your wallet`
       });
       
@@ -368,7 +368,7 @@ const Predictions = () => {
       fetchWalletBalance();
     } catch (error) {
       toast({
-        title: "Error updating bet",
+        title: "Error updating prediction",
         description: "Please try again",
         variant: "destructive"
       });
@@ -411,15 +411,15 @@ const Predictions = () => {
         return;
       }
 
-      // Find a tournament with open betting window
+      // Find a tournament with open prediction window
       for (const tournament of upcomingTournaments) {
-        const bettingWindow = getBettingWindowStatus(
+        const predictionWindow = getPredictionWindowStatus(
           tournament.start_datetime,
           tournament.end_datetime,
           tournament.settled_at
         );
         
-        if (!bettingWindow.canBet) continue;
+        if (!predictionWindow.canPredict) continue;
 
         // Navigate to the tournament with athlete names in state
         navigate(`/tournaments/${tournament.id}`, {
@@ -473,14 +473,14 @@ const Predictions = () => {
     const isParlayDisplay = slip.type === 'parlay' || actualLegCount > 1;
     const americanOdds = decimalToAmerican(slip.total_odds_decimal);
     
-    // Check if betting window is still open
-    const bettingWindow = isActive ? getBettingWindowStatus(
+    // Check if prediction window is still open
+    const predictionWindow = isActive ? getPredictionWindowStatus(
       slip.tournament_start_datetime,
       slip.tournament_end_datetime,
       slip.tournament_settled_at
     ) : null;
     
-    const canCancel = isActive && bettingWindow?.canBet;
+    const canCancel = isActive && predictionWindow?.canPredict;
     
     const getBetTypeLabel = (marketType: string) => {
       switch (marketType) {
@@ -677,7 +677,7 @@ const Predictions = () => {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                {bettingWindow.message}
+                {predictionWindow?.message}
               </p>
             </div>
           )}
@@ -704,7 +704,7 @@ const Predictions = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="My Bets" />
+        <PageHeader title="My Predictions" />
         <div className="max-w-lg mx-auto px-4 py-12 text-center text-muted-foreground">
           Loading...
         </div>
@@ -730,7 +730,7 @@ const Predictions = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="My Bets" />
+      <PageHeader title="My Predictions" />
       
       <div className="max-w-lg mx-auto px-4 py-6">
         {/* Stats Summary */}
