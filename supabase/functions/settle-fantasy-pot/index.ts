@@ -136,32 +136,28 @@ serve(async (req) => {
       }
     }
 
-    // Process payouts
+    // Process payouts atomically using database function (prevents race conditions)
     for (const payout of payouts) {
-      // Get current wallet balance
-      const { data: wallet, error: walletError } = await supabase
+      // Atomically increment earned tokens
+      const { error: incrementError } = await supabase
+        .rpc('increment_earned_tokens', {
+          user_id_param: payout.user_id,
+          amount: payout.amount
+        });
+
+      if (incrementError) {
+        console.error(`Error updating wallet for user ${payout.user_id}:`, incrementError);
+        continue;
+      }
+
+      // Get the new balance for transaction logging
+      const { data: wallet } = await supabase
         .from('token_wallets')
-        .select('earned_tokens')
+        .select('earned_tokens, purchased_tokens')
         .eq('user_id', payout.user_id)
         .single();
 
-      if (walletError) {
-        console.error(`Error fetching wallet for user ${payout.user_id}:`, walletError);
-        continue;
-      }
-
-      const newBalance = (wallet?.earned_tokens || 0) + payout.amount;
-
-      // Update wallet
-      const { error: updateWalletError } = await supabase
-        .from('token_wallets')
-        .update({ earned_tokens: newBalance })
-        .eq('user_id', payout.user_id);
-
-      if (updateWalletError) {
-        console.error(`Error updating wallet for user ${payout.user_id}:`, updateWalletError);
-        continue;
-      }
+      const newBalance = (wallet?.earned_tokens || 0) + (wallet?.purchased_tokens || 0);
 
       // Log transaction
       await supabase

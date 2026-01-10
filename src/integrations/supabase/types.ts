@@ -1702,6 +1702,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      deduct_tokens: {
+        Args: { amount_param: number; user_id_param: string }
+        Returns: {
+          new_balance: number
+          new_earned_tokens: number
+          new_purchased_tokens: number
+          success: boolean
+        }[]
+      }
       emit_event: {
         Args: { p_event_type: string; p_payload?: Json; p_user_id: string }
         Returns: string
