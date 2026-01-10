@@ -430,13 +430,34 @@ const Rewards = () => {
             ))}
           </TabsContent>
 
-          {Object.entries(categories).map(([category, categoryRewards]) => (
-            <TabsContent key={category} value={category} className="space-y-4">
-              {categoryRewards.map((reward) => (
-                <RewardCard key={reward.id} reward={reward} />
-              ))}
-            </TabsContent>
-          ))}
+          <TabsContent value="coaching" className="space-y-4">
+            {categories.coaching.map((reward) => (
+              <RewardCard key={reward.id} reward={reward} />
+            ))}
+          </TabsContent>
+
+          <TabsContent value="gear" className="space-y-4">
+            {categories.gear.map((reward) => (
+              <RewardCard key={reward.id} reward={reward} />
+            ))}
+          </TabsContent>
+
+          <TabsContent value="experience" className="space-y-4">
+            <Card className="p-8 bg-gradient-card border-border/50 text-center">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold mb-2">VIP Experiences</h3>
+                  <Badge variant="secondary" className="mb-3">Coming Soon</Badge>
+                  <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+                    Exclusive VIP experiences and premium rewards are on the way. Stay tuned!
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
