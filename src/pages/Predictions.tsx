@@ -243,20 +243,15 @@ const Predictions = () => {
       
       if (deleteError) throw deleteError;
       
-      // 4. Refund tokens to wallet
-      const { data: wallet } = await supabase
-        .from('token_wallets')
-        .select('earned_tokens')
-        .eq('user_id', user.id)
-        .single();
+      // 4. Refund tokens to wallet atomically using database function (prevents race conditions)
+      const { error: refundError } = await supabase
+        .rpc('increment_earned_tokens', {
+          user_id_param: user.id,
+          amount: deleteSlip.total_stake_tokens
+        });
       
-      if (wallet) {
-        await supabase
-          .from('token_wallets')
-          .update({ 
-            earned_tokens: wallet.earned_tokens + deleteSlip.total_stake_tokens 
-          })
-          .eq('user_id', user.id);
+      if (refundError) {
+        console.error('Error refunding tokens:', refundError);
       }
       
       toast({
