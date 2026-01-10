@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { Waves, ArrowLeft, Mail } from 'lucide-react';
 
@@ -21,6 +22,7 @@ const Auth = () => {
   const [username, setUsername] = useState('');
   const [country, setCountry] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -167,9 +169,22 @@ const Auth = () => {
             />
           </div>
 
-          <div className="text-right">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="remember-me" 
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
+              />
+              <Label 
+                htmlFor="remember-me" 
+                className="text-sm font-normal cursor-pointer"
+              >
+                Remember me
+              </Label>
+            </div>
             <Link to="/reset-password" className="text-sm text-primary hover:underline transition-colors">
-              Forgot your password?
+              Forgot password?
             </Link>
           </div>
 
