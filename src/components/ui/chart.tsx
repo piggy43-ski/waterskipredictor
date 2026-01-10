@@ -160,15 +160,9 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
-  // Use a regular style tag with textContent instead of dangerouslySetInnerHTML
-  // This is safe because all values are validated above
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: cssContent,
-      }}
-    />
-  );
+  // Render as a plain text node inside <style> (no dangerouslySetInnerHTML)
+  // Safe because all values are validated above.
+  return <style>{cssContent}</style>;
 };
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
