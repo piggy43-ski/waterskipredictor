@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { Waves, ArrowLeft, Mail } from 'lucide-react';
 
@@ -10,7 +11,7 @@ type AuthView = 'landing' | 'signin' | 'signup';
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { user, signIn, signUp } = useAuth();
+  const { user, loading: authLoading, signIn, signUp } = useAuth();
   
   const [view, setView] = useState<AuthView>('landing');
   const [signInEmail, setSignInEmail] = useState('');
@@ -19,7 +20,7 @@ const Auth = () => {
   const [signUpPassword, setSignUpPassword] = useState('');
   const [username, setUsername] = useState('');
   const [country, setCountry] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -27,18 +28,41 @@ const Auth = () => {
     }
   }, [user, navigate]);
 
+  // Loading skeleton while checking auth status
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 animate-fade-in">
+        {/* Logo Skeleton */}
+        <Skeleton className="w-20 h-20 rounded-full mb-12" />
+
+        {/* Hero Text Skeleton */}
+        <div className="text-center mb-16 space-y-3">
+          <Skeleton className="h-12 w-64 mx-auto" />
+          <Skeleton className="h-12 w-56 mx-auto" />
+          <Skeleton className="h-8 w-48 mx-auto mt-4" />
+        </div>
+
+        {/* Action Buttons Skeleton */}
+        <div className="w-full max-w-sm space-y-4">
+          <Skeleton className="h-14 w-full rounded-full" />
+          <Skeleton className="h-14 w-full rounded-full" />
+        </div>
+      </div>
+    );
+  }
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setFormLoading(true);
     await signIn(signInEmail, signInPassword);
-    setLoading(false);
+    setFormLoading(false);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setFormLoading(true);
     await signUp(signUpEmail, signUpPassword, username, country);
-    setLoading(false);
+    setFormLoading(false);
   };
 
   const handleBack = () => {
@@ -152,9 +176,9 @@ const Auth = () => {
           <Button 
             type="submit" 
             className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full mt-8 transition-transform hover:scale-[1.02] active:scale-[0.98]" 
-            disabled={loading}
+            disabled={formLoading}
           >
-            {loading ? 'Signing in...' : 'Log In'}
+            {formLoading ? 'Signing in...' : 'Log In'}
           </Button>
         </form>
       </div>
@@ -245,9 +269,9 @@ const Auth = () => {
         <Button 
           type="submit" 
           className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full mt-4 transition-transform hover:scale-[1.02] active:scale-[0.98]" 
-          disabled={loading}
+          disabled={formLoading}
         >
-          {loading ? 'Creating account...' : 'Sign Up'}
+          {formLoading ? 'Creating account...' : 'Sign Up'}
         </Button>
       </form>
     </div>
