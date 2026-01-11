@@ -77,7 +77,7 @@ const Auth = () => {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 animate-fade-in">
         {/* Logo */}
-        <div className="w-24 h-24 mb-12 animate-scale-in">
+        <div className="w-32 h-32 mb-12 animate-scale-in">
           <img src={logo} alt="WaterSki Predictor" className="w-full h-full object-contain" />
         </div>
 
