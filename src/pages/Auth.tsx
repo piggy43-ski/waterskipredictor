@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
-import { Waves, ArrowLeft, Mail } from 'lucide-react';
+import { ArrowLeft, Mail } from 'lucide-react';
+import logo from '@/assets/logo.png';
 
 type AuthView = 'landing' | 'signin' | 'signup';
 
@@ -76,8 +77,8 @@ const Auth = () => {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 animate-fade-in">
         {/* Logo */}
-        <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mb-12 animate-scale-in">
-          <Waves className="w-10 h-10 text-primary-foreground" />
+        <div className="w-24 h-24 mb-12 animate-scale-in">
+          <img src={logo} alt="WaterSki Predictor" className="w-full h-full object-contain" />
         </div>
 
         {/* Hero Text */}
