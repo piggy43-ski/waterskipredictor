@@ -73,7 +73,7 @@ const Auth = () => {
     return <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 animate-fade-in">
         {/* Logo */}
         <div className="w-32 h-32 mb-12 animate-scale-in">
-          <img alt="WaterSki Predictor" className="w-full h-full object-contain" src="/lovable-uploads/044d3856-abd0-4945-b0cb-c53a0704eb2e.png" />
+          <img alt="WaterSki Predictor" className="w-full h-full object-contain" src="/lovable-uploads/f9f1dcf1-992d-434c-80c3-7cc815c9ecf9.png" />
         </div>
 
         {/* Hero Text */}
