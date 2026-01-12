@@ -72,8 +72,12 @@ const Auth = () => {
   if (view === 'landing') {
     return <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 animate-fade-in">
         {/* Logo */}
-        <div className="w-32 h-32 mb-12 animate-scale-in">
-          <img alt="WaterSki Predictor" className="w-full h-full object-contain" src="/lovable-uploads/f9f1dcf1-992d-434c-80c3-7cc815c9ecf9.png" />
+        <div className="w-64 h-64 mb-12 animate-scale-in">
+          <img 
+            alt="WaterSki Predictor" 
+            className="w-full h-full object-contain drop-shadow-[0_0_15px_hsl(var(--primary)/0.1)]" 
+            src="/lovable-uploads/f9f1dcf1-992d-434c-80c3-7cc815c9ecf9.png" 
+          />
         </div>
 
         {/* Hero Text */}
