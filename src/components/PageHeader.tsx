@@ -6,7 +6,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface PageHeaderProps {
-  title: string;
+  title: ReactNode;
   subtitle?: string;
   showBack?: boolean;
   action?: ReactNode;

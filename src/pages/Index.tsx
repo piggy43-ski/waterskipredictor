@@ -147,7 +147,7 @@ const Index = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="WaterSki Predictor" showBalance={false} />
+        <PageHeader title={<>WaterSki <span className="text-primary">Predictor</span></>} showBalance={false} />
         <div className="max-w-lg mx-auto px-4 py-12 text-center text-muted-foreground">
           Loading...
         </div>
@@ -159,7 +159,7 @@ const Index = () => {
   if (!user) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="WaterSki Predictor" showBalance={false} />
+        <PageHeader title={<>WaterSki <span className="text-primary">Predictor</span></>} showBalance={false} />
         
         <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
           {/* Welcome Card */}
@@ -195,7 +195,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="WaterSki Predictor" />
+      <PageHeader title={<>WaterSki <span className="text-primary">Predictor</span></>} />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
         {/* Big Token Balance */}
