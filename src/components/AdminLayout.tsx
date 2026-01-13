@@ -10,20 +10,22 @@ interface AdminLayoutProps {
 
 const navItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/admin/house-ledger', label: 'House Ledger', icon: DollarSign },
+  { path: '/admin/house-ledger', label: 'Platform Ledger', icon: DollarSign },
   { path: '/admin/users', label: 'Users', icon: UserCog },
   { path: '/admin/athletes', label: 'Athletes', icon: Users },
   { path: '/admin/rankings-sync', label: 'Rankings Auto-Sync', icon: TrendingUp },
   { path: '/admin/rankings-import', label: 'Manual Import', icon: TrendingUp },
-  { path: '/admin/tournament-settlement', label: 'Results & Settlement', icon: FileCheck },
+  { path: '/admin/tournament-settlement', label: 'Results Processing', icon: FileCheck },
   { path: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { path: '/admin/fantasy-pots', label: 'Fantasy Leagues', icon: Crown },
-  { path: '/admin/markets', label: 'Markets', icon: TrendingUp },
+  { path: '/admin/markets', label: 'Contests', icon: TrendingUp },
+  { path: '/admin/market-results', label: 'Contest Results', icon: Trophy },
+  { path: '/admin/odds-review', label: 'Multiplier Review', icon: TrendingUp },
   { path: '/admin/selections', label: 'Selections', icon: Trophy },
   { path: '/admin/rewards', label: 'Rewards', icon: Gift },
   { path: '/admin/liabilities', label: 'Reward Liabilities', icon: ClipboardList },
   { path: '/admin/data-integrity', label: 'Data Integrity', icon: Database },
-  { path: '/admin/settlement-test', label: 'Settlement Test', icon: FlaskConical },
+  { path: '/admin/settlement-test', label: 'Results Test', icon: FlaskConical },
 ];
 
 export const AdminLayout = ({ children }: AdminLayoutProps) => {
