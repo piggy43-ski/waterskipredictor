@@ -40,6 +40,8 @@ import AdminSettlementTest from "./pages/admin/SettlementTest";
 import AdminLiabilities from "./pages/admin/Liabilities";
 import AdminMarketResults from "./pages/admin/MarketResults";
 import AdminMarketOddsReview from "./pages/admin/MarketOddsReview";
+import AdminContestEntries from "./pages/admin/ContestEntries";
+import AdminMonteCarloTest from "./pages/admin/MonteCarloTest";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCanceled from "./pages/PaymentCanceled";
 
@@ -90,6 +92,8 @@ const App = () => (
             <Route path="/admin/liabilities" element={<AdminLiabilities />} />
             <Route path="/admin/market-results" element={<AdminMarketResults />} />
             <Route path="/admin/odds-review" element={<AdminMarketOddsReview />} />
+            <Route path="/admin/contest-entries" element={<AdminContestEntries />} />
+            <Route path="/admin/monte-carlo-test" element={<AdminMonteCarloTest />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
