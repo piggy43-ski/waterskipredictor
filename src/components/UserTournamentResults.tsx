@@ -25,7 +25,7 @@ export const UserTournamentResults = ({ predictions }: UserTournamentResultsProp
       <Card className="p-6">
         <div className="text-center text-muted-foreground">
           <Trophy className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>No predictions placed for this tournament</p>
+          <p>No entries placed for this tournament</p>
         </div>
       </Card>
     );
@@ -35,7 +35,7 @@ export const UserTournamentResults = ({ predictions }: UserTournamentResultsProp
   const totalWon = predictions
     .filter(p => p.status === 'WON')
     .reduce((sum, p) => sum + (p.payout_tokens || 0), 0);
-  const netProfit = totalWon - totalStaked;
+  const netRewards = totalWon - totalStaked;
 
   const wonCount = predictions.filter(p => p.status === 'WON').length;
   const lostCount = predictions.filter(p => p.status === 'LOST').length;
@@ -52,26 +52,26 @@ export const UserTournamentResults = ({ predictions }: UserTournamentResultsProp
         {/* Summary Stats */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-muted/50 rounded-lg p-4">
-            <p className="text-xs text-muted-foreground mb-1">Total Staked</p>
+            <p className="text-xs text-muted-foreground mb-1">Total Entered</p>
             <p className="text-lg font-bold flex items-center gap-1">
               <Coins className="w-4 h-4" />
               {totalStaked.toLocaleString()}
             </p>
           </div>
           <div className="bg-muted/50 rounded-lg p-4">
-            <p className="text-xs text-muted-foreground mb-1">Total Won</p>
+            <p className="text-xs text-muted-foreground mb-1">Rewards Earned</p>
             <p className="text-lg font-bold text-success flex items-center gap-1">
               <TrendingUp className="w-4 h-4" />
               {totalWon.toLocaleString()}
             </p>
           </div>
           <div className="bg-muted/50 rounded-lg p-4">
-            <p className="text-xs text-muted-foreground mb-1">Net Profit</p>
+            <p className="text-xs text-muted-foreground mb-1">Net Rewards</p>
             <p className={`text-lg font-bold flex items-center gap-1 ${
-              netProfit >= 0 ? 'text-success' : 'text-destructive'
+              netRewards >= 0 ? 'text-success' : 'text-destructive'
             }`}>
-              {netProfit >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              {netProfit >= 0 ? '+' : ''}{netProfit.toLocaleString()}
+              {netRewards >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+              {netRewards >= 0 ? '+' : ''}{netRewards.toLocaleString()}
             </p>
           </div>
         </div>
@@ -79,10 +79,10 @@ export const UserTournamentResults = ({ predictions }: UserTournamentResultsProp
         {/* Win/Loss Summary */}
         <div className="flex items-center gap-2 mb-4 text-sm">
           <Badge variant="outline" className="bg-success/10 text-success border-success/20">
-            {wonCount} Won
+            {wonCount} Correct
           </Badge>
           <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
-            {lostCount} Lost
+            {lostCount} Incorrect
           </Badge>
           {voidCount > 0 && (
             <Badge variant="outline" className="bg-muted text-muted-foreground">
@@ -94,7 +94,7 @@ export const UserTournamentResults = ({ predictions }: UserTournamentResultsProp
 
       {/* Predictions List */}
       <div className="space-y-3">
-        <h3 className="font-semibold text-sm text-muted-foreground">Your Predictions</h3>
+        <h3 className="font-semibold text-sm text-muted-foreground">Your Entries</h3>
         {predictions.map((prediction) => (
           <div
             key={prediction.id}
@@ -127,21 +127,21 @@ export const UserTournamentResults = ({ predictions }: UserTournamentResultsProp
                     : ''
                 }
               >
-                {prediction.status}
+                {prediction.status === 'WON' ? 'Correct' : prediction.status === 'LOST' ? 'Incorrect' : prediction.status}
               </Badge>
             </div>
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Stake</p>
+                <p className="text-xs text-muted-foreground">Entry</p>
                 <p className="font-semibold">{prediction.staked_tokens}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Odds</p>
-                <p className="font-semibold">{prediction.decimal_odds.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Multiplier</p>
+                <p className="font-semibold">{prediction.decimal_odds.toFixed(2)}x</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">
-                  {prediction.status === 'WON' ? 'Won' : prediction.status === 'VOID' ? 'Refund' : 'Could Win'}
+                  {prediction.status === 'WON' ? 'Earned' : prediction.status === 'VOID' ? 'Refund' : 'Potential'}
                 </p>
                 <p className={`font-semibold ${
                   prediction.status === 'WON' ? 'text-success' : ''

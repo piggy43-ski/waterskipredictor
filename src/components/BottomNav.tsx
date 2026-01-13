@@ -39,7 +39,7 @@ export const BottomNav = () => {
             activeClassName="!text-primary"
           >
             <Wallet className="w-5 h-5" />
-            <span className="text-xs font-medium">Wallet</span>
+            <span className="text-xs font-medium">Tokens</span>
           </NavLink>
           
           <NavLink

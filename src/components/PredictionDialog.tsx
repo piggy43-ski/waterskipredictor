@@ -44,7 +44,7 @@ export const PredictionDialog = ({
   
   const isParlay = parlaySelections.length >= 2;
   
-  // For parlay, calculate combined odds with house edge
+  // For parlay, calculate combined multiplier with platform edge
   const combinedOdds = isParlay 
     ? calculateParlayOdds(parlaySelections.map(s => s.decimal_odds), PARLAY_CONFIG.HOUSE_EDGE)
     : selection?.decimal_odds || 1;
@@ -73,7 +73,7 @@ export const PredictionDialog = ({
       <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
           <DialogTitle>
-            {isParlay ? `Confirm Parlay Prediction` : 'Confirm Prediction'}
+            {isParlay ? `Confirm Combo Entry` : 'Confirm Entry'}
           </DialogTitle>
           <DialogDescription>
             {marketContext && (
@@ -82,7 +82,7 @@ export const PredictionDialog = ({
               </span>
             )}
             {isParlay 
-              ? `${parlaySelections.length}-leg parlay - All selections must win`
+              ? `${parlaySelections.length}-pick combo - All selections must be correct`
               : selection?.description}
           </DialogDescription>
         </DialogHeader>
@@ -91,7 +91,7 @@ export const PredictionDialog = ({
           {/* Prediction Summary for single predictions */}
           {!isParlay && marketContext && (
             <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-              <div className="text-xs text-muted-foreground">Market Type</div>
+              <div className="text-xs text-muted-foreground">Contest Type</div>
               <div className="font-semibold">{marketContext.marketType}</div>
               {selection && (
                 <>
@@ -101,10 +101,10 @@ export const PredictionDialog = ({
               )}
             </div>
           )}
-          {/* Show parlay legs if it's a parlay */}
+          {/* Show combo picks if it's a combo entry */}
           {isParlay && (
             <div className="space-y-2 mb-4">
-              <Label className="text-sm font-semibold">Parlay Legs:</Label>
+              <Label className="text-sm font-semibold">Combo Picks:</Label>
               {parlaySelections.map((sel, idx) => (
                 <div key={sel.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
                   <span className="text-sm">{idx + 1}. {sel.athlete.name}</span>
@@ -119,16 +119,16 @@ export const PredictionDialog = ({
           <div className="bg-muted/30 rounded-lg p-4 space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">
-                {isParlay ? 'Combined Odds' : 'Odds'}
+                {isParlay ? 'Combined Multiplier' : 'Multiplier'}
               </span>
               <span className="font-semibold text-primary flex items-center gap-1">
                 <TrendingUp className="w-4 h-4" />
-                {decimalToAmerican(combinedOdds)}
+                {combinedOdds.toFixed(2)}x
               </span>
             </div>
             {isParlay && (
               <div className="text-xs text-muted-foreground">
-                5% house edge applied to combined odds
+                5% platform fee applied to combined multiplier
               </div>
             )}
             <div className="flex justify-between text-sm">
@@ -141,13 +141,13 @@ export const PredictionDialog = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="stake">Stake Amount (Tokens)</Label>
+            <Label htmlFor="stake">Entry Amount (Tokens)</Label>
             <Input
               id="stake"
               type="number"
               value={stakeAmount}
               onChange={(e) => setStakeAmount(e.target.value)}
-              placeholder="Enter stake amount"
+              placeholder="Enter entry amount"
               min="1"
               max={Math.min(walletBalance, PARLAY_CONFIG.MAX_STAKE)}
             />
@@ -155,7 +155,7 @@ export const PredictionDialog = ({
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Maximum stake is {PARLAY_CONFIG.MAX_STAKE.toLocaleString()} tokens
+                  Maximum entry is {PARLAY_CONFIG.MAX_STAKE.toLocaleString()} tokens
                 </AlertDescription>
               </Alert>
             )}
@@ -178,11 +178,11 @@ export const PredictionDialog = ({
           {stake > 0 && (
             <div className="bg-primary/10 rounded-lg p-4 space-y-2 border border-primary/20">
               <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Potential Payout</span>
+                <span className="text-sm text-muted-foreground">Projected Rewards</span>
                 <span className="font-bold text-lg">{potentialPayout.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Potential Profit</span>
+                <span className="text-sm text-muted-foreground">Potential Rewards</span>
                 <span className="font-semibold text-primary">
                   +{potentialProfit.toLocaleString()}
                 </span>
@@ -203,7 +203,7 @@ export const PredictionDialog = ({
             disabled={!isValidStake}
             className="bg-primary hover:bg-primary/90"
           >
-            Confirm Prediction
+            Confirm Entry
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -11,7 +11,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Selection } from '@/types';
 import { Coins, Medal } from 'lucide-react';
-import { decimalToAmerican } from '@/utils/oddsConverter';
 
 interface PodiumPredictionDialogProps {
   selections: Selection[];
@@ -38,10 +37,10 @@ export const PodiumPredictionDialog = ({
 
   if (selections.length !== 3) return null;
 
-  // Calculate combined odds for podium (lower odds since it's easier to win)
+  // Calculate combined multiplier for podium (lower since it's easier to be correct)
   const combinedOdds = selections.reduce((acc, sel) => acc * sel.decimal_odds, 1) * 0.3;
   const potentialPayout = Math.floor(Number(stakeAmount) * combinedOdds);
-  const americanOdds = decimalToAmerican(combinedOdds);
+  const multiplierDisplay = `${combinedOdds.toFixed(2)}x`;
 
   const handleConfirm = () => {
     const amount = Number(stakeAmount);
@@ -55,16 +54,16 @@ export const PodiumPredictionDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Confirm Podium Prediction</DialogTitle>
+          <DialogTitle>Confirm Podium Entry</DialogTitle>
           <DialogDescription>
             {tournamentName} • {discipline.charAt(0).toUpperCase() + discipline.slice(1)} • {gender === 'men' ? 'Men' : 'Women'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Bet Summary */}
+          {/* Entry Summary */}
           <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-            <div className="text-xs text-muted-foreground">Market Type</div>
+            <div className="text-xs text-muted-foreground">Contest Type</div>
             <div className="font-semibold">Podium Finish (Exact Order)</div>
           </div>
           {/* Selected Athletes with Positions */}
@@ -85,18 +84,18 @@ export const PodiumPredictionDialog = ({
             })}
           </div>
 
-          {/* Combined Odds */}
+          {/* Combined Multiplier */}
           <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg">
-            <span className="text-sm font-medium">Combined Odds:</span>
+            <span className="text-sm font-medium">Combined Multiplier:</span>
             <span className="text-lg font-bold text-primary">
-              {americanOdds}
+              {multiplierDisplay}
             </span>
           </div>
 
-          {/* Stake Amount */}
+          {/* Entry Amount */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="stake">Stake Amount</Label>
+              <Label htmlFor="stake">Entry Amount</Label>
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Coins className="w-4 h-4" />
                 <span>Balance: {walletBalance}</span>
@@ -109,13 +108,13 @@ export const PodiumPredictionDialog = ({
               max={walletBalance}
               value={stakeAmount}
               onChange={(e) => setStakeAmount(e.target.value)}
-              placeholder="Enter stake amount"
+              placeholder="Enter entry amount"
             />
           </div>
 
-          {/* Potential Payout */}
+          {/* Projected Rewards */}
           <div className="flex items-center justify-between p-3 bg-accent rounded-lg">
-            <span className="text-sm font-medium">Potential Payout:</span>
+            <span className="text-sm font-medium">Projected Rewards:</span>
             <span className="text-xl font-bold">{potentialPayout} tokens</span>
           </div>
         </div>
@@ -133,7 +132,7 @@ export const PodiumPredictionDialog = ({
             disabled={!stakeAmount || Number(stakeAmount) <= 0 || Number(stakeAmount) > walletBalance}
             className="flex-1"
           >
-            Place Prediction
+            Place Entry
           </Button>
         </div>
       </DialogContent>
