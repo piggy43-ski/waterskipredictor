@@ -121,11 +121,14 @@ serve(async (req) => {
     console.log('Created tournament entries:', tournamentEntries.length);
 
     // Step 4: Create markets and selections
-    const markets: { id: string; tournament_id: string; name: string; market_type: string; discipline: string; category: string }[] = [];
-    const genders = ['male', 'female'];
+    const markets: { id: string; tournament_id: string; name: string; market_type: string; discipline: string; category: string; gender: string }[] = [];
+    const genderCategories = [
+      { gender: 'male', category: 'open_men' },
+      { gender: 'female', category: 'open_women' }
+    ];
     const disciplines = ['slalom', 'trick', 'jump'];
 
-    for (const gender of genders) {
+    for (const { gender, category } of genderCategories) {
       for (const discipline of disciplines) {
         markets.push({
           id: crypto.randomUUID(),
@@ -133,7 +136,8 @@ serve(async (req) => {
           name: `${gender} ${discipline} Winner`,
           market_type: 'WINNER',
           discipline,
-          category: gender
+          category,
+          gender
         });
       }
     }
@@ -148,7 +152,7 @@ serve(async (req) => {
     // Create selections for each market
     const selections = [];
     for (const market of markets) {
-      const genderAthletes = market.category === 'male' ? maleAthletes : femaleAthletes;
+      const genderAthletes = market.gender === 'male' ? maleAthletes : femaleAthletes;
       for (let i = 0; i < genderAthletes.length; i++) {
         selections.push({
           id: crypto.randomUUID(),
@@ -398,8 +402,9 @@ serve(async (req) => {
     // Step 8: Create athlete results
     const athleteResults = [];
     let position = 1;
+    const gendersForResults = ['male', 'female'];
     
-    for (const gender of genders) {
+    for (const gender of gendersForResults) {
       const genderAthletes = gender === 'male' ? maleAthletes : femaleAthletes;
       for (const discipline of disciplines) {
         position = 1;
@@ -438,7 +443,7 @@ serve(async (req) => {
     // Step 9: Mark winning selections
     // First athlete in each gender wins for each discipline
     for (const market of markets) {
-      const genderAthletes = market.category === 'male' ? maleAthletes : femaleAthletes;
+      const genderAthletes = market.gender === 'male' ? maleAthletes : femaleAthletes;
       const winningAthleteId = genderAthletes[0].id;
       
       // Mark winner
