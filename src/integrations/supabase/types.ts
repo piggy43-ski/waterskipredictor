@@ -883,6 +883,147 @@ export type Database = {
           },
         ]
       }
+      market_entries: {
+        Row: {
+          athlete_id: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          market_id: string
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          market_id: string
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          market_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_entries_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_entries_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_odds: {
+        Row: {
+          athlete_id: string
+          base_decimal_odds: number
+          base_probability: number
+          final_decimal_odds: number
+          generated_at: string | null
+          id: string
+          is_frozen: boolean | null
+          manual_multiplier: number | null
+          market_id: string
+          overround: number | null
+          sims: number | null
+          tau: number | null
+          token_price: number | null
+        }
+        Insert: {
+          athlete_id: string
+          base_decimal_odds: number
+          base_probability: number
+          final_decimal_odds: number
+          generated_at?: string | null
+          id?: string
+          is_frozen?: boolean | null
+          manual_multiplier?: number | null
+          market_id: string
+          overround?: number | null
+          sims?: number | null
+          tau?: number | null
+          token_price?: number | null
+        }
+        Update: {
+          athlete_id?: string
+          base_decimal_odds?: number
+          base_probability?: number
+          final_decimal_odds?: number
+          generated_at?: string | null
+          id?: string
+          is_frozen?: boolean | null
+          manual_multiplier?: number | null
+          market_id?: string
+          overround?: number | null
+          sims?: number | null
+          tau?: number | null
+          token_price?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_odds_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_odds_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_results: {
+        Row: {
+          athlete_id: string
+          created_at: string | null
+          final_rank: number
+          id: string
+          market_id: string
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string | null
+          final_rank: number
+          id?: string
+          market_id: string
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string | null
+          final_rank?: number
+          id?: string
+          market_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_results_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_results_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       markets: {
         Row: {
           category: string
@@ -1200,6 +1341,79 @@ export type Database = {
           },
           {
             foreignKeyName: "rating_adjustments_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rating_history: {
+        Row: {
+          actual_score: number | null
+          athlete_id: string
+          category: string
+          created_at: string | null
+          delta: number
+          discipline: string
+          expected_score: number | null
+          id: string
+          is_major: boolean | null
+          k_factor: number | null
+          market_id: string | null
+          new_rating: number
+          old_rating: number
+          tournament_id: string | null
+        }
+        Insert: {
+          actual_score?: number | null
+          athlete_id: string
+          category: string
+          created_at?: string | null
+          delta: number
+          discipline: string
+          expected_score?: number | null
+          id?: string
+          is_major?: boolean | null
+          k_factor?: number | null
+          market_id?: string | null
+          new_rating: number
+          old_rating: number
+          tournament_id?: string | null
+        }
+        Update: {
+          actual_score?: number | null
+          athlete_id?: string
+          category?: string
+          created_at?: string | null
+          delta?: number
+          discipline?: string
+          expected_score?: number | null
+          id?: string
+          is_major?: boolean | null
+          k_factor?: number | null
+          market_id?: string | null
+          new_rating?: number
+          old_rating?: number
+          tournament_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rating_history_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rating_history_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rating_history_tournament_id_fkey"
             columns: ["tournament_id"]
             isOneToOne: false
             referencedRelation: "tournaments"
