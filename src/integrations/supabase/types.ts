@@ -934,7 +934,9 @@ export type Database = {
           manual_multiplier: number | null
           market_id: string
           overround: number | null
+          scaling_factor: number | null
           sims: number | null
+          target_implied_sum: number | null
           tau: number | null
           token_price: number | null
         }
@@ -949,7 +951,9 @@ export type Database = {
           manual_multiplier?: number | null
           market_id: string
           overround?: number | null
+          scaling_factor?: number | null
           sims?: number | null
+          target_implied_sum?: number | null
           tau?: number | null
           token_price?: number | null
         }
@@ -964,7 +968,9 @@ export type Database = {
           manual_multiplier?: number | null
           market_id?: string
           overround?: number | null
+          scaling_factor?: number | null
           sims?: number | null
+          target_implied_sum?: number | null
           tau?: number | null
           token_price?: number | null
         }

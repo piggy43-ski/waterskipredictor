@@ -15,6 +15,20 @@ const ODDS_MIN = 1.20;
 const ODDS_MAX = 25.0;
 const DEFAULT_MANUAL_MULTIPLIER = 0.97;
 
+// Target implied sums for house edge (1/overround)
+const TARGET_IMPLIED_SUM: Record<string, number> = {
+  WINNER: 0.909,      // 1/1.10 - ensures ~10% house edge
+  PODIUM: 0.847,      // 1/1.18 - ensures ~18% house edge
+  HIGHEST_SCORE: 0.877 // 1/1.14 - ensures ~14% house edge
+};
+
+// Acceptable ranges for implied sum (target +/- tolerance)
+const IMPLIED_SUM_RANGES: Record<string, { min: number; max: number }> = {
+  WINNER: { min: 0.90, max: 0.915 },
+  PODIUM: { min: 0.84, max: 0.86 },
+  HIGHEST_SCORE: { min: 0.87, max: 0.89 }
+};
+
 // Odds ladder for rounding
 const ODDS_LADDER = [
   1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.50, 1.55, 1.60, 1.65, 1.70, 1.75, 1.80, 1.85, 1.90, 1.95,
@@ -75,6 +89,14 @@ function weightedSampleWithoutReplacement(weights: number[], k: number): number[
 interface AthleteOddsInput {
   athleteId: string;
   rating: number;
+}
+
+interface OddsResult {
+  athleteId: string;
+  probability: number;
+  baseOdds: number;
+  finalOdds: number;
+  manualMultiplier: number;
 }
 
 function calculateWinnerOdds(athletes: AthleteOddsInput[], tau: number, overround: number) {
@@ -157,6 +179,45 @@ function calculateHighestScoreOdds(athletes: AthleteOddsInput[], sigma: number, 
       baseOdds: clampOdds(baseOdds),
     };
   });
+}
+
+/**
+ * Normalize multipliers to hit the target implied sum (house edge enforcement).
+ * This runs AFTER manual multipliers and rounding to guarantee the house edge.
+ */
+function normalizeToTarget(
+  results: OddsResult[],
+  targetImpliedSum: number
+): { normalizedResults: OddsResult[]; scalingFactor: number; finalImpliedSum: number } {
+  // Calculate current implied sum
+  let currentImpliedSum = results.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
+  
+  // If already at or below target, no scaling needed
+  if (currentImpliedSum <= targetImpliedSum) {
+    return {
+      normalizedResults: results,
+      scalingFactor: 1.0,
+      finalImpliedSum: currentImpliedSum
+    };
+  }
+  
+  // Calculate scaling factor to bring implied sum down to target
+  const scalingFactor = currentImpliedSum / targetImpliedSum;
+  
+  // Apply scaling, re-round, and re-clamp
+  const normalizedResults = results.map(r => ({
+    ...r,
+    finalOdds: clampOdds(roundToLadder(r.finalOdds * scalingFactor))
+  }));
+  
+  // Recalculate final implied sum after normalization
+  const finalImpliedSum = normalizedResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
+  
+  return {
+    normalizedResults,
+    scalingFactor: Math.round(scalingFactor * 1000) / 1000,
+    finalImpliedSum
+  };
 }
 
 Deno.serve(async (req) => {
@@ -250,6 +311,7 @@ Deno.serve(async (req) => {
     const tau = TAU[discipline] ?? 14;
     const overround = OVERROUND[market.market_type] ?? 1.10;
     const sigma = SIGMA[discipline] ?? 6;
+    const targetImpliedSum = TARGET_IMPLIED_SUM[market.market_type] ?? 0.909;
 
     // Calculate odds based on market type
     let calculatedOdds: { athleteId: string; probability: number; baseOdds: number }[];
@@ -281,24 +343,40 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Prepare upserts
-    const now = new Date().toISOString();
-    const upserts = calculatedOdds.map(calc => {
+    // Step 1: Apply manual multipliers and initial rounding
+    let results: OddsResult[] = calculatedOdds.map(calc => {
       const manualMultiplier = multiplierMap.get(calc.athleteId) ?? DEFAULT_MANUAL_MULTIPLIER;
       const finalOdds = clampOdds(roundToLadder(calc.baseOdds * manualMultiplier));
-      const tokenPrice = Math.round(BANKROLL_UNIT / calc.probability);
+      return {
+        athleteId: calc.athleteId,
+        probability: calc.probability,
+        baseOdds: calc.baseOdds,
+        finalOdds,
+        manualMultiplier,
+      };
+    });
+
+    // Step 2: CRITICAL - Normalize to enforce house edge AFTER all adjustments
+    const { normalizedResults, scalingFactor, finalImpliedSum } = normalizeToTarget(results, targetImpliedSum);
+
+    // Prepare upserts with normalized values
+    const now = new Date().toISOString();
+    const upserts = normalizedResults.map(result => {
+      const tokenPrice = Math.round(BANKROLL_UNIT / result.probability);
 
       return {
         market_id,
-        athlete_id: calc.athleteId,
-        base_probability: Math.round(calc.probability * 10000) / 10000,
-        base_decimal_odds: Math.round(calc.baseOdds * 100) / 100,
-        manual_multiplier: manualMultiplier,
-        final_decimal_odds: finalOdds,
+        athlete_id: result.athleteId,
+        base_probability: Math.round(result.probability * 10000) / 10000,
+        base_decimal_odds: Math.round(result.baseOdds * 100) / 100,
+        manual_multiplier: result.manualMultiplier,
+        final_decimal_odds: result.finalOdds,
         token_price: tokenPrice,
         overround,
         tau,
         sims: market.market_type === "WINNER" ? null : SIMS,
+        target_implied_sum: targetImpliedSum,
+        scaling_factor: scalingFactor,
         generated_at: now,
         is_frozen: false,
       };
@@ -311,20 +389,23 @@ Deno.serve(async (req) => {
 
     if (upsertError) throw upsertError;
 
-    // Calculate implied sum for admin review
-    const impliedSum = calculatedOdds.reduce((sum, calc) => {
-      const manualMultiplier = multiplierMap.get(calc.athleteId) ?? DEFAULT_MANUAL_MULTIPLIER;
-      const finalOdds = clampOdds(roundToLadder(calc.baseOdds * manualMultiplier));
-      return sum + (1 / finalOdds);
-    }, 0);
+    // Calculate house edge percentage
+    const houseEdgePct = ((1 / finalImpliedSum - 1) * 100).toFixed(2);
+    const acceptableRange = IMPLIED_SUM_RANGES[market.market_type] || IMPLIED_SUM_RANGES.WINNER;
+    const isWithinRange = finalImpliedSum >= acceptableRange.min && finalImpliedSum <= acceptableRange.max;
 
     return new Response(
       JSON.stringify({
         success: true,
         market_id,
         market_type: market.market_type,
-        athletes_processed: calculatedOdds.length,
-        implied_sum: Math.round(impliedSum * 1000) / 1000,
+        athletes_processed: normalizedResults.length,
+        target_implied_sum: targetImpliedSum,
+        actual_implied_sum: Math.round(finalImpliedSum * 1000) / 1000,
+        scaling_factor: scalingFactor,
+        house_edge_pct: parseFloat(houseEdgePct),
+        is_within_range: isWithinRange,
+        acceptable_range: acceptableRange,
         overround,
         tau,
       }),

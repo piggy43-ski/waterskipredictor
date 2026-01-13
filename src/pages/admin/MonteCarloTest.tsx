@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { Play, AlertTriangle, CheckCircle, Info, BarChart3 } from 'lucide-react';
+import { Play, AlertTriangle, CheckCircle, Info, BarChart3, Target, TrendingUp, XCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface MarketOdds {
@@ -23,6 +23,8 @@ interface MarketOdds {
   tau: number | null;
   sims: number | null;
   overround: number | null;
+  target_implied_sum: number | null;
+  scaling_factor: number | null;
   athlete: {
     id: string;
     name: string;
@@ -47,17 +49,26 @@ interface Market {
 interface SimulationResult {
   market_id: string;
   market_type: string;
-  athlete_count: number;
-  implied_sum: number;
-  sims: number;
-  tau: number;
-  sigma?: number;
+  athletes_processed: number;
+  target_implied_sum: number;
+  actual_implied_sum: number;
+  scaling_factor: number;
+  house_edge_pct: number;
+  is_within_range: boolean;
+  acceptable_range: { min: number; max: number };
   overround: number;
+  tau: number;
 }
 
 const TAU_VALUES: Record<string, number> = { slalom: 14, trick: 22, jump: 12 };
 const SIGMA_VALUES: Record<string, number> = { slalom: 6, trick: 10, jump: 8 };
 const OVERROUND_VALUES: Record<string, number> = { WINNER: 1.10, PODIUM: 1.18, HIGHEST_SCORE: 1.14 };
+const TARGET_IMPLIED_SUM: Record<string, number> = { WINNER: 0.909, PODIUM: 0.847, HIGHEST_SCORE: 0.877 };
+const IMPLIED_SUM_RANGES: Record<string, { min: number; max: number }> = {
+  WINNER: { min: 0.90, max: 0.915 },
+  PODIUM: { min: 0.84, max: 0.86 },
+  HIGHEST_SCORE: { min: 0.87, max: 0.89 }
+};
 
 export default function MonteCarloTest() {
   const [selectedTournament, setSelectedTournament] = useState<string>('');
@@ -157,15 +168,31 @@ export default function MonteCarloTest() {
     }
   };
 
-  const getImpliedSumStatus = (sum: number) => {
-    if (sum < 1.0) return { status: 'error', message: 'Below 1.0 - no house edge!' };
-    if (sum > 1.25) return { status: 'warning', message: 'Above 1.25 - may be too high' };
-    return { status: 'success', message: 'Healthy margin' };
+  const getImpliedSumStatus = (sum: number, marketType: string) => {
+    const range = IMPLIED_SUM_RANGES[marketType] || IMPLIED_SUM_RANGES.WINNER;
+    const target = TARGET_IMPLIED_SUM[marketType] || 0.909;
+    
+    if (sum >= range.min && sum <= range.max) {
+      return { status: 'success', message: 'House edge enforced ✓', color: 'text-green-600' };
+    }
+    if (sum > range.max) {
+      return { status: 'error', message: 'Above target - reduce manual multipliers', color: 'text-red-600' };
+    }
+    // Below range means even more house edge (which is fine, but unusual)
+    return { status: 'warning', message: `Below target (${target.toFixed(3)}) - house edge higher than expected`, color: 'text-yellow-600' };
   };
 
   const impliedSum = marketOdds?.reduce((acc, o) => acc + (1 / o.final_decimal_odds), 0) || 0;
   const totalProbability = marketOdds?.reduce((acc, o) => acc + o.base_probability, 0) || 0;
-  const impliedStatus = getImpliedSumStatus(impliedSum);
+  const impliedStatus = getImpliedSumStatus(impliedSum, selectedMarketData?.market_type || 'WINNER');
+  const targetSum = TARGET_IMPLIED_SUM[selectedMarketData?.market_type || 'WINNER'] || 0.909;
+  const acceptableRange = IMPLIED_SUM_RANGES[selectedMarketData?.market_type || 'WINNER'] || IMPLIED_SUM_RANGES.WINNER;
+
+  // Calculate house edge percentage
+  const houseEdgePct = impliedSum > 0 ? ((1 / impliedSum - 1) * 100).toFixed(2) : '0.00';
+  
+  // Get scaling factor from the first odds entry (they should all have the same value)
+  const scalingFactor = marketOdds?.[0]?.scaling_factor ?? 1.0;
 
   // Chart data
   const chartData = marketOdds?.map(o => ({
@@ -185,12 +212,15 @@ export default function MonteCarloTest() {
     return colors[index % colors.length];
   };
 
+  // Check if market can be published (house edge enforced)
+  const canPublish = impliedSum >= acceptableRange.min && impliedSum <= acceptableRange.max;
+
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Monte Carlo Simulator</h1>
-          <p className="text-muted-foreground">Test and validate the prediction multiplier engine</p>
+          <p className="text-muted-foreground">Test and validate the prediction multiplier engine with house edge enforcement</p>
         </div>
 
         {/* Market Selection */}
@@ -243,6 +273,7 @@ export default function MonteCarloTest() {
                   <Badge variant="outline">SIGMA: {SIGMA_VALUES[selectedMarketData.discipline]}</Badge>
                 )}
                 <Badge variant="outline">Overround: {OVERROUND_VALUES[selectedMarketData.market_type]}</Badge>
+                <Badge variant="secondary">Target: {TARGET_IMPLIED_SUM[selectedMarketData.market_type]}</Badge>
               </div>
             )}
 
@@ -260,8 +291,30 @@ export default function MonteCarloTest() {
         {/* Results */}
         {marketOdds && marketOdds.length > 0 && (
           <>
-            {/* Statistics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* House Edge Status Banner */}
+            {!canPublish && (
+              <Alert variant="destructive">
+                <XCircle className="h-4 w-4" />
+                <AlertTitle>Cannot Publish - House Edge Not Enforced</AlertTitle>
+                <AlertDescription>
+                  Implied sum ({impliedSum.toFixed(3)}) is outside acceptable range ({acceptableRange.min.toFixed(3)} - {acceptableRange.max.toFixed(3)}). 
+                  Adjust manual multipliers or re-run simulation.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {canPublish && (
+              <Alert className="border-green-500 bg-green-50 dark:bg-green-950/20">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertTitle className="text-green-700 dark:text-green-400">Ready to Publish</AlertTitle>
+                <AlertDescription className="text-green-600 dark:text-green-300">
+                  House edge is enforced. Implied sum ({impliedSum.toFixed(3)}) is within target range.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Statistics - Updated with new metrics */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-2xl font-bold">{marketOdds[0]?.sims?.toLocaleString() || '20,000'}</div>
@@ -270,33 +323,52 @@ export default function MonteCarloTest() {
               </Card>
               <Card>
                 <CardContent className="pt-6">
-                  <div className="text-2xl font-bold">{(totalProbability * 100).toFixed(1)}%</div>
-                  <p className="text-sm text-muted-foreground">Total Probability</p>
+                  <div className="flex items-center gap-2">
+                    <Target className="h-5 w-5 text-muted-foreground" />
+                    <div className="text-2xl font-bold">{targetSum.toFixed(3)}</div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Target Implied Sum</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-6">
-                  <div className={`text-2xl font-bold ${impliedStatus.status === 'success' ? 'text-green-600' : impliedStatus.status === 'warning' ? 'text-yellow-600' : 'text-red-600'}`}>
+                  <div className={`text-2xl font-bold ${impliedStatus.color}`}>
                     {impliedSum.toFixed(3)}
                   </div>
-                  <p className="text-sm text-muted-foreground">Implied Sum</p>
+                  <p className="text-sm text-muted-foreground">Actual Implied Sum</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-6">
-                  <div className="text-2xl font-bold">{marketOdds[0]?.tau || TAU_VALUES[selectedMarketData?.discipline || 'slalom']}</div>
-                  <p className="text-sm text-muted-foreground">TAU Value</p>
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                    <div className={`text-2xl font-bold ${scalingFactor > 1 ? 'text-blue-600' : ''}`}>
+                      {scalingFactor.toFixed(3)}x
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Scaling Factor</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-2xl font-bold text-green-600">{houseEdgePct}%</div>
+                  <p className="text-sm text-muted-foreground">House Edge</p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Implied Sum Alert */}
+            {/* Implied Sum Alert with Details */}
             <Alert variant={impliedStatus.status === 'error' ? 'destructive' : 'default'}>
               {impliedStatus.status === 'success' ? <CheckCircle className="h-4 w-4" /> : 
                impliedStatus.status === 'warning' ? <AlertTriangle className="h-4 w-4" /> : 
                <AlertTriangle className="h-4 w-4" />}
-              <AlertTitle>Implied Sum: {impliedSum.toFixed(3)}</AlertTitle>
-              <AlertDescription>{impliedStatus.message}</AlertDescription>
+              <AlertTitle>
+                Implied Sum: {impliedSum.toFixed(3)} 
+                {scalingFactor > 1 && <span className="ml-2 text-blue-600">(scaled by {scalingFactor.toFixed(3)}x)</span>}
+              </AlertTitle>
+              <AlertDescription>
+                {impliedStatus.message} | Acceptable range: {acceptableRange.min.toFixed(3)} - {acceptableRange.max.toFixed(3)}
+              </AlertDescription>
             </Alert>
 
             {/* Probability Chart */}
@@ -334,6 +406,11 @@ export default function MonteCarloTest() {
                 <CardTitle>Simulation Results</CardTitle>
                 <CardDescription>
                   Calculated probabilities and multipliers for {marketOdds.length} athletes
+                  {scalingFactor > 1 && (
+                    <span className="ml-2 text-blue-600">
+                      (Normalization applied: {scalingFactor.toFixed(3)}x scaling)
+                    </span>
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -406,26 +483,44 @@ export default function MonteCarloTest() {
                     <span>PODIUM: Sum of probabilities = {(totalProbability * 100).toFixed(1)}% (should be ~300%)</span>
                   </div>
                 )}
+                
+                {/* House Edge Validation - CRITICAL */}
                 <div className="flex items-center gap-2">
-                  {impliedSum > 1.0 ? 
+                  {canPublish ? 
                     <CheckCircle className="h-4 w-4 text-green-600" /> : 
-                    <AlertTriangle className="h-4 w-4 text-red-600" />}
-                  <span>Implied sum {impliedSum.toFixed(3)} &gt; 1.0 (platform margin built in)</span>
+                    <XCircle className="h-4 w-4 text-red-600" />}
+                  <span className={canPublish ? '' : 'text-red-600 font-medium'}>
+                    House edge: Implied sum {impliedSum.toFixed(3)} is {canPublish ? 'within' : 'OUTSIDE'} range ({acceptableRange.min.toFixed(3)} - {acceptableRange.max.toFixed(3)})
+                  </span>
                 </div>
+
+                {/* Normalization Applied */}
+                <div className="flex items-center gap-2">
+                  {scalingFactor > 1 ? 
+                    <CheckCircle className="h-4 w-4 text-blue-600" /> : 
+                    <Info className="h-4 w-4 text-muted-foreground" />}
+                  <span>
+                    {scalingFactor > 1 
+                      ? `Normalization applied: multipliers scaled by ${scalingFactor.toFixed(3)}x to enforce house edge`
+                      : 'No normalization needed - implied sum already at or below target'}
+                  </span>
+                </div>
+
                 <div className="flex items-center gap-2">
                   {marketOdds[0]?.base_probability > marketOdds[marketOdds.length - 1]?.base_probability ? 
                     <CheckCircle className="h-4 w-4 text-green-600" /> : 
                     <AlertTriangle className="h-4 w-4 text-yellow-600" />}
-                  <span>Higher rated athletes have higher probability (lower multipliers)</span>
+                  <span>Probabilities correctly ordered by rating</span>
                 </div>
               </CardContent>
             </Card>
           </>
         )}
 
+        {/* No Odds Yet */}
         {selectedMarket && (!marketOdds || marketOdds.length === 0) && !runSimulation.isPending && (
           <Alert>
-            <Info className="h-4 w-4" />
+            <AlertTriangle className="h-4 w-4" />
             <AlertTitle>No odds generated yet</AlertTitle>
             <AlertDescription>
               Click "Run Monte Carlo Simulation" to generate multipliers for this contest.
