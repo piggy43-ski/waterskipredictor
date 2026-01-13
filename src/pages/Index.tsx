@@ -243,7 +243,7 @@ const Index = () => {
               <p className="text-2xl font-display font-bold">{activePredictions.length}</p>
             </Card>
             <Card className="p-4 rounded-2xl border-border/30">
-              <p className="text-xs text-muted-foreground mb-1">Potential Win</p>
+              <p className="text-xs text-muted-foreground mb-1">Potential Rewards</p>
               <p className="text-2xl font-display font-bold text-primary">
                 {activePredictions.reduce((sum, p) => sum + p.potential_payout, 0).toLocaleString()}
               </p>
@@ -308,7 +308,7 @@ const Index = () => {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-success">
-                    {settledPredictions.filter(p => p.status === 'WON').length} Won
+                    {settledPredictions.filter(p => p.status === 'WON').length} Correct
                   </p>
                   <p className="text-xs text-muted-foreground">
                     +{settledPredictions.filter(p => p.status === 'WON').reduce((sum, p) => sum + (p.payout_tokens || 0), 0).toLocaleString()}
@@ -321,7 +321,7 @@ const Index = () => {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-destructive">
-                    {settledPredictions.filter(p => p.status === 'LOST').length} Lost
+                    {settledPredictions.filter(p => p.status === 'LOST').length} Incorrect
                   </p>
                   <p className="text-xs text-muted-foreground">
                     -{settledPredictions.filter(p => p.status === 'LOST').reduce((sum, p) => sum + p.staked_tokens, 0).toLocaleString()}

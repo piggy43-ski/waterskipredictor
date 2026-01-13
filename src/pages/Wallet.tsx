@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useWallet } from '@/hooks/useWallet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
+import { TokenDisclaimer } from '@/components/TokenDisclaimer';
 
 // Token pack calculation: base_tokens = price * 100 (1 token = 1 cent)
 // Then apply bonus percentage on top
@@ -69,7 +70,7 @@ const Wallet = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="Token Wallet" />
+        <PageHeader title="Token Balance" />
         <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
           <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium">
             <Skeleton className="h-4 w-24 mb-2 bg-primary-foreground/20" />
@@ -90,7 +91,7 @@ const Wallet = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="Token Wallet" />
+      <PageHeader title="Token Balance" />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
         {/* Current Balance */}
@@ -106,7 +107,7 @@ const Wallet = () => {
             <div>
               <p className="text-xs opacity-75 mb-1">Purchased</p>
               <p className="text-xl font-bold">{(wallet?.purchasedTokens ?? 0).toLocaleString()}</p>
-              <p className="text-xs opacity-60 mt-0.5">For bets & fantasy</p>
+              <p className="text-xs opacity-60 mt-0.5">For entries & fantasy</p>
             </div>
             <div>
               <p className="text-xs opacity-75 mb-1">Earned</p>
@@ -118,7 +119,7 @@ const Wallet = () => {
 
         {/* Token Packs */}
         <div>
-          <h2 className="text-lg font-bold mb-4">Buy Token Packs</h2>
+          <h2 className="text-lg font-bold mb-4">Buy Tokens</h2>
           <div className="grid grid-cols-1 gap-3">
             {tokenPacks.map((pack) => (
               <Card 
@@ -191,11 +192,11 @@ const Wallet = () => {
           <ul className="text-sm text-muted-foreground space-y-2">
             <li className="flex items-start gap-2">
               <span className="text-primary font-bold">•</span>
-              <span><strong>Purchased tokens</strong> can be used for predictions and fantasy entries</span>
+              <span><strong>Purchased tokens</strong> can be used for prediction entries and fantasy entries</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-success font-bold">•</span>
-              <span><strong>Earned tokens</strong> (from winnings) can be used for predictions, fantasy, AND rewards redemptions</span>
+              <span><strong>Earned tokens</strong> (from rewards) can be used for entries, fantasy, AND rewards redemptions</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-muted-foreground">•</span>
@@ -203,6 +204,9 @@ const Wallet = () => {
             </li>
           </ul>
         </Card>
+
+        {/* Disclaimer */}
+        <TokenDisclaimer className="py-4" />
       </div>
 
       <BottomNav />

@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Coins, TrendingUp, TrendingDown, DollarSign, Gift, RefreshCw, Shield, Filter, CalendarIcon, X, Sun, Undo2, ShoppingBag } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { TokenDisclaimer } from '@/components/TokenDisclaimer';
 
 interface Transaction {
   id: string;
@@ -148,15 +149,15 @@ const Transactions = () => {
 
   const getTypeBadge = (type: string) => {
     const config: Record<string, { variant: any; label: string; className?: string }> = {
-      bet_placed: { variant: 'secondary', label: 'Bet Placed' },
-      bet_won: { variant: 'default', label: 'Won', className: 'bg-success text-success-foreground' },
-      bet_lost: { variant: 'destructive', label: 'Lost' },
+      bet_placed: { variant: 'secondary', label: 'Entry Placed' },
+      bet_won: { variant: 'default', label: 'Correct', className: 'bg-success text-success-foreground' },
+      bet_lost: { variant: 'destructive', label: 'Incorrect' },
       bet_void: { variant: 'outline', label: 'Voided' },
-      deposit: { variant: 'default', label: 'Deposit', className: 'bg-success text-success-foreground' },
+      deposit: { variant: 'default', label: 'Tokens Purchased', className: 'bg-success text-success-foreground' },
       bonus: { variant: 'default', label: 'Bonus', className: 'bg-purple-600 text-white' },
       daily_bonus: { variant: 'default', label: 'Daily Bonus', className: 'bg-success text-success-foreground' },
       redemption: { variant: 'secondary', label: 'Redemption' },
-      adjustment: { variant: 'default', label: 'Admin Adjustment', className: 'bg-purple-600 text-white' },
+      adjustment: { variant: 'default', label: 'Adjustment', className: 'bg-purple-600 text-white' },
       refund: { variant: 'default', label: 'Refund', className: 'bg-purple-600 text-white' },
     };
 
@@ -184,7 +185,7 @@ const Transactions = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="Transaction History" showBack />
+      <PageHeader title="Token History" showBack />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
         {/* Filter Toggle & Summary */}
@@ -227,15 +228,15 @@ const Transactions = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="bet_placed">Bet Placed</SelectItem>
-                  <SelectItem value="bet_won">Bet Won</SelectItem>
-                  <SelectItem value="bet_lost">Bet Lost</SelectItem>
-                  <SelectItem value="bet_void">Bet Voided</SelectItem>
-                  <SelectItem value="deposit">Deposit</SelectItem>
+                  <SelectItem value="bet_placed">Entry Placed</SelectItem>
+                  <SelectItem value="bet_won">Entry Correct</SelectItem>
+                  <SelectItem value="bet_lost">Entry Incorrect</SelectItem>
+                  <SelectItem value="bet_void">Entry Voided</SelectItem>
+                  <SelectItem value="deposit">Tokens Purchased</SelectItem>
                   <SelectItem value="bonus">Bonus</SelectItem>
                   <SelectItem value="daily_bonus">Daily Bonus</SelectItem>
                   <SelectItem value="redemption">Redemption</SelectItem>
-                  <SelectItem value="adjustment">Admin Adjustment</SelectItem>
+                  <SelectItem value="adjustment">Adjustment</SelectItem>
                   <SelectItem value="refund">Refund</SelectItem>
                 </SelectContent>
               </Select>
@@ -338,7 +339,7 @@ const Transactions = () => {
             <Coins className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground">No transactions yet</p>
             <p className="text-sm text-muted-foreground mt-2">
-              Your transaction history will appear here
+              Your token history will appear here
             </p>
           </Card>
         ) : filteredTransactions.length === 0 ? (
@@ -389,6 +390,9 @@ const Transactions = () => {
             ))}
           </div>
         )}
+
+        {/* Disclaimer */}
+        <TokenDisclaimer className="py-4" />
       </div>
 
       <BottomNav />

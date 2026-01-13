@@ -25,12 +25,12 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
     return market?.market_type || 'WINNER';
   };
 
-  // Calculate combined odds with 5% house edge
+  // Calculate combined multiplier with 5% platform edge
   const decimalOddsArray = selections.map(sel => sel.decimal_odds);
   const adjustedOdds = calculateParlayOdds(decimalOddsArray, PARLAY_CONFIG.HOUSE_EDGE);
   
-  // Convert to American odds
-  const americanOdds = decimalToAmerican(adjustedOdds);
+  // Display as multiplier
+  const multiplierDisplay = `${adjustedOdds.toFixed(2)}x`;
   
   // Validation checks
   const hasMaxLegs = selections.length > PARLAY_CONFIG.MAX_LEGS;
@@ -56,8 +56,8 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-primary" />
-            Parlay Prediction
-            <Badge variant="secondary">{selections.length} Legs</Badge>
+            Combo Entry
+            <Badge variant="secondary">{selections.length} Picks</Badge>
             {hasMaxLegs && (
               <Badge variant="destructive">Max {PARLAY_CONFIG.MAX_LEGS}</Badge>
             )}
@@ -72,7 +72,7 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
         </div>
         {selections.length > 0 && (
           <p className="text-xs text-muted-foreground mt-2">
-            All {selections.length} legs must win. 5% house edge applied to combined odds.
+            All {selections.length} picks must be correct. 5% platform fee applied to combined multiplier.
           </p>
         )}
       </CardHeader>
@@ -103,7 +103,7 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-primary">
-                    {decimalToAmerican(selection.decimal_odds)}
+                    {selection.decimal_odds.toFixed(2)}x
                   </span>
                   <Button
                     variant="ghost"
@@ -124,21 +124,21 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
           <Alert variant="destructive" className="mb-3">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Maximum {PARLAY_CONFIG.MAX_LEGS} legs allowed. Remove {selections.length - PARLAY_CONFIG.MAX_LEGS} selection(s).
+              Maximum {PARLAY_CONFIG.MAX_LEGS} picks allowed. Remove {selections.length - PARLAY_CONFIG.MAX_LEGS} selection(s).
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Combined Odds */}
+        {/* Combined Multiplier */}
         <div className="pt-3 border-t border-border">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <div className="text-sm text-muted-foreground">Combined Odds:</div>
+              <div className="text-sm text-muted-foreground">Combined Multiplier:</div>
               <div className="text-xs text-muted-foreground">
-                (5% house edge applied)
+                (5% platform fee applied)
               </div>
             </div>
-            <span className="text-xl font-bold text-primary">{americanOdds}</span>
+            <span className="text-xl font-bold text-primary">{multiplierDisplay}</span>
           </div>
           <div className="flex gap-2">
             <Button 
@@ -146,7 +146,7 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
               onClick={onPlaceParlay}
               disabled={!hasMinLegs || hasMaxLegs}
             >
-              Place Parlay Prediction
+              Place Combo Entry
             </Button>
             {onExitParlayMode && (
               <Button 
@@ -159,7 +159,7 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
           </div>
           {!hasMinLegs && (
             <p className="text-xs text-muted-foreground text-center mt-2">
-              Add at least {PARLAY_CONFIG.MIN_LEGS} selections to create a parlay
+              Add at least {PARLAY_CONFIG.MIN_LEGS} selections to create a combo entry
             </p>
           )}
         </div>

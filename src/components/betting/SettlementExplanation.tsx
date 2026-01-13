@@ -43,26 +43,26 @@ export function SettlementExplanation({ settlement, className }: Props) {
       icon: Trophy,
       bgClass: 'bg-success/10 border-success/30',
       iconClass: 'text-success',
-      label: 'You Won!'
+      label: 'Correct!'
     },
     LOST: {
       icon: XCircle,
       bgClass: 'bg-destructive/10 border-destructive/30',
       iconClass: 'text-destructive',
-      label: 'You Lost'
+      label: 'Incorrect'
     },
     VOID: {
       icon: RefreshCw,
       bgClass: 'bg-muted border-muted-foreground/30',
       iconClass: 'text-muted-foreground',
-      label: 'Bet Voided'
+      label: 'Entry Voided'
     }
   };
 
   const config = statusConfig[settlement.status];
   const Icon = config.icon;
 
-  // Check if this is a PODIUM bet with comparison data
+  // Check if this is a PODIUM entry with comparison data
   const isPodiumWithComparison = settlement.your_pick?.market_type === 'PODIUM' && 
     settlement.your_pick?.podium_picks && 
     settlement.your_pick.podium_picks.length > 0 &&
@@ -147,7 +147,7 @@ export function SettlementExplanation({ settlement, className }: Props) {
           </div>
         )}
 
-        {/* Actual Results (for non-PODIUM bets or when no comparison data) */}
+        {/* Actual Results (for non-PODIUM entries or when no comparison data) */}
         {!isPodiumWithComparison && settlement.actual_results && (
           <div className="space-y-1">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -183,27 +183,27 @@ export function SettlementExplanation({ settlement, className }: Props) {
           </div>
         )}
 
-        {/* Payout details for wins */}
+        {/* Payout details for correct entries */}
         {settlement.status === 'WON' && settlement.payout_details && (
           <div className="pt-2 border-t border-border/50 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Stake × Odds</span>
+              <span className="text-muted-foreground">Entry × Multiplier</span>
               <span>
                 {settlement.payout_details.stake} × {settlement.payout_details.odds_decimal.toFixed(2)}
               </span>
             </div>
             <div className="flex justify-between font-semibold text-success">
-              <span>Profit</span>
+              <span>Rewards Earned</span>
               <span>+{settlement.payout_details.profit?.toLocaleString() || 0} tokens</span>
             </div>
           </div>
         )}
 
-        {/* Stake lost for losses */}
+        {/* Entry amount lost for incorrect entries */}
         {settlement.status === 'LOST' && settlement.payout_details && (
           <div className="pt-2 border-t border-border/50 text-sm">
             <div className="flex justify-between font-semibold text-destructive">
-              <span>Stake Lost</span>
+              <span>Entry Lost</span>
               <span>-{settlement.payout_details.stake.toLocaleString()} tokens</span>
             </div>
           </div>
