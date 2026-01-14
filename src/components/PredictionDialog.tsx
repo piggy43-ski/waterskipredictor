@@ -30,6 +30,7 @@ interface PredictionDialogProps {
     gender: string;
     marketType: string;
   };
+  isValidating?: boolean;
 }
 
 export const PredictionDialog = ({
@@ -40,6 +41,7 @@ export const PredictionDialog = ({
   walletBalance,
   parlaySelections = [],
   marketContext,
+  isValidating = false,
 }: PredictionDialogProps) => {
   const [stakeAmount, setStakeAmount] = useState('100');
   
@@ -205,15 +207,16 @@ export const PredictionDialog = ({
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
+            disabled={isValidating}
           >
             Cancel
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={!isValidStake}
+            disabled={!isValidStake || isValidating}
             className="bg-primary hover:bg-primary/90"
           >
-            Confirm Entry
+            {isValidating ? 'Validating...' : 'Confirm Entry'}
           </Button>
         </DialogFooter>
       </DialogContent>
