@@ -379,9 +379,11 @@ export type Database = {
       bet_slips: {
         Row: {
           actual_payout_tokens: number | null
+          athlete_id: string | null
           created_at: string
           id: string
           leg_count: number
+          market_id: string | null
           potential_payout_tokens: number
           settled_at: string | null
           status: string
@@ -394,9 +396,11 @@ export type Database = {
         }
         Insert: {
           actual_payout_tokens?: number | null
+          athlete_id?: string | null
           created_at?: string
           id?: string
           leg_count?: number
+          market_id?: string | null
           potential_payout_tokens: number
           settled_at?: string | null
           status?: string
@@ -409,9 +413,11 @@ export type Database = {
         }
         Update: {
           actual_payout_tokens?: number | null
+          athlete_id?: string | null
           created_at?: string
           id?: string
           leg_count?: number
+          market_id?: string | null
           potential_payout_tokens?: number
           settled_at?: string | null
           status?: string
@@ -423,6 +429,20 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "bet_slips_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bet_slips_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bet_slips_tournament_id_fkey"
             columns: ["tournament_id"]
@@ -915,6 +935,54 @@ export type Database = {
           },
           {
             foreignKeyName: "market_entries_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_liability: {
+        Row: {
+          athlete_id: string
+          bet_count: number
+          id: string
+          liability_if_wins: number
+          market_id: string
+          total_potential_payout: number
+          total_stake_tokens: number
+          updated_at: string | null
+        }
+        Insert: {
+          athlete_id: string
+          bet_count?: number
+          id?: string
+          liability_if_wins?: number
+          market_id: string
+          total_potential_payout?: number
+          total_stake_tokens?: number
+          updated_at?: string | null
+        }
+        Update: {
+          athlete_id?: string
+          bet_count?: number
+          id?: string
+          liability_if_wins?: number
+          market_id?: string
+          total_potential_payout?: number
+          total_stake_tokens?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_liability_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_liability_market_id_fkey"
             columns: ["market_id"]
             isOneToOne: false
             referencedRelation: "markets"
@@ -1513,6 +1581,30 @@ export type Database = {
           required_tokens?: number
           updated_at?: string
           usd_cost?: number | null
+        }
+        Relationships: []
+      }
+      risk_config: {
+        Row: {
+          description: string | null
+          id: string
+          key: string
+          updated_at: string | null
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string | null
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string | null
+          value?: Json
         }
         Relationships: []
       }

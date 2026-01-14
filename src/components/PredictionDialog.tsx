@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Selection } from '@/types';
 import {
   Dialog,
@@ -12,9 +12,10 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Alert, AlertDescription } from './ui/alert';
-import { Coins, TrendingUp, AlertCircle } from 'lucide-react';
+import { Coins, TrendingUp, AlertCircle, AlertTriangle } from 'lucide-react';
 import { decimalToAmerican, calculateParlayOdds } from '@/utils/oddsConverter';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
+import { RISK_CONFIG, isPayoutOverMax } from '@/utils/riskConfig';
 
 interface PredictionDialogProps {
   selection: Selection | null;
@@ -55,7 +56,8 @@ export const PredictionDialog = ({
   
   // Validation
   const exceedsMaxStake = stake > PARLAY_CONFIG.MAX_STAKE;
-  const isValidStake = stake > 0 && stake <= walletBalance && !exceedsMaxStake;
+  const exceedsMaxPayout = isPayoutOverMax(stake, combinedOdds);
+  const isValidStake = stake > 0 && stake <= walletBalance && !exceedsMaxStake && !exceedsMaxPayout;
 
   const handleConfirm = () => {
     if (isValidStake) {
@@ -156,6 +158,14 @@ export const PredictionDialog = ({
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
                   Maximum entry is {PARLAY_CONFIG.MAX_STAKE.toLocaleString()} tokens
+                </AlertDescription>
+              </Alert>
+            )}
+            {exceedsMaxPayout && !exceedsMaxStake && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Maximum payout is {RISK_CONFIG.MAX_PAYOUT.toLocaleString()} tokens. Reduce stake or pick different odds.
                 </AlertDescription>
               </Alert>
             )}
