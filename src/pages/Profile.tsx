@@ -10,11 +10,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, Upload, History, Gift, TrendingUp, TrendingDown, ArrowRightLeft, Package, Clock, CheckCircle, Truck, XCircle } from 'lucide-react';
+import { Coins, Upload, History, Gift, TrendingUp, TrendingDown, ArrowRightLeft, Package, Clock, CheckCircle, Truck, XCircle, HelpCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { useWallet } from '@/hooks/useWallet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTutorial } from '@/components/tutorial';
 
 type Redemption = {
   id: string;
@@ -32,6 +33,7 @@ const Profile = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { wallet, loading: walletLoading } = useWallet();
+  const { resetTutorial, startTutorial } = useTutorial();
   
   const [username, setUsername] = useState('');
   const [country, setCountry] = useState('');
@@ -607,6 +609,23 @@ const Profile = () => {
           >
             <History className="w-4 h-4 mr-2" />
             View Full Transaction History
+          </Button>
+        </Card>
+
+        {/* Help & Support */}
+        <Card className="p-6">
+          <h2 className="text-lg font-bold mb-4">Help & Support</h2>
+          <Button 
+            variant="outline" 
+            className="w-full"
+            onClick={async () => {
+              await resetTutorial();
+              startTutorial();
+              navigate('/');
+            }}
+          >
+            <HelpCircle className="w-4 h-4 mr-2" />
+            Replay Tutorial
           </Button>
         </Card>
 

@@ -86,7 +86,7 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
           </p>
         </div>
         <div className="text-right flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2">
+          <div id="multiplier-display" className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
             <span className="text-2xl font-bold text-primary">
               {americanOdds}

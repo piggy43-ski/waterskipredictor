@@ -200,6 +200,7 @@ const Index = () => {
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
         {/* Big Token Balance */}
         <Card 
+          id="token-balance"
           className="p-6 cursor-pointer hover:bg-accent/50 transition-colors rounded-2xl border-border/30 bg-gradient-card"
           onClick={() => navigate('/wallet')}
         >
@@ -210,6 +211,7 @@ const Index = () => {
               <p className="text-sm text-muted-foreground">tokens</p>
             </div>
             <Button 
+              id="buy-tokens-btn"
               size="icon"
               className="w-14 h-14 rounded-full bg-gradient-water shadow-[0_0_20px_hsl(var(--primary)/0.5)] hover:shadow-[0_0_30px_hsl(var(--primary)/0.7)] hover:scale-105 transition-all duration-200"
               onClick={(e) => {
