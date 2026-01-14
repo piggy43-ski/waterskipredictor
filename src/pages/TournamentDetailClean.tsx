@@ -11,7 +11,7 @@ import { TournamentResults } from '@/components/TournamentResults';
 import { UserTournamentResults } from '@/components/UserTournamentResults';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
-import { Selection, Tournament, Market } from '@/types';
+import { Selection, Tournament, Market, MarketType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar, MapPin, Clock, AlertCircle, Users } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -21,6 +21,19 @@ import { ParlayBuilder } from '@/components/ParlayBuilder';
 import { Button } from '@/components/ui/button';
 import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+
+interface ValidationResult {
+  allowed: boolean;
+  adjustedOdds?: number;
+  reason?: string;
+  warnings: string[];
+  currentLiability?: {
+    athleteId: string;
+    currentLiability: number;
+    liabilityCap: number;
+    percentUsed: number;
+  };
+}
 
 const TournamentDetail = () => {
   const { id } = useParams();
@@ -60,6 +73,10 @@ const TournamentDetail = () => {
   
   // Gender state per discipline
   const [genderByDiscipline, setGenderByDiscipline] = useState<Record<string, 'men' | 'women'>>({});
+  
+  // Validation state
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -296,6 +313,37 @@ const TournamentDetail = () => {
     setPositionAssignerOpen(false);
   };
 
+  // Validate bet against risk controls
+  const validateBet = async (
+    athleteId: string,
+    marketId: string,
+    stakeAmount: number,
+    currentOdds: number,
+    marketType: MarketType
+  ): Promise<ValidationResult | null> => {
+    if (!user || !tournament) return null;
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('validate-bet', {
+        body: {
+          userId: user.id,
+          tournamentId: tournament.id,
+          marketId,
+          athleteId,
+          stakeAmount,
+          currentOdds,
+          marketType
+        }
+      });
+      
+      if (error) throw error;
+      return data as ValidationResult;
+    } catch (error) {
+      console.error('Validation error:', error);
+      return null;
+    }
+  };
+
   const handleConfirmPodiumPrediction = async (stakeAmount: number) => {
     if (!user || !currentPodiumContext || !tournament) return;
     
@@ -306,7 +354,56 @@ const TournamentDetail = () => {
       const podiumMarket = currentPodiumContext.market;
       
       // Calculate multiplier based on combined odds (simplified)
-      const combinedOdds = 1.5;
+      let combinedOdds = 1.5;
+      
+      // Validate bet before placing
+      setIsValidating(true);
+      const validation = await validateBet(
+        podiumState.assignedPositions.first.athlete_id,
+        podiumMarket.id,
+        stakeAmount,
+        combinedOdds,
+        'PODIUM'
+      );
+      setIsValidating(false);
+      
+      if (!validation) {
+        toast({
+          title: "Validation Error",
+          description: "Unable to validate bet. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      if (!validation.allowed) {
+        toast({
+          title: "Bet Not Allowed",
+          description: validation.reason || "This bet cannot be placed",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Show warnings if any
+      if (validation.warnings && validation.warnings.length > 0) {
+        validation.warnings.forEach(warning => {
+          toast({
+            title: "Notice",
+            description: warning,
+          });
+        });
+      }
+      
+      // Use adjusted odds if provided
+      if (validation.adjustedOdds) {
+        toast({
+          title: "Odds Adjusted",
+          description: `Odds shortened from ${combinedOdds.toFixed(2)}x to ${validation.adjustedOdds.toFixed(2)}x due to market exposure`,
+        });
+        combinedOdds = validation.adjustedOdds;
+      }
+      
       const potentialPayout = Math.floor(stakeAmount * combinedOdds);
 
       // Step 1: Create bet_slip FIRST
@@ -460,22 +557,75 @@ const TournamentDetail = () => {
       const market = markets.find(m => m.id === selectedSelection.market_id);
       if (!market) return;
 
-      const potentialPayout = Math.floor(stakeAmount * selectedSelection.decimal_odds);
+      let finalOdds = selectedSelection.decimal_odds;
+      
+      // Validate bet before placing
+      setIsValidating(true);
+      setValidationResult(null);
+      const validation = await validateBet(
+        selectedSelection.athlete_id,
+        selectedSelection.market_id,
+        stakeAmount,
+        selectedSelection.decimal_odds,
+        market.market_type as MarketType
+      );
+      setIsValidating(false);
+      
+      if (!validation) {
+        toast({
+          title: "Validation Error",
+          description: "Unable to validate bet. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      if (!validation.allowed) {
+        toast({
+          title: "Bet Not Allowed",
+          description: validation.reason || "This bet cannot be placed",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Show warnings if any
+      if (validation.warnings && validation.warnings.length > 0) {
+        validation.warnings.forEach(warning => {
+          toast({
+            title: "Notice",
+            description: warning,
+          });
+        });
+      }
+      
+      // Use adjusted odds if provided
+      if (validation.adjustedOdds && validation.adjustedOdds !== selectedSelection.decimal_odds) {
+        toast({
+          title: "Odds Adjusted",
+          description: `Odds shortened from ${selectedSelection.decimal_odds.toFixed(2)}x to ${validation.adjustedOdds.toFixed(2)}x due to market exposure`,
+        });
+        finalOdds = validation.adjustedOdds;
+      }
+
+      const potentialPayout = Math.floor(stakeAmount * finalOdds);
 
       // Step 1: Create bet_slip FIRST
-      const americanOdds = selectedSelection.decimal_odds >= 2 
-        ? Math.round((selectedSelection.decimal_odds - 1) * 100)
-        : Math.round(-100 / (selectedSelection.decimal_odds - 1));
+      const americanOdds = finalOdds >= 2 
+        ? Math.round((finalOdds - 1) * 100)
+        : Math.round(-100 / (finalOdds - 1));
         
       const { data: betSlip, error: slipError } = await supabase
         .from('bet_slips')
         .insert({
           user_id: user.id,
           tournament_id: tournament.id,
+          athlete_id: selectedSelection.athlete_id,
+          market_id: selectedSelection.market_id,
           type: 'single',
           leg_count: 1,
           total_stake_tokens: stakeAmount,
-          total_odds_decimal: selectedSelection.decimal_odds,
+          total_odds_decimal: finalOdds,
           total_odds_american: americanOdds,
           potential_payout_tokens: potentialPayout,
           status: 'PENDING'
@@ -497,7 +647,7 @@ const TournamentDetail = () => {
           category: market.category,
           market_type: market.market_type,
           staked_tokens: stakeAmount,
-          decimal_odds: selectedSelection.decimal_odds,
+          decimal_odds: finalOdds,
           potential_payout: potentialPayout,
           bet_slip_id: betSlip.id,
           status: 'PENDING'
@@ -887,6 +1037,7 @@ const TournamentDetail = () => {
         onOpenChange={setDialogOpen}
         onConfirm={handleConfirmPrediction}
         walletBalance={walletBalance}
+        isValidating={isValidating}
         marketContext={
           selectedSelection
             ? (() => {
