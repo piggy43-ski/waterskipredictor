@@ -1316,6 +1316,8 @@ export type Database = {
           lifetime_losses: number | null
           lifetime_winnings: number | null
           notification_preferences: Json | null
+          tutorial_completed: boolean | null
+          tutorial_completed_at: string | null
           updated_at: string
           username: string
         }
@@ -1329,6 +1331,8 @@ export type Database = {
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
           notification_preferences?: Json | null
+          tutorial_completed?: boolean | null
+          tutorial_completed_at?: string | null
           updated_at?: string
           username: string
         }
@@ -1342,6 +1346,8 @@ export type Database = {
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
           notification_preferences?: Json | null
+          tutorial_completed?: boolean | null
+          tutorial_completed_at?: string | null
           updated_at?: string
           username?: string
         }

@@ -17,6 +17,7 @@ export const BottomNav = () => {
           
           <NavLink
             to="/tournaments"
+            id="nav-events"
             className="flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all text-muted-foreground"
             activeClassName="!text-primary"
           >
@@ -44,6 +45,7 @@ export const BottomNav = () => {
           
           <NavLink
             to="/rewards"
+            id="nav-rewards"
             className="flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all text-muted-foreground"
             activeClassName="!text-primary"
           >

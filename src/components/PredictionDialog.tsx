@@ -147,7 +147,7 @@ export const PredictionDialog = ({
           <div className="space-y-2">
             <Label htmlFor="stake">Entry Amount (Tokens)</Label>
             <Input
-              id="stake"
+              id="entry-amount-input"
               type="number"
               value={stakeAmount}
               onChange={(e) => setStakeAmount(e.target.value)}
@@ -212,6 +212,7 @@ export const PredictionDialog = ({
             Cancel
           </Button>
           <Button
+            id="confirm-entry-btn"
             onClick={handleConfirm}
             disabled={!isValidStake || isValidating}
             className="bg-primary hover:bg-primary/90"
