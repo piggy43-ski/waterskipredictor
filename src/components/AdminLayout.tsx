@@ -14,6 +14,7 @@ interface AdminLayoutProps {
 const navItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/admin/house-ledger', label: 'Platform Ledger', icon: DollarSign },
+  { path: '/admin/market-liability', label: 'Market Liability', icon: TrendingUp },
   { path: '/admin/users', label: 'Users', icon: UserCog },
   { path: '/admin/athletes', label: 'Athletes', icon: Users },
   { path: '/admin/rankings-sync', label: 'Rankings Auto-Sync', icon: TrendingUp },
