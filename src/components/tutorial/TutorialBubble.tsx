@@ -26,7 +26,11 @@ export const TutorialBubble: React.FC = () => {
   const [position, setPosition] = useState<BubblePosition | null>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
+  const [showAsFallbackModal, setShowAsFallbackModal] = useState(false);
+
   useEffect(() => {
+    setShowAsFallbackModal(false);
+    
     if (!isActive || !currentStepData?.target) {
       setPosition(null);
       return;
@@ -47,7 +51,9 @@ export const TutorialBubble: React.FC = () => {
           console.log(`Tutorial: Retry ${attempts}/${maxAttempts} finding ${currentStepData.target}`);
           retryTimeout = setTimeout(updatePosition, 200);
         } else {
-          console.warn(`Tutorial: Could not find element ${currentStepData.target} after ${maxAttempts} attempts`);
+          console.warn(`Tutorial: Could not find element ${currentStepData.target} after ${maxAttempts} attempts - showing as modal`);
+          // Show as fallback modal instead of hiding
+          setShowAsFallbackModal(true);
           setPosition(null);
         }
         return;
@@ -111,8 +117,11 @@ export const TutorialBubble: React.FC = () => {
 
   if (!isActive || !currentStepData) return null;
 
-  // Modal content for welcome/complete steps
-  if (currentStepData.isModal) {
+  // Modal content for welcome/complete steps OR fallback when element not found
+  if (currentStepData.isModal || showAsFallbackModal) {
+    const isFirstStep = currentStep === 0;
+    const isLastStep = currentStep === totalSteps - 1;
+    
     return createPortal(
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
         <Card className="max-w-sm w-full p-6 bg-card border-border shadow-2xl animate-in fade-in zoom-in duration-300">
@@ -124,7 +133,7 @@ export const TutorialBubble: React.FC = () => {
               {currentStepData.content}
             </p>
             
-            {currentStep === 0 ? (
+            {isFirstStep ? (
               <div className="flex flex-col gap-3">
                 <Button onClick={nextStep} className="w-full">
                   Start Tutorial
@@ -133,10 +142,28 @@ export const TutorialBubble: React.FC = () => {
                   Skip
                 </Button>
               </div>
-            ) : (
+            ) : isLastStep ? (
               <Button onClick={completeTutorial} className="w-full">
                 Done
               </Button>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted-foreground">
+                  {currentStep + 1} of {totalSteps}
+                </div>
+                <div className="flex gap-2">
+                  {currentStep > 0 && (
+                    <Button size="sm" variant="ghost" onClick={prevStep}>
+                      <ChevronLeft className="w-4 h-4 mr-1" />
+                      Back
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={nextStep}>
+                    Next
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
         </Card>
