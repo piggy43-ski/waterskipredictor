@@ -17,7 +17,7 @@ interface TutorialContextType {
   resetTutorial: () => void;
 }
 
-const TutorialContext = createContext<TutorialContextType | null>(null);
+export const TutorialContext = createContext<TutorialContextType | null>(null);
 
 export const useTutorial = () => {
   const context = useContext(TutorialContext);

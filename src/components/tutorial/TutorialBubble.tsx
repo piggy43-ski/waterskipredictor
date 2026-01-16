@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { useTutorial } from './TutorialContext';
+import { TutorialContext } from './TutorialContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -12,6 +12,16 @@ interface BubblePosition {
 }
 
 export const TutorialBubble: React.FC = () => {
+  const context = useContext(TutorialContext);
+  
+  const [position, setPosition] = useState<BubblePosition | null>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  // Safety check - don't render if context isn't available  
+  if (!context) {
+    return null;
+  }
+
   const {
     isActive,
     currentStep,
@@ -21,10 +31,7 @@ export const TutorialBubble: React.FC = () => {
     prevStep,
     skipTutorial,
     completeTutorial,
-  } = useTutorial();
-  
-  const [position, setPosition] = useState<BubblePosition | null>(null);
-  const bubbleRef = useRef<HTMLDivElement>(null);
+  } = context;
 
   const [showAsFallbackModal, setShowAsFallbackModal] = useState(false);
 
