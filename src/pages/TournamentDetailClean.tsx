@@ -834,7 +834,7 @@ const TournamentDetail = () => {
                   
                   <TabsContent value="men">
                     <Tabs defaultValue="winner" className="w-full">
-                      <TabsList className="w-full grid grid-cols-3 mb-4">
+                      <TabsList id="contest-types" className="w-full grid grid-cols-3 mb-4">
                         <TabsTrigger value="winner">Winner</TabsTrigger>
                         <TabsTrigger value="podium">Podium</TabsTrigger>
                         <TabsTrigger value="highest">Highest</TabsTrigger>
@@ -844,24 +844,26 @@ const TournamentDetail = () => {
                         <h3 className="font-semibold text-sm text-muted-foreground mb-3">
                           Winner Market - Select One
                         </h3>
-                        {selections
-                          .filter(s => {
-                            const market = markets.find(m => m.id === s.market_id);
-                            return market?.discipline === discipline && 
-                                   market?.category === 'open_men' && 
-                                   market?.market_type === 'WINNER';
-                          })
-                          .sort((a, b) => a.decimal_odds - b.decimal_odds)
-                          .map((selection) => (
-                            <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
-                              <SelectionCard
-                                selection={selection}
-                                onSelect={handleSelectSelection}
-                                discipline={discipline}
-                                highlighted={betAgainAthletes.includes(selection.athlete.name)}
-                              />
-                            </div>
-                          ))}
+                        <div id="athlete-list" className="space-y-3">
+                          {selections
+                            .filter(s => {
+                              const market = markets.find(m => m.id === s.market_id);
+                              return market?.discipline === discipline && 
+                                     market?.category === 'open_men' && 
+                                     market?.market_type === 'WINNER';
+                            })
+                            .sort((a, b) => a.decimal_odds - b.decimal_odds)
+                            .map((selection) => (
+                              <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
+                                <SelectionCard
+                                  selection={selection}
+                                  onSelect={handleSelectSelection}
+                                  discipline={discipline}
+                                  highlighted={betAgainAthletes.includes(selection.athlete.name)}
+                                />
+                              </div>
+                            ))}
+                        </div>
                       </TabsContent>
 
                       <TabsContent value="podium" className="space-y-3">
