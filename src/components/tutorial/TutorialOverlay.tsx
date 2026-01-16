@@ -19,27 +19,39 @@ export const TutorialOverlay: React.FC = () => {
       return;
     }
 
+    let attempts = 0;
+    const maxAttempts = 10;
+    let retryTimeout: NodeJS.Timeout;
+
     const updateSpotlight = () => {
       const element = document.querySelector(currentStepData.target!);
-      if (element) {
-        const rect = element.getBoundingClientRect();
-        const padding = 8;
-        setSpotlight({
-          top: rect.top - padding + window.scrollY,
-          left: rect.left - padding,
-          width: rect.width + padding * 2,
-          height: rect.height + padding * 2,
-        });
-
-        // Scroll element into view
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else {
-        setSpotlight(null);
+      if (!element) {
+        // Retry up to maxAttempts times
+        if (attempts < maxAttempts) {
+          attempts++;
+          retryTimeout = setTimeout(updateSpotlight, 200);
+        } else {
+          console.warn(`Tutorial Overlay: Could not find element ${currentStepData.target}`);
+          setSpotlight(null);
+        }
+        return;
       }
+
+      const rect = element.getBoundingClientRect();
+      const padding = 8;
+      setSpotlight({
+        top: rect.top - padding + window.scrollY,
+        left: rect.left - padding,
+        width: rect.width + padding * 2,
+        height: rect.height + padding * 2,
+      });
+
+      // Scroll element into view
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
-    // Initial update
-    const timeout = setTimeout(updateSpotlight, 100);
+    // Initial update with longer delay
+    const timeout = setTimeout(updateSpotlight, 300);
 
     // Update on resize
     window.addEventListener('resize', updateSpotlight);
@@ -47,6 +59,7 @@ export const TutorialOverlay: React.FC = () => {
 
     return () => {
       clearTimeout(timeout);
+      clearTimeout(retryTimeout);
       window.removeEventListener('resize', updateSpotlight);
       window.removeEventListener('scroll', updateSpotlight);
     };

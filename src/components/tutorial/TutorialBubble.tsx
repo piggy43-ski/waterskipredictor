@@ -32,11 +32,28 @@ export const TutorialBubble: React.FC = () => {
       return;
     }
 
+    let attempts = 0;
+    const maxAttempts = 10;
+    let retryTimeout: NodeJS.Timeout;
+
     const updatePosition = () => {
       const element = document.querySelector(currentStepData.target!);
       const bubble = bubbleRef.current;
       
-      if (!element || !bubble) {
+      if (!element) {
+        // Retry up to maxAttempts times
+        if (attempts < maxAttempts) {
+          attempts++;
+          console.log(`Tutorial: Retry ${attempts}/${maxAttempts} finding ${currentStepData.target}`);
+          retryTimeout = setTimeout(updatePosition, 200);
+        } else {
+          console.warn(`Tutorial: Could not find element ${currentStepData.target} after ${maxAttempts} attempts`);
+          setPosition(null);
+        }
+        return;
+      }
+
+      if (!bubble) {
         setPosition(null);
         return;
       }
@@ -82,11 +99,12 @@ export const TutorialBubble: React.FC = () => {
       setPosition({ top, left, arrowPosition });
     };
 
-    const timeout = setTimeout(updatePosition, 150);
+    const timeout = setTimeout(updatePosition, 300);
     window.addEventListener('resize', updatePosition);
 
     return () => {
       clearTimeout(timeout);
+      clearTimeout(retryTimeout);
       window.removeEventListener('resize', updatePosition);
     };
   }, [isActive, currentStepData, currentStep]);

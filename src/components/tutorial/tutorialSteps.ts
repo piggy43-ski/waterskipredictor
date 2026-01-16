@@ -39,6 +39,7 @@ export const tutorialSteps: TutorialStep[] = [
     title: 'Find Contests',
     content: 'Pick a tournament and choose a contest to enter.',
     placement: 'top',
+    route: '/',
   },
   {
     id: 'contest-types',
