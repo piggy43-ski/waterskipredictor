@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { useTutorial } from './TutorialContext';
+import { TutorialContext } from './TutorialContext';
 
 interface SpotlightRect {
   top: number;
@@ -10,8 +10,12 @@ interface SpotlightRect {
 }
 
 export const TutorialOverlay: React.FC = () => {
-  const { isActive, currentStepData } = useTutorial();
+  const context = useContext(TutorialContext);
   const [spotlight, setSpotlight] = useState<SpotlightRect | null>(null);
+
+  // Safety check - don't render if context isn't available
+  const isActive = context?.isActive ?? false;
+  const currentStepData = context?.currentStepData ?? null;
 
   useEffect(() => {
     if (!isActive || !currentStepData?.target) {
