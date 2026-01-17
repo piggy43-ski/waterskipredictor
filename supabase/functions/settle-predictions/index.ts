@@ -65,12 +65,13 @@ interface SettlementRequest {
   tournament_name?: string;
 }
 
-// Build settlement explanation for a prediction
+// Build settlement explanation for a prediction with detailed "Why did I win/lose?" context
 function buildSettlementExplanation(
   prediction: any,
   selectionResult: 'won' | 'lost' | 'void',
   actualResults?: SelectionWithContext['actual_results'],
-  tournamentName?: string
+  tournamentName?: string,
+  voidReason?: string
 ): object {
   const marketType = prediction.market_type;
   const athleteName = prediction.athlete_name;
@@ -80,32 +81,85 @@ function buildSettlementExplanation(
   const odds = prediction.decimal_odds;
   const payout = prediction.potential_payout;
   
+  // Format discipline and category for display
+  const disciplineDisplay = discipline.charAt(0).toUpperCase() + discipline.slice(1);
+  const categoryDisplay = category.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+  
   let explanation = '';
+  let pickedAthleteRank: number | null = null;
+  let pickedAthleteScore: string | null = null;
   
   if (selectionResult === 'won') {
     if (marketType === 'WINNER') {
-      explanation = `You picked ${athleteName} to win ${category.replace('_', ' ')} ${discipline}. ${athleteName} won! Your bet WON.`;
+      explanation = `Correct! ${athleteName} finished 1st in ${categoryDisplay} ${disciplineDisplay}.`;
     } else if (marketType === 'PODIUM') {
-      explanation = `Your podium prediction for ${category.replace('_', ' ')} ${discipline} was correct! Your bet WON.`;
+      // Determine which position the athlete finished in
+      let podiumPosition = '';
+      if (actualResults?.position_1st?.toLowerCase() === athleteName.toLowerCase()) {
+        podiumPosition = '1st';
+        pickedAthleteRank = 1;
+      } else if (actualResults?.position_2nd?.toLowerCase() === athleteName.toLowerCase()) {
+        podiumPosition = '2nd';
+        pickedAthleteRank = 2;
+      } else if (actualResults?.position_3rd?.toLowerCase() === athleteName.toLowerCase()) {
+        podiumPosition = '3rd';
+        pickedAthleteRank = 3;
+      }
+      explanation = podiumPosition 
+        ? `Correct! ${athleteName} finished on the podium (${podiumPosition}) in ${disciplineDisplay}.`
+        : `Correct! Your podium prediction for ${categoryDisplay} ${disciplineDisplay} was correct!`;
     } else if (marketType === 'HIGHEST_SCORE') {
-      explanation = `You picked ${athleteName} to have the highest score in ${category.replace('_', ' ')} ${discipline}. They did! Your bet WON.`;
+      const score = actualResults?.highest_score || actualResults?.winner_score;
+      pickedAthleteScore = score || null;
+      explanation = score
+        ? `Correct! ${athleteName} posted the highest score (${score}) in ${categoryDisplay} ${disciplineDisplay}.`
+        : `Correct! ${athleteName} posted the highest score in ${categoryDisplay} ${disciplineDisplay}.`;
     } else {
-      explanation = `Your prediction for ${athleteName} in ${discipline} was correct. Your bet WON.`;
+      explanation = `Correct! Your prediction for ${athleteName} in ${disciplineDisplay} was correct.`;
     }
   } else if (selectionResult === 'lost') {
     if (marketType === 'WINNER') {
       const winner = actualResults?.position_1st || 'another athlete';
-      explanation = `You picked ${athleteName} to win ${category.replace('_', ' ')} ${discipline}. ${winner} won instead. Your bet LOST.`;
+      // Try to determine picked athlete's rank from results
+      if (actualResults?.position_2nd?.toLowerCase() === athleteName.toLowerCase()) {
+        pickedAthleteRank = 2;
+      } else if (actualResults?.position_3rd?.toLowerCase() === athleteName.toLowerCase()) {
+        pickedAthleteRank = 3;
+      }
+      
+      if (pickedAthleteRank) {
+        explanation = `Not correct. ${athleteName} finished #${pickedAthleteRank}, not 1st. Winner was ${winner}.`;
+      } else {
+        explanation = `Not correct. ${athleteName} did not finish 1st. Winner was ${winner}.`;
+      }
     } else if (marketType === 'PODIUM') {
-      explanation = `Your podium prediction for ${category.replace('_', ' ')} ${discipline} was incorrect. Your bet LOST.`;
+      // For podium bets - show what the actual podium was
+      const podiumList: string[] = [];
+      if (actualResults?.position_1st) podiumList.push(`1) ${actualResults.position_1st}`);
+      if (actualResults?.position_2nd) podiumList.push(`2) ${actualResults.position_2nd}`);
+      if (actualResults?.position_3rd) podiumList.push(`3) ${actualResults.position_3rd}`);
+      
+      const podiumDisplay = podiumList.length > 0 ? ` Podium: ${podiumList.join(', ')}` : '';
+      explanation = `Not correct. ${athleteName} did not finish in the Top 3.${podiumDisplay}`;
     } else if (marketType === 'HIGHEST_SCORE') {
       const scorer = actualResults?.highest_scorer || 'another athlete';
-      explanation = `You picked ${athleteName} for highest score. ${scorer} had the highest score instead. Your bet LOST.`;
+      const winningScore = actualResults?.highest_score;
+      
+      if (winningScore) {
+        explanation = `Not correct. ${athleteName} did not have the highest score. ${scorer} scored ${winningScore}.`;
+      } else {
+        explanation = `Not correct. ${athleteName} did not have the highest score. Highest scorer was ${scorer}.`;
+      }
     } else {
-      explanation = `Your prediction for ${athleteName} in ${discipline} was incorrect. Your bet LOST.`;
+      explanation = `Not correct. Your prediction for ${athleteName} in ${disciplineDisplay} was incorrect.`;
     }
   } else {
-    explanation = `Your bet on ${athleteName} in ${discipline} was voided. Your stake has been refunded.`;
+    // VOID - include specific reason if provided
+    if (voidReason) {
+      explanation = `Your entry on ${athleteName} was voided: ${voidReason}. Your stake has been refunded.`;
+    } else {
+      explanation = `Your entry on ${athleteName} in ${disciplineDisplay} was voided. Your stake has been refunded.`;
+    }
   }
 
   return {
@@ -116,13 +170,22 @@ function buildSettlementExplanation(
     discipline,
     category,
     athlete_picked: athleteName,
-    actual_results: actualResults || null,
+    actual_results: {
+      ...(actualResults || {}),
+      picked_athlete_rank: pickedAthleteRank,
+      picked_athlete_score: pickedAthleteScore,
+    },
+    your_pick: {
+      athlete_name: athleteName,
+      market_type: marketType,
+    },
     payout_details: {
       stake,
       odds_decimal: odds,
       payout: selectionResult === 'won' ? payout : (selectionResult === 'void' ? stake : 0),
       profit: selectionResult === 'won' ? payout - stake : 0
     },
+    void_reason: selectionResult === 'void' ? (voidReason || 'Entry voided by admin') : null,
     settled_at: new Date().toISOString()
   };
 }
@@ -1132,11 +1195,11 @@ Deno.serve(async (req) => {
       console.log(`   ❌ ${result.errors.length} errors occurred`);
     }
 
-    // Write audit log for the settlement batch
+    // Write audit log for the settlement batch - RESULTS_SETTLED
     await writeAuditLog(supabaseClient, {
       actor_type: 'admin',
       actor_id: user.id,
-      action_type: 'PREDICTIONS_SETTLED',
+      action_type: 'RESULTS_SETTLED',
       entity_type: 'settlement_batch',
       entity_id: `batch_${new Date().toISOString()}`,
       before_state: {
@@ -1153,7 +1216,24 @@ Deno.serve(async (req) => {
       },
       metadata: {
         tournament_name: requestTournamentName,
-        selection_ids: selectionIds.slice(0, 20), // First 20 for reference
+        selection_ids: selectionIds.slice(0, 20),
+      }
+    });
+
+    // Write audit log for entry results generation - ENTRY_RESULTS_GENERATED
+    const wonCount = result.debug_info?.single_bets_settled || 0;
+    const lostCount = result.settled_predictions - wonCount;
+    await writeAuditLog(supabaseClient, {
+      actor_type: 'system',
+      action_type: 'ENTRY_RESULTS_GENERATED',
+      entity_type: 'predictions',
+      entity_id: 'batch',
+      metadata: {
+        count: result.settled_predictions,
+        won: wonCount,
+        lost: lostCount,
+        void: 0, // Would need to track separately
+        tournament_name: requestTournamentName,
       }
     });
 

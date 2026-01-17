@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search, Sparkles, X, AlertTriangle, Edit } from 'lucide-react';
+import { AlertCircle, CheckCircle, TrendingUp, Users, Coins, Trophy, Search, Sparkles, X, AlertTriangle, Edit, Lock, Unlock } from 'lucide-react';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { compareScores, isValidSlalomScore, normalizeSlalomScore, parseSlalomScore } from '@/utils/waterskiScoring';
 import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
@@ -187,12 +187,15 @@ export default function TournamentSettlement() {
 
       const { data: markets, error: marketsError } = await supabase
         .from('markets')
-        .select('*, selections(*, athlete:athletes(name))')
+        .select('*, selections(*, athlete:athletes(name)), locked_at')
         .eq('tournament_id', selectedTournament);
 
       if (marketsError) throw marketsError;
 
-      return { tournament: tournament[0], existingResults, markets };
+      // Check if any market is locked
+      const isLocked = markets.some((m: any) => m.locked_at);
+
+      return { tournament: tournament[0], existingResults, markets, isLocked };
     },
     enabled: !!selectedTournament,
     staleTime: 5 * 60 * 1000, // 5 minutes - prevents refetching while working
@@ -967,6 +970,55 @@ export default function TournamentSettlement() {
     },
   });
 
+  // Lock Results mutation - marks market results as finalized and immutable
+  const lockResultsMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedTournament || !tournamentData?.markets) {
+        throw new Error('No tournament or markets selected');
+      }
+
+      const marketIds = tournamentData.markets.map((m: any) => m.id);
+      const lockedAt = new Date().toISOString();
+
+      // Lock all markets for this tournament
+      const { error: lockError } = await supabase
+        .from('markets')
+        .update({ locked_at: lockedAt })
+        .in('id', marketIds);
+
+      if (lockError) throw lockError;
+
+      // Write audit log for MARKET_RESULTS_LOCKED
+      const { error: auditError } = await supabase
+        .from('audit_logs')
+        .insert({
+          actor_type: 'admin',
+          action_type: 'MARKET_RESULTS_LOCKED',
+          entity_type: 'tournament',
+          entity_id: selectedTournament,
+          metadata: {
+            tournament_name: tournamentData.tournament?.name,
+            markets_locked: marketIds.length,
+            locked_at: lockedAt,
+          }
+        });
+
+      if (auditError) console.error('Failed to write audit log:', auditError);
+
+      return { lockedAt, marketsCount: marketIds.length };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data'] });
+      toast({ 
+        title: 'Results Locked',
+        description: `${data.marketsCount} market(s) are now finalized and cannot be re-settled.`
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Lock failed', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const totalHouseProfit = settlementPreviews.reduce(
     (sum, p) => sum + (p.total_wagered - p.total_payout),
     0
@@ -1008,8 +1060,25 @@ export default function TournamentSettlement() {
           </CardContent>
         </Card>
 
+        {/* Locked Results Indicator */}
+        {selectedTournament && tournamentData?.isLocked && (
+          <Card className="border-success/50 bg-success/5">
+            <CardContent className="py-4">
+              <div className="flex items-center gap-3">
+                <Lock className="w-5 h-5 text-success" />
+                <div className="flex-1">
+                  <p className="font-medium text-success">Results Locked</p>
+                  <p className="text-sm text-muted-foreground">
+                    Market results are finalized and explanations are immutable. Re-settlement is disabled.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Re-settlement Options for already-settled tournaments */}
-        {selectedTournament && tournamentData?.tournament?.settled_at && (
+        {selectedTournament && tournamentData?.tournament?.settled_at && !tournamentData?.isLocked && (
           <Card className="border-amber-500/50 bg-amber-500/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-amber-600">
@@ -1025,6 +1094,25 @@ export default function TournamentSettlement() {
                   You can edit individual results or rescore fantasy entries.
                 </AlertDescription>
               </Alert>
+
+              {/* Lock Results Button */}
+              <div className="pt-4 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">Finalize Results</p>
+                    <p className="text-sm text-muted-foreground">Lock results to prevent re-settlement and preserve explanations.</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => lockResultsMutation.mutate()}
+                    disabled={lockResultsMutation.isPending}
+                  >
+                    <Lock className="w-4 h-4" />
+                    {lockResultsMutation.isPending ? 'Locking...' : 'Lock Results'}
+                  </Button>
+                </div>
+              </div>
               
               <div className="flex gap-3">
                 <Button
