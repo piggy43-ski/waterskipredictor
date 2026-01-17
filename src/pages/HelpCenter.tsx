@@ -11,7 +11,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ArrowLeft, Search, BookOpen, Coins, Gift, Trophy, Wrench, HelpCircle } from "lucide-react";
+import { ArrowLeft, Search, BookOpen, Coins, Gift, Trophy, Wrench, HelpCircle, User } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const sectionIcons: Record<string, React.ReactNode> = {
@@ -19,6 +19,7 @@ const sectionIcons: Record<string, React.ReactNode> = {
   "Tokens & Limits": <Coins className="w-5 h-5" />,
   "Rewards & Redemption": <Gift className="w-5 h-5" />,
   "Results & Finalization": <Trophy className="w-5 h-5" />,
+  "Account & Profile": <User className="w-5 h-5" />,
   "Troubleshooting": <Wrench className="w-5 h-5" />,
 };
 
@@ -27,6 +28,7 @@ const sectionOrder = [
   "Tokens & Limits",
   "Rewards & Redemption",
   "Results & Finalization",
+  "Account & Profile",
   "Troubleshooting",
 ];
 

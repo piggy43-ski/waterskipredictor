@@ -48,6 +48,9 @@ import AdminAuditLogs from "./pages/admin/AuditLogs";
 import AdminRewardLiabilityDashboard from "./pages/admin/RewardLiabilityDashboard";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCanceled from "./pages/PaymentCanceled";
+import HelpCenter from "./pages/HelpCenter";
+import HelpArticle from "./pages/HelpArticle";
+import AdminHelpArticles from "./pages/admin/HelpArticles";
 
 const queryClient = new QueryClient();
 
@@ -80,7 +83,10 @@ const App = () => (
               <Route path="/fantasy/:potId" element={<FantasyPotDetail />} />
               <Route path="/fantasy/:potId/team/:entryId" element={<FantasyTeamView />} />
               <Route path="/fantasy/:potId/team/:entryId/edit" element={<FantasyTeamEdit />} />
+              <Route path="/help" element={<HelpCenter />} />
+              <Route path="/help/:id" element={<HelpArticle />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/help-articles" element={<AdminHelpArticles />} />
               <Route path="/admin/fantasy-pots" element={<AdminFantasyPots />} />
               <Route path="/admin/athletes" element={<AdminAthletes />} />
               <Route path="/admin/athletes/:id" element={<AdminAthleteDetail />} />
