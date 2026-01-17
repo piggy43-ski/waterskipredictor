@@ -11,7 +11,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ArrowLeft, Search, BookOpen, Coins, Gift, Trophy, Wrench, HelpCircle, User } from "lucide-react";
+import { ArrowLeft, Search, BookOpen, Coins, Gift, Trophy, Wrench, HelpCircle, User, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const sectionIcons: Record<string, React.ReactNode> = {
@@ -98,19 +98,29 @@ const HelpCenter = () => {
     <div className="min-h-screen bg-background pb-20">
       <div className="sticky top-0 z-10 bg-background border-b border-border">
         <div className="container max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate(-1)}
+                className="shrink-0"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-6 h-6 text-primary" />
+                <h1 className="text-xl font-bold">Help Center</h1>
+              </div>
+            </div>
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate(-1)}
+              onClick={() => navigate("/")}
               className="shrink-0"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <X className="w-5 h-5" />
             </Button>
-            <div className="flex items-center gap-2">
-              <HelpCircle className="w-6 h-6 text-primary" />
-              <h1 className="text-xl font-bold">Help Center</h1>
-            </div>
           </div>
           
           <div className="relative">
