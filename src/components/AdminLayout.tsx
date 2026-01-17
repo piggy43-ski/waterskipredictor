@@ -31,6 +31,7 @@ const navItems = [
   { path: '/admin/rewards', label: 'Rewards', icon: Gift },
   { path: '/admin/liabilities', label: 'Reward Liabilities', icon: ClipboardList },
   { path: '/admin/reward-dashboard', label: 'Reward Dashboard', icon: PieChart },
+  { path: '/admin/help-articles', label: 'Help Articles', icon: FileText },
   { path: '/admin/data-integrity', label: 'Data Integrity', icon: Database },
   { path: '/admin/settlement-test', label: 'Results Test', icon: FlaskConical },
   { path: '/admin/audit-logs', label: 'Audit Logs', icon: FileText },

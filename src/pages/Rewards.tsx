@@ -4,12 +4,12 @@ import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Coins, Award, ShoppingBag, Sparkles, Loader2, Package } from 'lucide-react';
+import { Coins, Award, ShoppingBag, Sparkles, Loader2, Package, HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useWallet } from '@/hooks/useWallet';
 import {
   Dialog,
@@ -416,6 +416,15 @@ const Rewards = () => {
       />
       
       <div className="max-w-lg mx-auto px-4 py-6">
+        <div className="flex justify-end mb-4">
+          <Link 
+            to="/help?section=Rewards%20%26%20Redemption" 
+            className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1"
+          >
+            <HelpCircle className="w-3 h-3" />
+            Need help with rewards?
+          </Link>
+        </div>
         <Tabs defaultValue="all" className="w-full">
           <TabsList className="w-full grid grid-cols-4 mb-6">
             <TabsTrigger value="all">All</TabsTrigger>
