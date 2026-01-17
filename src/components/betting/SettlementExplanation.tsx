@@ -1,4 +1,5 @@
-import { Trophy, XCircle, RefreshCw, Medal, Target, ArrowRight } from 'lucide-react';
+import { Trophy, XCircle, RefreshCw, Medal, Target, ArrowRight, HelpCircle, Hash } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -13,6 +14,8 @@ export interface SettlementData {
     winner_score?: string;
     highest_scorer?: string;
     highest_score?: string;
+    picked_athlete_rank?: number;
+    picked_athlete_score?: string;
   };
   your_pick?: {
     athlete_name?: string;
@@ -28,6 +31,7 @@ export interface SettlementData {
     payout: number;
     profit?: number;
   };
+  void_reason?: string;
 }
 
 interface Props {
@@ -208,6 +212,39 @@ export function SettlementExplanation({ settlement, className }: Props) {
             </div>
           </div>
         )}
+
+        {/* Your pick's actual finish (for non-podium LOST entries) */}
+        {settlement.status === 'LOST' && 
+         settlement.actual_results?.picked_athlete_rank && 
+         settlement.your_pick?.market_type !== 'PODIUM' && (
+          <div className="pt-2 border-t border-border/50 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Hash className="w-3 h-3" />
+              <span>
+                {settlement.your_pick?.athlete_name || 'Your pick'} finished #{settlement.actual_results.picked_athlete_rank}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Void reason */}
+        {settlement.status === 'VOID' && settlement.void_reason && (
+          <div className="pt-2 border-t border-border/50 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <RefreshCw className="w-3 h-3" />
+              <span>Reason: {settlement.void_reason}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Help link */}
+        <Link 
+          to="/help?section=Contests & Rules" 
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary mt-2 pt-2 border-t border-border/50"
+        >
+          <HelpCircle className="w-3 h-3" />
+          Learn how contests work
+        </Link>
       </div>
     </Card>
   );

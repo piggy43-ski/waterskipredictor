@@ -50,6 +50,8 @@ interface BetDetail {
   profit: number;
   created_at: string;
   settled_at: string | null;
+  settlement_explanation?: string;
+  settlement_metadata?: Record<string, any>;
 }
 
 export function SettlementAuditTable({ tournamentId, tournamentName }: SettlementAuditTableProps) {
@@ -82,7 +84,8 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
           created_at,
           settled_at,
           bet_slip_id,
-          selection_id
+          selection_id,
+          settlement_metadata
         `)
         .eq('tournament_name', tournamentName || '')
         .order('created_at', { ascending: false });
@@ -125,6 +128,10 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
         const payout = p.status === 'WON' ? (p.payout_tokens || p.potential_payout || 0) : 0;
         const profit = payout - p.staked_tokens;
 
+        // Extract explanation from settlement metadata
+        const metadata = p.settlement_metadata as Record<string, any> | null;
+        const explanation = metadata?.explanation || '';
+
         return {
           id: p.id,
           username: profile?.username || 'Unknown',
@@ -143,6 +150,8 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
           profit,
           created_at: p.created_at,
           settled_at: p.settled_at,
+          settlement_explanation: explanation,
+          settlement_metadata: metadata || undefined,
         };
       });
 
@@ -350,6 +359,7 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
                     <TableHead className="text-right">Stake</TableHead>
                     <TableHead className="text-right">Odds</TableHead>
                     <TableHead className="text-center">Result</TableHead>
+                    <TableHead className="min-w-[200px]">Explanation</TableHead>
                     <TableHead className="text-right">Payout</TableHead>
                     <TableHead className="text-right">Profit</TableHead>
                   </TableRow>
@@ -357,7 +367,7 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
                 <TableBody>
                   {filteredBets.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                         No bets found matching filters
                       </TableCell>
                     </TableRow>
@@ -392,6 +402,9 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
                         </TableCell>
                         <TableCell className="text-center">
                           {getResultBadge(bet.result)}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={bet.settlement_explanation}>
+                          {bet.settlement_explanation || (bet.result === 'PENDING' ? 'Awaiting results' : '—')}
                         </TableCell>
                         <TableCell className="text-right">
                           {bet.result === 'WON' ? (

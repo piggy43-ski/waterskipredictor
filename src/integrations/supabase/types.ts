@@ -1211,6 +1211,7 @@ export type Database = {
           created_at: string
           discipline: string
           id: string
+          locked_at: string | null
           market_type: string
           name: string
           tournament_id: string
@@ -1221,6 +1222,7 @@ export type Database = {
           created_at?: string
           discipline: string
           id?: string
+          locked_at?: string | null
           market_type: string
           name: string
           tournament_id: string
@@ -1231,6 +1233,7 @@ export type Database = {
           created_at?: string
           discipline?: string
           id?: string
+          locked_at?: string | null
           market_type?: string
           name?: string
           tournament_id?: string
