@@ -6,6 +6,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Audit log helper
+async function writeAuditLog(supabase: any, entry: {
+  actor_type: 'admin' | 'system';
+  actor_id?: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  before_state?: any;
+  after_state?: any;
+  metadata?: Record<string, any>;
+}): Promise<void> {
+  try {
+    await supabase.from('audit_logs').insert({
+      actor_type: entry.actor_type,
+      actor_id: entry.actor_id || null,
+      action_type: entry.action_type,
+      entity_type: entry.entity_type,
+      entity_id: entry.entity_id,
+      before_state: entry.before_state || null,
+      after_state: entry.after_state || null,
+      metadata: entry.metadata || {},
+    });
+  } catch (err) {
+    console.error('Audit log error:', err);
+  }
+}
+
 interface ValidateBetRequest {
   userId: string;
   tournamentId: string;
@@ -218,6 +245,26 @@ serve(async (req) => {
       // Odds shortened
       result.adjustedOdds = shortenedOdds;
       result.warnings.push(`Odds adjusted from ${currentOdds.toFixed(2)}x to ${shortenedOdds.toFixed(2)}x due to market exposure limits`);
+
+      // Write audit log for auto-shortening
+      await writeAuditLog(supabase, {
+        actor_type: 'system',
+        action_type: 'AUTO_SHORTENING_APPLIED',
+        entity_type: 'bet_validation',
+        entity_id: `${marketId}_${athleteId}`,
+        before_state: { original_odds: currentOdds },
+        after_state: { 
+          adjusted_odds: shortenedOdds,
+          reason: 'Liability cap triggered'
+        },
+        metadata: {
+          user_id: userId,
+          stake_amount: stakeAmount,
+          market_id: marketId,
+          athlete_name: athleteName,
+          liability_pct: marketHandle > 0 ? (currentLiabilityIfWins / marketHandle) * 100 : 0,
+        }
+      });
     }
 
     // Add liability info

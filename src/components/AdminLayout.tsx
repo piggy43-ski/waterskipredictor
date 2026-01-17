@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database, DollarSign, UserCog, Crown, FlaskConical, ClipboardList, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database, DollarSign, UserCog, Crown, FlaskConical, ClipboardList, Menu, X, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAdminCheck } from '@/hooks/useAdminCheck';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -32,6 +32,7 @@ const navItems = [
   { path: '/admin/liabilities', label: 'Reward Liabilities', icon: ClipboardList },
   { path: '/admin/data-integrity', label: 'Data Integrity', icon: Database },
   { path: '/admin/settlement-test', label: 'Results Test', icon: FlaskConical },
+  { path: '/admin/audit-logs', label: 'Audit Logs', icon: FileText },
 ];
 
 const NavItemsList = ({ onItemClick }: { onItemClick?: () => void }) => {

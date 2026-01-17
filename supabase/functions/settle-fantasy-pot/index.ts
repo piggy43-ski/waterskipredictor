@@ -6,6 +6,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Audit log helper
+async function writeAuditLog(supabase: any, entry: {
+  actor_type: 'admin' | 'system';
+  actor_id?: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  before_state?: any;
+  after_state?: any;
+  metadata?: Record<string, any>;
+}): Promise<void> {
+  try {
+    await supabase.from('audit_logs').insert({
+      actor_type: entry.actor_type,
+      actor_id: entry.actor_id || null,
+      action_type: entry.action_type,
+      entity_type: entry.entity_type,
+      entity_id: entry.entity_id,
+      before_state: entry.before_state || null,
+      after_state: entry.after_state || null,
+      metadata: entry.metadata || {},
+    });
+  } catch (err) {
+    console.error('Audit log error:', err);
+  }
+}
+
 // Payout structures
 const PAYOUT_STRUCTURES: Record<string, Record<number, number>> = {
   winner_takes_all: { 1: 100 },
@@ -182,6 +209,31 @@ serve(async (req) => {
       .eq('id', pot_id);
 
     console.log(`Fantasy pot ${pot_id} settled successfully`);
+
+    // Write audit log for fantasy pot settlement
+    await writeAuditLog(supabase, {
+      actor_type: 'admin',
+      actor_id: user.id,
+      action_type: 'FANTASY_POT_SETTLED',
+      entity_type: 'fantasy_pot',
+      entity_id: pot_id,
+      before_state: {
+        status: pot.status,
+        entries_count: entries.length,
+      },
+      after_state: {
+        status: 'settled',
+        total_pool: totalPool,
+        house_rake: houseRake,
+        net_prize_pool: netPrizePool,
+        payouts: payouts.map(p => ({ rank: p.rank, amount: p.amount })),
+      },
+      metadata: {
+        pot_name: pot.name,
+        payout_structure: pot.payout_structure,
+        entry_fee: pot.entry_fee_tokens,
+      }
+    });
 
     return new Response(JSON.stringify({
       success: true,
