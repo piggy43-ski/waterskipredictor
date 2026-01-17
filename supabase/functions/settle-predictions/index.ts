@@ -5,6 +5,41 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Audit log helper - writes immutable audit entries
+interface AuditLogEntry {
+  actor_type: 'admin' | 'system';
+  actor_id?: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  before_state?: any;
+  after_state?: any;
+  metadata?: Record<string, any>;
+}
+
+async function writeAuditLog(supabase: any, entry: AuditLogEntry): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('audit_logs')
+      .insert({
+        actor_type: entry.actor_type,
+        actor_id: entry.actor_id || null,
+        action_type: entry.action_type,
+        entity_type: entry.entity_type,
+        entity_id: entry.entity_id,
+        before_state: entry.before_state || null,
+        after_state: entry.after_state || null,
+        metadata: entry.metadata || {},
+      });
+    
+    if (error) {
+      console.error('Failed to write audit log:', error);
+    }
+  } catch (err) {
+    console.error('Audit log error:', err);
+  }
+}
+
 interface SelectionWithContext {
   selection_id: string;
   result: 'won' | 'lost' | 'void';
@@ -1096,6 +1131,31 @@ Deno.serve(async (req) => {
     if (result.errors && result.errors.length > 0) {
       console.log(`   ❌ ${result.errors.length} errors occurred`);
     }
+
+    // Write audit log for the settlement batch
+    await writeAuditLog(supabaseClient, {
+      actor_type: 'admin',
+      actor_id: user.id,
+      action_type: 'PREDICTIONS_SETTLED',
+      entity_type: 'settlement_batch',
+      entity_id: `batch_${new Date().toISOString()}`,
+      before_state: {
+        selections_count: selections.length,
+        pending_predictions: result.debug_info?.predictions_found
+      },
+      after_state: {
+        settled_predictions: result.settled_predictions,
+        total_payout: result.total_payout,
+        affected_users: result.affected_users,
+        single_bets_settled: result.debug_info?.single_bets_settled,
+        parlays_settled: result.debug_info?.parlays_settled,
+        errors_count: result.errors?.length || 0
+      },
+      metadata: {
+        tournament_name: requestTournamentName,
+        selection_ids: selectionIds.slice(0, 20), // First 20 for reference
+      }
+    });
 
     return new Response(
       JSON.stringify(result),

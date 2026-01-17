@@ -7,6 +7,33 @@ const logStep = (step: string, details?: any) => {
   console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
 };
 
+// Audit log helper
+async function writeAuditLog(supabase: any, entry: {
+  actor_type: 'admin' | 'system';
+  actor_id?: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  before_state?: any;
+  after_state?: any;
+  metadata?: Record<string, any>;
+}): Promise<void> {
+  try {
+    await supabase.from('audit_logs').insert({
+      actor_type: entry.actor_type,
+      actor_id: entry.actor_id || null,
+      action_type: entry.action_type,
+      entity_type: entry.entity_type,
+      entity_id: entry.entity_id,
+      before_state: entry.before_state || null,
+      after_state: entry.after_state || null,
+      metadata: entry.metadata || {},
+    });
+  } catch (err) {
+    console.error('Audit log error:', err);
+  }
+}
+
 serve(async (req) => {
   try {
     logStep("Webhook received");
@@ -126,6 +153,28 @@ serve(async (req) => {
         .from("profiles")
         .update({ lifetime_deposited: currentDeposited + tokenAmount })
         .eq("id", userId);
+
+      // Write audit log for token purchase
+      await writeAuditLog(supabaseClient, {
+        actor_type: 'system',
+        action_type: 'TOKENS_PURCHASED',
+        entity_type: 'token_transaction',
+        entity_id: session.payment_intent as string || session.id,
+        before_state: {
+          purchased_tokens: currentPurchased,
+          earned_tokens: currentEarned,
+        },
+        after_state: {
+          purchased_tokens: newPurchased,
+          total_balance: newBalance,
+        },
+        metadata: {
+          user_id: userId,
+          token_amount: tokenAmount,
+          pack_name: packName,
+          stripe_session_id: session.id,
+        }
+      });
 
       logStep("Checkout session processed successfully", { userId, tokenAmount });
     }

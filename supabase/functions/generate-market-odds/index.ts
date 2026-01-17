@@ -5,6 +5,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Audit log helper
+interface AuditLogEntry {
+  actor_type: 'admin' | 'system';
+  actor_id?: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  before_state?: any;
+  after_state?: any;
+  metadata?: Record<string, any>;
+}
+
+async function writeAuditLog(supabase: any, entry: AuditLogEntry): Promise<void> {
+  try {
+    await supabase.from('audit_logs').insert({
+      actor_type: entry.actor_type,
+      actor_id: entry.actor_id || null,
+      action_type: entry.action_type,
+      entity_type: entry.entity_type,
+      entity_id: entry.entity_id,
+      before_state: entry.before_state || null,
+      after_state: entry.after_state || null,
+      metadata: entry.metadata || {},
+    });
+  } catch (err) {
+    console.error('Audit log error:', err);
+  }
+}
+
 // Constants
 const TAU: Record<string, number> = { slalom: 14, trick: 22, jump: 12 };
 const OVERROUND: Record<string, number> = { WINNER: 1.10, PODIUM: 1.18, HIGHEST_SCORE: 1.14 };
@@ -393,6 +422,33 @@ Deno.serve(async (req) => {
     const houseEdgePct = ((1 / finalImpliedSum - 1) * 100).toFixed(2);
     const acceptableRange = IMPLIED_SUM_RANGES[market.market_type] || IMPLIED_SUM_RANGES.WINNER;
     const isWithinRange = finalImpliedSum >= acceptableRange.min && finalImpliedSum <= acceptableRange.max;
+
+    // Write audit log for odds generation
+    await writeAuditLog(supabase, {
+      actor_type: 'system',
+      action_type: 'ODDS_GENERATED',
+      entity_type: 'market',
+      entity_id: market_id,
+      before_state: existingOdds && existingOdds.length > 0 ? {
+        previous_odds_count: existingOdds.length,
+        was_frozen: existingOdds[0]?.is_frozen
+      } : null,
+      after_state: {
+        athletes_processed: normalizedResults.length,
+        target_implied_sum: targetImpliedSum,
+        actual_implied_sum: Math.round(finalImpliedSum * 1000) / 1000,
+        scaling_factor: scalingFactor,
+        house_edge_pct: parseFloat(houseEdgePct),
+      },
+      metadata: {
+        market_type: market.market_type,
+        discipline: market.discipline,
+        category: market.category,
+        overround,
+        tau,
+        sims: market.market_type === "WINNER" ? null : SIMS,
+      }
+    });
 
     return new Response(
       JSON.stringify({
