@@ -148,8 +148,24 @@ export default function AdminRewards() {
         usd_cost: usdCostValue ? parseFloat(usdCostValue) : null,
       };
 
-      const { error } = await supabase.from('rewards').insert(reward);
+      const { data: newReward, error } = await supabase.from('rewards').insert(reward).select().single();
       if (error) throw error;
+
+      // Get current user for audit log
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Write audit log
+      await supabase.from('audit_logs').insert({
+        actor_type: 'admin',
+        actor_id: user?.id || null,
+        action_type: 'REWARD_CREATED',
+        entity_type: 'reward',
+        entity_id: newReward.id,
+        before_state: null,
+        after_state: newReward,
+      });
+
+      return newReward;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-rewards'] });
@@ -165,11 +181,30 @@ export default function AdminRewards() {
 
   const toggleMutation = useMutation({
     mutationFn: async ({ id, available }: { id: string; available: boolean }) => {
+      // Get before state
+      const { data: beforeData } = await supabase.from('rewards').select('*').eq('id', id).single();
+
       const { error } = await supabase
         .from('rewards')
         .update({ available })
         .eq('id', id);
       if (error) throw error;
+
+      // Get after state and current user
+      const { data: afterData } = await supabase.from('rewards').select('*').eq('id', id).single();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Write audit log
+      await supabase.from('audit_logs').insert({
+        actor_type: 'admin',
+        actor_id: user?.id || null,
+        action_type: 'REWARD_UPDATED',
+        entity_type: 'reward',
+        entity_id: id,
+        before_state: beforeData,
+        after_state: afterData,
+        metadata: { field_changed: 'available' },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-rewards'] });
@@ -182,8 +217,23 @@ export default function AdminRewards() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Get before state
+      const { data: beforeData } = await supabase.from('rewards').select('*').eq('id', id).single();
+      const { data: { user } } = await supabase.auth.getUser();
+
       const { error } = await supabase.from('rewards').delete().eq('id', id);
       if (error) throw error;
+
+      // Write audit log
+      await supabase.from('audit_logs').insert({
+        actor_type: 'admin',
+        actor_id: user?.id || null,
+        action_type: 'REWARD_DELETED',
+        entity_type: 'reward',
+        entity_id: id,
+        before_state: beforeData,
+        after_state: null,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-rewards'] });

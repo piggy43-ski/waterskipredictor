@@ -133,6 +133,13 @@ export default function AdminLiabilities() {
   // Update status mutation
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      // Get before state
+      const { data: beforeData } = await supabase
+        .from('house_rewards_liability')
+        .select('*')
+        .eq('id', id)
+        .single();
+
       const updates: Record<string, any> = { status };
       
       if (status === 'delivered' || status === 'closed') {
@@ -145,6 +152,26 @@ export default function AdminLiabilities() {
         .eq('id', id);
 
       if (error) throw error;
+
+      // Get after state and current user
+      const { data: afterData } = await supabase
+        .from('house_rewards_liability')
+        .select('*')
+        .eq('id', id)
+        .single();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Write audit log
+      await supabase.from('audit_logs').insert({
+        actor_type: 'admin',
+        actor_id: user?.id || null,
+        action_type: 'REDEMPTION_STATUS_UPDATED',
+        entity_type: 'redemption',
+        entity_id: beforeData?.redemption_id || id,
+        before_state: { status: beforeData?.status },
+        after_state: { status: afterData?.status },
+        metadata: { liability_id: id },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-liabilities'] });
