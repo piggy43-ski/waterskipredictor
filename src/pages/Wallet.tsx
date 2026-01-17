@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Coins, Sparkles, Loader2 } from 'lucide-react';
+import { Coins, Sparkles, Loader2, HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWallet } from '@/hooks/useWallet';
@@ -203,6 +203,13 @@ const Wallet = () => {
               <span>Tokens cannot be converted back to cash - entertainment only</span>
             </li>
           </ul>
+          <Link 
+            to="/help?section=Tokens%20%26%20Limits" 
+            className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 mt-3"
+          >
+            <HelpCircle className="w-3 h-3" />
+            Need help with tokens?
+          </Link>
         </Card>
 
         {/* Disclaimer */}

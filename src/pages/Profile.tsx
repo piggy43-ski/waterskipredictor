@@ -615,18 +615,28 @@ const Profile = () => {
         {/* Help & Support */}
         <Card className="p-6">
           <h2 className="text-lg font-bold mb-4">Help & Support</h2>
-          <Button 
-            variant="outline" 
-            className="w-full"
-            onClick={async () => {
-              await resetTutorial();
-              startTutorial();
-              navigate('/');
-            }}
-          >
-            <HelpCircle className="w-4 h-4 mr-2" />
-            Replay Tutorial
-          </Button>
+          <div className="space-y-3">
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => navigate('/help')}
+            >
+              <HelpCircle className="w-4 h-4 mr-2" />
+              Help Center
+            </Button>
+            <Button 
+              variant="ghost" 
+              className="w-full"
+              onClick={async () => {
+                await resetTutorial();
+                startTutorial();
+                navigate('/');
+              }}
+            >
+              <HelpCircle className="w-4 h-4 mr-2" />
+              Replay Tutorial
+            </Button>
+          </div>
         </Card>
 
         {/* Admin Panel Link */}

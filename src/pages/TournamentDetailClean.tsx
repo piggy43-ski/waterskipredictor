@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { SelectionCard } from '@/components/SelectionCard';
@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Selection, Tournament, Market, MarketType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, MapPin, Clock, AlertCircle, Users } from 'lucide-react';
+import { Calendar, MapPin, Clock, AlertCircle, Users, HelpCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';

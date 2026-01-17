@@ -876,6 +876,74 @@ export type Database = {
           },
         ]
       }
+      help_articles: {
+        Row: {
+          body: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          section: string
+          sort_order: number | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          section: string
+          sort_order?: number | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          section?: string
+          sort_order?: number | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      help_feedback: {
+        Row: {
+          article_id: string
+          created_at: string | null
+          feedback_text: string | null
+          helpful: boolean
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          article_id: string
+          created_at?: string | null
+          feedback_text?: string | null
+          helpful: boolean
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          article_id?: string
+          created_at?: string | null
+          feedback_text?: string | null
+          helpful?: boolean
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "help_feedback_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "help_articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       house_rewards_liability: {
         Row: {
           created_at: string
