@@ -762,6 +762,15 @@ const TournamentDetail = () => {
               </AlertDescription>
             </Alert>
           )}
+          
+          {/* Help Link */}
+          <Link 
+            to="/help?section=Contests & Rules" 
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+          >
+            <HelpCircle className="w-3 h-3" />
+            Need help with contests?
+          </Link>
         </div>
 
         {/* Parlay Builder Button */}
