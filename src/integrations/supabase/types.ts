@@ -551,6 +551,9 @@ export type Database = {
           id: string
           marketing: boolean
           notifications: boolean
+          prediction_reminders: boolean | null
+          promo_notifications: boolean | null
+          results_notifications: boolean | null
           transactional: boolean
           updated_at: string
           user_id: string
@@ -560,6 +563,9 @@ export type Database = {
           id?: string
           marketing?: boolean
           notifications?: boolean
+          prediction_reminders?: boolean | null
+          promo_notifications?: boolean | null
+          results_notifications?: boolean | null
           transactional?: boolean
           updated_at?: string
           user_id: string
@@ -569,6 +575,9 @@ export type Database = {
           id?: string
           marketing?: boolean
           notifications?: boolean
+          prediction_reminders?: boolean | null
+          promo_notifications?: boolean | null
+          results_notifications?: boolean | null
           transactional?: boolean
           updated_at?: string
           user_id?: string
@@ -1242,6 +1251,57 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "markets_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_jobs: {
+        Row: {
+          created_at: string
+          id: string
+          market_id: string | null
+          metadata: Json | null
+          scheduled_for: string
+          status: string
+          tournament_id: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          market_id?: string | null
+          metadata?: Json | null
+          scheduled_for: string
+          status?: string
+          tournament_id?: string | null
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          market_id?: string | null
+          metadata?: Json | null
+          scheduled_for?: string
+          status?: string
+          tournament_id?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_jobs_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_jobs_tournament_id_fkey"
             columns: ["tournament_id"]
             isOneToOne: false
             referencedRelation: "tournaments"
