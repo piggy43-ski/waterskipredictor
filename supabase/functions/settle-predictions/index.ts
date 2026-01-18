@@ -1184,6 +1184,54 @@ Deno.serve(async (req) => {
 
     console.log(`📧 Email notifications: ${emailsSent} sent, ${emailsFailed} failed`);
 
+    // ============= IN-APP NOTIFICATIONS =============
+    console.log(`\n🔔 Creating in-app notifications for ${affectedUserIds.size} users...`);
+    let notificationsSent = 0;
+    
+    try {
+      // Check user preferences for results notifications
+      const { data: userPrefs } = await supabaseClient
+        .from('email_preferences')
+        .select('user_id, results_notifications')
+        .in('user_id', Array.from(affectedUserIds));
+      
+      const prefsMap = new Map(userPrefs?.map(p => [p.user_id, p.results_notifications]) || []);
+      
+      // Create notifications for each affected user (respecting preferences)
+      const notifications = Array.from(affectedUserIds)
+        .filter(userId => {
+          const pref = prefsMap.get(userId);
+          return pref === undefined || pref === true; // Default to true if no preference
+        })
+        .map(userId => ({
+          user_id: userId,
+          type: 'RESULTS_POSTED',
+          title: 'Results are in!',
+          message: `Your entries for ${requestTournamentName || 'the tournament'} have been settled.`,
+          link: '/predictions',
+          read: false,
+          metadata: {
+            tournament_name: requestTournamentName,
+            settlement_batch: new Date().toISOString(),
+          },
+        }));
+
+      if (notifications.length > 0) {
+        const { error: notifError } = await supabaseClient
+          .from('notifications')
+          .insert(notifications);
+        
+        if (notifError) {
+          console.error('❌ Error creating in-app notifications:', notifError);
+        } else {
+          notificationsSent = notifications.length;
+          console.log(`✅ Created ${notificationsSent} in-app notifications`);
+        }
+      }
+    } catch (notifBatchError) {
+      console.error('❌ Error in notification batch:', notifBatchError);
+    }
+
     console.log(`\n🎉 Settlement complete:`);
     console.log(`   ✅ ${result.settled_predictions} predictions settled`);
     console.log(`   💰 ${result.total_payout} tokens paid out`);

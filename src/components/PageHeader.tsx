@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { useWallet } from '@/hooks/useWallet';
 import { useAuth } from '@/contexts/AuthContext';
+import { NotificationBell } from './NotificationBell';
 
 interface PageHeaderProps {
   title: ReactNode;
@@ -50,6 +51,7 @@ export const PageHeader = ({
                 <span className="text-sm font-bold">{(wallet.totalBalance ?? 0).toLocaleString()}</span>
               </div>
             )}
+            {user && <NotificationBell />}
             {action}
             <Button 
               variant="ghost" 
