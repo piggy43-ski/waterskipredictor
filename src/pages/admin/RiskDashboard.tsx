@@ -75,6 +75,8 @@ interface AthleteRiskData {
   tokens_on_athlete: number;
   percent_of_pool: number;
   payout_exposure: number;
+  remaining_capacity: number;
+  is_at_capacity: boolean;
 }
 
 interface AuditLogEntry {
@@ -701,6 +703,11 @@ const RiskDashboard = () => {
         // Probability = 1 / decimal_odds (implied probability)
         const impliedProbability = (1 / s.decimal_odds) * 100;
 
+        // Option A: Calculate remaining capacity (30% cap)
+        const maxAthleteTokens = selectedMarket.total_tokens * RISK_CONFIG.MAX_ATHLETE_EXPOSURE_PCT;
+        const remainingCapacity = Math.max(0, Math.floor(maxAthleteTokens - tokensOnAthlete));
+        const isAtCapacity = tokensOnAthlete >= maxAthleteTokens && selectedMarket.total_tokens > 0;
+
         return {
           athlete_id: s.athlete_id,
           athlete_name: (s.athletes as any)?.name || 'Unknown',
@@ -709,6 +716,8 @@ const RiskDashboard = () => {
           tokens_on_athlete: tokensOnAthlete,
           percent_of_pool: percentOfPool,
           payout_exposure: liability?.liability_if_wins || 0,
+          remaining_capacity: remainingCapacity,
+          is_at_capacity: isAtCapacity,
         };
       });
 
@@ -944,6 +953,43 @@ const RiskDashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Option A: Profit Floor Analysis Card */}
+        <Card className="border-green-500/30 bg-green-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Shield className="h-4 w-4 text-green-400" />
+              Option A: Profit Floor Analysis
+              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                Fixed Multipliers Active
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Multipliers locked at publish • Hard 30% exposure cap per athlete • House bankruptcy impossible
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="p-3 rounded-lg bg-muted/30">
+                <p className="text-xs text-muted-foreground">Max Entry Per User</p>
+                <p className="text-lg font-bold">{RISK_CONFIG.MAX_STAKE.toLocaleString()} tokens</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/30">
+                <p className="text-xs text-muted-foreground">Max Athlete Exposure</p>
+                <p className="text-lg font-bold">{(RISK_CONFIG.MAX_ATHLETE_EXPOSURE_PCT * 100).toFixed(0)}% of pool</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/30">
+                <p className="text-xs text-muted-foreground">Total Active Exposure</p>
+                <p className="text-lg font-bold">{(kpis?.totalExposure || 0).toLocaleString()} tokens</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/30">
+                <p className="text-xs text-muted-foreground">Safety Margin</p>
+                <p className="text-lg font-bold text-green-400">{(RISK_CONFIG.PUBLISH_SAFETY_MARGIN * 100).toFixed(0)}%</p>
+                <p className="text-xs text-muted-foreground">Max payout ≤ {(RISK_CONFIG.PUBLISH_SAFETY_MARGIN * 100).toFixed(0)}% of pool</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* PART 7: Alerts Panel */}
         {alerts.length > 0 && (
@@ -1340,7 +1386,7 @@ const RiskDashboard = () => {
 
                 {/* Athlete Risk Table */}
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Athlete Concentration</h4>
+                  <h4 className="text-sm font-medium mb-2">Athlete Concentration (30% Exposure Cap)</h4>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1349,7 +1395,9 @@ const RiskDashboard = () => {
                         <TableHead className="text-right">Multiplier</TableHead>
                         <TableHead className="text-right">Tokens</TableHead>
                         <TableHead className="text-right">% of Pool</TableHead>
+                        <TableHead className="text-right">Remaining</TableHead>
                         <TableHead className="text-right">Exposure</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1357,9 +1405,11 @@ const RiskDashboard = () => {
                         <TableRow 
                           key={athlete.athlete_id}
                           className={
-                            athlete.percent_of_pool > ALERT_THRESHOLDS.CONCENTRATION_PERCENT 
-                              ? 'bg-yellow-500/10' 
-                              : ''
+                            athlete.is_at_capacity 
+                              ? 'bg-red-500/10' 
+                              : athlete.percent_of_pool > 25 
+                                ? 'bg-yellow-500/10' 
+                                : ''
                           }
                         >
                           <TableCell className="font-medium">{athlete.athlete_name}</TableCell>
@@ -1369,15 +1419,35 @@ const RiskDashboard = () => {
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
                               <Progress 
-                                value={Math.min(athlete.percent_of_pool, 100)} 
+                                value={Math.min((athlete.percent_of_pool / 30) * 100, 100)} 
                                 className="w-16 h-2" 
                               />
-                              <span className={athlete.percent_of_pool > ALERT_THRESHOLDS.CONCENTRATION_PERCENT ? 'text-yellow-400' : ''}>
+                              <span className={athlete.percent_of_pool >= 30 ? 'text-red-400' : athlete.percent_of_pool > 25 ? 'text-yellow-400' : ''}>
                                 {athlete.percent_of_pool.toFixed(1)}%
                               </span>
                             </div>
                           </TableCell>
+                          <TableCell className="text-right">
+                            <span className={athlete.remaining_capacity === 0 ? 'text-red-400' : 'text-green-400'}>
+                              {athlete.remaining_capacity.toLocaleString()}
+                            </span>
+                          </TableCell>
                           <TableCell className="text-right">{athlete.payout_exposure.toLocaleString()}</TableCell>
+                          <TableCell>
+                            {athlete.is_at_capacity ? (
+                              <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                                CAPPED
+                              </Badge>
+                            ) : athlete.percent_of_pool > 25 ? (
+                              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
+                                Near Cap
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                                OK
+                              </Badge>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
