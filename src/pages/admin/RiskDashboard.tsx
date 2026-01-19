@@ -58,6 +58,13 @@ interface MarketRiskData {
   odds_validation_status: 'PENDING' | 'VALID' | 'INVALID' | 'MISSING';
   odds_validation_error: string | null;
   has_monte_carlo: boolean;
+  // Safe Mode fields
+  loss_probability: number;
+  expected_profit: number;
+  profit_p05: number;
+  safe_mode_status: 'PENDING' | 'SAFE' | 'RISK' | 'BLOCKED';
+  last_safe_mode_check: string | null;
+  is_safe: boolean;
 }
 
 interface AthleteRiskData {
@@ -180,6 +187,29 @@ const RiskDashboard = () => {
     },
   });
 
+  // Enforce Safe Mode mutation
+  const enforceSafeMode = useMutation({
+    mutationFn: async (marketId: string) => {
+      const { data, error } = await supabase.functions.invoke('enforce-safe-mode', {
+        body: { market_id: marketId, dry_run: false },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.adjustments_made) {
+        toast.success(`Safe mode enforced: ${data.athletes_compressed} athletes compressed. Loss prob: ${(data.loss_probability * 100).toFixed(1)}%`);
+      } else {
+        toast.info(`Market already safe: Loss prob ${(data.loss_probability * 100).toFixed(1)}%`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['admin-risk-markets'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-risk-audit-logs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Safe mode enforcement failed: ${error.message}`);
+    },
+  });
+
   // Fetch all markets with their odds data
   const { data: marketsData, isLoading: marketsLoading, refetch: refetchMarkets } = useQuery({
     queryKey: ['admin-risk-markets'],
@@ -197,6 +227,11 @@ const RiskDashboard = () => {
           locked_at,
           odds_validation_status,
           odds_validation_error,
+          loss_probability,
+          expected_profit,
+          profit_p05,
+          safe_mode_status,
+          last_safe_mode_check,
           tournaments!inner (
             id,
             name,
@@ -341,6 +376,16 @@ const RiskDashboard = () => {
         } else if (riskRatio > maxRiskRatio * 0.9) {
           riskStatus = 'warning';
         }
+        
+        // Safe Mode fields
+        const lossProbability = market.loss_probability || 0;
+        const expectedProfit = market.expected_profit || 0;
+        const profitP05 = market.profit_p05 || 0;
+        const safeModeStatus = (market.safe_mode_status || 'PENDING') as 'PENDING' | 'SAFE' | 'RISK' | 'BLOCKED';
+        const lastSafeModeCheck = market.last_safe_mode_check || null;
+        
+        // A market is "safe" if loss probability ≤ 10% AND risk ratio within cap
+        const isSafe = lossProbability <= 0.10 && riskRatio <= maxRiskRatio;
 
         return {
           id: market.id,
@@ -369,6 +414,13 @@ const RiskDashboard = () => {
           odds_validation_status: validationStatus,
           odds_validation_error: validationError,
           has_monte_carlo: hasMonteCarlo,
+          // Safe Mode fields
+          loss_probability: lossProbability,
+          expected_profit: expectedProfit,
+          profit_p05: profitP05,
+          safe_mode_status: safeModeStatus,
+          last_safe_mode_check: lastSafeModeCheck,
+          is_safe: isSafe,
         };
       });
 
@@ -416,6 +468,7 @@ const RiskDashboard = () => {
           'PREDICTION_SETTLED',
           'PARLAY_SETTLED',
           'BETSLIP_SETTLED',
+          'SAFE_MODE_ADJUSTMENT',
           'MARKET_LOCKED',
         ])
         .order('created_at', { ascending: false })
@@ -486,11 +539,26 @@ const RiskDashboard = () => {
     
     const maxSingleEntry = Math.max(...marketsData.map(m => m.max_payout), 0);
 
+    // Safe Mode stats
+    const openMarkets = marketsData.filter(m => m.status === 'OPEN');
+    const safeCount = openMarkets.filter(m => m.safe_mode_status === 'SAFE').length;
+    const riskCount = openMarkets.filter(m => m.safe_mode_status === 'RISK').length;
+    const pendingCount = openMarkets.filter(m => m.safe_mode_status === 'PENDING').length;
+    const avgLossProbability = openMarkets.length > 0 
+      ? openMarkets.reduce((sum, m) => sum + (m.loss_probability || 0), 0) / openMarkets.length 
+      : 0;
+
     return {
       statusCounts,
       houseEdgeByType,
       totalExposure,
       maxSingleEntry,
+      safeMode: {
+        safeCount,
+        riskCount,
+        pendingCount,
+        avgLossProbability,
+      },
     };
   }, [marketsData]);
 
@@ -847,6 +915,34 @@ const RiskDashboard = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Safe Mode Status Card */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                90% Safe Mode
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                    {kpis?.safeMode?.safeCount || 0} SAFE
+                  </Badge>
+                  <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+                    {kpis?.safeMode?.riskCount || 0} RISK
+                  </Badge>
+                  <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">
+                    {kpis?.safeMode?.pendingCount || 0} Pending
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Avg loss prob: {((kpis?.safeMode?.avgLossProbability || 0) * 100).toFixed(1)}%
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* PART 7: Alerts Panel */}
@@ -916,23 +1012,24 @@ const RiskDashboard = () => {
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Sims</TableHead>
                     <TableHead className="text-right">Implied Sum</TableHead>
-                    <TableHead>Edge Status</TableHead>
-                    <TableHead className="text-right">Entries</TableHead>
+                    <TableHead>Edge</TableHead>
                     <TableHead className="text-right">Tokens</TableHead>
                     <TableHead className="text-right">Risk / Max</TableHead>
+                    <TableHead className="text-right">Loss Prob</TableHead>
+                    <TableHead>Safe</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {marketsLoading ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground">
                         Loading...
                       </TableCell>
                     </TableRow>
                   ) : marketsData?.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground">
                         No markets found
                       </TableCell>
                     </TableRow>
@@ -974,7 +1071,6 @@ const RiskDashboard = () => {
                           </div>
                         </TableCell>
                         <TableCell>{getHouseEdgeBadge(market.house_edge_status)}</TableCell>
-                        <TableCell className="text-right">{market.total_entries}</TableCell>
                         <TableCell className="text-right">{market.total_tokens.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
@@ -987,13 +1083,34 @@ const RiskDashboard = () => {
                             <span className="text-muted-foreground text-xs">
                               / {market.max_risk_ratio.toFixed(2)}x
                             </span>
-                            {market.is_compressed && (
-                              <Badge className="bg-blue-500/20 text-blue-400 text-xs ml-1">
-                                <Zap className="h-3 w-3 mr-1" />
-                                {market.cumulative_compression_pct.toFixed(1)}%
-                              </Badge>
-                            )}
                           </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={
+                            market.loss_probability > 0.10 ? 'text-red-400 font-medium' :
+                            market.loss_probability > 0.05 ? 'text-yellow-400' : 'text-green-400'
+                          }>
+                            {market.loss_probability > 0 ? `${(market.loss_probability * 100).toFixed(1)}%` : '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {market.safe_mode_status === 'SAFE' && (
+                            <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              SAFE
+                            </Badge>
+                          )}
+                          {market.safe_mode_status === 'RISK' && (
+                            <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              RISK
+                            </Badge>
+                          )}
+                          {market.safe_mode_status === 'PENDING' && (
+                            <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">
+                              —
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
@@ -1020,16 +1137,16 @@ const RiskDashboard = () => {
                                 <Target className="h-4 w-4" />
                               </Button>
                             )}
-                            {market.status === 'OPEN' && market.risk_status !== 'safe' && market.implied_sum <= 2 && (
+                            {market.status === 'OPEN' && market.implied_sum > 0 && market.implied_sum <= 2 && (
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => compressMultipliers.mutate(market.id)}
-                                disabled={compressMultipliers.isPending}
-                                title="Compress multipliers"
-                                className="text-blue-400 hover:text-blue-300"
+                                onClick={() => enforceSafeMode.mutate(market.id)}
+                                disabled={enforceSafeMode.isPending}
+                                title="Run safe mode check & enforcement"
+                                className={market.safe_mode_status === 'RISK' ? 'text-red-400 hover:text-red-300' : 'text-green-400 hover:text-green-300'}
                               >
-                                <Zap className="h-4 w-4" />
+                                <Shield className="h-4 w-4" />
                               </Button>
                             )}
                           </div>
