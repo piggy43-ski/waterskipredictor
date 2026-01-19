@@ -51,6 +51,8 @@ import PaymentCanceled from "./pages/PaymentCanceled";
 import HelpCenter from "./pages/HelpCenter";
 import HelpArticle from "./pages/HelpArticle";
 import AdminHelpArticles from "./pages/admin/HelpArticles";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -85,6 +87,8 @@ const App = () => (
               <Route path="/fantasy/:potId/team/:entryId/edit" element={<FantasyTeamEdit />} />
               <Route path="/help" element={<HelpCenter />} />
               <Route path="/help/:id" element={<HelpArticle />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/help-articles" element={<AdminHelpArticles />} />
               <Route path="/admin/fantasy-pots" element={<AdminFantasyPots />} />

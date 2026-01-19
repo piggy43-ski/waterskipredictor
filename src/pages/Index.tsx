@@ -271,7 +271,7 @@ const Index = () => {
                         {prediction.potential_payout.toLocaleString()}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Staked: {prediction.staked_tokens}
+                        Entry: {prediction.staked_tokens}
                       </p>
                     </div>
                   </div>
@@ -322,8 +322,8 @@ const Index = () => {
                   <XCircle className="w-4 h-4 text-destructive" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-destructive">
-                    {settledPredictions.filter(p => p.status === 'LOST').length} Incorrect
+                  <p className="text-sm font-bold text-muted-foreground">
+                    {settledPredictions.filter(p => p.status === 'LOST').length} Not Correct
                   </p>
                   <p className="text-xs text-muted-foreground">
                     -{settledPredictions.filter(p => p.status === 'LOST').reduce((sum, p) => sum + p.staked_tokens, 0).toLocaleString()}
