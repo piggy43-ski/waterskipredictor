@@ -77,6 +77,14 @@ interface AthleteRiskData {
   payout_exposure: number;
   remaining_capacity: number;
   is_at_capacity: boolean;
+  // NEW: Calibration debug fields
+  rank: number | null;
+  power_score: number | null;
+  prior_probability: number | null;
+  mc_probability: number | null;
+  blended_probability: number | null;
+  temperature_used: number | null;
+  calibration_iterations: number | null;
 }
 
 interface AuditLogEntry {
@@ -667,20 +675,26 @@ const RiskDashboard = () => {
     });
   }, [settlementData]);
 
-  // Get athlete details for selected market (using selections table instead of market_odds)
+  // Get athlete details for selected market with calibration data
   const { data: selectedMarketAthletes } = useQuery({
     queryKey: ['admin-risk-market-athletes', selectedMarket?.id],
     enabled: !!selectedMarket,
     queryFn: async () => {
       if (!selectedMarket) return [];
 
-      // Get selections with athlete info (actual odds are stored here)
-      const { data: selections, error: selectionsError } = await supabase
-        .from('selections')
+      // Get market_odds with calibration data (source of truth for odds engine details)
+      const { data: marketOdds, error: oddsError } = await supabase
+        .from('market_odds')
         .select(`
-          id,
           athlete_id,
-          decimal_odds,
+          final_decimal_odds,
+          power_score,
+          prior_probability,
+          mc_probability,
+          blended_probability,
+          temperature_used,
+          calibration_iterations,
+          athlete_rank,
           athletes (
             id,
             name
@@ -688,20 +702,21 @@ const RiskDashboard = () => {
         `)
         .eq('market_id', selectedMarket.id);
 
-      if (selectionsError) throw selectionsError;
+      if (oddsError) throw oddsError;
 
       const marketLiability = liabilityData?.filter(l => l.market_id === selectedMarket.id) || [];
 
-      // Calculate implied probability from decimal odds
-      const athletes: AthleteRiskData[] = (selections || []).map(s => {
-        const liability = marketLiability.find(l => l.athlete_id === s.athlete_id);
+      // Calculate implied probability and exposure data
+      const athletes: AthleteRiskData[] = (marketOdds || []).map(mo => {
+        const liability = marketLiability.find(l => l.athlete_id === mo.athlete_id);
         const tokensOnAthlete = liability?.total_stake_tokens || 0;
         const percentOfPool = selectedMarket.total_tokens > 0 
           ? (tokensOnAthlete / selectedMarket.total_tokens) * 100 
           : 0;
 
         // Probability = 1 / decimal_odds (implied probability)
-        const impliedProbability = (1 / s.decimal_odds) * 100;
+        const multiplier = mo.final_decimal_odds || 1.2;
+        const impliedProbability = (1 / multiplier) * 100;
 
         // Option A: Calculate remaining capacity (30% cap)
         const maxAthleteTokens = selectedMarket.total_tokens * RISK_CONFIG.MAX_ATHLETE_EXPOSURE_PCT;
@@ -709,15 +724,23 @@ const RiskDashboard = () => {
         const isAtCapacity = tokensOnAthlete >= maxAthleteTokens && selectedMarket.total_tokens > 0;
 
         return {
-          athlete_id: s.athlete_id,
-          athlete_name: (s.athletes as any)?.name || 'Unknown',
+          athlete_id: mo.athlete_id,
+          athlete_name: (mo.athletes as any)?.name || 'Unknown',
           probability: impliedProbability,
-          multiplier: s.decimal_odds,
+          multiplier: multiplier,
           tokens_on_athlete: tokensOnAthlete,
           percent_of_pool: percentOfPool,
           payout_exposure: liability?.liability_if_wins || 0,
           remaining_capacity: remainingCapacity,
           is_at_capacity: isAtCapacity,
+          // Calibration debug fields
+          rank: mo.athlete_rank,
+          power_score: mo.power_score,
+          prior_probability: mo.prior_probability,
+          mc_probability: mo.mc_probability,
+          blended_probability: mo.blended_probability,
+          temperature_used: mo.temperature_used,
+          calibration_iterations: mo.calibration_iterations,
         };
       });
 
@@ -1384,74 +1407,125 @@ const RiskDashboard = () => {
                   </div>
                 </div>
 
-                {/* Athlete Risk Table */}
+                {/* Calibration Summary */}
+                {selectedMarketAthletes && selectedMarketAthletes[0]?.temperature_used && (
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Zap className="h-4 w-4 text-blue-400" />
+                      <span className="text-sm font-medium text-blue-400">Calibration Status</span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Temperature: </span>
+                        <span className="font-mono">{selectedMarketAthletes[0].temperature_used?.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Iterations: </span>
+                        <span className="font-mono">{selectedMarketAthletes[0].calibration_iterations || '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Top-1: </span>
+                        <span className="font-mono">{selectedMarketAthletes[0]?.multiplier.toFixed(2)}×</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Top-3: </span>
+                        <span className="font-mono">{selectedMarketAthletes[2]?.multiplier.toFixed(2) || '-'}×</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Athlete Risk Table with Calibration Debug */}
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Athlete Concentration (30% Exposure Cap)</h4>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Athlete</TableHead>
-                        <TableHead className="text-right">Probability</TableHead>
-                        <TableHead className="text-right">Multiplier</TableHead>
-                        <TableHead className="text-right">Tokens</TableHead>
-                        <TableHead className="text-right">% of Pool</TableHead>
-                        <TableHead className="text-right">Remaining</TableHead>
-                        <TableHead className="text-right">Exposure</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedMarketAthletes?.map(athlete => (
-                        <TableRow 
-                          key={athlete.athlete_id}
-                          className={
-                            athlete.is_at_capacity 
-                              ? 'bg-red-500/10' 
-                              : athlete.percent_of_pool > 25 
-                                ? 'bg-yellow-500/10' 
-                                : ''
-                          }
-                        >
-                          <TableCell className="font-medium">{athlete.athlete_name}</TableCell>
-                          <TableCell className="text-right">{athlete.probability.toFixed(1)}%</TableCell>
-                          <TableCell className="text-right">{athlete.multiplier.toFixed(2)}×</TableCell>
-                          <TableCell className="text-right">{athlete.tokens_on_athlete.toLocaleString()}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Progress 
-                                value={Math.min((athlete.percent_of_pool / 30) * 100, 100)} 
-                                className="w-16 h-2" 
-                              />
-                              <span className={athlete.percent_of_pool >= 30 ? 'text-red-400' : athlete.percent_of_pool > 25 ? 'text-yellow-400' : ''}>
-                                {athlete.percent_of_pool.toFixed(1)}%
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className={athlete.remaining_capacity === 0 ? 'text-red-400' : 'text-green-400'}>
-                              {athlete.remaining_capacity.toLocaleString()}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">{athlete.payout_exposure.toLocaleString()}</TableCell>
-                          <TableCell>
-                            {athlete.is_at_capacity ? (
-                              <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
-                                CAPPED
-                              </Badge>
-                            ) : athlete.percent_of_pool > 25 ? (
-                              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
-                                Near Cap
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
-                                OK
-                              </Badge>
-                            )}
-                          </TableCell>
+                  <h4 className="text-sm font-medium mb-2">Athlete Odds &amp; Calibration Debug</h4>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Athlete</TableHead>
+                          <TableHead className="text-right">Rank</TableHead>
+                          <TableHead className="text-right">Power</TableHead>
+                          <TableHead className="text-right">P(prior)</TableHead>
+                          <TableHead className="text-right">P(MC)</TableHead>
+                          <TableHead className="text-right">P(blend)</TableHead>
+                          <TableHead className="text-right">Multiplier</TableHead>
+                          <TableHead className="text-right">% Pool</TableHead>
+                          <TableHead className="text-right">Remaining</TableHead>
+                          <TableHead>Status</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedMarketAthletes?.map((athlete, idx) => (
+                          <TableRow 
+                            key={athlete.athlete_id}
+                            className={
+                              idx < 3 
+                                ? 'bg-primary/5 border-l-2 border-l-primary'
+                                : athlete.is_at_capacity 
+                                  ? 'bg-red-500/10' 
+                                  : athlete.percent_of_pool > 25 
+                                    ? 'bg-yellow-500/10' 
+                                    : ''
+                            }
+                          >
+                            <TableCell className="font-medium">
+                              {idx < 3 && <span className="text-primary mr-1">#{idx + 1}</span>}
+                              {athlete.athlete_name}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {athlete.rank || '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {athlete.power_score?.toFixed(1) || '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {athlete.prior_probability ? (athlete.prior_probability * 100).toFixed(1) + '%' : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {athlete.mc_probability ? (athlete.mc_probability * 100).toFixed(1) + '%' : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {athlete.blended_probability ? (athlete.blended_probability * 100).toFixed(1) + '%' : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-bold">
+                              {athlete.multiplier.toFixed(2)}×
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Progress 
+                                  value={Math.min((athlete.percent_of_pool / 30) * 100, 100)} 
+                                  className="w-12 h-2" 
+                                />
+                                <span className={athlete.percent_of_pool >= 30 ? 'text-red-400' : athlete.percent_of_pool > 25 ? 'text-yellow-400' : 'text-xs'}>
+                                  {athlete.percent_of_pool.toFixed(1)}%
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className={athlete.remaining_capacity === 0 ? 'text-red-400' : 'text-green-400 text-xs'}>
+                                {athlete.remaining_capacity.toLocaleString()}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {athlete.is_at_capacity ? (
+                                <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                                  CAPPED
+                                </Badge>
+                              ) : athlete.percent_of_pool > 25 ? (
+                                <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
+                                  Near Cap
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                                  OK
+                                </Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
 
                 {/* Locked At Info */}

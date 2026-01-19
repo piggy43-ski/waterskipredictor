@@ -5,6 +5,8 @@
  * - Multipliers are computed before publish and DO NOT change during OPEN markets
  * - Hard exposure caps block bets (no odds shortening)
  * - House bankruptcy is mathematically impossible
+ * 
+ * CALIBRATION: Top-3 constraints ensure favorites have reasonable multipliers
  */
 
 export const RISK_CONFIG = {
@@ -58,6 +60,45 @@ export const RISK_CONFIG = {
     MIN_EXPOSURE_PCT: 0.05,
     /** Multiplier floor (never compress below this) */
     MULTIPLIER_FLOOR: 1.20,
+  } as const,
+  
+  /** 
+   * CALIBRATION: Auto-calibrate probabilities to ensure reasonable multipliers
+   * Reduces temperature iteratively until top-3 constraints pass
+   */
+  CALIBRATION: {
+    /** Initial temperature by market type (lower = sharper favorites) */
+    TEMPERATURE: {
+      WINNER: 12,
+      HIGHEST_SCORE: 12,
+      PODIUM: 10,
+    } as const,
+    /** Prior/MC blending factor (0.65 = 65% MC, 35% prior) */
+    PRIOR_BLEND_ALPHA: 0.65,
+    /** Temperature reduction per iteration (10%) */
+    TEMP_REDUCTION_FACTOR: 0.90,
+    /** Max calibration iterations before failing */
+    MAX_ITERATIONS: 10,
+  } as const,
+  
+  /**
+   * TOP-3 MULTIPLIER CONSTRAINTS
+   * If top athletes exceed these, calibration reduces temperature
+   */
+  TOP3_CONSTRAINTS: {
+    WINNER: { top1Max: 4.0, top2Max: 6.0, top3Max: 8.0 },
+    HIGHEST_SCORE: { top1Max: 4.5, top2Max: 6.5, top3Max: 9.0 },
+    PODIUM: { top1Max: 2.2, top2Max: 2.8, top3Max: 3.5 },
+  } as const,
+  
+  /**
+   * HARD MULTIPLIER CAPS (backstop for longshots)
+   * After calibration, compress any odds exceeding these
+   */
+  MULTIPLIER_CAPS: {
+    WINNER: 15.0,
+    HIGHEST_SCORE: 12.0,
+    PODIUM: 8.0,
   } as const,
 } as const;
 
@@ -117,6 +158,27 @@ export const getMaxRiskRatio = (marketType: MarketType): number => {
  */
 export const getImpliedSumBand = (marketType: MarketType): { target: number; min: number; max: number } => {
   return RISK_CONFIG.IMPLIED_SUM_BANDS[marketType] || RISK_CONFIG.IMPLIED_SUM_BANDS.WINNER;
+};
+
+/**
+ * Get top-3 multiplier constraints for a market type
+ */
+export const getTop3Constraints = (marketType: MarketType): { top1Max: number; top2Max: number; top3Max: number } => {
+  return RISK_CONFIG.TOP3_CONSTRAINTS[marketType] || RISK_CONFIG.TOP3_CONSTRAINTS.WINNER;
+};
+
+/**
+ * Get hard multiplier cap for a market type
+ */
+export const getMultiplierCap = (marketType: MarketType): number => {
+  return RISK_CONFIG.MULTIPLIER_CAPS[marketType] || RISK_CONFIG.MULTIPLIER_CAPS.WINNER;
+};
+
+/**
+ * Get initial temperature for a market type
+ */
+export const getInitialTemperature = (marketType: MarketType): number => {
+  return RISK_CONFIG.CALIBRATION.TEMPERATURE[marketType] || RISK_CONFIG.CALIBRATION.TEMPERATURE.WINNER;
 };
 
 /**
@@ -191,4 +253,24 @@ export const passesPrePublishSafetyCheck = (
   }
   
   return { passes: true };
+};
+
+/**
+ * Check if multipliers pass top-3 constraints
+ */
+export const passesTop3Constraints = (
+  sortedMultipliers: number[],
+  marketType: MarketType
+): { passes: boolean; details: { top1: number; top2: number; top3: number; constraints: { top1Max: number; top2Max: number; top3Max: number } } } => {
+  const constraints = getTop3Constraints(marketType);
+  const top1 = sortedMultipliers[0] || 99;
+  const top2 = sortedMultipliers[1] || 99;
+  const top3 = sortedMultipliers[2] || 99;
+  
+  const passes = top1 <= constraints.top1Max && top2 <= constraints.top2Max && top3 <= constraints.top3Max;
+  
+  return {
+    passes,
+    details: { top1, top2, top3, constraints }
+  };
 };
