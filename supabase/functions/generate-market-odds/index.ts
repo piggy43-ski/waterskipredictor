@@ -367,22 +367,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get active entries for this market
-    const { data: entries, error: entriesError } = await supabase
-      .from("market_entries")
+    // Get athletes from selections table (this is where athlete-market mappings are stored)
+    const { data: marketSelections, error: marketSelectionsError } = await supabase
+      .from("selections")
       .select("athlete_id")
-      .eq("market_id", market_id)
-      .eq("is_active", true);
+      .eq("market_id", market_id);
 
-    if (entriesError) throw entriesError;
-    if (!entries || entries.length === 0) {
+    if (marketSelectionsError) throw marketSelectionsError;
+    if (!marketSelections || marketSelections.length === 0) {
       return new Response(
-        JSON.stringify({ error: "No active entries in market" }),
+        JSON.stringify({ error: "No selections found for market" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const athleteIds = entries.map(e => e.athlete_id);
+    const athleteIds = [...new Set(marketSelections.map(s => s.athlete_id))];
     const discipline = market.discipline.toLowerCase();
     const marketType = market.market_type.toUpperCase();
 
