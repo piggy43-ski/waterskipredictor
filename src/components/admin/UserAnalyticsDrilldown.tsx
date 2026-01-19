@@ -209,7 +209,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatTokens(bettingStats?.totalWagered || 0)}</div>
-            <p className="text-xs text-muted-foreground">{bettingStats?.totalBets || 0} bets placed</p>
+            <p className="text-xs text-muted-foreground">{bettingStats?.totalBets || 0} entries placed</p>
           </CardContent>
         </Card>
 
@@ -248,7 +248,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
             <div className={`text-2xl font-bold ${(bettingStats?.netPL || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {(bettingStats?.netPL || 0) >= 0 ? '+' : ''}{formatTokens(bettingStats?.netPL || 0)}
             </div>
-            <p className="text-xs text-muted-foreground">{bettingStats?.pendingBets || 0} pending bets</p>
+            <p className="text-xs text-muted-foreground">{bettingStats?.pendingBets || 0} pending entries</p>
           </CardContent>
         </Card>
       </div>
@@ -258,11 +258,11 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
         <TabsList>
           <TabsTrigger value="summary">
             <Coins className="h-4 w-4 mr-2" />
-            Betting Summary
+            Prediction Summary
           </TabsTrigger>
           <TabsTrigger value="bets">
             <Target className="h-4 w-4 mr-2" />
-            All Bets
+            All Entries
           </TabsTrigger>
           <TabsTrigger value="byTournament">
             <Calendar className="h-4 w-4 mr-2" />
@@ -277,7 +277,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
         <TabsContent value="summary" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Betting Performance</CardTitle>
+              <CardTitle>Prediction Performance</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -286,11 +286,11 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
                   <p className="text-2xl font-bold">{bettingStats?.winRate}%</p>
                 </div>
                 <div className="p-4 bg-muted/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground">Settled Bets</p>
+                  <p className="text-sm text-muted-foreground">Settled Entries</p>
                   <p className="text-2xl font-bold">{bettingStats?.settledBets || 0}</p>
                 </div>
                 <div className="p-4 bg-muted/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground">Pending Bets</p>
+                  <p className="text-sm text-muted-foreground">Pending Entries</p>
                   <p className="text-2xl font-bold">{bettingStats?.pendingBets || 0}</p>
                 </div>
                 <div className="p-4 bg-green-500/10 rounded-lg">
@@ -315,7 +315,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
         <TabsContent value="bets" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>All Bets ({predictions?.length || 0})</CardTitle>
+              <CardTitle>All Entries ({predictions?.length || 0})</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[400px]">

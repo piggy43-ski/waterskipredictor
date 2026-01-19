@@ -1477,6 +1477,8 @@ export type Database = {
       }
       profiles: {
         Row: {
+          age_confirmed: boolean | null
+          age_confirmed_at: string | null
           avatar_url: string | null
           country: string | null
           created_at: string
@@ -1486,12 +1488,18 @@ export type Database = {
           lifetime_losses: number | null
           lifetime_winnings: number | null
           notification_preferences: Json | null
+          privacy_version: string | null
+          tos_accepted: boolean | null
+          tos_accepted_at: string | null
+          tos_version: string | null
           tutorial_completed: boolean | null
           tutorial_completed_at: string | null
           updated_at: string
           username: string
         }
         Insert: {
+          age_confirmed?: boolean | null
+          age_confirmed_at?: string | null
           avatar_url?: string | null
           country?: string | null
           created_at?: string
@@ -1501,12 +1509,18 @@ export type Database = {
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
           notification_preferences?: Json | null
+          privacy_version?: string | null
+          tos_accepted?: boolean | null
+          tos_accepted_at?: string | null
+          tos_version?: string | null
           tutorial_completed?: boolean | null
           tutorial_completed_at?: string | null
           updated_at?: string
           username: string
         }
         Update: {
+          age_confirmed?: boolean | null
+          age_confirmed_at?: string | null
           avatar_url?: string | null
           country?: string | null
           created_at?: string
@@ -1516,6 +1530,10 @@ export type Database = {
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
           notification_preferences?: Json | null
+          privacy_version?: string | null
+          tos_accepted?: boolean | null
+          tos_accepted_at?: string | null
+          tos_version?: string | null
           tutorial_completed?: boolean | null
           tutorial_completed_at?: string | null
           updated_at?: string

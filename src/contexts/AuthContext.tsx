@@ -3,11 +3,18 @@ import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+interface ConsentData {
+  ageConfirmed: boolean;
+  tosAccepted: boolean;
+  tosVersion: string;
+  privacyVersion: string;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, username: string, country?: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, username: string, country?: string, consent?: ConsentData) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
@@ -76,7 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, username: string, country?: string) => {
+  const signUp = async (email: string, password: string, username: string, country?: string, consent?: ConsentData) => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -86,7 +93,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         emailRedirectTo: redirectUrl,
         data: {
           username,
-          country
+          country,
+          // Store consent data in user metadata for the trigger to use
+          age_confirmed: consent?.ageConfirmed ?? false,
+          tos_accepted: consent?.tosAccepted ?? false,
+          tos_version: consent?.tosVersion ?? '1.0',
+          privacy_version: consent?.privacyVersion ?? '1.0'
         }
       }
     });
@@ -98,6 +110,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         variant: "destructive"
       });
     } else {
+      // Update the profile with consent data after signup
+      if (data.user) {
+        const now = new Date().toISOString();
+        
+        // Update profile with consent fields
+        await supabase
+          .from('profiles')
+          .update({
+            age_confirmed: consent?.ageConfirmed ?? false,
+            age_confirmed_at: consent?.ageConfirmed ? now : null,
+            tos_accepted: consent?.tosAccepted ?? false,
+            tos_accepted_at: consent?.tosAccepted ? now : null,
+            tos_version: consent?.tosVersion ?? '1.0',
+            privacy_version: consent?.privacyVersion ?? '1.0'
+          })
+          .eq('id', data.user.id);
+      }
+      
       toast({
         title: "Success!",
         description: "Your account has been created. You can now sign in.",
