@@ -94,6 +94,65 @@ const RiskDashboard = () => {
   const [auditLogsExpanded, setAuditLogsExpanded] = useState(false);
   const queryClient = useQueryClient();
 
+  // Generate odds mutation (Monte Carlo)
+  const generateOdds = useMutation({
+    mutationFn: async (marketId: string) => {
+      const { data, error } = await supabase.functions.invoke('generate-market-odds', {
+        body: { market_id: marketId },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(`Odds generated: Implied sum = ${data.finalImpliedSum?.toFixed(4) || 'N/A'}`);
+      queryClient.invalidateQueries({ queryKey: ['admin-risk-markets'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-risk-audit-logs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Odds generation failed: ${error.message}`);
+    },
+  });
+
+  // Generate all odds mutation
+  const [generatingAllProgress, setGeneratingAllProgress] = useState<{ current: number; total: number } | null>(null);
+  
+  const generateAllOdds = useMutation({
+    mutationFn: async () => {
+      const openMarkets = marketsData?.filter(m => 
+        m.status === 'OPEN' && !m.locked_at && (m.implied_sum === 0 || m.implied_sum > 2)
+      ) || [];
+      
+      if (openMarkets.length === 0) {
+        throw new Error('No markets need odds generation');
+      }
+
+      setGeneratingAllProgress({ current: 0, total: openMarkets.length });
+      
+      for (let i = 0; i < openMarkets.length; i++) {
+        const market = openMarkets[i];
+        const { error } = await supabase.functions.invoke('generate-market-odds', {
+          body: { market_id: market.id },
+        });
+        if (error) {
+          console.error(`Failed to generate odds for ${market.name}:`, error);
+        }
+        setGeneratingAllProgress({ current: i + 1, total: openMarkets.length });
+      }
+      
+      return openMarkets.length;
+    },
+    onSuccess: (count) => {
+      toast.success(`Generated odds for ${count} markets`);
+      setGeneratingAllProgress(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-risk-markets'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-risk-audit-logs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Bulk odds generation failed: ${error.message}`);
+      setGeneratingAllProgress(null);
+    },
+  });
+
   // Compression mutation
   const compressMultipliers = useMutation({
     mutationFn: async (marketId: string) => {
@@ -639,6 +698,24 @@ const RiskDashboard = () => {
             <p className="text-muted-foreground">House safety, odds health, and exposure monitoring</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button 
+              variant="default" 
+              size="sm" 
+              onClick={() => generateAllOdds.mutate()}
+              disabled={generateAllOdds.isPending || !marketsData?.some(m => m.status === 'OPEN' && (m.implied_sum === 0 || m.implied_sum > 2))}
+            >
+              {generateAllOdds.isPending ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  {generatingAllProgress ? `${generatingAllProgress.current}/${generatingAllProgress.total}` : 'Generating...'}
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Generate All Odds
+                </>
+              )}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => refetchMarkets()}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
@@ -856,7 +933,14 @@ const RiskDashboard = () => {
                           </span>
                         </TableCell>
                         <TableCell className="text-right font-mono">
-                          {market.implied_sum > 0 ? market.implied_sum.toFixed(4) : '-'}
+                          <div className="flex items-center justify-end gap-1">
+                            {market.implied_sum > 0 ? market.implied_sum.toFixed(4) : '-'}
+                            {market.implied_sum > 2 && (
+                              <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs ml-1">
+                                No Odds
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>{getHouseEdgeBadge(market.house_edge_status)}</TableCell>
                         <TableCell className="text-right">{market.total_entries}</TableCell>
@@ -893,7 +977,19 @@ const RiskDashboard = () => {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            {market.status === 'OPEN' && market.risk_status !== 'safe' && (
+                            {market.status === 'OPEN' && (market.implied_sum === 0 || market.implied_sum > 2) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => generateOdds.mutate(market.id)}
+                                disabled={generateOdds.isPending}
+                                title="Generate Monte Carlo odds"
+                                className="text-orange-400 hover:text-orange-300"
+                              >
+                                <Target className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {market.status === 'OPEN' && market.risk_status !== 'safe' && market.implied_sum <= 2 && (
                               <Button
                                 variant="ghost"
                                 size="sm"
