@@ -585,7 +585,10 @@ export default function TournamentEntries() {
           if (selections.length > 0) {
             const { error: selectionsError } = await supabase
               .from('selections')
-              .insert(selections);
+              .upsert(selections, { 
+                onConflict: 'market_id,athlete_id',
+                ignoreDuplicates: false 
+              });
 
             if (selectionsError) throw selectionsError;
           }
