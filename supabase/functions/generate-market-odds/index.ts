@@ -36,7 +36,6 @@ async function writeAuditLog(supabase: any, entry: AuditLogEntry): Promise<void>
 
 // Constants
 const TAU: Record<string, number> = { slalom: 14, trick: 22, jump: 12 };
-const OVERROUND: Record<string, number> = { WINNER: 1.10, PODIUM: 1.18, HIGHEST_SCORE: 1.14 };
 const SIGMA: Record<string, number> = { slalom: 6, trick: 10, jump: 8 };
 const SIMS = 20000;
 const BANKROLL_UNIT = 100000;
@@ -44,14 +43,15 @@ const ODDS_MIN = 1.20;
 const ODDS_MAX = 25.0;
 const DEFAULT_MANUAL_MULTIPLIER = 0.97;
 
-// Target implied sums for house edge (1/overround)
-const TARGET_IMPLIED_SUM: Record<string, number> = {
-  WINNER: 0.909,      // 1/1.10 - ensures ~10% house edge
-  PODIUM: 0.847,      // 1/1.18 - ensures ~18% house edge
-  HIGHEST_SCORE: 0.877 // 1/1.14 - ensures ~14% house edge
+// House edge by market type (this is the % above fair odds)
+// e.g., 0.10 = 10% house edge, resulting in implied_sum = 1/(1+0.10) = 0.909
+const HOUSE_EDGE: Record<string, number> = {
+  WINNER: 0.10,        // 10% edge → implied_sum = 0.909
+  PODIUM: 0.18,        // 18% edge → implied_sum = 0.847
+  HIGHEST_SCORE: 0.14  // 14% edge → implied_sum = 0.877
 };
 
-// Acceptable ranges for implied sum (target +/- tolerance)
+// Acceptable ranges for implied sum validation
 const IMPLIED_SUM_RANGES: Record<string, { min: number; max: number }> = {
   WINNER: { min: 0.90, max: 0.915 },
   PODIUM: { min: 0.84, max: 0.86 },
@@ -120,32 +120,40 @@ interface AthleteOddsInput {
   rating: number;
 }
 
+interface RawProbabilityResult {
+  athleteId: string;
+  rawProbability: number;  // Before normalization
+  winCount: number;        // For debugging
+}
+
 interface OddsResult {
   athleteId: string;
-  probability: number;
-  baseOdds: number;
-  finalOdds: number;
+  normalizedProbability: number;  // MUST sum to 1.0
+  fairOdds: number;               // 1 / normalizedProbability
+  adjustedProbability: number;    // normalizedProbability * (1 + houseEdge)
+  finalOdds: number;              // After house edge, rounding, manual multiplier
   manualMultiplier: number;
 }
 
-function calculateWinnerOdds(athletes: AthleteOddsInput[], tau: number, overround: number) {
-  // Softmax for WINNER
+/**
+ * WINNER Markets: Softmax produces probabilities that naturally sum to 1.0
+ */
+function calculateWinnerProbabilities(athletes: AthleteOddsInput[], tau: number): RawProbabilityResult[] {
   const strengths = athletes.map(a => Math.exp(a.rating / tau));
   const totalStrength = strengths.reduce((a, b) => a + b, 0);
   
-  return athletes.map((athlete, i) => {
-    const probability = strengths[i] / totalStrength;
-    const baseOdds = overround / probability;
-    return {
-      athleteId: athlete.athleteId,
-      probability,
-      baseOdds: clampOdds(baseOdds),
-    };
-  });
+  return athletes.map((athlete, i) => ({
+    athleteId: athlete.athleteId,
+    rawProbability: strengths[i] / totalStrength,
+    winCount: Math.round((strengths[i] / totalStrength) * SIMS), // Synthetic for logging
+  }));
 }
 
-function calculatePodiumOdds(athletes: AthleteOddsInput[], tau: number, overround: number, sims: number) {
-  // Monte Carlo for PODIUM (top 3)
+/**
+ * PODIUM Markets: Monte Carlo simulation for top-3 finish
+ * CRITICAL FIX: Raw probabilities sum to ~3.0 (3 athletes per sim), so MUST normalize
+ */
+function calculatePodiumProbabilities(athletes: AthleteOddsInput[], tau: number, sims: number): RawProbabilityResult[] {
   const weights = athletes.map(a => Math.exp(a.rating / tau));
   const top3Counts = new Map<string, number>();
   
@@ -161,20 +169,22 @@ function calculatePodiumOdds(athletes: AthleteOddsInput[], tau: number, overroun
     }
   }
 
+  // Raw probability = count / sims → sums to ~3.0 (since 3 athletes win per sim)
   return athletes.map(athlete => {
     const count = top3Counts.get(athlete.athleteId) || 0;
-    const probability = Math.max(0.001, count / sims); // Minimum probability to avoid division by zero
-    const baseOdds = overround / probability;
     return {
       athleteId: athlete.athleteId,
-      probability,
-      baseOdds: clampOdds(baseOdds),
+      rawProbability: count / sims,  // This will sum to ~3.0
+      winCount: count,
     };
   });
 }
 
-function calculateHighestScoreOdds(athletes: AthleteOddsInput[], sigma: number, overround: number, sims: number) {
-  // Monte Carlo for HIGHEST_SCORE
+/**
+ * HIGHEST_SCORE Markets: Monte Carlo with normal distribution
+ * Only 1 winner per simulation, so raw probabilities sum to 1.0
+ */
+function calculateHighestScoreProbabilities(athletes: AthleteOddsInput[], sigma: number, sims: number): RawProbabilityResult[] {
   const winCounts = new Map<string, number>();
   
   for (const athlete of athletes) {
@@ -200,50 +210,111 @@ function calculateHighestScoreOdds(athletes: AthleteOddsInput[], sigma: number, 
 
   return athletes.map(athlete => {
     const count = winCounts.get(athlete.athleteId) || 0;
-    const probability = Math.max(0.001, count / sims);
-    const baseOdds = overround / probability;
     return {
       athleteId: athlete.athleteId,
-      probability,
-      baseOdds: clampOdds(baseOdds),
+      rawProbability: count / sims,  // Sums to 1.0
+      winCount: count,
     };
   });
 }
 
 /**
- * Normalize multipliers to hit the target implied sum (house edge enforcement).
- * This runs AFTER manual multipliers and rounding to guarantee the house edge.
+ * CRITICAL: Normalize probabilities to sum to exactly 1.0
+ * This is MANDATORY before applying house edge
  */
-function normalizeToTarget(
+function normalizeProbabilities(results: RawProbabilityResult[]): { athleteId: string; normalizedProbability: number }[] {
+  const rawSum = results.reduce((sum, r) => sum + r.rawProbability, 0);
+  
+  console.log(`[NORMALIZE] Raw probability sum: ${rawSum.toFixed(4)}`);
+  
+  // Normalize to 1.0
+  return results.map(r => ({
+    athleteId: r.athleteId,
+    normalizedProbability: r.rawProbability / rawSum,
+  }));
+}
+
+/**
+ * Derive odds from normalized probabilities with house edge
+ * 
+ * Formula:
+ * 1. Fair odds = 1 / normalizedProbability
+ * 2. Adjusted probability = normalizedProbability * (1 + houseEdge)
+ * 3. Final odds = 1 / adjustedProbability
+ * 
+ * This guarantees: implied_sum = Σ(adjustedProbability) = 1 * (1 + houseEdge)
+ * And: Σ(1/finalOdds) = 1 / (1 + houseEdge) = target implied sum
+ */
+function deriveOddsFromProbabilities(
+  normalizedProbs: { athleteId: string; normalizedProbability: number }[],
+  houseEdge: number,
+  multiplierMap: Map<string, number>
+): OddsResult[] {
+  return normalizedProbs.map(({ athleteId, normalizedProbability }) => {
+    const fairOdds = 1 / normalizedProbability;
+    const adjustedProbability = normalizedProbability * (1 + houseEdge);
+    const rawFinalOdds = 1 / adjustedProbability;
+    
+    // Apply manual multiplier (for admin adjustments)
+    const manualMultiplier = multiplierMap.get(athleteId) ?? DEFAULT_MANUAL_MULTIPLIER;
+    const adjustedOdds = rawFinalOdds * manualMultiplier;
+    
+    // Round to ladder and clamp
+    const finalOdds = clampOdds(roundToLadder(adjustedOdds));
+    
+    return {
+      athleteId,
+      normalizedProbability,
+      fairOdds,
+      adjustedProbability,
+      finalOdds,
+      manualMultiplier,
+    };
+  });
+}
+
+/**
+ * Post-processing: Normalize final odds to guarantee target implied sum
+ * This corrects for rounding/clamping drift
+ */
+function enforceTargetImpliedSum(
   results: OddsResult[],
   targetImpliedSum: number
-): { normalizedResults: OddsResult[]; scalingFactor: number; finalImpliedSum: number } {
-  // Calculate current implied sum
-  let currentImpliedSum = results.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
+): { correctedResults: OddsResult[]; scalingFactor: number; finalImpliedSum: number } {
+  // Calculate current implied sum after rounding
+  const currentImpliedSum = results.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
   
-  // If already at or below target, no scaling needed
-  if (currentImpliedSum <= targetImpliedSum) {
+  console.log(`[ENFORCE] Current implied sum: ${currentImpliedSum.toFixed(4)}, Target: ${targetImpliedSum.toFixed(4)}`);
+  
+  // If already within tolerance, return as-is
+  if (Math.abs(currentImpliedSum - targetImpliedSum) < 0.005) {
     return {
-      normalizedResults: results,
+      correctedResults: results,
       scalingFactor: 1.0,
       finalImpliedSum: currentImpliedSum
     };
   }
   
-  // Calculate scaling factor to bring implied sum down to target
+  // Calculate scaling factor
+  // If currentImpliedSum > target, we need to INCREASE odds (scale up)
+  // If currentImpliedSum < target, we need to DECREASE odds (scale down)
   const scalingFactor = currentImpliedSum / targetImpliedSum;
   
-  // Apply scaling, re-round, and re-clamp
-  const normalizedResults = results.map(r => ({
+  console.log(`[ENFORCE] Scaling factor: ${scalingFactor.toFixed(4)}`);
+  
+  // Apply scaling and re-round
+  const correctedResults = results.map(r => ({
     ...r,
     finalOdds: clampOdds(roundToLadder(r.finalOdds * scalingFactor))
   }));
   
-  // Recalculate final implied sum after normalization
-  const finalImpliedSum = normalizedResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
+  // Recalculate final implied sum
+  const finalImpliedSum = correctedResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
+  
+  console.log(`[ENFORCE] Final implied sum: ${finalImpliedSum.toFixed(4)}`);
   
   return {
-    normalizedResults,
+    correctedResults,
     scalingFactor: Math.round(scalingFactor * 1000) / 1000,
     finalImpliedSum
   };
@@ -313,6 +384,9 @@ Deno.serve(async (req) => {
 
     const athleteIds = entries.map(e => e.athlete_id);
     const discipline = market.discipline.toLowerCase();
+    const marketType = market.market_type.toUpperCase();
+
+    console.log(`[GENERATE] Market: ${market_id}, Type: ${marketType}, Athletes: ${athleteIds.length}`);
 
     // Fetch athlete ratings
     const { data: athletes, error: athletesError } = await supabase
@@ -338,26 +412,43 @@ Deno.serve(async (req) => {
     });
 
     const tau = TAU[discipline] ?? 14;
-    const overround = OVERROUND[market.market_type] ?? 1.10;
     const sigma = SIGMA[discipline] ?? 6;
-    const targetImpliedSum = TARGET_IMPLIED_SUM[market.market_type] ?? 0.909;
+    const houseEdge = HOUSE_EDGE[marketType] ?? 0.10;
+    const targetImpliedSum = 1 / (1 + houseEdge);  // Derived from house edge
+    const acceptableRange = IMPLIED_SUM_RANGES[marketType] || IMPLIED_SUM_RANGES.WINNER;
 
-    // Calculate odds based on market type
-    let calculatedOdds: { athleteId: string; probability: number; baseOdds: number }[];
+    console.log(`[PARAMS] tau=${tau}, sigma=${sigma}, houseEdge=${houseEdge}, targetImpliedSum=${targetImpliedSum.toFixed(4)}`);
 
-    switch (market.market_type) {
+    // STEP 1: Calculate raw probabilities from Monte Carlo
+    let rawProbabilities: RawProbabilityResult[];
+
+    switch (marketType) {
       case "WINNER":
-        calculatedOdds = calculateWinnerOdds(athleteInputs, tau, overround);
+        rawProbabilities = calculateWinnerProbabilities(athleteInputs, tau);
         break;
       case "PODIUM":
-        calculatedOdds = calculatePodiumOdds(athleteInputs, tau, overround, SIMS);
+        rawProbabilities = calculatePodiumProbabilities(athleteInputs, tau, SIMS);
         break;
       case "HIGHEST_SCORE":
-        calculatedOdds = calculateHighestScoreOdds(athleteInputs, sigma, overround, SIMS);
+        rawProbabilities = calculateHighestScoreProbabilities(athleteInputs, sigma, SIMS);
         break;
       default:
-        calculatedOdds = calculateWinnerOdds(athleteInputs, tau, overround);
+        rawProbabilities = calculateWinnerProbabilities(athleteInputs, tau);
     }
+
+    // STEP 2: Validate raw probability sum
+    const rawSum = rawProbabilities.reduce((sum, r) => sum + r.rawProbability, 0);
+    console.log(`[VALIDATION] Raw probability sum: ${rawSum.toFixed(4)} (expected ~1.0 for WINNER/HIGHEST_SCORE, ~3.0 for PODIUM)`);
+
+    // STEP 3: Normalize probabilities to sum to 1.0
+    const normalizedProbs = normalizeProbabilities(rawProbabilities);
+    
+    // Validate normalization
+    const normalizedSum = normalizedProbs.reduce((sum, r) => sum + r.normalizedProbability, 0);
+    if (normalizedSum < 0.98 || normalizedSum > 1.02) {
+      throw new Error(`VALIDATION FAILED: Normalized probability sum ${normalizedSum.toFixed(4)} not near 1.0`);
+    }
+    console.log(`[VALIDATION] Normalized probability sum: ${normalizedSum.toFixed(4)} ✓`);
 
     // Get existing manual multipliers
     const { data: existingMultipliers } = await supabase
@@ -372,58 +463,72 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Step 1: Apply manual multipliers and initial rounding
-    let results: OddsResult[] = calculatedOdds.map(calc => {
-      const manualMultiplier = multiplierMap.get(calc.athleteId) ?? DEFAULT_MANUAL_MULTIPLIER;
-      const finalOdds = clampOdds(roundToLadder(calc.baseOdds * manualMultiplier));
-      return {
-        athleteId: calc.athleteId,
-        probability: calc.probability,
-        baseOdds: calc.baseOdds,
-        finalOdds,
-        manualMultiplier,
-      };
-    });
+    // STEP 4: Derive odds from normalized probabilities
+    const oddsResults = deriveOddsFromProbabilities(normalizedProbs, houseEdge, multiplierMap);
 
-    // Step 2: CRITICAL - Normalize to enforce house edge AFTER all adjustments
-    const { normalizedResults, scalingFactor, finalImpliedSum } = normalizeToTarget(results, targetImpliedSum);
+    // STEP 5: Enforce target implied sum (correct for rounding drift)
+    const { correctedResults, scalingFactor, finalImpliedSum } = enforceTargetImpliedSum(oddsResults, targetImpliedSum);
 
-    // Prepare upserts with normalized values
+    // STEP 6: Final validation
+    if (finalImpliedSum < 0.75 || finalImpliedSum > 1.05) {
+      throw new Error(`VALIDATION FAILED: Final implied sum ${finalImpliedSum.toFixed(4)} outside safe range 0.75-1.05`);
+    }
+
+    const isWithinRange = finalImpliedSum >= acceptableRange.min && finalImpliedSum <= acceptableRange.max;
+    if (!isWithinRange) {
+      console.warn(`[WARNING] Final implied sum ${finalImpliedSum.toFixed(4)} outside target band ${acceptableRange.min}-${acceptableRange.max}`);
+    }
+
+    // Calculate house edge percentage for display
+    const actualHouseEdgePct = ((1 / finalImpliedSum - 1) * 100).toFixed(2);
+
+    // Prepare upserts for market_odds
     const now = new Date().toISOString();
-    const upserts = normalizedResults.map(result => {
-      const tokenPrice = Math.round(BANKROLL_UNIT / result.probability);
+    const marketOddsUpserts = correctedResults.map(result => ({
+      market_id,
+      athlete_id: result.athleteId,
+      base_probability: Math.round(result.normalizedProbability * 10000) / 10000,
+      base_decimal_odds: Math.round(result.fairOdds * 100) / 100,
+      manual_multiplier: result.manualMultiplier,
+      final_decimal_odds: result.finalOdds,
+      token_price: Math.round(BANKROLL_UNIT / result.normalizedProbability),
+      overround: 1 + houseEdge,
+      tau,
+      sims: marketType === "WINNER" ? null : SIMS,
+      target_implied_sum: Math.round(targetImpliedSum * 1000) / 1000,
+      scaling_factor: scalingFactor,
+      generated_at: now,
+      is_frozen: false,
+    }));
 
-      return {
-        market_id,
-        athlete_id: result.athleteId,
-        base_probability: Math.round(result.probability * 10000) / 10000,
-        base_decimal_odds: Math.round(result.baseOdds * 100) / 100,
-        manual_multiplier: result.manualMultiplier,
-        final_decimal_odds: result.finalOdds,
-        token_price: tokenPrice,
-        overround,
-        tau,
-        sims: market.market_type === "WINNER" ? null : SIMS,
-        target_implied_sum: targetImpliedSum,
-        scaling_factor: scalingFactor,
-        generated_at: now,
-        is_frozen: false,
-      };
-    });
-
-    // Upsert all odds
+    // Upsert market_odds
     const { error: upsertError } = await supabase
       .from("market_odds")
-      .upsert(upserts, { onConflict: "market_id,athlete_id" });
+      .upsert(marketOddsUpserts, { onConflict: "market_id,athlete_id" });
 
     if (upsertError) throw upsertError;
 
-    // Calculate house edge percentage
-    const houseEdgePct = ((1 / finalImpliedSum - 1) * 100).toFixed(2);
-    const acceptableRange = IMPLIED_SUM_RANGES[market.market_type] || IMPLIED_SUM_RANGES.WINNER;
-    const isWithinRange = finalImpliedSum >= acceptableRange.min && finalImpliedSum <= acceptableRange.max;
+    // STEP 7: CRITICAL - Sync selections table with market_odds
+    // This ensures the Risk Dashboard (which reads from selections) shows correct values
+    const selectionsUpserts = correctedResults.map(result => ({
+      market_id,
+      athlete_id: result.athleteId,
+      decimal_odds: result.finalOdds,
+      description: `${marketType} - Monte Carlo generated`, // Update description
+    }));
 
-    // Write audit log for odds generation
+    const { error: selectionsError } = await supabase
+      .from("selections")
+      .upsert(selectionsUpserts, { onConflict: "market_id,athlete_id" });
+
+    if (selectionsError) {
+      console.error("[SYNC] Failed to sync selections table:", selectionsError);
+      // Don't throw - market_odds is the source of truth
+    } else {
+      console.log(`[SYNC] Updated ${selectionsUpserts.length} selections with Monte Carlo odds`);
+    }
+
+    // Write audit log
     await writeAuditLog(supabase, {
       actor_type: 'system',
       action_type: 'ODDS_GENERATED',
@@ -434,36 +539,44 @@ Deno.serve(async (req) => {
         was_frozen: existingOdds[0]?.is_frozen
       } : null,
       after_state: {
-        athletes_processed: normalizedResults.length,
-        target_implied_sum: targetImpliedSum,
+        athletes_processed: correctedResults.length,
+        raw_probability_sum: Math.round(rawSum * 1000) / 1000,
+        normalized_probability_sum: Math.round(normalizedSum * 1000) / 1000,
+        target_implied_sum: Math.round(targetImpliedSum * 1000) / 1000,
         actual_implied_sum: Math.round(finalImpliedSum * 1000) / 1000,
         scaling_factor: scalingFactor,
-        house_edge_pct: parseFloat(houseEdgePct),
+        house_edge_pct: parseFloat(actualHouseEdgePct),
+        is_within_range: isWithinRange,
+        selections_synced: !selectionsError,
       },
       metadata: {
-        market_type: market.market_type,
+        market_type: marketType,
         discipline: market.discipline,
         category: market.category,
-        overround,
+        house_edge: houseEdge,
         tau,
-        sims: market.market_type === "WINNER" ? null : SIMS,
+        sigma,
+        sims: marketType === "WINNER" ? null : SIMS,
       }
     });
+
+    console.log(`[SUCCESS] Generated odds for ${correctedResults.length} athletes, implied_sum=${finalImpliedSum.toFixed(4)}, house_edge=${actualHouseEdgePct}%`);
 
     return new Response(
       JSON.stringify({
         success: true,
         market_id,
-        market_type: market.market_type,
-        athletes_processed: normalizedResults.length,
-        target_implied_sum: targetImpliedSum,
+        market_type: marketType,
+        athletes_processed: correctedResults.length,
+        raw_probability_sum: Math.round(rawSum * 1000) / 1000,
+        normalized_probability_sum: Math.round(normalizedSum * 1000) / 1000,
+        target_implied_sum: Math.round(targetImpliedSum * 1000) / 1000,
         actual_implied_sum: Math.round(finalImpliedSum * 1000) / 1000,
         scaling_factor: scalingFactor,
-        house_edge_pct: parseFloat(houseEdgePct),
+        house_edge_pct: parseFloat(actualHouseEdgePct),
         is_within_range: isWithinRange,
         acceptable_range: acceptableRange,
-        overround,
-        tau,
+        selections_synced: !selectionsError,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
