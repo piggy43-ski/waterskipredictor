@@ -26,14 +26,14 @@ import { useAdminCheck } from '@/hooks/useAdminCheck';
 
 interface ValidationResult {
   allowed: boolean;
-  adjustedOdds?: number;
   reason?: string;
   warnings: string[];
-  currentLiability?: {
-    athleteId: string;
-    currentLiability: number;
-    liabilityCap: number;
-    percentUsed: number;
+  exposureInfo?: {
+    athleteName: string;
+    currentExposurePct: number;
+    maxExposurePct: number;
+    remainingCapacity: number;
+    isAtCapacity: boolean;
   };
 }
 
@@ -398,15 +398,8 @@ const TournamentDetail = () => {
         });
       }
       
-      // Use adjusted odds if provided
-      if (validation.adjustedOdds) {
-        toast({
-          title: "Odds Adjusted",
-          description: `Odds shortened from ${combinedOdds.toFixed(2)}x to ${validation.adjustedOdds.toFixed(2)}x due to market exposure`,
-        });
-        combinedOdds = validation.adjustedOdds;
-      }
-      
+      // OPTION A: No odds adjustment - multipliers are fixed
+      // Just use the original combined odds
       const potentialPayout = Math.floor(stakeAmount * combinedOdds);
 
       // Step 1: Create bet_slip FIRST
@@ -560,7 +553,8 @@ const TournamentDetail = () => {
       const market = markets.find(m => m.id === selectedSelection.market_id);
       if (!market) return;
 
-      let finalOdds = selectedSelection.decimal_odds;
+      // OPTION A: Multipliers are fixed at publish - use original odds
+      const finalOdds = selectedSelection.decimal_odds;
       
       // Validate bet before placing
       setIsValidating(true);
@@ -569,7 +563,7 @@ const TournamentDetail = () => {
         selectedSelection.athlete_id,
         selectedSelection.market_id,
         stakeAmount,
-        selectedSelection.decimal_odds,
+        finalOdds,
         market.market_type as MarketType
       );
       setIsValidating(false);
@@ -602,15 +596,7 @@ const TournamentDetail = () => {
         });
       }
       
-      // Use adjusted odds if provided
-      if (validation.adjustedOdds && validation.adjustedOdds !== selectedSelection.decimal_odds) {
-        toast({
-          title: "Odds Adjusted",
-          description: `Odds shortened from ${selectedSelection.decimal_odds.toFixed(2)}x to ${validation.adjustedOdds.toFixed(2)}x due to market exposure`,
-        });
-        finalOdds = validation.adjustedOdds;
-      }
-
+      // Calculate potential payout with fixed odds
       const potentialPayout = Math.floor(stakeAmount * finalOdds);
 
       // Step 1: Create bet_slip FIRST

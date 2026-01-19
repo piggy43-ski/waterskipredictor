@@ -12,6 +12,10 @@ interface SelectionCardProps {
   onAddToParlay?: (selection: Selection) => void;
   isInParlay?: boolean;
   highlighted?: boolean;
+  /** Option A: Athlete has reached max exposure cap */
+  isAtCapacity?: boolean;
+  /** Option A: Remaining tokens before cap is reached */
+  remainingCapacity?: number;
 }
 
 const getFlagEmoji = (countryCode: string): string => {
@@ -37,7 +41,17 @@ const getFlagEmoji = (countryCode: string): string => {
   return countryFlags[countryCode] || '🏴';
 };
 
-export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single', onAddToParlay, isInParlay, highlighted }: SelectionCardProps) => {
+export const SelectionCard = ({ 
+  selection, 
+  onSelect, 
+  discipline, 
+  mode = 'single', 
+  onAddToParlay, 
+  isInParlay, 
+  highlighted,
+  isAtCapacity = false,
+  remainingCapacity
+}: SelectionCardProps) => {
   const multiplierDisplay = `${selection.decimal_odds.toFixed(2)}×`;
   
   // Get the appropriate rank based on discipline
@@ -92,18 +106,28 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
             </span>
           </div>
           
+          {/* Option A: Show capacity warning */}
+          {isAtCapacity && (
+            <Badge variant="outline" className="text-muted-foreground bg-muted text-xs">
+              Max entries reached
+            </Badge>
+          )}
+          
           {/* Single Mode - Show only Enter Prediction */}
           {mode === 'single' && (
             <Button 
               size="sm" 
-              variant="default" 
+              variant={isAtCapacity ? "outline" : "default"}
               className="min-w-[100px]"
+              disabled={isAtCapacity}
               onClick={(e) => {
                 e.stopPropagation();
-                onSelect(selection);
+                if (!isAtCapacity) {
+                  onSelect(selection);
+                }
               }}
             >
-              Enter Prediction
+              {isAtCapacity ? 'Unavailable' : 'Enter Prediction'}
             </Button>
           )}
           
@@ -113,9 +137,12 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
               size="sm" 
               variant={isInParlay ? "default" : "outline"}
               className="min-w-[100px]"
+              disabled={isAtCapacity && !isInParlay}
               onClick={(e) => {
                 e.stopPropagation();
-                onAddToParlay(selection);
+                if (!isAtCapacity || isInParlay) {
+                  onAddToParlay(selection);
+                }
               }}
             >
               {isInParlay ? (
@@ -123,6 +150,8 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
                   <Check className="w-4 h-4 mr-1" />
                   Selected
                 </>
+              ) : isAtCapacity ? (
+                'Unavailable'
               ) : (
                 'Select'
               )}

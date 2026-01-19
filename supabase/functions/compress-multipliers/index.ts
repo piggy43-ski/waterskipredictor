@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { market_id, dry_run = false } = await req.json();
+    const { market_id, dry_run = false, force = false } = await req.json();
 
     if (!market_id) {
       return new Response(
@@ -113,7 +113,29 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Processing compression for market: ${market_id}, dry_run: ${dry_run}`);
+    // === OPTION A: Check if Fixed Multiplier Mode is enabled ===
+    const { data: configData } = await supabase
+      .from('risk_config')
+      .select('key, value')
+      .eq('key', 'fixed_multiplier_mode')
+      .maybeSingle();
+
+    const fixedMultiplierMode = configData?.value === 'true';
+
+    if (fixedMultiplierMode && !force) {
+      console.log(`[COMPRESS] Blocked: Fixed Multiplier Mode enabled (Option A)`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Multiplier compression disabled in Fixed Multiplier Mode (Option A)",
+          message: "Multipliers are locked at publish time. Use force=true to override.",
+          fixed_multiplier_mode: true,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`Processing compression for market: ${market_id}, dry_run: ${dry_run}, force: ${force}`);
 
     // Get market details
     const { data: market, error: marketError } = await supabase
