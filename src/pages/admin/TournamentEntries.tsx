@@ -56,6 +56,7 @@ interface MatchedParticipant extends ParsedParticipant {
   // Reject match fields
   matchRejected?: boolean;
   originalMatchedAthlete?: MatchedParticipant['matchedAthlete']; // Store original for undo
+  alsoAddRejectedAthlete?: boolean; // Also add the rejected athlete to tournament
 }
 
 export default function TournamentEntries() {
@@ -317,7 +318,7 @@ export default function TournamentEntries() {
   };
 
   // Handle updating new athlete fields for unmatched participants
-  const handleUpdateNewAthlete = (participantIdx: number, field: 'country' | 'gender' | 'create', value: any) => {
+  const handleUpdateNewAthlete = (participantIdx: number, field: 'country' | 'gender' | 'create' | 'alsoAddRejected', value: any) => {
     const updated = [...matchedParticipants];
     const p = updated[participantIdx];
     if (field === 'country') {
@@ -331,6 +332,8 @@ export default function TournamentEntries() {
         p.selectedDisciplines = [uploadDiscipline];
         p.selected = true;
       }
+    } else if (field === 'alsoAddRejected') {
+      p.alsoAddRejectedAthlete = value;
     }
     setMatchedParticipants(updated);
   };
@@ -452,6 +455,31 @@ export default function TournamentEntries() {
         override_rating: number | null;
       }> = [];
 
+      // Handle "also add rejected athletes" - add original matched athletes that were rejected
+      const alsoAddAthletes = participants.filter(
+        p => p.matchRejected && p.alsoAddRejectedAthlete && p.originalMatchedAthlete
+      );
+
+      for (const p of alsoAddAthletes) {
+        const athlete = p.originalMatchedAthlete!;
+        const key = `${athlete.id}-${uploadDiscipline}`;
+        
+        if (!existingSet.has(key)) {
+          // Find full athlete data for odds calculation
+          const fullAthlete = refreshedAthletes?.find(a => a.id === athlete.id);
+          const odds = calculateDefaultOdds(fullAthlete, uploadDiscipline);
+          
+          entriesToAdd.push({
+            tournament_id: selectedTournamentId,
+            athlete_id: athlete.id,
+            discipline: uploadDiscipline,
+            custom_odds: odds,
+            override_rating: null,
+          });
+          existingSet.add(key); // Prevent duplicates
+        }
+      }
+
       for (const p of toAdd) {
         const athlete = refreshedAthletes?.find(a => a.id === p.matchedAthlete!.id);
         for (const discipline of p.selectedDisciplines) {
@@ -466,6 +494,7 @@ export default function TournamentEntries() {
               custom_odds: calculatedOdds,
               override_rating: overrideRating !== undefined ? overrideRating : null,
             });
+            existingSet.add(key); // Prevent duplicates
           }
         }
       }
@@ -790,9 +819,12 @@ export default function TournamentEntries() {
   const femaleParticipants = matchedParticipants.filter(p => p.gender === 'female');
 
   // Count total entries to be added (athlete-discipline combos)
+  const alsoAddCount = matchedParticipants.filter(
+    m => m.matchRejected && m.alsoAddRejectedAthlete && m.originalMatchedAthlete
+  ).length;
   const totalEntriesToAdd = matchedParticipants
     .filter(m => (m.selected && m.matchedAthlete) || (m.createNewAthlete && m.newAthleteCountry))
-    .reduce((sum, m) => sum + m.selectedDisciplines.length, 0);
+    .reduce((sum, m) => sum + m.selectedDisciplines.length, 0) + alsoAddCount;
 
   return (
     <AdminLayout>
@@ -1243,7 +1275,7 @@ function ParticipantMatchRow({
   onToggle: () => void;
   onToggleDiscipline: (discipline: string) => void;
   onOverrideRatingChange: (discipline: string, value: string) => void;
-  onUpdateNewAthlete: (field: 'country' | 'gender' | 'create', value: any) => void;
+  onUpdateNewAthlete: (field: 'country' | 'gender' | 'create' | 'alsoAddRejected', value: any) => void;
   onSelectAlternative: (id: string) => void;
   onRejectMatch: () => void;
   onUndoRejectMatch: () => void;
@@ -1417,6 +1449,25 @@ function ParticipantMatchRow({
                   </Label>
                 </div>
               </div>
+              
+              {/* Option to also add the rejected athlete */}
+              {isRejected && participant.originalMatchedAthlete && (
+                <div className="mt-2 p-2 bg-green-500/10 border border-green-500/30 rounded">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`also-add-${participant.name}`}
+                      checked={participant.alsoAddRejectedAthlete || false}
+                      onCheckedChange={(c) => onUpdateNewAthlete('alsoAddRejected', c)}
+                    />
+                    <Label htmlFor={`also-add-${participant.name}`} className="text-xs cursor-pointer">
+                      Also add <strong>{participant.originalMatchedAthlete.name}</strong> ({participant.originalMatchedAthlete.country}) to tournament
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Check this if both athletes should be in the tournament
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
