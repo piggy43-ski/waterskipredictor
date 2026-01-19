@@ -212,7 +212,11 @@ const RiskDashboard = () => {
         
         // Monte Carlo always runs 20,000 sims (constant)
         const sims = selectionCount > 0 ? 20000 : 0;
-        const targetImpliedSum = HOUSE_EDGE_BANDS[market.market_type as MarketType]?.target || 0.9;
+        
+        // Normalize market_type to uppercase for lookup
+        const normalizedMarketType = (market.market_type?.toUpperCase() || 'WINNER') as MarketType;
+        const band = HOUSE_EDGE_BANDS[normalizedMarketType];
+        const targetImpliedSum = band?.target || 0.9;
 
         // Get exposure from predictions
         const exposure = exposureByMarket[market.id];
@@ -231,8 +235,7 @@ const RiskDashboard = () => {
           status = 'CLOSED';
         }
 
-        // Determine house edge health
-        const band = HOUSE_EDGE_BANDS[market.market_type as MarketType];
+        // Determine house edge health (band already set above with normalized type)
         let houseEdgeStatus: 'green' | 'yellow' | 'red' = 'green';
         if (band && selectionCount > 0) {
           if (impliedSum < band.min - 0.02 || impliedSum > band.max + 0.02) {
@@ -242,8 +245,8 @@ const RiskDashboard = () => {
           }
         }
 
-        // Get max risk ratio for this market type
-        const maxRiskRatio = MAX_RISK_RATIOS[market.market_type as MarketType] || MAX_RISK_RATIOS.WINNER;
+        // Get max risk ratio for this market type (use normalized type)
+        const maxRiskRatio = MAX_RISK_RATIOS[normalizedMarketType] || MAX_RISK_RATIOS.WINNER;
         
         // Determine risk status based on ratio vs max
         let riskStatus: 'safe' | 'warning' | 'danger' = 'safe';
@@ -682,13 +685,14 @@ const RiskDashboard = () => {
             <CardContent>
               <div className="space-y-1">
                 {kpis?.houseEdgeByType.map(({ type, avg, target }) => {
-                  const band = HOUSE_EDGE_BANDS[type as MarketType];
+                  const normalizedType = (type?.toUpperCase() || 'WINNER') as MarketType;
+                  const band = HOUSE_EDGE_BANDS[normalizedType];
                   const isHealthy = band && avg >= band.min && avg <= band.max;
                   return (
                     <div key={type} className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">{type}:</span>
                       <span className={isHealthy ? 'text-green-400' : 'text-red-400'}>
-                        {avg.toFixed(3)} (target: {target.toFixed(3)})
+                        {(avg || 0).toFixed(3)} (target: {(target || 0.9).toFixed(3)})
                       </span>
                     </div>
                   );
@@ -1061,7 +1065,11 @@ const RiskDashboard = () => {
                   <div className="p-3 rounded-lg bg-muted/30">
                     <p className="text-xs text-muted-foreground">Target Band</p>
                     <p className="text-lg font-bold font-mono">
-                      {HOUSE_EDGE_BANDS[selectedMarket.market_type]?.min.toFixed(3)} - {HOUSE_EDGE_BANDS[selectedMarket.market_type]?.max.toFixed(3)}
+                      {(() => {
+                        const normalizedType = (selectedMarket.market_type?.toUpperCase() || 'WINNER') as MarketType;
+                        const band = HOUSE_EDGE_BANDS[normalizedType];
+                        return `${(band?.min || 0.9).toFixed(3)} - ${(band?.max || 0.915).toFixed(3)}`;
+                      })()}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/30">
