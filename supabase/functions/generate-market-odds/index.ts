@@ -353,10 +353,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get market details
+    // Get market details with tournament info
     const { data: market, error: marketError } = await supabase
       .from("markets")
-      .select("id, discipline, category, market_type")
+      .select("id, discipline, category, market_type, tournament_id")
       .eq("id", market_id)
       .single();
 
@@ -367,48 +367,97 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get athletes from selections table (this is where athlete-market mappings are stored)
-    const { data: marketSelections, error: marketSelectionsError } = await supabase
-      .from("selections")
-      .select("athlete_id")
-      .eq("market_id", market_id);
+    // Determine gender from category
+    const gender = market.category === 'open_men' ? 'male' : 'female';
 
-    if (marketSelectionsError) throw marketSelectionsError;
-    if (!marketSelections || marketSelections.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "No selections found for market" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // PRIMARY SOURCE: Get athletes from tournament_entries (source of truth)
+    // This ensures we always use the registered athletes for this tournament/discipline/gender
+    const { data: tournamentEntries, error: entriesError } = await supabase
+      .from("tournament_entries")
+      .select(`
+        athlete_id,
+        athletes!inner (
+          id,
+          gender,
+          current_rating_slalom,
+          current_rating_trick,
+          current_rating_jump
+        )
+      `)
+      .eq("tournament_id", market.tournament_id)
+      .eq("discipline", market.discipline);
+
+    if (entriesError) throw entriesError;
+
+    // Filter by gender
+    const filteredEntries = (tournamentEntries || []).filter((e: any) => 
+      e.athletes?.gender === gender
+    );
+
+    let athleteInputs: AthleteOddsInput[];
+    
+    if (filteredEntries.length === 0) {
+      // Fallback to selections table if tournament_entries is empty
+      console.log(`[GENERATE] No tournament_entries found, falling back to selections table`);
+      
+      const { data: marketSelections, error: selectionsError } = await supabase
+        .from("selections")
+        .select("athlete_id")
+        .eq("market_id", market_id);
+
+      if (selectionsError) throw selectionsError;
+      if (!marketSelections || marketSelections.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "No athletes found for market (checked tournament_entries and selections)" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Fetch athlete ratings from selections fallback
+      const athleteIds = [...new Set(marketSelections.map(s => s.athlete_id))];
+      const { data: fallbackAthletes, error: athletesError } = await supabase
+        .from("athletes")
+        .select("id, current_rating_slalom, current_rating_trick, current_rating_jump")
+        .in("id", athleteIds);
+
+      if (athletesError) throw athletesError;
+      if (!fallbackAthletes || fallbackAthletes.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "No athlete data found" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Build athlete inputs from selections fallback
+      const disciplineLower = market.discipline.toLowerCase();
+      athleteInputs = fallbackAthletes.map(a => {
+        const rating = disciplineLower === 'slalom' ? a.current_rating_slalom :
+                      disciplineLower === 'trick' ? a.current_rating_trick : a.current_rating_jump;
+        return {
+          athleteId: a.id,
+          rating: rating ?? 70,
+        };
+      });
+      console.log(`[GENERATE] Using ${athleteInputs.length} athletes from selections fallback`);
+    } else {
+      // Build athlete inputs from tournament_entries (primary source)
+      const disciplineLower = market.discipline.toLowerCase();
+      athleteInputs = filteredEntries.map((e: any) => {
+        const a = e.athletes;
+        const rating = disciplineLower === 'slalom' ? a.current_rating_slalom :
+                      disciplineLower === 'trick' ? a.current_rating_trick : a.current_rating_jump;
+        return {
+          athleteId: e.athlete_id,
+          rating: rating ?? 70,
+        };
+      });
+      console.log(`[GENERATE] Using ${athleteInputs.length} athletes from tournament_entries (source of truth)`);
     }
 
-    const athleteIds = [...new Set(marketSelections.map(s => s.athlete_id))];
     const discipline = market.discipline.toLowerCase();
     const marketType = market.market_type.toUpperCase();
 
-    console.log(`[GENERATE] Market: ${market_id}, Type: ${marketType}, Athletes: ${athleteIds.length}`);
-
-    // Fetch athlete ratings
-    const { data: athletes, error: athletesError } = await supabase
-      .from("athletes")
-      .select("id, current_rating_slalom, current_rating_trick, current_rating_jump")
-      .in("id", athleteIds);
-
-    if (athletesError) throw athletesError;
-    if (!athletes) {
-      return new Response(
-        JSON.stringify({ error: "No athletes found" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const athleteInputs: AthleteOddsInput[] = athletes.map(a => {
-      const rating = discipline === 'slalom' ? a.current_rating_slalom :
-                    discipline === 'trick' ? a.current_rating_trick : a.current_rating_jump;
-      return {
-        athleteId: a.id,
-        rating: rating ?? 70,
-      };
-    });
+    console.log(`[GENERATE] Market: ${market_id}, Type: ${marketType}, Athletes: ${athleteInputs.length}`);
 
     const tau = TAU[discipline] ?? 14;
     const sigma = SIGMA[discipline] ?? 6;
