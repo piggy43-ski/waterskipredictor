@@ -53,6 +53,9 @@ interface MatchedParticipant extends ParsedParticipant {
   createNewAthlete?: boolean;
   newAthleteCountry?: string;
   newAthleteGender?: 'male' | 'female';
+  // Reject match fields
+  matchRejected?: boolean;
+  originalMatchedAthlete?: MatchedParticipant['matchedAthlete']; // Store original for undo
 }
 
 export default function TournamentEntries() {
@@ -328,6 +331,33 @@ export default function TournamentEntries() {
         p.selectedDisciplines = [uploadDiscipline];
         p.selected = true;
       }
+    }
+    setMatchedParticipants(updated);
+  };
+
+  // Handle rejecting a suggested match
+  const handleRejectMatch = (participantIdx: number) => {
+    const updated = [...matchedParticipants];
+    const p = updated[participantIdx];
+    // Store original match for undo
+    p.originalMatchedAthlete = p.matchedAthlete;
+    p.matchRejected = true;
+    p.selected = false;
+    p.selectedDisciplines = [];
+    setMatchedParticipants(updated);
+  };
+
+  // Handle undoing a rejected match
+  const handleUndoRejectMatch = (participantIdx: number) => {
+    const updated = [...matchedParticipants];
+    const p = updated[participantIdx];
+    p.matchRejected = false;
+    // Clear create new athlete if it was set
+    p.createNewAthlete = false;
+    // Restore selection with upload discipline
+    if (p.matchedAthlete && uploadDiscipline) {
+      p.selectedDisciplines = [uploadDiscipline];
+      p.selected = p.confidence >= 0.7;
     }
     setMatchedParticipants(updated);
   };
@@ -1062,6 +1092,8 @@ export default function TournamentEntries() {
                           onToggleDiscipline={(disc) => handleToggleDiscipline(globalIdx, disc)}
                           onOverrideRatingChange={(disc, val) => handleOverrideRatingChange(globalIdx, disc, val)}
                           onUpdateNewAthlete={(field, value) => handleUpdateNewAthlete(globalIdx, field, value)}
+                          onRejectMatch={() => handleRejectMatch(globalIdx)}
+                          onUndoRejectMatch={() => handleUndoRejectMatch(globalIdx)}
                           onSelectAlternative={(altId) => {
                             const alt = participant.alternatives?.find(a => a.id === altId);
                             const altAthlete = allAthletes?.find(a => a.id === altId);
@@ -1088,6 +1120,7 @@ export default function TournamentEntries() {
                                 confidence: 0.8,
                                 selected: true,
                                 createNewAthlete: false,
+                                matchRejected: false,
                               };
                               setMatchedParticipants(updated);
                             }
@@ -1122,6 +1155,8 @@ export default function TournamentEntries() {
                           onToggleDiscipline={(disc) => handleToggleDiscipline(globalIdx, disc)}
                           onOverrideRatingChange={(disc, val) => handleOverrideRatingChange(globalIdx, disc, val)}
                           onUpdateNewAthlete={(field, value) => handleUpdateNewAthlete(globalIdx, field, value)}
+                          onRejectMatch={() => handleRejectMatch(globalIdx)}
+                          onUndoRejectMatch={() => handleUndoRejectMatch(globalIdx)}
                           onSelectAlternative={(altId) => {
                             const alt = participant.alternatives?.find(a => a.id === altId);
                             const altAthlete = allAthletes?.find(a => a.id === altId);
@@ -1148,6 +1183,7 @@ export default function TournamentEntries() {
                                 confidence: 0.8,
                                 selected: true,
                                 createNewAthlete: false,
+                                matchRejected: false,
                               };
                               setMatchedParticipants(updated);
                             }
@@ -1198,6 +1234,8 @@ function ParticipantMatchRow({
   onOverrideRatingChange,
   onUpdateNewAthlete,
   onSelectAlternative,
+  onRejectMatch,
+  onUndoRejectMatch,
   allAthletes
 }: {
   participant: MatchedParticipant;
@@ -1207,34 +1245,43 @@ function ParticipantMatchRow({
   onOverrideRatingChange: (discipline: string, value: string) => void;
   onUpdateNewAthlete: (field: 'country' | 'gender' | 'create', value: any) => void;
   onSelectAlternative: (id: string) => void;
+  onRejectMatch: () => void;
+  onUndoRejectMatch: () => void;
   allAthletes: any[] | undefined;
 }) {
-  const isMatched = participant.confidence >= 0.7 && participant.matchedAthlete;
-  const isUncertain = participant.confidence > 0 && participant.confidence < 0.7 && participant.matchedAthlete;
+  const isRejected = participant.matchRejected;
+  const isMatched = !isRejected && participant.confidence >= 0.7 && participant.matchedAthlete;
+  const isUncertain = !isRejected && participant.confidence > 0 && participant.confidence < 0.7 && participant.matchedAthlete;
   const notFound = !participant.matchedAthlete;
+  const showCreateSection = notFound || isRejected;
 
   const athleteDisciplines = participant.matchedAthlete?.disciplines || [];
   const rankings = participant.matchedAthlete?.rankings || {};
   const ratings = participant.matchedAthlete?.ratings || {};
 
   return (
-    <div className={`p-3 border rounded-lg ${participant.selected || participant.createNewAthlete ? 'bg-accent/50 border-primary' : ''}`}>
+    <div className={`p-3 border rounded-lg ${participant.selected || participant.createNewAthlete ? 'bg-accent/50 border-primary' : ''} ${isRejected ? 'border-yellow-500/50' : ''}`}>
       <div className="flex items-start gap-3">
         <Checkbox
           checked={participant.selected}
           onCheckedChange={onToggle}
-          disabled={notFound && !participant.createNewAthlete}
+          disabled={(notFound || isRejected) && !participant.createNewAthlete}
           className="mt-1"
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             {isMatched && <Check className="h-4 w-4 text-green-500 flex-shrink-0" />}
             {isUncertain && <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />}
-            {notFound && !participant.createNewAthlete && <X className="h-4 w-4 text-red-500 flex-shrink-0" />}
+            {isRejected && !participant.createNewAthlete && <X className="h-4 w-4 text-yellow-500 flex-shrink-0" />}
+            {notFound && !participant.createNewAthlete && !isRejected && <X className="h-4 w-4 text-red-500 flex-shrink-0" />}
             {participant.createNewAthlete && <UserPlus className="h-4 w-4 text-blue-500 flex-shrink-0" />}
             <span className="font-medium truncate">"{participant.name}"</span>
             <span className="text-muted-foreground">→</span>
-            {participant.matchedAthlete ? (
+            {isRejected && participant.matchedAthlete ? (
+              <span className="text-muted-foreground line-through truncate">
+                {participant.matchedAthlete.name} ({participant.matchedAthlete.country})
+              </span>
+            ) : participant.matchedAthlete && !isRejected ? (
               <span className="text-primary truncate">
                 {participant.matchedAthlete.name} ({participant.matchedAthlete.country})
               </span>
@@ -1245,10 +1292,35 @@ function ParticipantMatchRow({
             ) : (
               <span className="text-destructive">No match found</span>
             )}
+            
+            {/* Reject match button */}
+            {participant.matchedAthlete && !isRejected && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={onRejectMatch}
+              >
+                <X className="h-3 w-3 mr-1" />
+                Not this person
+              </Button>
+            )}
+            
+            {/* Undo reject button */}
+            {isRejected && participant.matchedAthlete && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
+                onClick={onUndoRejectMatch}
+              >
+                Undo reject
+              </Button>
+            )}
           </div>
           
-          {/* Rankings display */}
-          {participant.matchedAthlete && (
+          {/* Rankings display - only show if not rejected */}
+          {participant.matchedAthlete && !isRejected && (
             <div className="text-xs text-muted-foreground mt-1">
               Rankings: 
               {rankings.slalom && <span className="ml-1">S#{rankings.slalom}</span>}
@@ -1258,8 +1330,8 @@ function ParticipantMatchRow({
             </div>
           )}
 
-          {/* Discipline checkboxes with override rating - for matched athletes */}
-          {participant.matchedAthlete && uploadDiscipline && (
+          {/* Discipline checkboxes with override rating - for matched athletes (not rejected) */}
+          {participant.matchedAthlete && uploadDiscipline && !isRejected && (
             <div className="mt-2 space-y-2">
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-xs text-muted-foreground">Event:</span>
@@ -1304,9 +1376,14 @@ function ParticipantMatchRow({
             </div>
           )}
 
-          {/* Create new athlete section for unmatched */}
-          {notFound && (
+          {/* Create new athlete section - show for unmatched OR rejected matches */}
+          {showCreateSection && (
             <div className="mt-2 p-2 bg-muted rounded border border-dashed">
+              {isRejected && (
+                <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-1">
+                  Match rejected - create new profile or select an alternative
+                </p>
+              )}
               <p className="text-xs text-muted-foreground mb-2">
                 Create temporary profile for this athlete (wildcard/qualifier) - will have low rating & high odds
               </p>
@@ -1343,7 +1420,7 @@ function ParticipantMatchRow({
             </div>
           )}
 
-          {participant.confidence > 0 && participant.confidence < 1 && (
+          {participant.confidence > 0 && participant.confidence < 1 && !isRejected && (
             <div className="text-xs text-muted-foreground mt-1">
               Confidence: {Math.round(participant.confidence * 100)}%
             </div>
