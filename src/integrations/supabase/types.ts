@@ -2133,6 +2133,9 @@ export type Database = {
           disciplines: string[]
           end_date: string | null
           end_datetime: string | null
+          has_final: boolean | null
+          has_qualifying: boolean | null
+          has_semifinal: boolean | null
           id: string
           location: string
           name: string
@@ -2151,6 +2154,9 @@ export type Database = {
           disciplines?: string[]
           end_date?: string | null
           end_datetime?: string | null
+          has_final?: boolean | null
+          has_qualifying?: boolean | null
+          has_semifinal?: boolean | null
           id?: string
           location: string
           name: string
@@ -2169,6 +2175,9 @@ export type Database = {
           disciplines?: string[]
           end_date?: string | null
           end_datetime?: string | null
+          has_final?: boolean | null
+          has_qualifying?: boolean | null
+          has_semifinal?: boolean | null
           id?: string
           location?: string
           name?: string

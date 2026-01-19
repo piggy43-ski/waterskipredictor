@@ -45,6 +45,9 @@ type Tournament = {
   status: string;
   disciplines: string[];
   settled_at?: string | null;
+  has_qualifying?: boolean;
+  has_semifinal?: boolean;
+  has_final?: boolean;
 };
 
 export default function AdminTournaments() {
@@ -62,15 +65,25 @@ export default function AdminTournaments() {
   const [editStartDatetime, setEditStartDatetime] = useState('');
   const [editEndDatetime, setEditEndDatetime] = useState('');
   
+  // Round structure state for create form
+  const [hasQualifying, setHasQualifying] = useState(false);
+  const [hasSemifinal, setHasSemifinal] = useState(false);
+  
+  // Round structure state for edit form
+  const [editHasQualifying, setEditHasQualifying] = useState(false);
+  const [editHasSemifinal, setEditHasSemifinal] = useState(false);
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   
-  // When edit dialog opens, populate the datetime fields
+  // When edit dialog opens, populate the datetime and round structure fields
   useEffect(() => {
     if (editOpen && editingTournament) {
       setEditStartDatetime(formatDatetimeForInput(editingTournament.start_datetime));
       setEditEndDatetime(formatDatetimeForInput(editingTournament.end_datetime));
+      setEditHasQualifying(editingTournament.has_qualifying ?? false);
+      setEditHasSemifinal(editingTournament.has_semifinal ?? false);
     }
   }, [editOpen, editingTournament]);
   
@@ -124,6 +137,9 @@ export default function AdminTournaments() {
         end_date: endDatetime ? endDatetime.split('T')[0] : null,
         status: 'upcoming', // Auto-calculate, but set default
         disciplines: disciplines,
+        has_qualifying: hasQualifying,
+        has_semifinal: hasSemifinal,
+        has_final: true,
       };
 
       const { error } = await supabase.from('tournaments').insert(tournament);
@@ -135,6 +151,8 @@ export default function AdminTournaments() {
       setDisciplines([]);
       setCreateStartDatetime('');
       setCreateEndDatetime('');
+      setHasQualifying(false);
+      setHasSemifinal(false);
       toast({ title: 'Tournament created successfully' });
     },
     onError: (error: Error) => {
@@ -205,6 +223,8 @@ export default function AdminTournaments() {
       start_date: startDatetime ? startDatetime.split('T')[0] : null,
       end_date: endDatetime ? endDatetime.split('T')[0] : null,
       disciplines: editDisciplines,
+      has_qualifying: editHasQualifying,
+      has_semifinal: editHasSemifinal,
     };
 
     updateMutation.mutate({ id: editingTournament.id, updates });
@@ -225,6 +245,8 @@ export default function AdminTournaments() {
               setDisciplines([]);
               setCreateStartDatetime('');
               setCreateEndDatetime('');
+              setHasQualifying(false);
+              setHasSemifinal(false);
             }
           }}>
             <DialogTrigger asChild>
@@ -295,6 +317,40 @@ export default function AdminTournaments() {
                         </label>
                       </div>
                     ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Round Structure</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Select which rounds this tournament will have
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="create-has-qualifying"
+                        checked={hasQualifying}
+                        onCheckedChange={(checked) => setHasQualifying(checked === true)}
+                      />
+                      <label htmlFor="create-has-qualifying" className="cursor-pointer">
+                        Qualification Round
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="create-has-semifinal"
+                        checked={hasSemifinal}
+                        onCheckedChange={(checked) => setHasSemifinal(checked === true)}
+                      />
+                      <label htmlFor="create-has-semifinal" className="cursor-pointer">
+                        Semi-Finals
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox id="create-has-final" checked={true} disabled />
+                      <label className="text-muted-foreground">
+                        Finals (required)
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={createMutation.isPending || disciplines.length === 0}>
@@ -371,6 +427,15 @@ export default function AdminTournaments() {
                         {disc}
                       </Badge>
                     ))}
+                    <div className="ml-auto flex gap-1">
+                      {tournament.has_qualifying && (
+                        <Badge variant="secondary" className="text-xs">Qual</Badge>
+                      )}
+                      {tournament.has_semifinal && (
+                        <Badge variant="secondary" className="text-xs">Semi</Badge>
+                      )}
+                      <Badge variant="secondary" className="text-xs">Final</Badge>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -395,6 +460,8 @@ export default function AdminTournaments() {
               setEditDisciplines([]);
               setEditStartDatetime('');
               setEditEndDatetime('');
+              setEditHasQualifying(false);
+              setEditHasSemifinal(false);
             }
           }}
         >
@@ -470,6 +537,40 @@ export default function AdminTournaments() {
                       </label>
                     </div>
                   ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Round Structure</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select which rounds this tournament will have
+                </p>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-has-qualifying"
+                      checked={editHasQualifying}
+                      onCheckedChange={(checked) => setEditHasQualifying(checked === true)}
+                    />
+                    <label htmlFor="edit-has-qualifying" className="cursor-pointer">
+                      Qualification Round
+                    </label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-has-semifinal"
+                      checked={editHasSemifinal}
+                      onCheckedChange={(checked) => setEditHasSemifinal(checked === true)}
+                    />
+                    <label htmlFor="edit-has-semifinal" className="cursor-pointer">
+                      Semi-Finals
+                    </label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="edit-has-final" checked={true} disabled />
+                    <label className="text-muted-foreground">
+                      Finals (required)
+                    </label>
+                  </div>
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={updateMutation.isPending || editDisciplines.length === 0}>
