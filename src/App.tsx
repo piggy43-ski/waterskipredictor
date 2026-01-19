@@ -46,6 +46,7 @@ import AdminMonteCarloTest from "./pages/admin/MonteCarloTest";
 import AdminMarketLiability from "./pages/admin/MarketLiability";
 import AdminAuditLogs from "./pages/admin/AuditLogs";
 import AdminRewardLiabilityDashboard from "./pages/admin/RewardLiabilityDashboard";
+import AdminRiskDashboard from "./pages/admin/RiskDashboard";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCanceled from "./pages/PaymentCanceled";
 import HelpCenter from "./pages/HelpCenter";
@@ -91,6 +92,7 @@ const App = () => (
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/risk-dashboard" element={<AdminRiskDashboard />} />
               <Route path="/admin/help-articles" element={<AdminHelpArticles />} />
               <Route path="/admin/fantasy-pots" element={<AdminFantasyPots />} />
               <Route path="/admin/athletes" element={<AdminAthletes />} />

@@ -1,0 +1,1024 @@
+import { useState, useMemo } from 'react';
+import { AdminLayout } from '@/components/AdminLayout';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
+import { 
+  Shield, AlertTriangle, TrendingUp, DollarSign, Download, RefreshCw, Eye, 
+  Activity, Target, Users, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight,
+  FileJson, FileSpreadsheet, Lock
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { RISK_CONFIG, getLiabilityCap } from '@/utils/riskConfig';
+
+// Target bands for house edge by market type
+const HOUSE_EDGE_BANDS = {
+  'WINNER': { target: 0.909, min: 0.90, max: 0.915 },
+  'PODIUM': { target: 0.847, min: 0.84, max: 0.86 },
+  'HIGHEST_SCORE': { target: 0.877, min: 0.87, max: 0.89 },
+} as const;
+
+// Alert thresholds (could be moved to risk_config table)
+const ALERT_THRESHOLDS = {
+  CONCENTRATION_PERCENT: 40,
+  FAVORITE_OVERLOAD_PERCENT: 50,
+  RISK_RATIO_WARNING: 1.6,
+  LARGE_ENTRY_PERCENT: 80,
+};
+
+type MarketType = 'WINNER' | 'PODIUM' | 'HIGHEST_SCORE';
+
+interface MarketRiskData {
+  id: string;
+  name: string;
+  market_type: MarketType;
+  discipline: string;
+  category: string;
+  tournament_id: string;
+  tournament_name: string;
+  tournament_status: string;
+  locked_at: string | null;
+  status: 'OPEN' | 'CLOSED' | 'SETTLED' | 'LOCKED';
+  sims: number;
+  implied_sum: number;
+  target_implied_sum: number;
+  total_entries: number;
+  total_tokens: number;
+  max_payout: number;
+  risk_ratio: number;
+  house_edge_status: 'green' | 'yellow' | 'red';
+}
+
+interface AthleteRiskData {
+  athlete_id: string;
+  athlete_name: string;
+  probability: number;
+  multiplier: number;
+  tokens_on_athlete: number;
+  percent_of_pool: number;
+  payout_exposure: number;
+}
+
+interface AuditLogEntry {
+  id: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  actor_type: string;
+  actor_id: string | null;
+  before_state: any;
+  after_state: any;
+  created_at: string;
+  metadata: any;
+}
+
+interface RiskAlert {
+  id: string;
+  type: 'HIGH' | 'MEDIUM' | 'LOW';
+  message: string;
+  marketId?: string;
+  marketName?: string;
+}
+
+const RiskDashboard = () => {
+  const [selectedMarket, setSelectedMarket] = useState<MarketRiskData | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [alertsExpanded, setAlertsExpanded] = useState(true);
+  const [auditLogsExpanded, setAuditLogsExpanded] = useState(false);
+
+  // Fetch all markets with their odds data
+  const { data: marketsData, isLoading: marketsLoading, refetch: refetchMarkets } = useQuery({
+    queryKey: ['admin-risk-markets'],
+    queryFn: async () => {
+      // Get markets with tournament info
+      const { data: markets, error: marketsError } = await supabase
+        .from('markets')
+        .select(`
+          id,
+          name,
+          market_type,
+          discipline,
+          category,
+          tournament_id,
+          locked_at,
+          tournaments!inner (
+            id,
+            name,
+            status,
+            start_date,
+            end_date
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (marketsError) throw marketsError;
+
+      // Get market odds for implied sum calculation
+      const { data: odds, error: oddsError } = await supabase
+        .from('market_odds')
+        .select('market_id, final_decimal_odds, base_probability, sims, target_implied_sum');
+
+      if (oddsError) throw oddsError;
+
+      // Get bet slips for exposure data
+      const { data: betSlips, error: betSlipsError } = await supabase
+        .from('bet_slips')
+        .select('market_id, total_stake_tokens, potential_payout_tokens, status');
+
+      if (betSlipsError) throw betSlipsError;
+
+      // Process markets with calculated metrics
+      const processedMarkets: MarketRiskData[] = (markets || []).map((market: any) => {
+        const marketOdds = odds?.filter(o => o.market_id === market.id) || [];
+        const marketBets = betSlips?.filter(b => b.market_id === market.id) || [];
+        
+        // Calculate implied sum
+        const impliedSum = marketOdds.reduce((sum, o) => sum + (1 / o.final_decimal_odds), 0);
+        const sims = marketOdds[0]?.sims || 0;
+        const targetImpliedSum = marketOdds[0]?.target_implied_sum || 
+          HOUSE_EDGE_BANDS[market.market_type as MarketType]?.target || 0.9;
+
+        // Calculate exposure metrics
+        const totalTokens = marketBets.reduce((sum, b) => sum + (b.total_stake_tokens || 0), 0);
+        const maxPayout = Math.max(...marketBets.map(b => b.potential_payout_tokens || 0), 0);
+        const totalEntries = marketBets.length;
+        const riskRatio = totalTokens > 0 ? maxPayout / totalTokens : 0;
+
+        // Determine status
+        let status: 'OPEN' | 'CLOSED' | 'SETTLED' | 'LOCKED' = 'OPEN';
+        if (market.locked_at) {
+          status = 'LOCKED';
+        } else if (market.tournaments?.status === 'completed') {
+          status = 'SETTLED';
+        } else if (market.tournaments?.status === 'live') {
+          status = 'CLOSED';
+        }
+
+        // Determine house edge health
+        const band = HOUSE_EDGE_BANDS[market.market_type as MarketType];
+        let houseEdgeStatus: 'green' | 'yellow' | 'red' = 'green';
+        if (band && marketOdds.length > 0) {
+          if (impliedSum < band.min - 0.02 || impliedSum > band.max + 0.02) {
+            houseEdgeStatus = 'red';
+          } else if (impliedSum < band.min || impliedSum > band.max) {
+            houseEdgeStatus = 'yellow';
+          }
+        }
+
+        return {
+          id: market.id,
+          name: market.name,
+          market_type: market.market_type as MarketType,
+          discipline: market.discipline,
+          category: market.category,
+          tournament_id: market.tournament_id,
+          tournament_name: market.tournaments?.name || 'Unknown',
+          tournament_status: market.tournaments?.status || 'unknown',
+          locked_at: market.locked_at,
+          status,
+          sims,
+          implied_sum: impliedSum,
+          target_implied_sum: targetImpliedSum,
+          total_entries: totalEntries,
+          total_tokens: totalTokens,
+          max_payout: maxPayout,
+          risk_ratio: riskRatio,
+          house_edge_status: houseEdgeStatus,
+        };
+      });
+
+      return processedMarkets;
+    },
+  });
+
+  // Fetch market liability for concentration data
+  const { data: liabilityData } = useQuery({
+    queryKey: ['admin-risk-liability'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('market_liability')
+        .select(`
+          market_id,
+          athlete_id,
+          total_stake_tokens,
+          total_potential_payout,
+          bet_count,
+          liability_if_wins,
+          athletes (
+            id,
+            name
+          )
+        `);
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch recent audit logs
+  const { data: auditLogs } = useQuery({
+    queryKey: ['admin-risk-audit-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .in('action_type', [
+          'ODDS_GENERATED',
+          'MULTIPLIER_UPDATED',
+          'IMPLIED_SUM_NORMALIZED',
+          'PREDICTION_SETTLED',
+          'PARLAY_SETTLED',
+          'BETSLIP_SETTLED',
+          'MARKET_LOCKED',
+        ])
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      return data as AuditLogEntry[];
+    },
+  });
+
+  // Fetch settlement data for P/L calculation
+  const { data: settlementData } = useQuery({
+    queryKey: ['admin-risk-settlement'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bet_slips')
+        .select(`
+          tournament_id,
+          status,
+          total_stake_tokens,
+          actual_payout_tokens,
+          tournaments (
+            id,
+            name,
+            status
+          )
+        `)
+        .in('status', ['WON', 'LOST', 'VOID']);
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Calculate KPIs
+  const kpis = useMemo(() => {
+    if (!marketsData) return null;
+
+    const statusCounts = {
+      OPEN: marketsData.filter(m => m.status === 'OPEN').length,
+      CLOSED: marketsData.filter(m => m.status === 'CLOSED').length,
+      SETTLED: marketsData.filter(m => m.status === 'SETTLED').length,
+      LOCKED: marketsData.filter(m => m.status === 'LOCKED').length,
+    };
+
+    // Average implied sum by market type
+    const impliedSumByType: Record<string, { sum: number; count: number }> = {};
+    marketsData.forEach(m => {
+      if (m.implied_sum > 0) {
+        if (!impliedSumByType[m.market_type]) {
+          impliedSumByType[m.market_type] = { sum: 0, count: 0 };
+        }
+        impliedSumByType[m.market_type].sum += m.implied_sum;
+        impliedSumByType[m.market_type].count += 1;
+      }
+    });
+
+    const houseEdgeByType = Object.entries(impliedSumByType).map(([type, data]) => ({
+      type,
+      avg: data.sum / data.count,
+      target: HOUSE_EDGE_BANDS[type as MarketType]?.target || 0.9,
+    }));
+
+    // Total exposure
+    const totalExposure = marketsData
+      .filter(m => m.status === 'OPEN' || m.status === 'CLOSED')
+      .reduce((sum, m) => sum + m.total_tokens, 0);
+    
+    const maxSingleEntry = Math.max(...marketsData.map(m => m.max_payout), 0);
+
+    return {
+      statusCounts,
+      houseEdgeByType,
+      totalExposure,
+      maxSingleEntry,
+    };
+  }, [marketsData]);
+
+  // Generate alerts
+  const alerts = useMemo(() => {
+    const alertList: RiskAlert[] = [];
+
+    marketsData?.forEach(market => {
+      // Implied sum outside band
+      if (market.house_edge_status === 'red') {
+        alertList.push({
+          id: `implied-${market.id}`,
+          type: 'HIGH',
+          message: `Implied sum (${market.implied_sum.toFixed(3)}) outside target band for ${market.name}`,
+          marketId: market.id,
+          marketName: market.name,
+        });
+      }
+
+      // Simulations incomplete
+      if (market.sims > 0 && market.sims !== 20000) {
+        alertList.push({
+          id: `sims-${market.id}`,
+          type: 'HIGH',
+          message: `Only ${market.sims} simulations run for ${market.name} (expected 20000)`,
+          marketId: market.id,
+          marketName: market.name,
+        });
+      }
+
+      // High risk ratio
+      if (market.risk_ratio > ALERT_THRESHOLDS.RISK_RATIO_WARNING) {
+        alertList.push({
+          id: `risk-${market.id}`,
+          type: 'MEDIUM',
+          message: `High risk ratio (${market.risk_ratio.toFixed(2)}x) on ${market.name}`,
+          marketId: market.id,
+          marketName: market.name,
+        });
+      }
+    });
+
+    // Check for concentration
+    liabilityData?.forEach(liability => {
+      const market = marketsData?.find(m => m.id === liability.market_id);
+      if (market && market.total_tokens > 0) {
+        const percentOfPool = (liability.total_stake_tokens / market.total_tokens) * 100;
+        if (percentOfPool > ALERT_THRESHOLDS.CONCENTRATION_PERCENT) {
+          alertList.push({
+            id: `concentration-${liability.market_id}-${liability.athlete_id}`,
+            type: 'MEDIUM',
+            message: `Sharp concentration: ${(liability.athletes as any)?.name || 'Unknown'} has ${percentOfPool.toFixed(1)}% of pool in ${market.name}`,
+            marketId: market.id,
+            marketName: market.name,
+          });
+        }
+      }
+    });
+
+    return alertList;
+  }, [marketsData, liabilityData]);
+
+  // Calculate settlement P/L by tournament
+  const settlementPL = useMemo(() => {
+    if (!settlementData) return [];
+
+    const byTournament: Record<string, { 
+      name: string; 
+      collected: number; 
+      paid: number; 
+      net: number;
+      status: 'PROFIT' | 'BREAK-EVEN' | 'LOSS';
+    }> = {};
+
+    settlementData.forEach(bet => {
+      const tournamentId = bet.tournament_id;
+      if (!byTournament[tournamentId]) {
+        byTournament[tournamentId] = {
+          name: (bet.tournaments as any)?.name || 'Unknown',
+          collected: 0,
+          paid: 0,
+          net: 0,
+          status: 'BREAK-EVEN',
+        };
+      }
+      byTournament[tournamentId].collected += bet.total_stake_tokens || 0;
+      if (bet.status === 'WON') {
+        byTournament[tournamentId].paid += bet.actual_payout_tokens || 0;
+      }
+    });
+
+    return Object.entries(byTournament).map(([id, data]) => {
+      data.net = data.collected - data.paid;
+      data.status = data.net > 0 ? 'PROFIT' : data.net < 0 ? 'LOSS' : 'BREAK-EVEN';
+      return { id, ...data };
+    });
+  }, [settlementData]);
+
+  // Get athlete details for selected market
+  const { data: selectedMarketAthletes } = useQuery({
+    queryKey: ['admin-risk-market-athletes', selectedMarket?.id],
+    enabled: !!selectedMarket,
+    queryFn: async () => {
+      if (!selectedMarket) return [];
+
+      const { data: odds, error: oddsError } = await supabase
+        .from('market_odds')
+        .select(`
+          athlete_id,
+          base_probability,
+          final_decimal_odds,
+          athletes (
+            id,
+            name
+          )
+        `)
+        .eq('market_id', selectedMarket.id);
+
+      if (oddsError) throw oddsError;
+
+      const marketLiability = liabilityData?.filter(l => l.market_id === selectedMarket.id) || [];
+
+      const athletes: AthleteRiskData[] = (odds || []).map(o => {
+        const liability = marketLiability.find(l => l.athlete_id === o.athlete_id);
+        const tokensOnAthlete = liability?.total_stake_tokens || 0;
+        const percentOfPool = selectedMarket.total_tokens > 0 
+          ? (tokensOnAthlete / selectedMarket.total_tokens) * 100 
+          : 0;
+
+        return {
+          athlete_id: o.athlete_id,
+          athlete_name: (o.athletes as any)?.name || 'Unknown',
+          probability: o.base_probability * 100,
+          multiplier: o.final_decimal_odds,
+          tokens_on_athlete: tokensOnAthlete,
+          percent_of_pool: percentOfPool,
+          payout_exposure: liability?.liability_if_wins || 0,
+        };
+      });
+
+      return athletes.sort((a, b) => b.probability - a.probability);
+    },
+  });
+
+  // Export functions
+  const exportJSON = () => {
+    const snapshot = {
+      exportedAt: new Date().toISOString(),
+      markets: marketsData,
+      settlementPL,
+      alerts,
+      auditLogs: auditLogs?.slice(0, 100),
+    };
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `risk-snapshot-${format(new Date(), 'yyyy-MM-dd')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCSV = () => {
+    if (!marketsData) return;
+    
+    const headers = [
+      'Tournament', 'Market Type', 'Status', 'Sims', 'Implied Sum', 'Target',
+      'House Edge Status', 'Total Entries', 'Total Tokens', 'Max Payout', 'Risk Ratio'
+    ];
+    
+    const rows = marketsData.map(m => [
+      m.tournament_name,
+      m.market_type,
+      m.status,
+      m.sims,
+      m.implied_sum.toFixed(4),
+      m.target_implied_sum.toFixed(4),
+      m.house_edge_status,
+      m.total_entries,
+      m.total_tokens,
+      m.max_payout,
+      m.risk_ratio.toFixed(3),
+    ]);
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `risk-snapshot-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'OPEN': return 'default';
+      case 'CLOSED': return 'secondary';
+      case 'SETTLED': return 'outline';
+      case 'LOCKED': return 'destructive';
+      default: return 'outline';
+    }
+  };
+
+  const getHouseEdgeBadge = (status: 'green' | 'yellow' | 'red') => {
+    switch (status) {
+      case 'green': return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Healthy</Badge>;
+      case 'yellow': return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Warning</Badge>;
+      case 'red': return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Risk</Badge>;
+    }
+  };
+
+  return (
+    <AdminLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              <Shield className="h-6 w-6" />
+              Risk Dashboard
+            </h2>
+            <p className="text-muted-foreground">House safety, odds health, and exposure monitoring</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => refetchMarkets()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportJSON}>
+              <FileJson className="h-4 w-4 mr-2" />
+              Export JSON
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportCSV}>
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+          </div>
+        </div>
+
+        {/* PART 1: KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Active Markets */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                Active Markets
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="default">{kpis?.statusCounts.OPEN || 0} Open</Badge>
+                <Badge variant="secondary">{kpis?.statusCounts.CLOSED || 0} Closed</Badge>
+                <Badge variant="outline">{kpis?.statusCounts.SETTLED || 0} Settled</Badge>
+                <Badge variant="destructive">{kpis?.statusCounts.LOCKED || 0} Locked</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* House Edge Health */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Target className="h-4 w-4" />
+                House Edge Health
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                {kpis?.houseEdgeByType.map(({ type, avg, target }) => {
+                  const band = HOUSE_EDGE_BANDS[type as MarketType];
+                  const isHealthy = band && avg >= band.min && avg <= band.max;
+                  return (
+                    <div key={type} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{type}:</span>
+                      <span className={isHealthy ? 'text-green-400' : 'text-red-400'}>
+                        {avg.toFixed(3)} (target: {target.toFixed(3)})
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Total Exposure */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Total Exposure
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{(kpis?.totalExposure || 0).toLocaleString()} tokens</div>
+              <p className="text-xs text-muted-foreground">
+                Max single entry: {(kpis?.maxSingleEntry || 0).toLocaleString()} tokens
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Alert Count */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Active Alerts
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <span className="text-2xl font-bold">{alerts.length}</span>
+                <div className="flex gap-1">
+                  <Badge className="bg-red-500/20 text-red-400">
+                    {alerts.filter(a => a.type === 'HIGH').length} High
+                  </Badge>
+                  <Badge className="bg-yellow-500/20 text-yellow-400">
+                    {alerts.filter(a => a.type === 'MEDIUM').length} Med
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* PART 7: Alerts Panel */}
+        {alerts.length > 0 && (
+          <Collapsible open={alertsExpanded} onOpenChange={setAlertsExpanded}>
+            <Card className="border-yellow-500/30 bg-yellow-500/5">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer">
+                  <CardTitle className="text-sm font-medium flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-400" />
+                      Risk Alerts ({alerts.length})
+                    </span>
+                    {alertsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </CardTitle>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {alerts.map(alert => (
+                      <Alert key={alert.id} variant={alert.type === 'HIGH' ? 'destructive' : 'default'}>
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription className="flex items-center justify-between">
+                          <span>{alert.message}</span>
+                          {alert.marketId && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => {
+                                const market = marketsData?.find(m => m.id === alert.marketId);
+                                if (market) {
+                                  setSelectedMarket(market);
+                                  setDetailModalOpen(true);
+                                }
+                              }}
+                            >
+                              View
+                            </Button>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+                    ))}
+                  </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        )}
+
+        {/* PART 2: Market Risk Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Market Risk Overview
+            </CardTitle>
+            <CardDescription>All markets with risk metrics and house edge status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[400px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tournament</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Sims</TableHead>
+                    <TableHead className="text-right">Implied Sum</TableHead>
+                    <TableHead>Edge Status</TableHead>
+                    <TableHead className="text-right">Entries</TableHead>
+                    <TableHead className="text-right">Tokens</TableHead>
+                    <TableHead className="text-right">Risk Ratio</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {marketsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center text-muted-foreground">
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : marketsData?.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center text-muted-foreground">
+                        No markets found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    marketsData?.map(market => (
+                      <TableRow 
+                        key={market.id}
+                        className={
+                          market.house_edge_status === 'red' || (market.sims > 0 && market.sims !== 20000)
+                            ? 'bg-red-500/10'
+                            : market.risk_ratio > ALERT_THRESHOLDS.RISK_RATIO_WARNING
+                              ? 'bg-yellow-500/10'
+                              : ''
+                        }
+                      >
+                        <TableCell className="font-medium">{market.tournament_name}</TableCell>
+                        <TableCell>{market.market_type}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(market.status)}>
+                            {market.status === 'LOCKED' && <Lock className="h-3 w-3 mr-1" />}
+                            {market.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={market.sims !== 20000 && market.sims > 0 ? 'text-red-400' : ''}>
+                            {market.sims.toLocaleString()}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {market.implied_sum > 0 ? market.implied_sum.toFixed(4) : '-'}
+                        </TableCell>
+                        <TableCell>{getHouseEdgeBadge(market.house_edge_status)}</TableCell>
+                        <TableCell className="text-right">{market.total_entries}</TableCell>
+                        <TableCell className="text-right">{market.total_tokens.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          <span className={market.risk_ratio > ALERT_THRESHOLDS.RISK_RATIO_WARNING ? 'text-yellow-400' : ''}>
+                            {market.risk_ratio > 0 ? `${market.risk_ratio.toFixed(2)}x` : '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedMarket(market);
+                              setDetailModalOpen(true);
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        {/* PART 5: Settlement P/L */}
+        {settlementPL.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Settlement Results
+              </CardTitle>
+              <CardDescription>Profit/Loss by settled tournament</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tournament</TableHead>
+                    <TableHead className="text-right">Collected</TableHead>
+                    <TableHead className="text-right">Paid Out</TableHead>
+                    <TableHead className="text-right">Net Result</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {settlementPL.map(settlement => (
+                    <TableRow key={settlement.id}>
+                      <TableCell className="font-medium">{settlement.name}</TableCell>
+                      <TableCell className="text-right">{settlement.collected.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{settlement.paid.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-bold">
+                        <span className={settlement.net >= 0 ? 'text-green-400' : 'text-red-400'}>
+                          {settlement.net >= 0 ? '+' : ''}{settlement.net.toLocaleString()}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          className={
+                            settlement.status === 'PROFIT' 
+                              ? 'bg-green-500/20 text-green-400' 
+                              : settlement.status === 'LOSS'
+                                ? 'bg-red-500/20 text-red-400'
+                                : 'bg-gray-500/20 text-gray-400'
+                          }
+                        >
+                          {settlement.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* PART 6: Audit Log Stream */}
+        <Collapsible open={auditLogsExpanded} onOpenChange={setAuditLogsExpanded}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer">
+                <CardTitle className="text-sm font-medium flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Recent Audit Events ({auditLogs?.length || 0})
+                  </span>
+                  {auditLogsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </CardTitle>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent>
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-2">
+                    {auditLogs?.map(log => (
+                      <Collapsible key={log.id}>
+                        <CollapsibleTrigger asChild>
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer">
+                            <div className="flex items-center gap-3">
+                              <Badge variant="outline" className="text-xs">
+                                {log.action_type}
+                              </Badge>
+                              <span className="text-sm text-muted-foreground">
+                                {log.entity_type}: {log.entity_id.slice(0, 8)}...
+                              </span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(log.created_at), 'MMM d, HH:mm')}
+                            </span>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="p-3 ml-4 border-l-2 border-muted text-xs font-mono">
+                            <div className="mb-2">
+                              <span className="text-muted-foreground">Actor: </span>
+                              {log.actor_type} {log.actor_id ? `(${log.actor_id.slice(0, 8)}...)` : ''}
+                            </div>
+                            {log.before_state && (
+                              <div className="mb-2">
+                                <span className="text-muted-foreground">Before: </span>
+                                <pre className="text-xs overflow-x-auto">{JSON.stringify(log.before_state, null, 2)}</pre>
+                              </div>
+                            )}
+                            {log.after_state && (
+                              <div>
+                                <span className="text-muted-foreground">After: </span>
+                                <pre className="text-xs overflow-x-auto">{JSON.stringify(log.after_state, null, 2)}</pre>
+                              </div>
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+
+        {/* PART 3 & 4: Market Detail Modal */}
+        <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {selectedMarket?.name}
+                <Badge variant={getStatusBadgeVariant(selectedMarket?.status || 'OPEN')}>
+                  {selectedMarket?.status}
+                </Badge>
+              </DialogTitle>
+              <DialogDescription>
+                {selectedMarket?.tournament_name} • {selectedMarket?.discipline} • {selectedMarket?.category}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedMarket && (
+              <div className="space-y-6">
+                {/* Market Metadata */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-xs text-muted-foreground">Simulations</p>
+                    <p className={`text-lg font-bold ${selectedMarket.sims !== 20000 && selectedMarket.sims > 0 ? 'text-red-400' : ''}`}>
+                      {selectedMarket.sims.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-xs text-muted-foreground">Implied Sum</p>
+                    <p className="text-lg font-bold font-mono">{selectedMarket.implied_sum.toFixed(4)}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-xs text-muted-foreground">Target Band</p>
+                    <p className="text-lg font-bold font-mono">
+                      {HOUSE_EDGE_BANDS[selectedMarket.market_type]?.min.toFixed(3)} - {HOUSE_EDGE_BANDS[selectedMarket.market_type]?.max.toFixed(3)}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-xs text-muted-foreground">House Edge</p>
+                    {getHouseEdgeBadge(selectedMarket.house_edge_status)}
+                  </div>
+                </div>
+
+                {/* Exposure Summary */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-xs text-muted-foreground">Total Entries</p>
+                    <p className="text-lg font-bold">{selectedMarket.total_entries}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-xs text-muted-foreground">Total Tokens</p>
+                    <p className="text-lg font-bold">{selectedMarket.total_tokens.toLocaleString()}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-xs text-muted-foreground">Max Payout</p>
+                    <p className="text-lg font-bold">{selectedMarket.max_payout.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* Athlete Risk Table */}
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Athlete Concentration</h4>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Athlete</TableHead>
+                        <TableHead className="text-right">Probability</TableHead>
+                        <TableHead className="text-right">Multiplier</TableHead>
+                        <TableHead className="text-right">Tokens</TableHead>
+                        <TableHead className="text-right">% of Pool</TableHead>
+                        <TableHead className="text-right">Exposure</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedMarketAthletes?.map(athlete => (
+                        <TableRow 
+                          key={athlete.athlete_id}
+                          className={
+                            athlete.percent_of_pool > ALERT_THRESHOLDS.CONCENTRATION_PERCENT 
+                              ? 'bg-yellow-500/10' 
+                              : ''
+                          }
+                        >
+                          <TableCell className="font-medium">{athlete.athlete_name}</TableCell>
+                          <TableCell className="text-right">{athlete.probability.toFixed(1)}%</TableCell>
+                          <TableCell className="text-right">{athlete.multiplier.toFixed(2)}×</TableCell>
+                          <TableCell className="text-right">{athlete.tokens_on_athlete.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Progress 
+                                value={Math.min(athlete.percent_of_pool, 100)} 
+                                className="w-16 h-2" 
+                              />
+                              <span className={athlete.percent_of_pool > ALERT_THRESHOLDS.CONCENTRATION_PERCENT ? 'text-yellow-400' : ''}>
+                                {athlete.percent_of_pool.toFixed(1)}%
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">{athlete.payout_exposure.toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Locked At Info */}
+                {selectedMarket.locked_at && (
+                  <Alert>
+                    <Lock className="h-4 w-4" />
+                    <AlertTitle>Results Finalized</AlertTitle>
+                    <AlertDescription>
+                      Locked at: {format(new Date(selectedMarket.locked_at), 'PPpp')}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </AdminLayout>
+  );
+};
+
+export default RiskDashboard;
