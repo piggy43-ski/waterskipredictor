@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Check, Medal } from 'lucide-react';
 import { Selection, Discipline } from '@/types';
-import { decimalToAmerican } from '@/utils/oddsConverter';
 
 interface PodiumSelectionCardProps {
   athletes: Selection[];
@@ -70,13 +69,20 @@ export const PodiumSelectionCard = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-sm text-muted-foreground">
-          Select {maxSelections} Athletes for Podium
-        </h3>
-        <Badge variant={selectedAthletes.length === maxSelections ? "default" : "secondary"}>
-          {selectedAthletes.length}/{maxSelections} Selected
-        </Badge>
+      <div className="flex flex-col gap-2 mb-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-sm text-muted-foreground">
+            Select {maxSelections} Athletes for Podium
+          </h3>
+          <Badge variant={selectedAthletes.length === maxSelections ? "default" : "secondary"}>
+            {selectedAthletes.length}/{maxSelections} Selected
+          </Badge>
+        </div>
+        {selectedAthletes.length < maxSelections && (
+          <p className="text-xs text-muted-foreground">
+            Select {maxSelections - selectedAthletes.length} more athlete(s) to continue
+          </p>
+        )}
       </div>
       
       {athletes.map((athlete) => {
@@ -121,9 +127,9 @@ export const PodiumSelectionCard = ({
                 </div>
                 <div className="text-right">
                   <div className="text-lg font-bold text-primary">
-                    {decimalToAmerican(athlete.decimal_odds)}
+                    {athlete.decimal_odds.toFixed(2)}×
                   </div>
-                  <div className="text-xs text-muted-foreground">odds</div>
+                  <div className="text-xs text-muted-foreground">Multiplier</div>
                 </div>
               </div>
             </CardContent>

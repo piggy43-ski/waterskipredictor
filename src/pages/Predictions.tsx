@@ -12,7 +12,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info, RotateCcw, TrendingDown, Percent } from 'lucide-react';
-import { decimalToAmerican } from '@/utils/oddsConverter';
 import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -471,7 +470,7 @@ const Predictions = () => {
     // Use actual legs array length, not stale database field
     const actualLegCount = slip.legs?.length || 0;
     const isParlayDisplay = slip.type === 'parlay' || actualLegCount > 1;
-    const americanOdds = decimalToAmerican(slip.total_odds_decimal);
+    const multiplierDisplay = `${slip.total_odds_decimal.toFixed(2)}×`;
     
     // Check if prediction window is still open
     const predictionWindow = isActive ? getPredictionWindowStatus(
@@ -569,7 +568,7 @@ const Predictions = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-primary">
-                          {decimalToAmerican(leg.decimal_odds)}
+                          {leg.decimal_odds.toFixed(2)}×
                         </span>
                         {getStatusBadge(leg.status)}
                       </div>
@@ -582,17 +581,17 @@ const Predictions = () => {
 
           <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Stake</p>
+              <p className="text-xs text-muted-foreground mb-1">Entry Amount</p>
               <p className="font-semibold flex items-center gap-1">
                 <Coins className="w-4 h-4 text-primary" />
                 {slip.total_stake_tokens.toLocaleString()}
               </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Odds</p>
+              <p className="text-xs text-muted-foreground mb-1">Multiplier</p>
               <p className="font-semibold flex items-center gap-1 text-primary">
                 <TrendingUp className="w-4 h-4" />
-                {americanOdds}
+                {multiplierDisplay}
               </p>
             </div>
           </div>
@@ -600,7 +599,7 @@ const Predictions = () => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-muted-foreground mb-1">
-                {isActive ? 'Potential Win' : 'Result'}
+                {isActive ? 'Projected Rewards' : 'Result'}
               </p>
               <p className={`font-bold ${
                 slip.status === 'WON' ? 'text-success' : 
@@ -664,7 +663,7 @@ const Predictions = () => {
                   }}
                 >
                   <Pencil className="w-4 h-4 mr-2" />
-                  Edit Stake
+                  Edit Entry
                 </Button>
                 <Button 
                   variant="destructive" 
@@ -682,7 +681,7 @@ const Predictions = () => {
             </div>
           )}
 
-          {/* Bet Again button for settled bets */}
+          {/* Predict Again button for settled entries */}
           {!isActive && (
             <div className="pt-3 border-t border-border">
               <Button 
@@ -692,7 +691,7 @@ const Predictions = () => {
                 onClick={() => handleBetAgain(slip)}
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
-                Bet Again
+                Predict Again
               </Button>
             </div>
           )}

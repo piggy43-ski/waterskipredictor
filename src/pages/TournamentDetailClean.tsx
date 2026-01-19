@@ -21,6 +21,8 @@ import { ParlayBuilder } from '@/components/ParlayBuilder';
 import { Button } from '@/components/ui/button';
 import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { SimulationDetails } from '@/components/SimulationDetails';
+import { useAdminCheck } from '@/hooks/useAdminCheck';
 
 interface ValidationResult {
   allowed: boolean;
@@ -41,8 +43,9 @@ const TournamentDetail = () => {
   const location = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { isAdmin } = useAdminCheck();
   
-  // Get highlighted athletes from "Bet Again" navigation
+  // Get highlighted athletes from "Predict Again" navigation
   const betAgainAthletes: string[] = location.state?.betAgainAthletes || [];
   const [selectedSelection, setSelectedSelection] = useState<Selection | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -506,12 +509,12 @@ const TournamentDetail = () => {
       // Log transaction
       await supabase.from('token_transactions').insert({
         user_id: user.id,
-        type: 'bet_placed',
+        type: 'prediction_placed',
         amount: -stakeAmount,
         balance_after: newBalance,
         reference_type: 'bet_slip',
         reference_id: betSlip.id,
-        description: `Podium bet: ${podiumState.assignedPositions.first.athlete.name}, ${podiumState.assignedPositions.second.athlete.name}, ${podiumState.assignedPositions.third.athlete.name} - ${tournament.name}`,
+        description: `Podium prediction: ${podiumState.assignedPositions.first.athlete.name}, ${podiumState.assignedPositions.second.athlete.name}, ${podiumState.assignedPositions.third.athlete.name} - ${tournament.name}`,
         metadata: {
           tournament_name: tournament.name,
           discipline: currentPodiumContext.discipline,
@@ -529,7 +532,7 @@ const TournamentDetail = () => {
 
       toast({
         title: "Podium Prediction Placed!",
-        description: `${stakeAmount} tokens staked on podium prediction`,
+        description: `${stakeAmount} tokens entered on podium prediction`,
       });
 
       await fetchWalletBalance();
@@ -684,12 +687,12 @@ const TournamentDetail = () => {
       // Log transaction
       await supabase.from('token_transactions').insert({
         user_id: user.id,
-        type: 'bet_placed',
+        type: 'prediction_placed',
         amount: -stakeAmount,
         balance_after: newBalance,
         reference_type: 'bet_slip',
         reference_id: betSlip.id,
-        description: `Bet placed on ${selectedSelection.athlete.name} - ${tournament.name}`,
+        description: `Prediction placed on ${selectedSelection.athlete.name} - ${tournament.name}`,
         metadata: {
           tournament_name: tournament.name,
           athlete_name: selectedSelection.athlete.name,
@@ -703,7 +706,7 @@ const TournamentDetail = () => {
 
       toast({
         title: "Prediction Placed!",
-        description: `${stakeAmount} tokens staked on ${selectedSelection.athlete.name}`,
+        description: `${stakeAmount} tokens entered on ${selectedSelection.athlete.name}`,
       });
 
       await fetchWalletBalance();
@@ -810,7 +813,7 @@ const TournamentDetail = () => {
             <h3 className="font-semibold mb-2">Athletes Coming Soon</h3>
             <p className="text-sm text-muted-foreground mb-4">
               We're waiting for the tournament organizer to confirm the athletes list. 
-              Check back closer to the event for betting markets.
+              Check back closer to the event for prediction markets.
             </p>
             <Button variant="outline" onClick={() => navigate('/tournaments')}>
               Browse Other Events
@@ -842,6 +845,9 @@ const TournamentDetail = () => {
                   </TabsList>
                   
                   <TabsContent value="men">
+                    {/* Simulation Details Info Box */}
+                    <SimulationDetails isAdmin={isAdmin} className="mb-4" />
+                    
                     <Tabs defaultValue="winner" className="w-full">
                       <TabsList id="contest-types" className="w-full grid grid-cols-3 mb-4">
                         <TabsTrigger value="winner">Winner</TabsTrigger>
@@ -897,14 +903,14 @@ const TournamentDetail = () => {
                                 discipline={discipline}
                               />
                               {podiumState.selectedAthletes.length === 3 && podiumState.assignedPositions && (
-                                <button
+                              <button
                                   className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
                                   onClick={() => {
                                     setCurrentPodiumContext({ market: podiumMarket, discipline, gender: 'men' });
                                     setPodiumDialogOpen(true);
                                   }}
                                 >
-                                  Place Podium Bet
+                                  Place Podium Entry
                                 </button>
                               )}
                             </div>
@@ -940,6 +946,9 @@ const TournamentDetail = () => {
 
                   {/* Women's markets - similar structure */}
                   <TabsContent value="women">
+                    {/* Simulation Details Info Box */}
+                    <SimulationDetails isAdmin={isAdmin} className="mb-4" />
+                    
                     <Tabs defaultValue="winner" className="w-full">
                       <TabsList className="w-full grid grid-cols-3 mb-4">
                         <TabsTrigger value="winner">Winner</TabsTrigger>
@@ -993,14 +1002,14 @@ const TournamentDetail = () => {
                                 discipline={discipline}
                               />
                               {podiumState.selectedAthletes.length === 3 && podiumState.assignedPositions && (
-                                <button
+                              <button
                                   className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
                                   onClick={() => {
                                     setCurrentPodiumContext({ market: podiumMarket, discipline, gender: 'women' });
                                     setPodiumDialogOpen(true);
                                   }}
                                 >
-                                  Place Podium Bet
+                                  Place Podium Entry
                                 </button>
                               )}
                             </div>
