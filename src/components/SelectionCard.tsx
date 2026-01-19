@@ -3,7 +3,6 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { TrendingUp, Medal, Check } from 'lucide-react';
-import { decimalToAmerican } from '@/utils/oddsConverter';
 
 interface SelectionCardProps {
   selection: Selection;
@@ -39,7 +38,7 @@ const getFlagEmoji = (countryCode: string): string => {
 };
 
 export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single', onAddToParlay, isInParlay, highlighted }: SelectionCardProps) => {
-  const americanOdds = decimalToAmerican(selection.decimal_odds);
+  const multiplierDisplay = `${selection.decimal_odds.toFixed(2)}×`;
   
   // Get the appropriate rank based on discipline
   const getRank = () => {
@@ -89,7 +88,7 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
           <div id="multiplier-display" className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
             <span className="text-2xl font-bold text-primary">
-              {americanOdds}
+              {multiplierDisplay}
             </span>
           </div>
           
