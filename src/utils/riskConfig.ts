@@ -18,7 +18,33 @@ export const RISK_CONFIG = {
     PODIUM: 0.30,
     HIGHEST_SCORE: 0.30,
   } as const,
+  
+  /** Target implied sum bands by market type */
+  IMPLIED_SUM_BANDS: {
+    WINNER: { target: 0.909, min: 0.90, max: 0.915 },
+    PODIUM: { target: 0.847, min: 0.84, max: 0.86 },
+    HIGHEST_SCORE: { target: 0.877, min: 0.87, max: 0.89 },
+  } as const,
+  
+  /** Maximum risk ratio by market type (caps house downside at 10-15%) */
+  MAX_RISK_RATIO: {
+    WINNER: 1.15,       // Max 15% downside
+    PODIUM: 1.10,       // Max 10% downside
+    HIGHEST_SCORE: 1.12 // Max 12% downside
+  } as const,
+  
+  /** Compression rules */
+  COMPRESSION: {
+    /** Maximum single adjustment per update (8%) */
+    MAX_ADJUSTMENT_PCT: 0.08,
+    /** Minimum % of total tokens to be eligible for compression */
+    MIN_EXPOSURE_PCT: 0.05,
+    /** Multiplier floor (never compress below this) */
+    MULTIPLIER_FLOOR: 1.20,
+  } as const,
 } as const;
+
+export type MarketType = 'WINNER' | 'PODIUM' | 'HIGHEST_SCORE';
 
 /**
  * Check if stake exceeds maximum
@@ -58,6 +84,39 @@ export const formatRiskError = (reason: string): string => {
 /**
  * Get liability cap for a market type
  */
-export const getLiabilityCap = (marketType: 'WINNER' | 'PODIUM' | 'HIGHEST_SCORE'): number => {
+export const getLiabilityCap = (marketType: MarketType): number => {
   return RISK_CONFIG.LIABILITY_CAPS[marketType] || RISK_CONFIG.LIABILITY_CAPS.WINNER;
+};
+
+/**
+ * Get max risk ratio for a market type
+ */
+export const getMaxRiskRatio = (marketType: MarketType): number => {
+  return RISK_CONFIG.MAX_RISK_RATIO[marketType] || RISK_CONFIG.MAX_RISK_RATIO.WINNER;
+};
+
+/**
+ * Get implied sum band for a market type
+ */
+export const getImpliedSumBand = (marketType: MarketType): { target: number; min: number; max: number } => {
+  return RISK_CONFIG.IMPLIED_SUM_BANDS[marketType] || RISK_CONFIG.IMPLIED_SUM_BANDS.WINNER;
+};
+
+/**
+ * Calculate compression factor needed to bring risk ratio within limits
+ */
+export const calculateCompressionFactor = (
+  currentRiskRatio: number,
+  maxRiskRatio: number
+): number => {
+  if (currentRiskRatio <= maxRiskRatio) return 1.0;
+  return maxRiskRatio / currentRiskRatio;
+};
+
+/**
+ * Apply max single adjustment cap to compression factor
+ */
+export const capCompressionAdjustment = (compressionFactor: number): number => {
+  const minAllowed = 1 - RISK_CONFIG.COMPRESSION.MAX_ADJUSTMENT_PCT;
+  return Math.max(compressionFactor, minAllowed);
 };
