@@ -121,35 +121,81 @@ const RiskDashboard = () => {
 
       if (marketsError) throw marketsError;
 
-      // Get market odds for implied sum calculation
-      const { data: odds, error: oddsError } = await supabase
-        .from('market_odds')
-        .select('market_id, final_decimal_odds, base_probability, sims, target_implied_sum');
+      // Get selections for implied sum calculation (actual odds are here, not in market_odds)
+      const { data: selections, error: selectionsError } = await supabase
+        .from('selections')
+        .select('id, market_id, decimal_odds');
 
-      if (oddsError) throw oddsError;
+      if (selectionsError) throw selectionsError;
 
-      // Get bet slips for exposure data
-      const { data: betSlips, error: betSlipsError } = await supabase
-        .from('bet_slips')
-        .select('market_id, total_stake_tokens, potential_payout_tokens, status');
+      // Get predictions to calculate exposure (predictions link to markets via selections)
+      const { data: predictions, error: predictionsError } = await supabase
+        .from('predictions')
+        .select('id, selection_id, staked_tokens, potential_payout, status, bet_slip_id');
 
-      if (betSlipsError) throw betSlipsError;
+      if (predictionsError) throw predictionsError;
+
+      // Create lookup: selection_id -> market_id
+      const selectionToMarket: Record<string, string> = {};
+      (selections || []).forEach(s => {
+        selectionToMarket[s.id] = s.market_id;
+      });
+
+      // Calculate implied sum per market from selections
+      const impliedSumByMarket: Record<string, { sum: number; count: number }> = {};
+      (selections || []).forEach(s => {
+        if (!impliedSumByMarket[s.market_id]) {
+          impliedSumByMarket[s.market_id] = { sum: 0, count: 0 };
+        }
+        impliedSumByMarket[s.market_id].sum += 1 / s.decimal_odds;
+        impliedSumByMarket[s.market_id].count += 1;
+      });
+
+      // Calculate exposure per market from predictions
+      const exposureByMarket: Record<string, { 
+        totalTokens: number; 
+        maxPayout: number; 
+        betSlipIds: Set<string>;
+      }> = {};
+      
+      (predictions || []).forEach(p => {
+        const marketId = selectionToMarket[p.selection_id];
+        if (!marketId) return;
+        
+        if (!exposureByMarket[marketId]) {
+          exposureByMarket[marketId] = { 
+            totalTokens: 0, 
+            maxPayout: 0, 
+            betSlipIds: new Set()
+          };
+        }
+        
+        exposureByMarket[marketId].totalTokens += p.staked_tokens || 0;
+        exposureByMarket[marketId].maxPayout = Math.max(
+          exposureByMarket[marketId].maxPayout, 
+          p.potential_payout || 0
+        );
+        if (p.bet_slip_id) {
+          exposureByMarket[marketId].betSlipIds.add(p.bet_slip_id);
+        }
+      });
 
       // Process markets with calculated metrics
       const processedMarkets: MarketRiskData[] = (markets || []).map((market: any) => {
-        const marketOdds = odds?.filter(o => o.market_id === market.id) || [];
-        const marketBets = betSlips?.filter(b => b.market_id === market.id) || [];
+        // Get implied sum from selections
+        const impliedData = impliedSumByMarket[market.id];
+        const impliedSum = impliedData?.sum || 0;
+        const selectionCount = impliedData?.count || 0;
         
-        // Calculate implied sum
-        const impliedSum = marketOdds.reduce((sum, o) => sum + (1 / o.final_decimal_odds), 0);
-        const sims = marketOdds[0]?.sims || 0;
-        const targetImpliedSum = marketOdds[0]?.target_implied_sum || 
-          HOUSE_EDGE_BANDS[market.market_type as MarketType]?.target || 0.9;
+        // Monte Carlo always runs 20,000 sims (constant)
+        const sims = selectionCount > 0 ? 20000 : 0;
+        const targetImpliedSum = HOUSE_EDGE_BANDS[market.market_type as MarketType]?.target || 0.9;
 
-        // Calculate exposure metrics
-        const totalTokens = marketBets.reduce((sum, b) => sum + (b.total_stake_tokens || 0), 0);
-        const maxPayout = Math.max(...marketBets.map(b => b.potential_payout_tokens || 0), 0);
-        const totalEntries = marketBets.length;
+        // Get exposure from predictions
+        const exposure = exposureByMarket[market.id];
+        const totalTokens = exposure?.totalTokens || 0;
+        const maxPayout = exposure?.maxPayout || 0;
+        const totalEntries = exposure?.betSlipIds.size || 0;
         const riskRatio = totalTokens > 0 ? maxPayout / totalTokens : 0;
 
         // Determine status
@@ -165,7 +211,7 @@ const RiskDashboard = () => {
         // Determine house edge health
         const band = HOUSE_EDGE_BANDS[market.market_type as MarketType];
         let houseEdgeStatus: 'green' | 'yellow' | 'red' = 'green';
-        if (band && marketOdds.length > 0) {
+        if (band && selectionCount > 0) {
           if (impliedSum < band.min - 0.02 || impliedSum > band.max + 0.02) {
             houseEdgeStatus = 'red';
           } else if (impliedSum < band.min || impliedSum > band.max) {
@@ -410,19 +456,20 @@ const RiskDashboard = () => {
     });
   }, [settlementData]);
 
-  // Get athlete details for selected market
+  // Get athlete details for selected market (using selections table instead of market_odds)
   const { data: selectedMarketAthletes } = useQuery({
     queryKey: ['admin-risk-market-athletes', selectedMarket?.id],
     enabled: !!selectedMarket,
     queryFn: async () => {
       if (!selectedMarket) return [];
 
-      const { data: odds, error: oddsError } = await supabase
-        .from('market_odds')
+      // Get selections with athlete info (actual odds are stored here)
+      const { data: selections, error: selectionsError } = await supabase
+        .from('selections')
         .select(`
+          id,
           athlete_id,
-          base_probability,
-          final_decimal_odds,
+          decimal_odds,
           athletes (
             id,
             name
@@ -430,22 +477,26 @@ const RiskDashboard = () => {
         `)
         .eq('market_id', selectedMarket.id);
 
-      if (oddsError) throw oddsError;
+      if (selectionsError) throw selectionsError;
 
       const marketLiability = liabilityData?.filter(l => l.market_id === selectedMarket.id) || [];
 
-      const athletes: AthleteRiskData[] = (odds || []).map(o => {
-        const liability = marketLiability.find(l => l.athlete_id === o.athlete_id);
+      // Calculate implied probability from decimal odds
+      const athletes: AthleteRiskData[] = (selections || []).map(s => {
+        const liability = marketLiability.find(l => l.athlete_id === s.athlete_id);
         const tokensOnAthlete = liability?.total_stake_tokens || 0;
         const percentOfPool = selectedMarket.total_tokens > 0 
           ? (tokensOnAthlete / selectedMarket.total_tokens) * 100 
           : 0;
 
+        // Probability = 1 / decimal_odds (implied probability)
+        const impliedProbability = (1 / s.decimal_odds) * 100;
+
         return {
-          athlete_id: o.athlete_id,
-          athlete_name: (o.athletes as any)?.name || 'Unknown',
-          probability: o.base_probability * 100,
-          multiplier: o.final_decimal_odds,
+          athlete_id: s.athlete_id,
+          athlete_name: (s.athletes as any)?.name || 'Unknown',
+          probability: impliedProbability,
+          multiplier: s.decimal_odds,
           tokens_on_athlete: tokensOnAthlete,
           percent_of_pool: percentOfPool,
           payout_exposure: liability?.liability_if_wins || 0,
