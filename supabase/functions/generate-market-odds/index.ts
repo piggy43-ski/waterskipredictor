@@ -267,8 +267,16 @@ function deriveOddsFromProbabilities(
   multiplierMap: Map<string, number>
 ): OddsResult[] {
   return normalizedProbs.map(({ athleteId, rawProbability, normalizedProbability }) => {
-    const fairOdds = 1 / normalizedProbability;
-    const adjustedProbability = normalizedProbability * (1 + houseEdge);
+    // SAFETY: Guard against division by zero or very small probabilities
+    const safeNormalizedProb = Math.max(normalizedProbability, 0.0001);  // Min 0.01%
+    const safeRawProb = Math.max(rawProbability, 0.0001);
+    
+    // Calculate fair odds with safety clamp
+    const rawFairOdds = 1 / safeNormalizedProb;
+    const fairOdds = Math.min(rawFairOdds, ODDS_MAX);  // Cap at max odds
+    
+    // Adjusted probability for house edge
+    const adjustedProbability = safeNormalizedProb * (1 + houseEdge);
     const rawFinalOdds = 1 / adjustedProbability;
     
     // Apply manual multiplier (for admin adjustments)
@@ -280,8 +288,8 @@ function deriveOddsFromProbabilities(
     
     return {
       athleteId,
-      rawProbability,
-      normalizedProbability,
+      rawProbability: safeRawProb,
+      normalizedProbability: safeNormalizedProb,
       fairOdds,
       adjustedProbability,
       finalOdds,
