@@ -93,7 +93,7 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
             </span>
           </div>
           
-          {/* Single Mode - Show only Place Prediction */}
+          {/* Single Mode - Show only Enter Prediction */}
           {mode === 'single' && (
             <Button 
               size="sm" 
@@ -104,7 +104,7 @@ export const SelectionCard = ({ selection, onSelect, discipline, mode = 'single'
                 onSelect(selection);
               }}
             >
-              Place Prediction
+              Enter Prediction
             </Button>
           )}
           

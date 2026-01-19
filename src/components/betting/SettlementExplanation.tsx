@@ -51,9 +51,9 @@ export function SettlementExplanation({ settlement, className }: Props) {
     },
     LOST: {
       icon: XCircle,
-      bgClass: 'bg-destructive/10 border-destructive/30',
-      iconClass: 'text-destructive',
-      label: 'Incorrect'
+      bgClass: 'bg-secondary/10 border-secondary/30',
+      iconClass: 'text-muted-foreground',
+      label: 'Not Correct'
     },
     VOID: {
       icon: RefreshCw,
@@ -203,12 +203,12 @@ export function SettlementExplanation({ settlement, className }: Props) {
           </div>
         )}
 
-        {/* Entry amount lost for incorrect entries */}
+        {/* Entry amount used for incorrect entries */}
         {settlement.status === 'LOST' && settlement.payout_details && (
           <div className="pt-2 border-t border-border/50 text-sm">
-            <div className="flex justify-between font-semibold text-destructive">
-              <span>Entry Lost</span>
-              <span>-{settlement.payout_details.stake.toLocaleString()} tokens</span>
+            <div className="flex justify-between font-semibold text-muted-foreground">
+              <span>Entry Used</span>
+              <span>{settlement.payout_details.stake.toLocaleString()} tokens</span>
             </div>
           </div>
         )}

@@ -119,7 +119,8 @@ const Wallet = () => {
 
         {/* Token Packs */}
         <div>
-          <h2 className="text-lg font-bold mb-4">Buy Tokens</h2>
+          <h2 className="text-lg font-bold mb-2">Buy Tokens</h2>
+          <p className="text-xs text-muted-foreground mb-4">Daily purchase limit: $250 (25,000 tokens)</p>
           <div className="grid grid-cols-1 gap-3">
             {tokenPacks.map((pack) => (
               <Card 

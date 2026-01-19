@@ -416,6 +416,16 @@ const Rewards = () => {
       />
       
       <div className="max-w-lg mx-auto px-4 py-6">
+        {/* Trust Banner */}
+        <Card className="p-4 bg-primary/5 border-primary/20 mb-6">
+          <p className="text-sm text-center">
+            Redeem your tokens for real rewards like gear, lessons, and experiences.
+          </p>
+          <p className="text-xs text-muted-foreground text-center mt-1">
+            Rewards only. Tokens cannot be exchanged for cash.
+          </p>
+        </Card>
+
         <div className="flex justify-end mb-4">
           <Link 
             to="/help?section=Rewards%20%26%20Redemption" 
@@ -461,7 +471,7 @@ const Rewards = () => {
                   <h3 className="text-xl font-semibold mb-2">VIP Experiences</h3>
                   <Badge variant="secondary" className="mb-3">Coming Soon</Badge>
                   <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-                    Exclusive VIP experiences and premium rewards are on the way. Stay tuned!
+                    More rewards are coming soon. Keep earning tokens!
                   </p>
                 </div>
               </div>
@@ -476,7 +486,7 @@ const Rewards = () => {
           <DialogHeader>
             <DialogTitle>Confirm Reward Redemption</DialogTitle>
             <DialogDescription>
-              Review your reward redemption before confirming.
+              Your reward request will be received. Fulfillment times vary by reward.
             </DialogDescription>
           </DialogHeader>
           

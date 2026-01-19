@@ -81,12 +81,12 @@ export const UserTournamentResults = ({ predictions }: UserTournamentResultsProp
           <Badge variant="outline" className="bg-success/10 text-success border-success/20">
             {wonCount} Correct
           </Badge>
-          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
-            {lostCount} Incorrect
+          <Badge variant="outline" className="bg-secondary/10 text-muted-foreground border-secondary/20">
+            {lostCount} Not Correct
           </Badge>
           {voidCount > 0 && (
             <Badge variant="outline" className="bg-muted text-muted-foreground">
-              {voidCount} Void
+              {voidCount} Voided
             </Badge>
           )}
         </div>
@@ -118,7 +118,7 @@ export const UserTournamentResults = ({ predictions }: UserTournamentResultsProp
                   prediction.status === 'WON'
                     ? 'default'
                     : prediction.status === 'LOST'
-                    ? 'destructive'
+                    ? 'secondary'
                     : 'outline'
                 }
                 className={
@@ -127,7 +127,7 @@ export const UserTournamentResults = ({ predictions }: UserTournamentResultsProp
                     : ''
                 }
               >
-                {prediction.status === 'WON' ? 'Correct' : prediction.status === 'LOST' ? 'Incorrect' : prediction.status}
+                {prediction.status === 'WON' ? 'Correct' : prediction.status === 'LOST' ? 'Not Correct' : prediction.status}
               </Badge>
             </div>
             <div className="grid grid-cols-3 gap-2 text-sm">
