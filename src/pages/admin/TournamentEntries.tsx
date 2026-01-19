@@ -595,6 +595,22 @@ export default function TournamentEntries() {
         }
       }
 
+      // After creating all markets and selections, generate proper Monte Carlo odds
+      const { data: allMarkets } = await supabase
+        .from('markets')
+        .select('id')
+        .eq('tournament_id', selectedTournamentId);
+
+      for (const market of allMarkets || []) {
+        try {
+          await supabase.functions.invoke('generate-market-odds', {
+            body: { market_id: market.id }
+          });
+        } catch (err) {
+          console.error(`Failed to generate odds for market ${market.id}:`, err);
+        }
+      }
+
       return entriesToAdd.length;
     },
     onSuccess: (count) => {
@@ -603,7 +619,7 @@ export default function TournamentEntries() {
       queryClient.invalidateQueries({ queryKey: ['selections'] });
       queryClient.invalidateQueries({ queryKey: ['athletes-for-tournament'] });
       queryClient.invalidateQueries({ queryKey: ['all-athletes-for-matching'] });
-      toast.success(`Added ${count} entries and created markets`);
+      toast.success(`Added ${count} entries, created markets & generated odds`);
       setShowPreviewDialog(false);
       setAiFiles([]);
       setMatchedParticipants([]);
@@ -779,12 +795,28 @@ export default function TournamentEntries() {
           if (selectionsError) throw selectionsError;
         }
       }
+
+      // After creating all markets and selections, generate proper Monte Carlo odds
+      const { data: allMarkets } = await supabase
+        .from('markets')
+        .select('id')
+        .eq('tournament_id', selectedTournamentId);
+
+      for (const market of allMarkets || []) {
+        try {
+          await supabase.functions.invoke('generate-market-odds', {
+            body: { market_id: market.id }
+          });
+        } catch (err) {
+          console.error(`Failed to generate odds for market ${market.id}:`, err);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
       queryClient.invalidateQueries({ queryKey: ['markets'] });
       queryClient.invalidateQueries({ queryKey: ['selections'] });
-      toast.success('Athletes added and markets created');
+      toast.success('Athletes added, markets created & odds generated');
       setSelectedAthletes(new Set());
       setCustomOdds({});
     },
