@@ -74,3 +74,9 @@ verify_jwt = false
 
 [functions.generate-parlays]
 verify_jwt = true
+
+[functions.simulate-house-profit]
+verify_jwt = true
+
+[functions.enforce-safe-mode]
+verify_jwt = true

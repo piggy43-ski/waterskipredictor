@@ -1234,12 +1234,17 @@ export type Database = {
           category: string
           created_at: string
           discipline: string
+          expected_profit: number | null
           id: string
+          last_safe_mode_check: string | null
           locked_at: string | null
+          loss_probability: number | null
           market_type: string
           name: string
           odds_validation_error: string | null
           odds_validation_status: string | null
+          profit_p05: number | null
+          safe_mode_status: string | null
           tournament_id: string
           updated_at: string
         }
@@ -1247,12 +1252,17 @@ export type Database = {
           category: string
           created_at?: string
           discipline: string
+          expected_profit?: number | null
           id?: string
+          last_safe_mode_check?: string | null
           locked_at?: string | null
+          loss_probability?: number | null
           market_type: string
           name: string
           odds_validation_error?: string | null
           odds_validation_status?: string | null
+          profit_p05?: number | null
+          safe_mode_status?: string | null
           tournament_id: string
           updated_at?: string
         }
@@ -1260,12 +1270,17 @@ export type Database = {
           category?: string
           created_at?: string
           discipline?: string
+          expected_profit?: number | null
           id?: string
+          last_safe_mode_check?: string | null
           locked_at?: string | null
+          loss_probability?: number | null
           market_type?: string
           name?: string
           odds_validation_error?: string | null
           odds_validation_status?: string | null
+          profit_p05?: number | null
+          safe_mode_status?: string | null
           tournament_id?: string
           updated_at?: string
         }
@@ -1919,6 +1934,47 @@ export type Database = {
           value?: Json
         }
         Relationships: []
+      }
+      safe_mode_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error: string | null
+          id: string
+          market_id: string
+          scheduled_for: string
+          started_at: string | null
+          status: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          error?: string | null
+          id?: string
+          market_id: string
+          scheduled_for: string
+          started_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          error?: string | null
+          id?: string
+          market_id?: string
+          scheduled_for?: string
+          started_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safe_mode_jobs_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: true
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       selections: {
         Row: {
