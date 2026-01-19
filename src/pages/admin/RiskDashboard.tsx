@@ -43,6 +43,7 @@ interface MarketRiskData {
   locked_at: string | null;
   status: 'OPEN' | 'CLOSED' | 'SETTLED' | 'LOCKED';
   sims: number;
+  sims_run: number;  // Actual sims from market_odds
   implied_sum: number;
   target_implied_sum: number;
   total_entries: number;
@@ -54,6 +55,9 @@ interface MarketRiskData {
   risk_status: 'safe' | 'warning' | 'danger';
   is_compressed: boolean;
   cumulative_compression_pct: number;
+  odds_validation_status: 'PENDING' | 'VALID' | 'INVALID' | 'MISSING';
+  odds_validation_error: string | null;
+  has_monte_carlo: boolean;
 }
 
 interface AthleteRiskData {
@@ -180,7 +184,7 @@ const RiskDashboard = () => {
   const { data: marketsData, isLoading: marketsLoading, refetch: refetchMarkets } = useQuery({
     queryKey: ['admin-risk-markets'],
     queryFn: async () => {
-      // Get markets with tournament info
+      // Get markets with tournament info and validation status
       const { data: markets, error: marketsError } = await supabase
         .from('markets')
         .select(`
@@ -191,6 +195,8 @@ const RiskDashboard = () => {
           category,
           tournament_id,
           locked_at,
+          odds_validation_status,
+          odds_validation_error,
           tournaments!inner (
             id,
             name,
@@ -203,10 +209,30 @@ const RiskDashboard = () => {
 
       if (marketsError) throw marketsError;
 
-      // Get selections for implied sum calculation (actual odds are here, not in market_odds)
+      // CRITICAL: Get implied sum from market_odds.adjusted_probability (source of truth)
+      // This is the properly computed implied sum from Monte Carlo
+      const { data: marketOdds, error: marketOddsError } = await supabase
+        .from('market_odds')
+        .select('market_id, adjusted_probability, sims_run');
+
+      if (marketOddsError) throw marketOddsError;
+
+      // Calculate implied sum per market from adjusted_probability (SUM of p_adjusted)
+      const impliedSumByMarket: Record<string, { sum: number; count: number; sims_run: number }> = {};
+      (marketOdds || []).forEach(mo => {
+        if (!impliedSumByMarket[mo.market_id]) {
+          impliedSumByMarket[mo.market_id] = { sum: 0, count: 0, sims_run: 0 };
+        }
+        // adjusted_probability IS the implied probability (1/final_odds)
+        impliedSumByMarket[mo.market_id].sum += mo.adjusted_probability || 0;
+        impliedSumByMarket[mo.market_id].count += 1;
+        impliedSumByMarket[mo.market_id].sims_run = mo.sims_run || 0;
+      });
+
+      // Get selections for selection_id -> market_id mapping
       const { data: selections, error: selectionsError } = await supabase
         .from('selections')
-        .select('id, market_id, decimal_odds');
+        .select('id, market_id');
 
       if (selectionsError) throw selectionsError;
 
@@ -221,16 +247,6 @@ const RiskDashboard = () => {
       const selectionToMarket: Record<string, string> = {};
       (selections || []).forEach(s => {
         selectionToMarket[s.id] = s.market_id;
-      });
-
-      // Calculate implied sum per market from selections
-      const impliedSumByMarket: Record<string, { sum: number; count: number }> = {};
-      (selections || []).forEach(s => {
-        if (!impliedSumByMarket[s.market_id]) {
-          impliedSumByMarket[s.market_id] = { sum: 0, count: 0 };
-        }
-        impliedSumByMarket[s.market_id].sum += 1 / s.decimal_odds;
-        impliedSumByMarket[s.market_id].count += 1;
       });
 
       // Calculate exposure per market from predictions
@@ -264,12 +280,16 @@ const RiskDashboard = () => {
 
       // Process markets with calculated metrics
       const processedMarkets: MarketRiskData[] = (markets || []).map((market: any) => {
-        // Get implied sum from selections
+        // Get implied sum from market_odds.adjusted_probability (source of truth)
         const impliedData = impliedSumByMarket[market.id];
         const impliedSum = impliedData?.sum || 0;
         const selectionCount = impliedData?.count || 0;
+        const simsRun = impliedData?.sims_run || 0;
         
-        // Monte Carlo always runs 20,000 sims (constant)
+        // Check if we have Monte Carlo data
+        const hasMonteCarlo = selectionCount > 0 && simsRun === 20000;
+        
+        // Legacy sims for backward compat (shows 20000 if we have any selections)
         const sims = selectionCount > 0 ? 20000 : 0;
         
         // Normalize market_type to uppercase for lookup
@@ -294,14 +314,21 @@ const RiskDashboard = () => {
           status = 'CLOSED';
         }
 
+        // Get validation status from DB (new columns)
+        const validationStatus = (market.odds_validation_status || 'PENDING') as 'PENDING' | 'VALID' | 'INVALID' | 'MISSING';
+        const validationError = market.odds_validation_error || null;
+
         // Determine house edge health (band already set above with normalized type)
         let houseEdgeStatus: 'green' | 'yellow' | 'red' = 'green';
-        if (band && selectionCount > 0) {
+        if (band && hasMonteCarlo) {
           if (impliedSum < band.min - 0.02 || impliedSum > band.max + 0.02) {
             houseEdgeStatus = 'red';
           } else if (impliedSum < band.min || impliedSum > band.max) {
             houseEdgeStatus = 'yellow';
           }
+        } else if (!hasMonteCarlo && selectionCount > 0) {
+          // No Monte Carlo but has selections = placeholder odds = red
+          houseEdgeStatus = 'red';
         }
 
         // Get max risk ratio for this market type (use normalized type)
@@ -327,6 +354,7 @@ const RiskDashboard = () => {
           locked_at: market.locked_at,
           status,
           sims,
+          sims_run: simsRun,
           implied_sum: impliedSum,
           target_implied_sum: targetImpliedSum,
           total_entries: totalEntries,
@@ -338,6 +366,9 @@ const RiskDashboard = () => {
           risk_status: riskStatus,
           is_compressed: false, // Will be updated from audit logs
           cumulative_compression_pct: 0,
+          odds_validation_status: validationStatus,
+          odds_validation_error: validationError,
+          has_monte_carlo: hasMonteCarlo,
         };
       });
 

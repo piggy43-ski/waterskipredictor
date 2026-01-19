@@ -1108,6 +1108,7 @@ export type Database = {
       }
       market_odds: {
         Row: {
+          adjusted_probability: number | null
           athlete_id: string
           base_decimal_odds: number
           base_probability: number
@@ -1118,14 +1119,18 @@ export type Database = {
           manual_multiplier: number | null
           market_id: string
           model_version: string | null
+          normalized_probability: number | null
           overround: number | null
+          raw_probability: number | null
           scaling_factor: number | null
           sims: number | null
+          sims_run: number | null
           target_implied_sum: number | null
           tau: number | null
           token_price: number | null
         }
         Insert: {
+          adjusted_probability?: number | null
           athlete_id: string
           base_decimal_odds: number
           base_probability: number
@@ -1136,14 +1141,18 @@ export type Database = {
           manual_multiplier?: number | null
           market_id: string
           model_version?: string | null
+          normalized_probability?: number | null
           overround?: number | null
+          raw_probability?: number | null
           scaling_factor?: number | null
           sims?: number | null
+          sims_run?: number | null
           target_implied_sum?: number | null
           tau?: number | null
           token_price?: number | null
         }
         Update: {
+          adjusted_probability?: number | null
           athlete_id?: string
           base_decimal_odds?: number
           base_probability?: number
@@ -1154,9 +1163,12 @@ export type Database = {
           manual_multiplier?: number | null
           market_id?: string
           model_version?: string | null
+          normalized_probability?: number | null
           overround?: number | null
+          raw_probability?: number | null
           scaling_factor?: number | null
           sims?: number | null
+          sims_run?: number | null
           target_implied_sum?: number | null
           tau?: number | null
           token_price?: number | null
@@ -1226,6 +1238,8 @@ export type Database = {
           locked_at: string | null
           market_type: string
           name: string
+          odds_validation_error: string | null
+          odds_validation_status: string | null
           tournament_id: string
           updated_at: string
         }
@@ -1237,6 +1251,8 @@ export type Database = {
           locked_at?: string | null
           market_type: string
           name: string
+          odds_validation_error?: string | null
+          odds_validation_status?: string | null
           tournament_id: string
           updated_at?: string
         }
@@ -1248,6 +1264,8 @@ export type Database = {
           locked_at?: string | null
           market_type?: string
           name?: string
+          odds_validation_error?: string | null
+          odds_validation_status?: string | null
           tournament_id?: string
           updated_at?: string
         }
