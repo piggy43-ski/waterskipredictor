@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { AdminLayout } from '@/components/AdminLayout';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,27 +14,22 @@ import { Progress } from '@/components/ui/progress';
 import { 
   Shield, AlertTriangle, TrendingUp, DollarSign, Download, RefreshCw, Eye, 
   Activity, Target, Users, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight,
-  FileJson, FileSpreadsheet, Lock
+  FileJson, FileSpreadsheet, Lock, Zap
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { RISK_CONFIG, getLiabilityCap } from '@/utils/riskConfig';
+import { RISK_CONFIG, getLiabilityCap, getMaxRiskRatio, MarketType } from '@/utils/riskConfig';
+import { toast } from 'sonner';
 
-// Target bands for house edge by market type
-const HOUSE_EDGE_BANDS = {
-  'WINNER': { target: 0.909, min: 0.90, max: 0.915 },
-  'PODIUM': { target: 0.847, min: 0.84, max: 0.86 },
-  'HIGHEST_SCORE': { target: 0.877, min: 0.87, max: 0.89 },
-} as const;
+// Use risk config for bands
+const HOUSE_EDGE_BANDS = RISK_CONFIG.IMPLIED_SUM_BANDS;
+const MAX_RISK_RATIOS = RISK_CONFIG.MAX_RISK_RATIO;
 
-// Alert thresholds (could be moved to risk_config table)
+// Alert thresholds
 const ALERT_THRESHOLDS = {
   CONCENTRATION_PERCENT: 40,
   FAVORITE_OVERLOAD_PERCENT: 50,
-  RISK_RATIO_WARNING: 1.6,
   LARGE_ENTRY_PERCENT: 80,
 };
-
-type MarketType = 'WINNER' | 'PODIUM' | 'HIGHEST_SCORE';
 
 interface MarketRiskData {
   id: string;
@@ -54,7 +49,11 @@ interface MarketRiskData {
   total_tokens: number;
   max_payout: number;
   risk_ratio: number;
+  max_risk_ratio: number;
   house_edge_status: 'green' | 'yellow' | 'red';
+  risk_status: 'safe' | 'warning' | 'danger';
+  is_compressed: boolean;
+  cumulative_compression_pct: number;
 }
 
 interface AthleteRiskData {
@@ -93,6 +92,30 @@ const RiskDashboard = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [alertsExpanded, setAlertsExpanded] = useState(true);
   const [auditLogsExpanded, setAuditLogsExpanded] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Compression mutation
+  const compressMultipliers = useMutation({
+    mutationFn: async (marketId: string) => {
+      const { data, error } = await supabase.functions.invoke('compress-multipliers', {
+        body: { market_id: marketId, dry_run: false },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.compression_applied) {
+        toast.success(`Compressed ${data.athletes_compressed} athletes. Risk ratio: ${data.risk_ratio_before.toFixed(2)}x → ${data.risk_ratio_after.toFixed(2)}x`);
+      } else {
+        toast.info(data.message || 'No compression needed');
+      }
+      queryClient.invalidateQueries({ queryKey: ['admin-risk-markets'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-risk-audit-logs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Compression failed: ${error.message}`);
+    },
+  });
 
   // Fetch all markets with their odds data
   const { data: marketsData, isLoading: marketsLoading, refetch: refetchMarkets } = useQuery({
@@ -219,6 +242,17 @@ const RiskDashboard = () => {
           }
         }
 
+        // Get max risk ratio for this market type
+        const maxRiskRatio = MAX_RISK_RATIOS[market.market_type as MarketType] || MAX_RISK_RATIOS.WINNER;
+        
+        // Determine risk status based on ratio vs max
+        let riskStatus: 'safe' | 'warning' | 'danger' = 'safe';
+        if (riskRatio > maxRiskRatio) {
+          riskStatus = 'danger';
+        } else if (riskRatio > maxRiskRatio * 0.9) {
+          riskStatus = 'warning';
+        }
+
         return {
           id: market.id,
           name: market.name,
@@ -237,7 +271,11 @@ const RiskDashboard = () => {
           total_tokens: totalTokens,
           max_payout: maxPayout,
           risk_ratio: riskRatio,
+          max_risk_ratio: maxRiskRatio,
           house_edge_status: houseEdgeStatus,
+          risk_status: riskStatus,
+          is_compressed: false, // Will be updated from audit logs
+          cumulative_compression_pct: 0,
         };
       });
 
@@ -279,6 +317,8 @@ const RiskDashboard = () => {
         .in('action_type', [
           'ODDS_GENERATED',
           'MULTIPLIER_UPDATED',
+          'MULTIPLIER_COMPRESSED',
+          'MARKET_RISK_COMPRESSED',
           'IMPLIED_SUM_NORMALIZED',
           'PREDICTION_SETTLED',
           'PARLAY_SETTLED',
@@ -388,12 +428,20 @@ const RiskDashboard = () => {
         });
       }
 
-      // High risk ratio
-      if (market.risk_ratio > ALERT_THRESHOLDS.RISK_RATIO_WARNING) {
+      // High risk ratio (exceeds max for market type)
+      if (market.risk_ratio > market.max_risk_ratio) {
         alertList.push({
           id: `risk-${market.id}`,
+          type: 'HIGH',
+          message: `Risk ratio (${market.risk_ratio.toFixed(2)}x) exceeds limit (${market.max_risk_ratio.toFixed(2)}x) on ${market.name}`,
+          marketId: market.id,
+          marketName: market.name,
+        });
+      } else if (market.risk_ratio > market.max_risk_ratio * 0.9) {
+        alertList.push({
+          id: `risk-warning-${market.id}`,
           type: 'MEDIUM',
-          message: `High risk ratio (${market.risk_ratio.toFixed(2)}x) on ${market.name}`,
+          message: `Risk ratio (${market.risk_ratio.toFixed(2)}x) approaching limit (${market.max_risk_ratio.toFixed(2)}x) on ${market.name}`,
           marketId: market.id,
           marketName: market.name,
         });
@@ -759,8 +807,8 @@ const RiskDashboard = () => {
                     <TableHead>Edge Status</TableHead>
                     <TableHead className="text-right">Entries</TableHead>
                     <TableHead className="text-right">Tokens</TableHead>
-                    <TableHead className="text-right">Risk Ratio</TableHead>
-                    <TableHead></TableHead>
+                    <TableHead className="text-right">Risk / Max</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -783,9 +831,11 @@ const RiskDashboard = () => {
                         className={
                           market.house_edge_status === 'red' || (market.sims > 0 && market.sims !== 20000)
                             ? 'bg-red-500/10'
-                            : market.risk_ratio > ALERT_THRESHOLDS.RISK_RATIO_WARNING
-                              ? 'bg-yellow-500/10'
-                              : ''
+                            : market.risk_status === 'danger'
+                              ? 'bg-red-500/10'
+                              : market.risk_status === 'warning'
+                                ? 'bg-yellow-500/10'
+                                : ''
                         }
                       >
                         <TableCell className="font-medium">{market.tournament_name}</TableCell>
@@ -808,21 +858,50 @@ const RiskDashboard = () => {
                         <TableCell className="text-right">{market.total_entries}</TableCell>
                         <TableCell className="text-right">{market.total_tokens.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
-                          <span className={market.risk_ratio > ALERT_THRESHOLDS.RISK_RATIO_WARNING ? 'text-yellow-400' : ''}>
-                            {market.risk_ratio > 0 ? `${market.risk_ratio.toFixed(2)}x` : '-'}
-                          </span>
+                          <div className="flex items-center justify-end gap-1">
+                            <span className={
+                              market.risk_status === 'danger' ? 'text-red-400' : 
+                              market.risk_status === 'warning' ? 'text-yellow-400' : ''
+                            }>
+                              {market.risk_ratio > 0 ? `${market.risk_ratio.toFixed(2)}x` : '-'}
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              / {market.max_risk_ratio.toFixed(2)}x
+                            </span>
+                            {market.is_compressed && (
+                              <Badge className="bg-blue-500/20 text-blue-400 text-xs ml-1">
+                                <Zap className="h-3 w-3 mr-1" />
+                                {market.cumulative_compression_pct.toFixed(1)}%
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedMarket(market);
-                              setDetailModalOpen(true);
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedMarket(market);
+                                setDetailModalOpen(true);
+                              }}
+                              title="View details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {market.status === 'OPEN' && market.risk_status !== 'safe' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => compressMultipliers.mutate(market.id)}
+                                disabled={compressMultipliers.isPending}
+                                title="Compress multipliers"
+                                className="text-blue-400 hover:text-blue-300"
+                              >
+                                <Zap className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))

@@ -56,3 +56,9 @@ verify_jwt = true
 
 [functions.process-notification-jobs]
 verify_jwt = false
+
+[functions.compress-multipliers]
+verify_jwt = true
+
+[functions.validate-bet]
+verify_jwt = true
