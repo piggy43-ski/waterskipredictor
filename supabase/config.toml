@@ -62,3 +62,15 @@ verify_jwt = true
 
 [functions.validate-bet]
 verify_jwt = true
+
+[functions.auto-generate-markets]
+verify_jwt = true
+
+[functions.process-odds-jobs]
+verify_jwt = false
+
+[functions.schedule-odds-refresh]
+verify_jwt = false
+
+[functions.generate-parlays]
+verify_jwt = true

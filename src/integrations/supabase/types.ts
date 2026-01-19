@@ -1117,6 +1117,7 @@ export type Database = {
           is_frozen: boolean | null
           manual_multiplier: number | null
           market_id: string
+          model_version: string | null
           overround: number | null
           scaling_factor: number | null
           sims: number | null
@@ -1134,6 +1135,7 @@ export type Database = {
           is_frozen?: boolean | null
           manual_multiplier?: number | null
           market_id: string
+          model_version?: string | null
           overround?: number | null
           scaling_factor?: number | null
           sims?: number | null
@@ -1151,6 +1153,7 @@ export type Database = {
           is_frozen?: boolean | null
           manual_multiplier?: number | null
           market_id?: string
+          model_version?: string | null
           overround?: number | null
           scaling_factor?: number | null
           sims?: number | null
@@ -1344,6 +1347,103 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      odds_generation_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          market_id: string
+          result: Json | null
+          scheduled_for: string
+          started_at: string | null
+          status: string
+          triggered_by: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          market_id: string
+          result?: Json | null
+          scheduled_for?: string
+          started_at?: string | null
+          status?: string
+          triggered_by: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          market_id?: string
+          result?: Json | null
+          scheduled_for?: string
+          started_at?: string | null
+          status?: string
+          triggered_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "odds_generation_jobs_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parlay_markets: {
+        Row: {
+          combined_multiplier: number
+          created_at: string
+          final_multiplier: number
+          house_factor: number
+          id: string
+          implied_probability: number | null
+          leg_count: number
+          legs: Json
+          status: string
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          combined_multiplier: number
+          created_at?: string
+          final_multiplier: number
+          house_factor?: number
+          id?: string
+          implied_probability?: number | null
+          leg_count?: number
+          legs: Json
+          status?: string
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          combined_multiplier?: number
+          created_at?: string
+          final_multiplier?: number
+          house_factor?: number
+          id?: string
+          implied_probability?: number | null
+          leg_count?: number
+          legs?: Json
+          status?: string
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parlay_markets_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       podium_selections: {
         Row: {
