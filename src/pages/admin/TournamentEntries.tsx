@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
-import { Plus, Trash2, Search, Upload, Check, AlertTriangle, X, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Search, Upload, Check, AlertTriangle, X, Loader2, UserPlus } from 'lucide-react';
 import type { Discipline } from '@/types';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
@@ -49,6 +49,10 @@ interface MatchedParticipant extends ParsedParticipant {
   confidence: number;
   alternatives?: Array<{ id: string; name: string; country: string; disciplines: string[] }>;
   selected: boolean;
+  // New athlete creation fields
+  createNewAthlete?: boolean;
+  newAthleteCountry?: string;
+  newAthleteGender?: 'male' | 'female';
 }
 
 export default function TournamentEntries() {
@@ -65,6 +69,8 @@ export default function TournamentEntries() {
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [matchedParticipants, setMatchedParticipants] = useState<MatchedParticipant[]>([]);
   const [detectedDiscipline, setDetectedDiscipline] = useState<string>('');
+  // Pre-selected discipline for AI import
+  const [uploadDiscipline, setUploadDiscipline] = useState<Discipline | ''>('');
 
   const queryClient = useQueryClient();
 
@@ -132,10 +138,10 @@ export default function TournamentEntries() {
   });
 
   const calculateDefaultOdds = (athlete: any, discipline: string) => {
-    if (!athlete) return 2.5;
+    if (!athlete) return 15.0; // Very high odds for unknown athletes
     const rankField = `current_rank_${discipline}` as keyof typeof athlete;
     const rank = athlete[rankField] as number | undefined;
-    if (!rank) return 2.5;
+    if (!rank) return 15.0; // Unranked = high odds (15x = unlikely to win)
     return 1.5 + (rank / 10);
   };
 
@@ -198,6 +204,11 @@ export default function TournamentEntries() {
       return;
     }
 
+    if (!uploadDiscipline) {
+      toast.error('Please select a discipline for this running order');
+      return;
+    }
+
     setIsParsing(true);
     
     try {
@@ -218,22 +229,14 @@ export default function TournamentEntries() {
         return;
       }
 
-      // Auto-set discipline if detected AND valid
-      if (data.detected_discipline && VALID_DISCIPLINES.includes(data.detected_discipline)) {
-        setDetectedDiscipline(data.detected_discipline);
-      } else if (data.detected_discipline) {
-        console.warn(`Invalid discipline detected: ${data.detected_discipline}`);
-        setDetectedDiscipline('');
-      }
+      // Set discipline from pre-selection (ignore AI detection)
+      setDetectedDiscipline(uploadDiscipline);
 
       // Match participants to athletes - using database for gender/disciplines
       const matched: MatchedParticipant[] = data.participants.map((p: ParsedParticipant) => {
         // Filter by detected gender for matching
         const genderPool = allAthletes?.filter(a => a.gender === p.gender) || [];
         const { match, confidence, alternatives } = matchAthleteByName(p.name, genderPool);
-        
-        // Use database info for matched athlete
-        const athleteDisciplines = match?.disciplines || [];
         
         return {
           ...p,
@@ -244,7 +247,7 @@ export default function TournamentEntries() {
             name: match.name,
             country: match.country,
             gender: match.gender,
-            disciplines: athleteDisciplines,
+            disciplines: match.disciplines || [],
             rankings: {
               slalom: match.current_rank_slalom || undefined,
               trick: match.current_rank_trick || undefined,
@@ -256,16 +259,16 @@ export default function TournamentEntries() {
               jump: match.current_rating_jump || undefined,
             }
           } : undefined,
-          // Pre-select all disciplines athlete competes in, or just detected if available
-          selectedDisciplines: match 
-            ? (data.detected_discipline && athleteDisciplines.includes(data.detected_discipline) 
-                ? [data.detected_discipline] 
-                : athleteDisciplines.filter(d => VALID_DISCIPLINES.includes(d as any)))
-            : [],
+          // ONLY select the pre-selected uploadDiscipline, NOT all athlete disciplines
+          selectedDisciplines: match ? [uploadDiscipline] : [uploadDiscipline],
           overrideRatings: {}, // Start with no overrides
           confidence,
           alternatives,
-          selected: confidence >= 0.7 && !!match
+          selected: confidence >= 0.7 && !!match,
+          // Initialize new athlete fields for unmatched
+          createNewAthlete: false,
+          newAthleteCountry: p.country || '',
+          newAthleteGender: p.gender,
         };
       });
 
@@ -310,6 +313,25 @@ export default function TournamentEntries() {
     }
   };
 
+  // Handle updating new athlete fields for unmatched participants
+  const handleUpdateNewAthlete = (participantIdx: number, field: 'country' | 'gender' | 'create', value: any) => {
+    const updated = [...matchedParticipants];
+    const p = updated[participantIdx];
+    if (field === 'country') {
+      p.newAthleteCountry = value;
+    } else if (field === 'gender') {
+      p.newAthleteGender = value;
+    } else if (field === 'create') {
+      p.createNewAthlete = value;
+      // Auto-select if creating
+      if (value && uploadDiscipline) {
+        p.selectedDisciplines = [uploadDiscipline];
+        p.selected = true;
+      }
+    }
+    setMatchedParticipants(updated);
+  };
+
   // Mutation to directly save AI-matched entries to database - handles multiple disciplines per athlete
   const addAIEntriesMutation = useMutation({
     mutationFn: async (participants: MatchedParticipant[]) => {
@@ -317,8 +339,51 @@ export default function TournamentEntries() {
         throw new Error('Please select a tournament first');
       }
 
-      if (!allAthletes || allAthletes.length === 0) {
-        throw new Error('Athletes data not loaded. Please wait and try again.');
+      if (!uploadDiscipline) {
+        throw new Error('No discipline selected for import');
+      }
+
+      // Handle participants that need new athletes created first
+      const newAthleteRequests = participants.filter(
+        p => p.createNewAthlete && !p.matchedAthlete && p.newAthleteCountry
+      );
+
+      for (const p of newAthleteRequests) {
+        const { data: newAthlete, error: createError } = await supabase
+          .from('athletes')
+          .insert({
+            name: p.name,
+            gender: p.newAthleteGender || p.gender,
+            country: p.newAthleteCountry || 'UNK',
+            federation: 'Unknown',
+            year_of_birth: 2000, // Default
+            disciplines: [uploadDiscipline],
+            // LOW ratings for unranked athletes
+            current_rating_slalom: uploadDiscipline === 'slalom' ? 55 : null,
+            current_rating_trick: uploadDiscipline === 'trick' ? 55 : null,
+            current_rating_jump: uploadDiscipline === 'jump' ? 55 : null,
+            // No ranking (null = unranked)
+            current_rank_slalom: null,
+            current_rank_trick: null,
+            current_rank_jump: null,
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        
+        // Update the participant with the new athlete data
+        p.matchedAthlete = {
+          id: newAthlete.id,
+          name: newAthlete.name,
+          country: newAthlete.country,
+          gender: newAthlete.gender,
+          disciplines: newAthlete.disciplines || [],
+          rankings: {},
+          ratings: { [uploadDiscipline]: 55 }
+        };
+        p.selectedDisciplines = [uploadDiscipline];
+        p.selected = true;
       }
 
       const toAdd = participants.filter(m => m.selected && m.matchedAthlete && m.selectedDisciplines.length > 0);
@@ -343,6 +408,11 @@ export default function TournamentEntries() {
 
       const existingSet = new Set(existingEntries?.map(e => `${e.athlete_id}-${e.discipline}`) || []);
 
+      // Refetch allAthletes to include newly created ones
+      const { data: refreshedAthletes } = await supabase
+        .from('athletes')
+        .select('id, name, country, gender, disciplines, current_rank_slalom, current_rank_trick, current_rank_jump, current_rating_slalom, current_rating_trick, current_rating_jump');
+
       // Create entries for each athlete's selected disciplines
       const entriesToAdd: Array<{
         tournament_id: string;
@@ -353,7 +423,7 @@ export default function TournamentEntries() {
       }> = [];
 
       for (const p of toAdd) {
-        const athlete = allAthletes?.find(a => a.id === p.matchedAthlete!.id);
+        const athlete = refreshedAthletes?.find(a => a.id === p.matchedAthlete!.id);
         for (const discipline of p.selectedDisciplines) {
           const key = `${p.matchedAthlete!.id}-${discipline}`;
           if (!existingSet.has(key)) {
@@ -383,7 +453,7 @@ export default function TournamentEntries() {
       // Group entries by discipline and gender to create markets
       const disciplineGenderGroups = new Map<string, typeof entriesToAdd>();
       for (const entry of entriesToAdd) {
-        const athlete = allAthletes?.find(a => a.id === entry.athlete_id);
+        const athlete = refreshedAthletes?.find(a => a.id === entry.athlete_id);
         const key = `${entry.discipline}-${athlete?.gender}`;
         if (!disciplineGenderGroups.has(key)) {
           disciplineGenderGroups.set(key, []);
@@ -421,7 +491,7 @@ export default function TournamentEntries() {
 
         // Create selections for each athlete in this group
         for (const entry of groupEntries) {
-          const athlete = allAthletes?.find(a => a.id === entry.athlete_id);
+          const athlete = refreshedAthletes?.find(a => a.id === entry.athlete_id);
           if (!athlete) continue;
 
           const selections = [];
@@ -470,10 +540,13 @@ export default function TournamentEntries() {
       queryClient.invalidateQueries({ queryKey: ['markets'] });
       queryClient.invalidateQueries({ queryKey: ['selections'] });
       queryClient.invalidateQueries({ queryKey: ['athletes-for-tournament'] });
+      queryClient.invalidateQueries({ queryKey: ['all-athletes-for-matching'] });
       toast.success(`Added ${count} entries and created markets`);
       setShowPreviewDialog(false);
       setAiFiles([]);
       setMatchedParticipants([]);
+      setUploadDiscipline('');
+      setDetectedDiscipline('');
     },
     onError: (error: Error) => {
       toast.error(`Failed to add athletes: ${error.message}`);
@@ -688,7 +761,7 @@ export default function TournamentEntries() {
 
   // Count total entries to be added (athlete-discipline combos)
   const totalEntriesToAdd = matchedParticipants
-    .filter(m => m.selected && m.matchedAthlete)
+    .filter(m => (m.selected && m.matchedAthlete) || (m.createNewAthlete && m.newAthleteCountry))
     .reduce((sum, m) => sum + m.selectedDisciplines.length, 0);
 
   return (
@@ -768,20 +841,40 @@ export default function TournamentEntries() {
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
                   Upload entry lists, start lists, or paste URLs to automatically extract and match participants.
-                  Athletes will be matched to the database with their disciplines and rankings.
                 </p>
+                
+                {/* Discipline pre-selection - REQUIRED before upload */}
+                <div className="space-y-2">
+                  <Label className="text-base font-medium">What discipline is this running order for? *</Label>
+                  <Select 
+                    value={uploadDiscipline} 
+                    onValueChange={(v) => setUploadDiscipline(v as Discipline)}
+                  >
+                    <SelectTrigger className={!uploadDiscipline ? 'border-destructive' : ''}>
+                      <SelectValue placeholder="Select discipline (required)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="slalom">Slalom</SelectItem>
+                      <SelectItem value="trick">Trick</SelectItem>
+                      <SelectItem value="jump">Jump</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    All athletes in this upload will be added ONLY for this discipline, regardless of their other events.
+                  </p>
+                </div>
                 
                 <BatchImageUploader
                   files={aiFiles}
                   onFilesChange={setAiFiles}
                   onParseAll={handleParseFiles}
                   isParsing={isParsing}
-                  disabled={false}
+                  disabled={!uploadDiscipline}
                 />
 
                 {detectedDiscipline && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Badge variant="secondary">Detected: {detectedDiscipline}</Badge>
+                    <Badge variant="secondary">Import discipline: {detectedDiscipline}</Badge>
                   </div>
                 )}
               </CardContent>
@@ -891,10 +984,9 @@ export default function TournamentEntries() {
                       })}
                     </div>
 
-                    <Button
+                    <Button 
                       onClick={handleAddEntries}
                       disabled={selectedAthletes.size === 0 || addEntriesMutation.isPending}
-                      className="w-full"
                     >
                       <Plus className="mr-2 h-4 w-4" />
                       Add {selectedAthletes.size} Athlete{selectedAthletes.size !== 1 ? 's' : ''} & Generate Markets
@@ -914,6 +1006,9 @@ export default function TournamentEntries() {
             <DialogTitle className="flex items-center gap-2">
               AI Matched Participants
               <Badge variant="secondary">{matchedParticipants.length} found</Badge>
+              {uploadDiscipline && (
+                <Badge className="bg-primary">{uploadDiscipline.toUpperCase()}</Badge>
+              )}
             </DialogTitle>
           </DialogHeader>
           
@@ -939,7 +1034,7 @@ export default function TournamentEntries() {
           <div className="flex items-center gap-2 p-3 rounded-md bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-300 mb-4">
             <AlertTriangle className="h-5 w-5 flex-shrink-0" />
             <div className="text-sm">
-              <span className="font-medium">Multi-discipline support:</span> Select which events each athlete will compete in using the checkboxes. Athletes' disciplines are pulled from the database.
+              <span className="font-medium">Single discipline import:</span> All athletes will be added for <strong>{uploadDiscipline}</strong> only. Unmatched athletes can be created as new profiles with low ratings.
             </div>
           </div>
 
@@ -958,6 +1053,7 @@ export default function TournamentEntries() {
                         <ParticipantMatchRow
                           key={`male-${idx}`}
                           participant={participant}
+                          uploadDiscipline={uploadDiscipline}
                           onToggle={() => {
                             const updated = [...matchedParticipants];
                             updated[globalIdx] = { ...participant, selected: !participant.selected };
@@ -965,6 +1061,7 @@ export default function TournamentEntries() {
                           }}
                           onToggleDiscipline={(disc) => handleToggleDiscipline(globalIdx, disc)}
                           onOverrideRatingChange={(disc, val) => handleOverrideRatingChange(globalIdx, disc, val)}
+                          onUpdateNewAthlete={(field, value) => handleUpdateNewAthlete(globalIdx, field, value)}
                           onSelectAlternative={(altId) => {
                             const alt = participant.alternatives?.find(a => a.id === altId);
                             const altAthlete = allAthletes?.find(a => a.id === altId);
@@ -986,10 +1083,11 @@ export default function TournamentEntries() {
                                     jump: altAthlete.current_rating_jump || undefined,
                                   }
                                 },
-                                selectedDisciplines: alt.disciplines.filter(d => VALID_DISCIPLINES.includes(d as any)),
+                                selectedDisciplines: [uploadDiscipline],
                                 overrideRatings: {},
                                 confidence: 0.8,
-                                selected: true
+                                selected: true,
+                                createNewAthlete: false,
                               };
                               setMatchedParticipants(updated);
                             }
@@ -1015,6 +1113,7 @@ export default function TournamentEntries() {
                         <ParticipantMatchRow
                           key={`female-${idx}`}
                           participant={participant}
+                          uploadDiscipline={uploadDiscipline}
                           onToggle={() => {
                             const updated = [...matchedParticipants];
                             updated[globalIdx] = { ...participant, selected: !participant.selected };
@@ -1022,6 +1121,7 @@ export default function TournamentEntries() {
                           }}
                           onToggleDiscipline={(disc) => handleToggleDiscipline(globalIdx, disc)}
                           onOverrideRatingChange={(disc, val) => handleOverrideRatingChange(globalIdx, disc, val)}
+                          onUpdateNewAthlete={(field, value) => handleUpdateNewAthlete(globalIdx, field, value)}
                           onSelectAlternative={(altId) => {
                             const alt = participant.alternatives?.find(a => a.id === altId);
                             const altAthlete = allAthletes?.find(a => a.id === altId);
@@ -1043,10 +1143,11 @@ export default function TournamentEntries() {
                                     jump: altAthlete.current_rating_jump || undefined,
                                   }
                                 },
-                                selectedDisciplines: alt.disciplines.filter(d => VALID_DISCIPLINES.includes(d as any)),
+                                selectedDisciplines: [uploadDiscipline],
                                 overrideRatings: {},
                                 confidence: 0.8,
-                                selected: true
+                                selected: true,
+                                createNewAthlete: false,
                               };
                               setMatchedParticipants(updated);
                             }
@@ -1091,16 +1192,20 @@ export default function TournamentEntries() {
 // Sub-component for participant match rows with discipline checkboxes
 function ParticipantMatchRow({
   participant,
+  uploadDiscipline,
   onToggle,
   onToggleDiscipline,
   onOverrideRatingChange,
+  onUpdateNewAthlete,
   onSelectAlternative,
   allAthletes
 }: {
   participant: MatchedParticipant;
+  uploadDiscipline: Discipline | '';
   onToggle: () => void;
   onToggleDiscipline: (discipline: string) => void;
   onOverrideRatingChange: (discipline: string, value: string) => void;
+  onUpdateNewAthlete: (field: 'country' | 'gender' | 'create', value: any) => void;
   onSelectAlternative: (id: string) => void;
   allAthletes: any[] | undefined;
 }) {
@@ -1113,24 +1218,29 @@ function ParticipantMatchRow({
   const ratings = participant.matchedAthlete?.ratings || {};
 
   return (
-    <div className={`p-3 border rounded-lg ${participant.selected ? 'bg-accent/50 border-primary' : ''}`}>
+    <div className={`p-3 border rounded-lg ${participant.selected || participant.createNewAthlete ? 'bg-accent/50 border-primary' : ''}`}>
       <div className="flex items-start gap-3">
         <Checkbox
           checked={participant.selected}
           onCheckedChange={onToggle}
-          disabled={notFound}
+          disabled={notFound && !participant.createNewAthlete}
           className="mt-1"
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             {isMatched && <Check className="h-4 w-4 text-green-500 flex-shrink-0" />}
             {isUncertain && <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />}
-            {notFound && <X className="h-4 w-4 text-red-500 flex-shrink-0" />}
+            {notFound && !participant.createNewAthlete && <X className="h-4 w-4 text-red-500 flex-shrink-0" />}
+            {participant.createNewAthlete && <UserPlus className="h-4 w-4 text-blue-500 flex-shrink-0" />}
             <span className="font-medium truncate">"{participant.name}"</span>
             <span className="text-muted-foreground">→</span>
             {participant.matchedAthlete ? (
               <span className="text-primary truncate">
                 {participant.matchedAthlete.name} ({participant.matchedAthlete.country})
+              </span>
+            ) : participant.createNewAthlete ? (
+              <span className="text-blue-500 truncate">
+                Will create: {participant.name} ({participant.newAthleteCountry || 'UNK'})
               </span>
             ) : (
               <span className="text-destructive">No match found</span>
@@ -1148,18 +1258,16 @@ function ParticipantMatchRow({
             </div>
           )}
 
-          {/* Discipline checkboxes with override rating */}
-          {participant.matchedAthlete && athleteDisciplines.length > 0 && (
+          {/* Discipline checkboxes with override rating - for matched athletes */}
+          {participant.matchedAthlete && uploadDiscipline && (
             <div className="mt-2 space-y-2">
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs text-muted-foreground">Events:</span>
-                {VALID_DISCIPLINES.map(disc => {
-                  const canCompete = athleteDisciplines.includes(disc);
+                <span className="text-xs text-muted-foreground">Event:</span>
+                {(() => {
+                  const disc = uploadDiscipline;
                   const isSelected = participant.selectedDisciplines.includes(disc);
                   const currentRating = ratings[disc as keyof typeof ratings];
                   const overrideRating = participant.overrideRatings[disc];
-                  
-                  if (!canCompete) return null;
                   
                   return (
                     <div key={disc} className="flex items-center gap-2">
@@ -1191,11 +1299,47 @@ function ParticipantMatchRow({
                       )}
                     </div>
                   );
-                })}
+                })()}
               </div>
-              {athleteDisciplines.filter(d => VALID_DISCIPLINES.includes(d as any)).length === 0 && (
-                <span className="text-xs text-destructive">No valid disciplines</span>
-              )}
+            </div>
+          )}
+
+          {/* Create new athlete section for unmatched */}
+          {notFound && (
+            <div className="mt-2 p-2 bg-muted rounded border border-dashed">
+              <p className="text-xs text-muted-foreground mb-2">
+                Create temporary profile for this athlete (wildcard/qualifier) - will have low rating & high odds
+              </p>
+              <div className="flex gap-2 flex-wrap items-center">
+                <Input
+                  placeholder="Country (e.g., USA)"
+                  value={participant.newAthleteCountry || ''}
+                  onChange={(e) => onUpdateNewAthlete('country', e.target.value)}
+                  className="h-7 w-24 text-xs"
+                />
+                <Select 
+                  value={participant.newAthleteGender || participant.gender} 
+                  onValueChange={(v) => onUpdateNewAthlete('gender', v)}
+                >
+                  <SelectTrigger className="h-7 w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-1">
+                  <Checkbox
+                    id={`create-${participant.name}`}
+                    checked={participant.createNewAthlete || false}
+                    onCheckedChange={(c) => onUpdateNewAthlete('create', c)}
+                  />
+                  <Label htmlFor={`create-${participant.name}`} className="text-xs cursor-pointer">
+                    Create & Add
+                  </Label>
+                </div>
+              </div>
             </div>
           )}
 
