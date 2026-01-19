@@ -170,9 +170,24 @@ serve(async (req) => {
         });
       } else if (file.type === 'image') {
         // Add image for vision processing
+        // Ensure the image is in data URL format
+        let imageUrl = file.content;
+        if (!imageUrl.startsWith('data:') && !imageUrl.startsWith('http')) {
+          // Assume it's raw base64, convert to data URL
+          // Try to detect image type from base64 header
+          let mimeType = 'image/png';
+          if (imageUrl.startsWith('/9j/')) {
+            mimeType = 'image/jpeg';
+          } else if (imageUrl.startsWith('R0lGOD')) {
+            mimeType = 'image/gif';
+          } else if (imageUrl.startsWith('UklGR')) {
+            mimeType = 'image/webp';
+          }
+          imageUrl = `data:${mimeType};base64,${imageUrl}`;
+        }
         contentParts.push({
           type: 'image_url',
-          image_url: { url: file.content }
+          image_url: { url: imageUrl }
         });
       } else if (file.type === 'pdf') {
         // PDF text content
