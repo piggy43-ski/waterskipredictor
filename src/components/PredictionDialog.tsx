@@ -130,11 +130,11 @@ export const PredictionDialog = ({
                 {combinedOdds.toFixed(2)}x
               </span>
             </div>
-            {isParlay && (
-              <div className="text-xs text-muted-foreground">
-                5% platform fee applied to combined multiplier
-              </div>
-            )}
+            <div className="text-xs text-muted-foreground">
+              {isParlay 
+                ? '5% platform fee applied. Higher multipliers = lower probability.'
+                : 'Higher multipliers mean lower probability. Multipliers reflect difficulty, not guaranteed outcomes.'}
+            </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Your Balance</span>
               <span className="font-semibold flex items-center gap-1">
@@ -155,11 +155,14 @@ export const PredictionDialog = ({
               min="1"
               max={Math.min(walletBalance, PARLAY_CONFIG.MAX_STAKE)}
             />
+            <p className="text-xs text-muted-foreground">
+              Entry amount × multiplier = projected rewards (if correct)
+            </p>
             {exceedsMaxStake && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Maximum entry is {PARLAY_CONFIG.MAX_STAKE.toLocaleString()} tokens
+                  Max entry per pick: {PARLAY_CONFIG.MAX_STAKE.toLocaleString()} tokens. For fairness and safety, limits are in place for all users.
                 </AlertDescription>
               </Alert>
             )}
@@ -167,7 +170,7 @@ export const PredictionDialog = ({
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  Maximum payout is {RISK_CONFIG.MAX_PAYOUT.toLocaleString()} tokens. Reduce stake or pick different odds.
+                  Maximum projected rewards exceeded. Please reduce entry amount or select different picks.
                 </AlertDescription>
               </Alert>
             )}

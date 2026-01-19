@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/accordion";
 import { ArrowLeft, Search, BookOpen, Coins, Gift, Trophy, Wrench, HelpCircle, User, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TrustDisclaimer } from "@/components/TrustDisclaimer";
 
 const sectionIcons: Record<string, React.ReactNode> = {
   "Contests & Rules": <BookOpen className="w-5 h-5" />,
@@ -207,6 +208,9 @@ const HelpCenter = () => {
             ))}
           </Accordion>
         )}
+
+        {/* Trust Disclaimer */}
+        <TrustDisclaimer className="mt-8" />
       </div>
     </div>
   );

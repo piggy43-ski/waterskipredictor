@@ -51,6 +51,7 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
       <div className="flex justify-between items-start mb-3">
         <div className="flex-1">
           <h3 className="font-bold text-lg mb-1">{tournament.name}</h3>
+          <p className="text-xs text-muted-foreground mb-1">Make a skill-based prediction. Rewards only.</p>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <MapPin className="w-3.5 h-3.5" />
             <span>{tournament.location}</span>

@@ -455,11 +455,11 @@ const Predictions = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'WON':
-        return <Badge className="bg-success text-success-foreground">Won</Badge>;
+        return <Badge className="bg-success text-success-foreground">Correct</Badge>;
       case 'LOST':
-        return <Badge variant="destructive">Lost</Badge>;
+        return <Badge variant="secondary">Not Correct</Badge>;
       case 'VOID':
-        return <Badge variant="secondary">Void</Badge>;
+        return <Badge variant="outline">Voided</Badge>;
       case 'PENDING':
         return <Badge variant="outline">Pending</Badge>;
       default:
@@ -740,14 +740,14 @@ const Predictions = () => {
               <div>
                 <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                   <Coins className="w-4 h-4" />
-                  <span className="text-xs">Wagered</span>
+                  <span className="text-xs">Entered</span>
                 </div>
                 <p className="font-bold text-lg">{bettingStats.totalWagered.toLocaleString()}</p>
               </div>
               <div>
                 <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                   <TrendingUp className="w-4 h-4" />
-                  <span className="text-xs">Won</span>
+                  <span className="text-xs">Earned</span>
                 </div>
                 <p className="font-bold text-lg text-success">{bettingStats.totalWon.toLocaleString()}</p>
               </div>
@@ -764,11 +764,11 @@ const Predictions = () => {
             <div className="flex justify-center gap-4 mt-3 pt-3 border-t border-border text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-success"></span>
-                {bettingStats.winCount} Won
+                {bettingStats.winCount} Correct
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-destructive"></span>
-                {bettingStats.lossCount} Lost
+                <span className="w-2 h-2 rounded-full bg-secondary"></span>
+                {bettingStats.lossCount} Not Correct
               </span>
               <span className={`font-medium ${bettingStats.netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
                 {bettingStats.netProfit >= 0 ? '+' : ''}{bettingStats.netProfit.toLocaleString()} net
@@ -790,9 +790,9 @@ const Predictions = () => {
           <TabsContent value="active" className="space-y-3">
             {activeBetSlips.length === 0 ? (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground mb-4">No active bets</p>
+                <p className="text-muted-foreground mb-4">No active predictions</p>
                 <p className="text-sm text-muted-foreground">
-                  Browse tournaments and place your first bet!
+                  You haven't made any predictions yet. Start with a contest you understand.
                 </p>
               </Card>
             ) : (
@@ -805,9 +805,9 @@ const Predictions = () => {
           <TabsContent value="history" className="space-y-3">
             {completedBetSlips.length === 0 ? (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground mb-4">No completed bets yet</p>
+                <p className="text-muted-foreground mb-4">No completed predictions yet</p>
                 <p className="text-sm text-muted-foreground">
-                  Your settled bets will appear here
+                  Your finalized predictions will appear here
                 </p>
               </Card>
             ) : (
@@ -825,38 +825,38 @@ const Predictions = () => {
       <AlertDialog open={!!deleteSlip} onOpenChange={() => setDeleteSlip(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel this bet?</AlertDialogTitle>
+            <AlertDialogTitle>Cancel this prediction?</AlertDialogTitle>
             <AlertDialogDescription>
-              Your stake of <strong>{deleteSlip?.total_stake_tokens.toLocaleString()} tokens</strong> will be refunded to your wallet. This action cannot be undone.
+              Your entry of <strong>{deleteSlip?.total_stake_tokens.toLocaleString()} tokens</strong> will be refunded to your wallet. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep Bet</AlertDialogCancel>
+            <AlertDialogCancel>Keep Prediction</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleDeleteBet}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeleting ? 'Cancelling...' : 'Cancel Bet'}
+              {isDeleting ? 'Cancelling...' : 'Cancel Prediction'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit stake dialog */}
+      {/* Edit entry dialog */}
       <Dialog open={!!editSlip} onOpenChange={() => setEditSlip(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Bet Stake</DialogTitle>
+            <DialogTitle>Edit Entry Amount</DialogTitle>
             <DialogDescription>
-              Adjust your stake for this bet. Changes will be reflected in your wallet.
+              Adjust your entry for this prediction. Changes will be reflected in your wallet.
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {/* Current bet info */}
+            {/* Current entry info */}
             <div className="bg-muted/50 rounded-lg p-3">
-              <div className="text-sm text-muted-foreground">Current Stake</div>
+              <div className="text-sm text-muted-foreground">Current Entry</div>
               <div className="font-semibold">{editSlip?.total_stake_tokens.toLocaleString()} tokens</div>
             </div>
             
@@ -866,9 +866,9 @@ const Predictions = () => {
               <span className="font-semibold">{walletBalance.toLocaleString()} tokens</span>
             </div>
             
-            {/* New stake input */}
+            {/* New entry input */}
             <div className="space-y-2">
-              <Label>New Stake Amount</Label>
+              <Label>New Entry Amount</Label>
               <Input
                 type="number"
                 value={newStakeAmount}
@@ -891,10 +891,10 @@ const Predictions = () => {
               </div>
             </div>
             
-            {/* New potential payout preview */}
+            {/* New potential rewards preview */}
             {editSlip && parseInt(newStakeAmount) > 0 && (
               <div className="bg-primary/10 rounded-lg p-3">
-                <div className="text-sm text-muted-foreground">New Potential Payout</div>
+                <div className="text-sm text-muted-foreground">New Projected Rewards</div>
                 <div className="font-bold text-lg">
                   {Math.floor(parseInt(newStakeAmount) * editSlip.total_odds_decimal).toLocaleString()} tokens
                 </div>
