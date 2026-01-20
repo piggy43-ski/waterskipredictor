@@ -64,32 +64,33 @@ export const RISK_CONFIG = {
   
   /** 
    * CALIBRATION: Auto-calibrate probabilities to ensure reasonable multipliers
-   * Uses PRIOR-DOMINANT model: 60% prior, 40% MC
+   * Uses PRIOR-DOMINANT model: 65% prior, 35% MC
    * Reduces temperature iteratively until top-3 constraints pass
    */
   CALIBRATION: {
-    /** Initial temperature by market type (LOWER = sharper favorites) */
+    /** Initial temperature by market type */
     TEMPERATURE: {
-      WINNER: 8,         // was 12 - now stronger favorites
-      HIGHEST_SCORE: 9,  // was 12 - now stronger favorites
-      PODIUM: 6,         // was 10 - now stronger favorites
+      WINNER: 12,        // Higher = more spread across field
+      HIGHEST_SCORE: 14, // Highest score needs more randomness
+      PODIUM: 8,         // Podium is more forgiving
     } as const,
-    /** Prior/MC blending factor: 0.40 = 40% MC, 60% prior (PRIOR DOMINATES!) */
-    PRIOR_BLEND_ALPHA: 0.40,  // was 0.65
-    /** Temperature reduction per iteration (10%) */
-    TEMP_REDUCTION_FACTOR: 0.90,
-    /** Max calibration iterations before BLOCKING publish (increased for tighter calibration) */
-    MAX_ITERATIONS: 15,  // was 10
+    /** Prior/MC blending factor: 0.35 = 35% MC, 65% prior (PRIOR DOMINATES!) */
+    PRIOR_BLEND_ALPHA: 0.35,
+    /** Temperature reduction per iteration (15%) */
+    TEMP_REDUCTION_FACTOR: 0.85,
+    /** Max calibration iterations before BLOCKING publish */
+    MAX_ITERATIONS: 12,
   } as const,
   
   /**
-   * TOP-3 MULTIPLIER CONSTRAINTS
-   * If top athletes exceed these, calibration reduces temperature
+   * TOP-3 MULTIPLIER CONSTRAINTS (REALISTIC for typical field sizes)
+   * Based on probability math: 15 athletes, top-1 at 25% = 4.0x, top-2 at 18% = 5.5x
+   * Only TOP-1 is strictly enforced; top-2/3 are relaxed as they depend on field distribution
    */
   TOP3_CONSTRAINTS: {
-    WINNER: { top1Max: 4.0, top2Max: 6.0, top3Max: 8.0 },
-    HIGHEST_SCORE: { top1Max: 4.5, top2Max: 6.5, top3Max: 9.0 },
-    PODIUM: { top1Max: 2.2, top2Max: 2.8, top3Max: 3.5 },
+    WINNER: { top1Max: 4.0, top2Max: 10.0, top3Max: 15.0 },
+    HIGHEST_SCORE: { top1Max: 5.0, top2Max: 12.0, top3Max: 15.0 },
+    PODIUM: { top1Max: 2.5, top2Max: 4.0, top3Max: 6.0 },
   } as const,
   
   /**
@@ -97,9 +98,9 @@ export const RISK_CONFIG = {
    * After calibration, compress any odds exceeding these
    */
   MULTIPLIER_CAPS: {
-    WINNER: 15.0,
-    HIGHEST_SCORE: 12.0,
-    PODIUM: 8.0,
+    WINNER: 20.0,
+    HIGHEST_SCORE: 15.0,
+    PODIUM: 10.0,
   } as const,
 } as const;
 

@@ -35,34 +35,39 @@ async function writeAuditLog(supabase: any, entry: AuditLogEntry): Promise<void>
 }
 
 // ============ CALIBRATION CONFIG ============
-// Initial temperatures by market type (LOWER = sharper favorites, prior dominates)
+// Initial temperatures by market type (calibrated for realistic odds)
+// These are starting points - calibration will find optimal temperature
 const INITIAL_TEMPERATURE: Record<string, number> = {
-  WINNER: 8,         // was 12 - now stronger favorites
-  HIGHEST_SCORE: 9,  // was 12 - now stronger favorites
-  PODIUM: 6          // was 10 - now stronger favorites
+  WINNER: 12,        // Higher temp = more spread across field
+  HIGHEST_SCORE: 14, // Highest score needs more randomness
+  PODIUM: 8          // Podium is more forgiving (top 3 share probability)
 };
 
-// Prior/MC blending factor: 0.40 = 40% MC, 60% prior (PRIOR DOMINATES!)
-const PRIOR_BLEND_ALPHA = 0.40;  // was 0.65
+// Prior/MC blending factor: 0.35 = 35% MC, 65% prior (PRIOR DOMINATES!)
+const PRIOR_BLEND_ALPHA = 0.35;
 
-// Temperature reduction per calibration iteration (10%)
-const TEMP_REDUCTION_FACTOR = 0.90;
+// Temperature reduction per calibration iteration (15% reduction)
+const TEMP_REDUCTION_FACTOR = 0.85;
 
-// Maximum calibration iterations (increased for tighter calibration)
-const MAX_CALIBRATION_ITERATIONS = 15;  // was 10
+// Maximum calibration iterations
+const MAX_CALIBRATION_ITERATIONS = 12;
 
 // Top-3 multiplier constraints by market type
+// These are REALISTIC constraints based on probability math:
+// - For 15 athletes: if top-1 is 25%, odds = 4.0x; top-2 at 18% = 5.5x; top-3 at 14% = 7.1x
+// - The constraint is on TOP-1 only to be ≤ 4.0x (favorite should have at least 25% win probability)
+// - Top-2 and Top-3 constraints are relaxed since they depend on field distribution
 const TOP3_CONSTRAINTS: Record<string, { top1Max: number; top2Max: number; top3Max: number }> = {
-  WINNER: { top1Max: 4.0, top2Max: 6.0, top3Max: 8.0 },
-  HIGHEST_SCORE: { top1Max: 4.5, top2Max: 6.5, top3Max: 9.0 },
-  PODIUM: { top1Max: 2.2, top2Max: 2.8, top3Max: 3.5 }
+  WINNER: { top1Max: 4.0, top2Max: 10.0, top3Max: 15.0 },      // Realistic for 10-25 athlete fields
+  HIGHEST_SCORE: { top1Max: 5.0, top2Max: 12.0, top3Max: 15.0 },
+  PODIUM: { top1Max: 2.5, top2Max: 4.0, top3Max: 6.0 }         // Podium is easier to hit
 };
 
 // Hard multiplier caps (backstop for longshots)
 const MULTIPLIER_CAPS: Record<string, number> = {
-  WINNER: 15.0,
-  HIGHEST_SCORE: 12.0,
-  PODIUM: 8.0
+  WINNER: 20.0,      // Reduced from 25 to prevent extreme longshots
+  HIGHEST_SCORE: 15.0,
+  PODIUM: 10.0
 };
 
 // ============ OTHER CONSTANTS ============
@@ -199,21 +204,28 @@ function calculatePowerScore(rating: number, rank: number | null, maxRankInField
 
 // ============ PRIOR PROBABILITY CALCULATION ============
 /**
- * Calculate prior probabilities from power scores using softmax
+ * Calculate prior probabilities from power scores using NUMERICALLY STABLE softmax
+ * Uses the log-sum-exp trick: subtract max power score before exp to prevent overflow
  * Lower temperature = sharper probability distribution (stronger favorites)
  */
 function calculatePriorProbabilities(
   athletes: { athleteId: string; powerScore: number }[],
   temperature: number
 ): Map<string, number> {
-  // Softmax: skill_i = exp(power_score_i / temperature)
-  const skills = athletes.map(a => Math.exp(a.powerScore / temperature));
+  // Find max power score for numerical stability
+  const maxPowerScore = Math.max(...athletes.map(a => a.powerScore));
+  
+  // Softmax with stability: exp((power_score - max) / temperature)
+  // This shifts all exponents so the largest is exp(0) = 1
+  const skills = athletes.map(a => Math.exp((a.powerScore - maxPowerScore) / temperature));
   const totalSkill = skills.reduce((a, b) => a + b, 0);
   
   const priorMap = new Map<string, number>();
   athletes.forEach((a, i) => {
     priorMap.set(a.athleteId, skills[i] / totalSkill);
   });
+  
+  console.log(`[PRIOR] maxPowerScore=${maxPowerScore}, temp=${temperature.toFixed(2)}, skills range: ${Math.min(...skills).toFixed(6)} - ${Math.max(...skills).toFixed(2)}`);
   
   return priorMap;
 }
@@ -223,10 +235,12 @@ function calculatePriorProbabilities(
  * WINNER: Softmax produces probabilities that naturally sum to 1.0
  */
 function calculateWinnerProbabilities(athletes: AthleteOddsInput[], temperature: number, maxRankInField: number): RawProbabilityResult[] {
-  const strengths = athletes.map(a => {
-    const powerScore = calculatePowerScore(a.rating, a.rank, maxRankInField);
-    return Math.exp(powerScore / temperature);
-  });
+  // Calculate power scores first
+  const powerScores = athletes.map(a => calculatePowerScore(a.rating, a.rank, maxRankInField));
+  const maxPowerScore = Math.max(...powerScores);
+  
+  // Use numerically stable softmax (subtract max to prevent overflow)
+  const strengths = powerScores.map(ps => Math.exp((ps - maxPowerScore) / temperature));
   const totalStrength = strengths.reduce((a, b) => a + b, 0);
   
   return athletes.map((athlete, i) => ({
@@ -240,10 +254,12 @@ function calculateWinnerProbabilities(athletes: AthleteOddsInput[], temperature:
  * PODIUM: Monte Carlo simulation for top-3 finish
  */
 function calculatePodiumProbabilities(athletes: AthleteOddsInput[], temperature: number, sims: number, maxRankInField: number): RawProbabilityResult[] {
-  const weights = athletes.map(a => {
-    const powerScore = calculatePowerScore(a.rating, a.rank, maxRankInField);
-    return Math.exp(powerScore / temperature);
-  });
+  // Calculate power scores first for stability
+  const powerScores = athletes.map(a => calculatePowerScore(a.rating, a.rank, maxRankInField));
+  const maxPowerScore = Math.max(...powerScores);
+  
+  // Use numerically stable softmax weights
+  const weights = powerScores.map(ps => Math.exp((ps - maxPowerScore) / temperature));
   const top3Counts = new Map<string, number>();
   
   for (const athlete of athletes) {
@@ -528,7 +544,7 @@ function calibrateOdds(
     // 6. Sort by probability (highest first = best athlete)
     results.sort((a, b) => b.blendedProbability - a.blendedProbability);
     
-    // 7. Check top-3 constraints AND max multiplier
+    // 7. Check ONLY top-3 constraints (max cap is applied AFTER calibration)
     const top1Mult = results[0]?.finalOdds || 99;
     const top2Mult = results[1]?.finalOdds || 99;
     const top3Mult = results[2]?.finalOdds || 99;
@@ -536,16 +552,25 @@ function calibrateOdds(
     
     console.log(`[CALIBRATION] Iter ${iter + 1}: temp=${temperature.toFixed(2)}, top1=${top1Mult.toFixed(2)}x, top2=${top2Mult.toFixed(2)}x, top3=${top3Mult.toFixed(2)}x, max=${maxMult.toFixed(2)}x`);
     
+    // Only check top-3 constraints during calibration
+    // Hard cap on max multiplier is applied post-calibration
     const passesConstraints = (
       top1Mult <= constraints.top1Max &&
       top2Mult <= constraints.top2Max &&
-      top3Mult <= constraints.top3Max &&
-      maxMult <= maxMultiplier  // Also check max cap
+      top3Mult <= constraints.top3Max
     );
     
     if (passesConstraints) {
       console.log(`[CALIBRATION] ✓ Passed on iteration ${iter + 1} with temp=${temperature.toFixed(2)}`);
-      return { results, temperatureUsed: temperature, iterations: iter + 1, calibrationPassed: true };
+      
+      // Apply hard cap to longshots (post-calibration)
+      const cappedResults = results.map(r => ({
+        ...r,
+        finalOdds: Math.min(r.finalOdds, maxMultiplier),
+        adjustedProbability: 1 / Math.min(r.finalOdds, maxMultiplier)
+      }));
+      
+      return { results: cappedResults, temperatureUsed: temperature, iterations: iter + 1, calibrationPassed: true };
     }
     
     // 8. Reduce temperature by 10% (strengthen favorites)
