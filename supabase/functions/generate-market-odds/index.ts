@@ -266,6 +266,15 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Fetch existing manual overrides
+    const { data: overrides } = await supabase
+      .from('market_multiplier_overrides')
+      .select('athlete_id, manual_multiplier, is_enabled')
+      .eq('market_id', market_id)
+      .eq('is_enabled', true);
+    
+    const overrideMap = new Map(overrides?.map(o => [o.athlete_id, o.manual_multiplier]) || []);
+
     // Build athlete array
     const rankKey = `current_rank_${market.discipline}`;
     const ratingKey = `current_rating_${market.discipline}`;
@@ -277,7 +286,7 @@ Deno.serve(async (req) => {
         name: a.name,
         worldRank: e.discipline_rank || a[rankKey] || e.seed_rank,
         rating: e.rating_0_100 || a[ratingKey] || 70,
-        manualMultiplier: null  // Not implemented yet
+        manualMultiplier: overrideMap.get(a.id) || null
       };
     });
 

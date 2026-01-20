@@ -47,6 +47,7 @@ import AdminMarketLiability from "./pages/admin/MarketLiability";
 import AdminAuditLogs from "./pages/admin/AuditLogs";
 import AdminRewardLiabilityDashboard from "./pages/admin/RewardLiabilityDashboard";
 import AdminRiskDashboard from "./pages/admin/RiskDashboard";
+import AdminMultiplierOverrides from "./pages/admin/MultiplierOverrides";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCanceled from "./pages/PaymentCanceled";
 import HelpCenter from "./pages/HelpCenter";
@@ -117,6 +118,7 @@ const App = () => (
               <Route path="/admin/market-liability" element={<AdminMarketLiability />} />
               <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
               <Route path="/admin/reward-dashboard" element={<AdminRewardLiabilityDashboard />} />
+              <Route path="/admin/multiplier-overrides" element={<AdminMultiplierOverrides />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </TutorialProvider>
