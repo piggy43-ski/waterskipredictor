@@ -150,17 +150,33 @@ const TournamentDetail = () => {
         if (marketsError) throw marketsError;
         if (marketsData) setMarkets(marketsData as Market[]);
 
-        // Fetch selections with athletes
+        // Fetch selections with athletes and manual overrides
         const { data: selectionsData, error: selectionsError } = await supabase
           .from('selections')
           .select(`
             *,
-            athlete:athletes(*)
+            athlete:athletes(*),
+            override:market_multiplier_overrides(manual_multiplier, is_enabled)
           `)
           .in('market_id', marketsData?.map(m => m.id) || []);
 
         if (selectionsError) throw selectionsError;
-        if (selectionsData) setSelections(selectionsData as any);
+        
+        // Apply manual overrides to decimal_odds for display
+        if (selectionsData) {
+          const processedSelections = selectionsData.map((sel: any) => {
+            // Check if there's an enabled override for this selection
+            const override = sel.override?.find?.((o: any) => o.is_enabled) || 
+                           (sel.override?.is_enabled ? sel.override : null);
+            
+            return {
+              ...sel,
+              decimal_odds: override?.manual_multiplier ?? sel.decimal_odds,
+              multiplier_source: override?.manual_multiplier ? 'manual' : 'auto'
+            };
+          });
+          setSelections(processedSelections as any);
+        }
 
         // Fetch tournament entries for ranking data
         const { data: entriesData, error: entriesError } = await supabase
