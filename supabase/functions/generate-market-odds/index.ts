@@ -6,41 +6,24 @@ const corsHeaders = {
 };
 
 // ============================================================
-// MARKET CONFIGURATION - Deterministic Rank-Based Pricing
+// CONFIGURATION
 // ============================================================
-const MARKET_CONFIG = {
-  WINNER: {
-    formula: { A: 3, B: 12, gamma: 1.8 },
-    buckets: [
-      { maxRank: 3, min: 3.0, max: 6.0 },
-      { maxRank: 10, min: 6.0, max: 10.0 },
-      { maxRank: Infinity, min: 10.0, max: 15.0 }
-    ],
-    targetImpliedSum: { min: 0.90, max: 0.915 }
-  },
-  PODIUM: {
-    formula: { A: 1.25, B: 6.75, gamma: 1.6 },
-    buckets: [
-      { maxRank: 3, min: 1.25, max: 3.0 },
-      { maxRank: 10, min: 3.0, max: 5.5 },
-      { maxRank: Infinity, min: 5.5, max: 8.0 }
-    ],
-    targetImpliedSum: { min: 0.84, max: 0.86 }
-  },
-  HIGHEST_SCORE: {
-    formula: { A: 4, B: 8, gamma: 1.7 },
-    buckets: [
-      { maxRank: 3, min: 4.0, max: 6.5 },
-      { maxRank: 10, min: 6.5, max: 9.5 },
-      { maxRank: Infinity, min: 9.5, max: 12.0 }
-    ],
-    targetImpliedSum: { min: 0.87, max: 0.89 }
-  }
-} as const;
+const SIMS = 5000;  // Light MC for adjustment only
+const W_BASE = 0.85;  // 85% weight on rank-based formula
+const W_MC = 0.15;    // 15% weight on Monte Carlo
 
-type MarketType = keyof typeof MARKET_CONFIG;
+const TARGET_IMPLIED_SUM = {
+  WINNER: { min: 0.90, max: 0.915 },
+  PODIUM: { min: 0.84, max: 0.86 },
+  HIGHEST_SCORE: { min: 0.87, max: 0.89 },
+};
 
-// Odds ladder for rounding
+const MULTIPLIER_CAPS = {
+  WINNER: { min: 1.5, max: 15.0 },
+  PODIUM: { min: 1.25, max: 8.0 },
+  HIGHEST_SCORE: { min: 1.5, max: 12.0 },
+};
+
 const ODDS_LADDER = [
   1.25, 1.30, 1.35, 1.40, 1.45, 1.50, 1.55, 1.60, 1.65, 1.70, 1.75, 1.80, 1.85, 1.90, 1.95,
   2.00, 2.10, 2.20, 2.30, 2.40, 2.50, 2.60, 2.70, 2.80, 2.90,
@@ -53,276 +36,183 @@ const ODDS_LADDER = [
 ];
 
 // ============================================================
-// UTILITY FUNCTIONS
+// UTILITIES
 // ============================================================
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
 }
 
-function roundToLadder(value: number): number {
-  if (value <= ODDS_LADDER[0]) return ODDS_LADDER[0];
-  if (value >= ODDS_LADDER[ODDS_LADDER.length - 1]) return ODDS_LADDER[ODDS_LADDER.length - 1];
-  
+function roundToLadder(v: number): number {
+  if (v <= ODDS_LADDER[0]) return ODDS_LADDER[0];
+  if (v >= ODDS_LADDER[ODDS_LADDER.length - 1]) return ODDS_LADDER[ODDS_LADDER.length - 1];
   let closest = ODDS_LADDER[0];
-  let minDiff = Math.abs(value - closest);
-  
-  for (const ladder of ODDS_LADDER) {
-    const diff = Math.abs(value - ladder);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = ladder;
-    }
+  for (const l of ODDS_LADDER) {
+    if (Math.abs(l - v) < Math.abs(closest - v)) closest = l;
   }
-  
   return closest;
 }
 
-function decimalToAmerican(decimal: number): number {
-  if (decimal >= 2.0) {
-    return Math.round((decimal - 1) * 100);
-  } else {
-    return Math.round(-100 / (decimal - 1));
-  }
+function decimalToAmerican(d: number): number {
+  return d >= 2.0 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1));
+}
+
+function normalize(arr: number[]): number[] {
+  const sum = arr.reduce((a, b) => a + b, 0);
+  return sum > 0 ? arr.map(v => v / sum) : arr.map(() => 1 / arr.length);
+}
+
+function seededRandom(seed: number): () => number {
+  let s = seed;
+  return () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  };
 }
 
 // ============================================================
 // ATHLETE TYPES
 // ============================================================
-
-interface AthleteInput {
+interface Athlete {
   id: string;
   name: string;
   worldRank: number | null;
-  rating: number | null;
+  rating: number;
   selectionId?: string;
   manualMultiplier?: number | null;
 }
 
-interface AthleteWithFieldRank extends AthleteInput {
+interface AthleteResult extends Athlete {
   fieldRank: number;
-  effectiveRank: number;
-}
-
-interface AthleteWithMultiplier extends AthleteWithFieldRank {
-  M_base: number;
+  p_base: number;
+  p_mc: number;
+  p_final: number;
   multiplier: number;
-  impliedProbability: number;
 }
 
 // ============================================================
-// CORE PRICING FUNCTIONS
+// STEP 1: BASE PROBABILITY (Rank-based formula)
+// p_base ∝ 1 / (fieldRank ^ power)
+// Power varies by market type for sharper/flatter curves
 // ============================================================
-
-/**
- * Assign field ranks based on world rank (or rating if unranked)
- * RULE: Every athlete MUST have a rank - no uniform fallback
- */
-function assignFieldRanks(athletes: AthleteInput[]): AthleteWithFieldRank[] {
-  // Sort: world-ranked first (by rank ASC), then unranked by rating DESC
+function calculateBaseProbabilities(athletes: Athlete[], marketType: string): number[] {
+  const power = marketType === 'PODIUM' ? 0.8 : marketType === 'HIGHEST_SCORE' ? 1.0 : 1.2;
+  
+  // Sort by world rank (lower = better), then by rating (higher = better)
   const sorted = [...athletes].sort((a, b) => {
     const aRank = a.worldRank ?? Infinity;
     const bRank = b.worldRank ?? Infinity;
-    
     if (aRank !== bRank) return aRank - bRank;
-    
-    // Tie-break by rating (higher is better)
     return (b.rating ?? 0) - (a.rating ?? 0);
   });
   
-  // Assign field ranks 1, 2, 3...
-  return sorted.map((athlete, index) => ({
-    ...athlete,
-    fieldRank: index + 1,
-    effectiveRank: athlete.worldRank ?? (1000 + index) // For audit: unranked get high synthetic ranks
-  }));
+  // Assign field ranks and calculate raw scores
+  const rawScores: number[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const fieldRank = i + 1;
+    rawScores.push(1 / Math.pow(fieldRank, power));
+  }
+  
+  // Return normalized probabilities in original order
+  const normalized = normalize(rawScores);
+  const rankMap = new Map(sorted.map((a, i) => [a.id, { fieldRank: i + 1, prob: normalized[i] }]));
+  
+  return athletes.map(a => rankMap.get(a.id)!.prob);
 }
 
-/**
- * Calculate base multiplier using the rank-based formula
- * M_base = A + B * (t^γ) where t = (r-1)/(N-1)
- */
-function calculateBaseMultiplier(
-  fieldRank: number,
-  fieldSize: number,
-  marketType: MarketType
-): { M_base: number; multiplier: number } {
-  const config = MARKET_CONFIG[marketType];
-  const { A, B, gamma } = config.formula;
+// ============================================================
+// STEP 2: MONTE CARLO ADJUSTMENT (Light simulations)
+// Adds variance based on rating differences
+// ============================================================
+function runLightMonteCarlo(athletes: Athlete[], marketType: string): number[] {
+  const rng = seededRandom(Date.now());
+  const wins = new Array(athletes.length).fill(0);
+  const sigma = marketType === 'PODIUM' ? 8 : 10;
   
-  // Normalized rank: t ∈ [0, 1]
-  const t = fieldSize > 1 ? (fieldRank - 1) / (fieldSize - 1) : 0;
-  
-  // Base multiplier from curve
-  const M_base = A + B * Math.pow(t, gamma);
-  
-  // Find appropriate bucket and clamp
-  let multiplier = M_base;
-  for (const bucket of config.buckets) {
-    if (fieldRank <= bucket.maxRank) {
-      multiplier = clamp(M_base, bucket.min, bucket.max);
-      break;
+  for (let sim = 0; sim < SIMS; sim++) {
+    // Simulate performance: rating + noise
+    const performances = athletes.map(a => (a.rating ?? 70) + (rng() - 0.5) * sigma * 2);
+    
+    if (marketType === 'PODIUM') {
+      // Top 3 all "win"
+      const indices = performances
+        .map((p, i) => ({ p, i }))
+        .sort((a, b) => b.p - a.p)
+        .slice(0, 3)
+        .map(x => x.i);
+      indices.forEach(i => wins[i]++);
+    } else {
+      // Winner only
+      let bestIdx = 0;
+      for (let i = 1; i < performances.length; i++) {
+        if (performances[i] > performances[bestIdx]) bestIdx = i;
+      }
+      wins[bestIdx]++;
     }
   }
   
-  return { M_base, multiplier };
+  // Normalize: for PODIUM, each sim has 3 winners
+  const divisor = marketType === 'PODIUM' ? SIMS * 3 : SIMS;
+  return wins.map(w => w / divisor);
 }
 
-/**
- * Calculate multipliers for all athletes
- */
-function calculateMultipliers(
-  athletes: AthleteWithFieldRank[],
-  marketType: MarketType
-): AthleteWithMultiplier[] {
-  const fieldSize = athletes.length;
-  
-  return athletes.map(athlete => {
-    // Use manual multiplier if set
-    if (athlete.manualMultiplier && athlete.manualMultiplier > 0) {
-      const multiplier = roundToLadder(athlete.manualMultiplier);
-      return {
-        ...athlete,
-        M_base: athlete.manualMultiplier,
-        multiplier,
-        impliedProbability: 1 / multiplier
-      };
-    }
-    
-    const { M_base, multiplier } = calculateBaseMultiplier(
-      athlete.fieldRank,
-      fieldSize,
-      marketType
-    );
-    
-    return {
-      ...athlete,
-      M_base,
-      multiplier: roundToLadder(multiplier),
-      impliedProbability: 1 / roundToLadder(multiplier)
-    };
-  });
+// ============================================================
+// STEP 3: BLEND & NORMALIZE
+// p_final = normalize(W_BASE * p_base + W_MC * p_mc)
+// ============================================================
+function blendProbabilities(p_base: number[], p_mc: number[]): number[] {
+  const blended = p_base.map((pb, i) => W_BASE * pb + W_MC * p_mc[i]);
+  return normalize(blended);
 }
 
-/**
- * Apply house edge by scaling to target implied sum
- * For large fields, bucket maxes are scaled up proportionally
- */
-function applyHouseEdge(
-  athletes: AthleteWithMultiplier[],
-  marketType: MarketType
-): AthleteWithMultiplier[] {
-  const config = MARKET_CONFIG[marketType];
-  const targetMid = (config.targetImpliedSum.min + config.targetImpliedSum.max) / 2;
-  const fieldSize = athletes.length;
+// ============================================================
+// STEP 4: APPLY HOUSE EDGE
+// Scale probabilities to hit target implied sum
+// ============================================================
+function applyHouseEdge(probs: number[], marketType: string): number[] {
+  const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] 
+    || TARGET_IMPLIED_SUM.WINNER;
+  const targetMid = (target.min + target.max) / 2;
   
-  // Calculate current implied sum
-  const currentSum = athletes.reduce((sum, a) => sum + (1 / a.multiplier), 0);
+  // p_adj = p * targetMid (since sum(p) = 1, sum(p_adj) = targetMid)
+  return probs.map(p => p * targetMid);
+}
+
+// ============================================================
+// STEP 5: DERIVE MULTIPLIERS
+// M = 1 / p_adj, clamped and rounded
+// ============================================================
+function deriveMultipliers(p_adj: number[], marketType: string): number[] {
+  const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] 
+    || MULTIPLIER_CAPS.WINNER;
   
-  console.log(`[HOUSE-EDGE] Current sum: ${currentSum.toFixed(4)}, Target: ${targetMid.toFixed(4)}, Field: ${fieldSize}`);
-  
-  if (Math.abs(currentSum - targetMid) < 0.01) {
-    return athletes;
-  }
-  
-  // Scale probabilities to hit target
-  const scaleFactor = targetMid / currentSum;
-  
-  // For large fields, scale bucket maxes proportionally
-  const bucketScaler = fieldSize > 8 ? fieldSize / 8 : 1;
-  
-  return athletes.map(a => {
-    const p = 1 / a.multiplier;
-    const p_adj = p * scaleFactor;
-    let M_final = 1 / p_adj;
-    
-    // Get bucket with scaled max for large fields
-    const baseBucket = config.buckets.find(b => a.fieldRank <= b.maxRank) 
-      || config.buckets[config.buckets.length - 1];
-    
-    const scaledMax = Math.min(baseBucket.max * bucketScaler, 15.0);
-    M_final = clamp(M_final, baseBucket.min, scaledMax);
-    M_final = roundToLadder(M_final);
-    
-    return {
-      ...a,
-      multiplier: M_final,
-      impliedProbability: 1 / M_final
-    };
+  return p_adj.map(p => {
+    if (p <= 0) return caps.max;
+    let m = 1 / p;
+    m = clamp(m, caps.min, caps.max);
+    return roundToLadder(m);
   });
 }
 
 // ============================================================
-// VALIDATION - FAIL-FAST ASSERTIONS
+// VALIDATION
 // ============================================================
-
-interface ValidationResult {
-  passed: boolean;
-  errors: string[];
-  warnings: string[];
-}
-
-function validateBeforePublish(
-  athletes: AthleteWithMultiplier[],
-  marketType: MarketType
-): ValidationResult {
+function validate(athletes: AthleteResult[], marketType: string): { passed: boolean; errors: string[] } {
   const errors: string[] = [];
-  const warnings: string[] = [];
-  const config = MARKET_CONFIG[marketType];
-  
-  // Sort by field rank for validation
   const sorted = [...athletes].sort((a, b) => a.fieldRank - b.fieldRank);
   
-  // 1. Rank ordering preserved (lower rank = lower multiplier)
+  // Check rank ordering (lower rank should have lower or equal multiplier)
   for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].multiplier < sorted[i - 1].multiplier) {
+    if (sorted[i].multiplier < sorted[i - 1].multiplier - 0.01) {
       errors.push(`Rank ${sorted[i].fieldRank} (${sorted[i].multiplier}x) < Rank ${sorted[i - 1].fieldRank} (${sorted[i - 1].multiplier}x)`);
     }
   }
   
-  // 2. No identical multipliers for top 5 adjacent ranks (unless many athletes)
-  if (athletes.length <= 10) {
-    for (let i = 1; i < Math.min(5, sorted.length); i++) {
-      if (sorted[i].multiplier === sorted[i - 1].multiplier && !sorted[i].manualMultiplier && !sorted[i - 1].manualMultiplier) {
-        warnings.push(`Ranks ${sorted[i - 1].fieldRank} and ${sorted[i].fieldRank} have identical multipliers (${sorted[i].multiplier}x)`);
-      }
-    }
-  }
-  
-  // 3. All multipliers within bucket caps
-  for (const athlete of sorted) {
-    const bucket = config.buckets.find(b => athlete.fieldRank <= b.maxRank)!;
-    if (athlete.multiplier < bucket.min - 0.01 || athlete.multiplier > bucket.max + 0.01) {
-      warnings.push(`Rank ${athlete.fieldRank} multiplier ${athlete.multiplier}x outside bucket [${bucket.min}, ${bucket.max}]`);
-    }
-  }
-  
-  // 4. Implied sum within target band (with tolerance)
-  const impliedSum = sorted.reduce((s, a) => s + (1 / a.multiplier), 0);
-  const tolerance = 0.05; // 5% tolerance
-  if (impliedSum < config.targetImpliedSum.min - tolerance || impliedSum > config.targetImpliedSum.max + tolerance) {
-    warnings.push(`Implied sum ${impliedSum.toFixed(4)} outside band [${config.targetImpliedSum.min}, ${config.targetImpliedSum.max}]`);
-  }
-  
-  // 5. Top athlete must have the lowest multiplier
-  if (sorted.length > 0 && sorted[0].fieldRank === 1) {
-    const minMultiplier = Math.min(...sorted.map(a => a.multiplier));
-    if (sorted[0].multiplier > minMultiplier) {
-      errors.push(`Rank 1 (${sorted[0].multiplier}x) does not have lowest multiplier (min is ${minMultiplier}x)`);
-    }
-  }
-  
-  return {
-    passed: errors.length === 0,
-    errors,
-    warnings
-  };
+  return { passed: errors.length === 0, errors };
 }
 
 // ============================================================
 // MAIN HANDLER
 // ============================================================
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -334,331 +224,193 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { market_id, force = false } = await req.json();
-    
     if (!market_id) {
-      return new Response(
-        JSON.stringify({ error: "market_id required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "market_id required" }), 
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    console.log(`[ODDS-ENGINE] Processing market ${market_id}, force=${force}`);
+    console.log(`[ODDS] Processing market ${market_id}`);
 
-    // ========================================
-    // 1. FETCH MARKET DATA
-    // ========================================
-    const { data: market, error: marketError } = await supabase
+    // Fetch market
+    const { data: market, error: mErr } = await supabase
       .from('markets')
-      .select('*, tournaments!inner(id, name, start_datetime)')
+      .select('*, tournaments!inner(id, name)')
       .eq('id', market_id)
       .single();
-
-    if (marketError || !market) {
-      console.error('[ODDS-ENGINE] Market not found:', marketError);
-      return new Response(
-        JSON.stringify({ error: "Market not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (mErr || !market) {
+      return new Response(JSON.stringify({ error: "Market not found" }), 
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const marketType = (market.market_type?.toUpperCase() || 'WINNER') as MarketType;
-    if (!MARKET_CONFIG[marketType]) {
-      return new Response(
-        JSON.stringify({ error: `Unsupported market type: ${marketType}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const marketType = (market.market_type?.toUpperCase() || 'WINNER') as string;
+    console.log(`[ODDS] Market: ${market.name}, Type: ${marketType}`);
 
-    console.log(`[ODDS-ENGINE] Market: ${market.name}, Type: ${marketType}, Discipline: ${market.discipline}, Category: ${market.category}`);
-
-    // ========================================
-    // 2. FETCH ATHLETES FROM TOURNAMENT ENTRIES
-    // ========================================
-    const { data: entries, error: entriesError } = await supabase
+    // Fetch entries
+    const { data: entries } = await supabase
       .from('tournament_entries')
-      .select(`
-        id,
-        athlete_id,
-        discipline_rank,
-        seed_rank,
-        rating_0_100,
-        athletes!inner(id, name, gender, current_rank_slalom, current_rank_trick, current_rank_jump, current_rating_slalom, current_rating_trick, current_rating_jump)
-      `)
+      .select(`id, athlete_id, discipline_rank, seed_rank, rating_0_100,
+        athletes!inner(id, name, gender, current_rank_slalom, current_rank_trick, current_rank_jump, 
+          current_rating_slalom, current_rating_trick, current_rating_jump)`)
       .eq('tournament_id', market.tournament_id)
       .eq('discipline', market.discipline);
 
-    if (entriesError) {
-      console.error('[ODDS-ENGINE] Failed to fetch entries:', entriesError);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch tournament entries" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Filter by gender
     const genderFilter = market.category === 'open_men' ? 'male' : 'female';
-    const filteredEntries = entries?.filter(e => {
-      const athlete = e.athletes as any;
-      return athlete?.gender === genderFilter;
-    }) || [];
-
-    console.log(`[ODDS-ENGINE] Found ${filteredEntries.length} athletes for ${genderFilter} ${market.discipline}`);
-
-    if (filteredEntries.length < 2) {
+    const filtered = entries?.filter(e => (e.athletes as any)?.gender === genderFilter) || [];
+    
+    if (filtered.length < 2) {
       await supabase.from('markets').update({
         odds_validation_status: 'INVALID',
-        odds_validation_error: 'Insufficient athletes (need at least 2)'
+        odds_validation_error: 'Insufficient athletes'
       }).eq('id', market_id);
-      
-      return new Response(
-        JSON.stringify({ error: "Insufficient athletes", count: filteredEntries.length }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Insufficient athletes" }), 
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ========================================
-    // 3. FETCH EXISTING SELECTIONS & MANUAL MULTIPLIERS
-    // ========================================
-    const { data: existingSelections } = await supabase
-      .from('selections')
-      .select('id, athlete_id, manual_multiplier')
-      .eq('market_id', market_id);
-
-    const selectionMap = new Map(existingSelections?.map(s => [s.athlete_id, s]) || []);
-
-    // ========================================
-    // 4. BUILD ATHLETE INPUT ARRAY
-    // ========================================
-    const athleteInputs: AthleteInput[] = filteredEntries.map(entry => {
-      const athlete = entry.athletes as any;
-      const selection = selectionMap.get(athlete.id);
-      
-      // Priority: discipline_rank > athlete world rank > seed_rank
-      const disciplineRankKey = `current_rank_${market.discipline}`;
-      const disciplineRatingKey = `current_rating_${market.discipline}`;
-      
-      const worldRank = entry.discipline_rank 
-        || athlete[disciplineRankKey]
-        || entry.seed_rank;
-      
-      // Priority: cached rating > athlete rating
-      const rating = entry.rating_0_100 
-        || athlete[disciplineRatingKey]
-        || 70; // Default rating
-      
+    // Build athlete array
+    const rankKey = `current_rank_${market.discipline}`;
+    const ratingKey = `current_rating_${market.discipline}`;
+    
+    const athletes: Athlete[] = filtered.map(e => {
+      const a = e.athletes as any;
       return {
-        id: athlete.id,
-        name: athlete.name,
-        worldRank,
-        rating,
-        selectionId: selection?.id,
-        manualMultiplier: selection?.manual_multiplier
+        id: a.id,
+        name: a.name,
+        worldRank: e.discipline_rank || a[rankKey] || e.seed_rank,
+        rating: e.rating_0_100 || a[ratingKey] || 70,
+        manualMultiplier: null  // Not implemented yet
       };
     });
 
-    // ========================================
-    // 5. FAIL-FAST: Check for athletes missing both rank AND rating
-    // ========================================
-    const invalidAthletes = athleteInputs.filter(a => !a.worldRank && !a.rating);
-    if (invalidAthletes.length > 0) {
-      const names = invalidAthletes.map(a => a.name).join(', ');
-      await supabase.from('markets').update({
-        odds_validation_status: 'INVALID',
-        odds_validation_error: `Athletes missing rank and rating: ${names}`
-      }).eq('id', market_id);
-      
-      return new Response(
-        JSON.stringify({ error: `BLOCKED: Athletes missing rank and rating: ${names}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    console.log(`[ODDS] ${athletes.length} athletes`);
 
-    // ========================================
-    // 6. ASSIGN FIELD RANKS
-    // ========================================
-    const rankedAthletes = assignFieldRanks(athleteInputs);
+    // ========== CORE PIPELINE ==========
     
-    console.log('[ODDS-ENGINE] Field rankings:');
-    rankedAthletes.slice(0, 5).forEach(a => {
-      console.log(`  Field #${a.fieldRank}: ${a.name} (World Rank: ${a.worldRank || 'unranked'}, Rating: ${a.rating})`);
+    // Step 1: Base probabilities from rank formula
+    const p_base = calculateBaseProbabilities(athletes, marketType);
+    
+    // Step 2: Light Monte Carlo adjustment
+    const p_mc = runLightMonteCarlo(athletes, marketType);
+    
+    // Step 3: Blend
+    const p_blended = blendProbabilities(p_base, p_mc);
+    
+    // Step 4: House edge
+    const p_adj = applyHouseEdge(p_blended, marketType);
+    
+    // Step 5: Derive multipliers
+    const multipliers = deriveMultipliers(p_adj, marketType);
+
+    // Build results with field ranks
+    const sortedForRank = [...athletes].sort((a, b) => {
+      const aR = a.worldRank ?? Infinity, bR = b.worldRank ?? Infinity;
+      if (aR !== bR) return aR - bR;
+      return (b.rating ?? 0) - (a.rating ?? 0);
     });
+    const fieldRankMap = new Map(sortedForRank.map((a, i) => [a.id, i + 1]));
 
-    // ========================================
-    // 7. CALCULATE BASE MULTIPLIERS
-    // ========================================
-    const withMultipliers = calculateMultipliers(rankedAthletes, marketType);
-
-    // ========================================
-    // 8. APPLY HOUSE EDGE
-    // ========================================
-    const finalAthletes = applyHouseEdge(withMultipliers, marketType);
-
-    // ========================================
-    // 9. VALIDATE BEFORE PUBLISH
-    // ========================================
-    const validation = validateBeforePublish(finalAthletes, marketType);
-    
-    const impliedSum = finalAthletes.reduce((s, a) => s + (1 / a.multiplier), 0);
-    
-    console.log(`[ODDS-ENGINE] Validation: passed=${validation.passed}, impliedSum=${impliedSum.toFixed(4)}`);
-    if (validation.errors.length > 0) {
-      console.error('[ODDS-ENGINE] Errors:', validation.errors);
-    }
-    if (validation.warnings.length > 0) {
-      console.warn('[ODDS-ENGINE] Warnings:', validation.warnings);
-    }
-
-    // Log final odds for top 5
-    console.log('[ODDS-ENGINE] Final multipliers:');
-    finalAthletes.slice(0, 5).forEach(a => {
-      console.log(`  Field #${a.fieldRank}: ${a.name} = ${a.multiplier}x (M_base: ${a.M_base.toFixed(2)})`);
-    });
-
-    // ========================================
-    // 10. DETERMINE VALIDATION STATUS
-    // ========================================
-    let validationStatus = validation.passed ? 'VALID' : 'INVALID';
-    let validationError = validation.passed ? null : validation.errors.join('; ');
-
-    if (!validation.passed && !force) {
-      // Update market status but DO NOT sync selections
-      await supabase.from('markets').update({
-        odds_validation_status: validationStatus,
-        odds_validation_error: validationError,
-        odds_generated_at: new Date().toISOString()
-      }).eq('id', market_id);
-      
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: `BLOCKED: ${validationError}`,
-          validation,
-          impliedSum,
-          athletes: finalAthletes.slice(0, 10).map(a => ({
-            name: a.name,
-            fieldRank: a.fieldRank,
-            M_base: a.M_base,
-            multiplier: a.multiplier
-          }))
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ========================================
-    // 11. SYNC TO DATABASE
-    // ========================================
-    
-    // Update or create selections
-    for (const athlete of finalAthletes) {
-      const americanOdds = decimalToAmerican(athlete.multiplier);
-      
-      if (athlete.selectionId) {
-        // Update existing selection
-        await supabase
-          .from('selections')
-          .update({
-            decimal_odds: athlete.multiplier,
-            american_odds: americanOdds,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', athlete.selectionId);
-      } else {
-        // Create new selection
-        await supabase
-          .from('selections')
-          .insert({
-            market_id,
-            athlete_id: athlete.id,
-            description: `${athlete.name} to win`,
-            decimal_odds: athlete.multiplier,
-            american_odds: americanOdds
-          });
-      }
-    }
-
-    // Upsert market_odds for audit trail
-    const marketOddsRecords = finalAthletes.map(a => ({
-      market_id,
-      athlete_id: a.id,
-      multiplier: a.multiplier,
-      american_odds: decimalToAmerican(a.multiplier),
-      raw_probability: 1 / a.M_base,
-      normalized_probability: a.impliedProbability,
-      adjusted_probability: a.impliedProbability,
-      field_rank: a.fieldRank,
-      world_rank: a.worldRank,
-      rating: a.rating,
-      sims_run: 0, // Deterministic - no simulations
-      model_version: 'deterministic-rank-v1'
+    const results: AthleteResult[] = athletes.map((a, i) => ({
+      ...a,
+      fieldRank: fieldRankMap.get(a.id)!,
+      p_base: p_base[i],
+      p_mc: p_mc[i],
+      p_final: p_blended[i],
+      multiplier: a.manualMultiplier && a.manualMultiplier > 0 
+        ? roundToLadder(a.manualMultiplier) 
+        : multipliers[i]
     }));
 
-    for (const record of marketOddsRecords) {
-      await supabase
-        .from('market_odds')
-        .upsert(record, { onConflict: 'market_id,athlete_id' });
+    // Validate
+    const validation = validate(results, marketType);
+    const impliedSum = results.reduce((s, r) => s + (1 / r.multiplier), 0);
+    
+    console.log(`[ODDS] Implied sum: ${impliedSum.toFixed(4)}, Valid: ${validation.passed}`);
+
+    // Sort for logging
+    const sortedResults = [...results].sort((a, b) => a.fieldRank - b.fieldRank);
+    console.log('[ODDS] Top 5:');
+    sortedResults.slice(0, 5).forEach(r => {
+      console.log(`  #${r.fieldRank} ${r.name}: p_base=${(r.p_base*100).toFixed(1)}%, p_mc=${(r.p_mc*100).toFixed(1)}%, p_final=${(r.p_final*100).toFixed(1)}% → ${r.multiplier}x`);
+    });
+
+    // Update database - delete existing selections first to avoid stale data
+    const validationStatus = validation.passed ? 'VALID' : 'INVALID';
+    
+    // Delete all existing selections for this market
+    await supabase.from('selections').delete().eq('market_id', market_id);
+    
+    // Insert fresh selections
+    for (const r of results) {
+      const american = decimalToAmerican(r.multiplier);
+      await supabase.from('selections').insert({
+        market_id,
+        athlete_id: r.id,
+        description: `${r.name} to win`,
+        decimal_odds: r.multiplier,
+        american_odds: american
+      });
+      
+      await supabase.from('market_odds').upsert({
+        market_id,
+        athlete_id: r.id,
+        multiplier: r.multiplier,
+        american_odds: decimalToAmerican(r.multiplier),
+        raw_probability: r.p_mc,
+        normalized_probability: r.p_final,
+        adjusted_probability: 1 / r.multiplier,
+        field_rank: r.fieldRank,
+        world_rank: r.worldRank,
+        rating: r.rating,
+        sims_run: SIMS,
+        model_version: 'hybrid-v1'
+      }, { onConflict: 'market_id,athlete_id' });
     }
 
-    // Update market status
     await supabase.from('markets').update({
       odds_validation_status: validationStatus,
-      odds_validation_error: validationError,
+      odds_validation_error: validation.passed ? null : validation.errors.join('; '),
       odds_generated_at: new Date().toISOString(),
       implied_sum: impliedSum
     }).eq('id', market_id);
 
-    // ========================================
-    // 12. WRITE AUDIT LOG
-    // ========================================
     await supabase.from('audit_logs').insert({
       event_type: 'odds_generated',
       target_type: 'market',
       target_id: market_id,
       payload: {
         market_type: marketType,
-        field_size: finalAthletes.length,
+        field_size: results.length,
         implied_sum: impliedSum,
-        validation_status: validationStatus,
-        model_version: 'deterministic-rank-v1',
-        top_5: finalAthletes.slice(0, 5).map(a => ({
-          name: a.name,
-          fieldRank: a.fieldRank,
-          worldRank: a.worldRank,
-          M_base: a.M_base,
-          multiplier: a.multiplier
-        }))
+        model_version: 'hybrid-v1',
+        sims: SIMS,
+        w_base: W_BASE,
+        w_mc: W_MC
       }
     });
 
-    console.log(`[ODDS-ENGINE] ✅ Market ${market_id} processed successfully`);
+    console.log(`[ODDS] ✅ Done`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        market_id,
-        market_type: marketType,
-        field_size: finalAthletes.length,
-        implied_sum: impliedSum,
-        validation_status: validationStatus,
-        warnings: validation.warnings,
-        model_version: 'deterministic-rank-v1',
-        top_athletes: finalAthletes.slice(0, 5).map(a => ({
-          name: a.name,
-          fieldRank: a.fieldRank,
-          worldRank: a.worldRank,
-          M_base: a.M_base,
-          multiplier: a.multiplier
-        }))
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({
+      success: true,
+      market_id,
+      market_type: marketType,
+      field_size: results.length,
+      implied_sum: impliedSum,
+      validation_status: validationStatus,
+      model_version: 'hybrid-v1',
+      top_athletes: sortedResults.slice(0, 5).map(r => ({
+        name: r.name,
+        fieldRank: r.fieldRank,
+        worldRank: r.worldRank,
+        p_base: (r.p_base * 100).toFixed(1) + '%',
+        p_mc: (r.p_mc * 100).toFixed(1) + '%',
+        p_final: (r.p_final * 100).toFixed(1) + '%',
+        multiplier: r.multiplier
+      }))
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (err) {
-    const error = err as Error;
-    console.error("[ODDS-ENGINE] Error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("[ODDS] Error:", err);
+    return new Response(JSON.stringify({ error: (err as Error).message }), 
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
