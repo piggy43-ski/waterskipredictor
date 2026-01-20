@@ -2,6 +2,24 @@ import { ParlayLeg } from '@/types/parlay';
 import { PARLAY_CONFIG } from './parlayConfig';
 
 /**
+ * Parlay pricing with house safety
+ * - Raw product multiplied by 0.75 haircut
+ * - Hard caps by leg count
+ * - 5+ legs DISABLED
+ */
+
+const PARLAY_HAIRCUT = 0.75;
+
+const PARLAY_CAPS: Record<number, number> = {
+  1: 15,    // Single leg capped at 15x
+  2: 20,    // 2-leg max 20x
+  3: 35,    // 3-leg max 35x
+  4: 50,    // 4-leg max 50x
+};
+
+const MAX_PARLAY_LEGS = 4;
+
+/**
  * Convert American odds to decimal odds
  */
 export function americanToDecimal(americanOdds: number): number {
@@ -49,46 +67,40 @@ export function calculateRawParlayMultiplier(legs: ParlayLeg[]): number {
 
 /**
  * Calculate the progressive cap based on number of legs
- * Uses lookup table with 12-18% house edge
- * 
- * Progressive Caps (Option B):
- * - 1 leg: 30x cap (12% house edge)
- * - 2 legs: 55x cap (18% house edge)
- * - 3 legs: 85x cap (15% house edge)
- * - 4 legs: 115x cap (14% house edge)
- * - 5 legs: 145x cap (13% house edge)
- * - 6 legs: 200x cap (full reward)
+ * 5+ legs are DISABLED
  */
 export function calculateProgressiveCap(legCount: number): number {
-  const { PROGRESSIVE_CAPS, MAX_PARLAY_MULTIPLIER } = PARLAY_CONFIG;
-  
-  // Return full cap for max legs or above
-  if (legCount >= 6) {
-    return MAX_PARLAY_MULTIPLIER;
+  if (legCount > MAX_PARLAY_LEGS) {
+    return 0; // DISABLED
   }
   
-  // Return 0 for invalid leg counts
   if (legCount <= 0) {
     return 0;
   }
   
-  // Use lookup table for progressive caps
-  return PROGRESSIVE_CAPS[legCount as keyof typeof PROGRESSIVE_CAPS] || MAX_PARLAY_MULTIPLIER;
+  return PARLAY_CAPS[legCount] || PARLAY_CAPS[MAX_PARLAY_LEGS];
 }
 
 /**
- * Calculate the final parlay multiplier (raw odds capped by progressive limit)
+ * Calculate the final parlay multiplier with house safety
+ * Raw product × 0.75 haircut, then capped
  */
 export function calculateParlayMultiplier(legs: ParlayLeg[]): number {
   if (legs.length === 0) return 0;
+  if (legs.length > MAX_PARLAY_LEGS) return 0; // DISABLED for 5+ legs
   
   const completedLegs = legs.filter(l => l.isComplete);
   if (completedLegs.length === 0) return 0;
   
   const rawMultiplier = calculateRawParlayMultiplier(completedLegs);
-  const progressiveCap = calculateProgressiveCap(completedLegs.length);
   
-  return Math.min(rawMultiplier, progressiveCap);
+  // Apply 25% haircut for house safety
+  const withHaircut = rawMultiplier * PARLAY_HAIRCUT;
+  
+  // Apply progressive cap
+  const cap = calculateProgressiveCap(completedLegs.length);
+  
+  return Math.min(withHaircut, cap);
 }
 
 /**
@@ -96,22 +108,41 @@ export function calculateParlayMultiplier(legs: ParlayLeg[]): number {
  */
 export function getParlayMultiplierDetails(legs: ParlayLeg[]): {
   rawMultiplier: number;
+  withHaircut: number;
   progressiveCap: number;
   finalMultiplier: number;
   isCapped: boolean;
+  isDisabled: boolean;
   legCount: number;
 } {
   const completedLegs = legs.filter(l => l.isComplete);
+  const legCount = completedLegs.length;
+  
+  if (legCount > MAX_PARLAY_LEGS) {
+    return {
+      rawMultiplier: 0,
+      withHaircut: 0,
+      progressiveCap: 0,
+      finalMultiplier: 0,
+      isCapped: false,
+      isDisabled: true,
+      legCount
+    };
+  }
+  
   const rawMultiplier = calculateRawParlayMultiplier(completedLegs);
-  const progressiveCap = calculateProgressiveCap(completedLegs.length);
-  const finalMultiplier = Math.min(rawMultiplier, progressiveCap);
+  const withHaircut = rawMultiplier * PARLAY_HAIRCUT;
+  const progressiveCap = calculateProgressiveCap(legCount);
+  const finalMultiplier = Math.min(withHaircut, progressiveCap);
   
   return {
     rawMultiplier: Math.round(rawMultiplier * 100) / 100,
+    withHaircut: Math.round(withHaircut * 100) / 100,
     progressiveCap: Math.round(progressiveCap * 100) / 100,
     finalMultiplier: Math.round(finalMultiplier * 100) / 100,
-    isCapped: rawMultiplier > progressiveCap,
-    legCount: completedLegs.length
+    isCapped: withHaircut > progressiveCap,
+    isDisabled: false,
+    legCount
   };
 }
 
@@ -119,20 +150,24 @@ export function getParlayMultiplierDetails(legs: ParlayLeg[]): {
  * Get suggestions for increasing the multiplier
  */
 export function getMultiplierSuggestions(legs: ParlayLeg[], availableDisciplines: string[]): string[] {
-  const completedLegs = legs.filter(l => l.isComplete);
-  const { progressiveCap, isCapped, legCount } = getParlayMultiplierDetails(legs);
+  const { legCount, isDisabled, isCapped, progressiveCap } = getParlayMultiplierDetails(legs);
   const suggestions: string[] = [];
   
-  // Calculate what cap would be with one more leg
-  if (legCount < PARLAY_CONFIG.MAX_LEGS_FOR_FULL_CAP) {
-    const nextCap = calculateProgressiveCap(legCount + 1);
-    suggestions.push(`Add another leg to increase max cap from ${progressiveCap.toFixed(0)}x to ${nextCap.toFixed(0)}x`);
+  if (isDisabled) {
+    suggestions.push(`Maximum ${MAX_PARLAY_LEGS} legs allowed. Remove a leg to continue.`);
+    return suggestions;
   }
   
-  // If currently capped, show how many more legs needed for full 200x
-  if (isCapped && legCount < PARLAY_CONFIG.MAX_LEGS_FOR_FULL_CAP) {
-    const legsNeeded = PARLAY_CONFIG.MAX_LEGS_FOR_FULL_CAP - legCount;
-    suggestions.push(`Add ${legsNeeded} more leg${legsNeeded > 1 ? 's' : ''} to unlock full 200x potential`);
+  // Calculate what cap would be with one more leg
+  if (legCount < MAX_PARLAY_LEGS) {
+    const nextCap = calculateProgressiveCap(legCount + 1);
+    suggestions.push(`Add another leg to increase max cap from ${progressiveCap}x to ${nextCap}x`);
+  }
+  
+  // If currently capped, show max legs info
+  if (isCapped && legCount < MAX_PARLAY_LEGS) {
+    const legsNeeded = MAX_PARLAY_LEGS - legCount;
+    suggestions.push(`Add ${legsNeeded} more leg${legsNeeded > 1 ? 's' : ''} to unlock full ${PARLAY_CAPS[MAX_PARLAY_LEGS]}x potential`);
   }
   
   return suggestions;
@@ -143,4 +178,18 @@ export function getMultiplierSuggestions(legs: ParlayLeg[], availableDisciplines
  */
 export function isDuplicateLeg(legs: ParlayLeg[], discipline: string, gender: string): boolean {
   return legs.some(leg => leg.discipline === discipline && leg.gender === gender);
+}
+
+/**
+ * Check if more legs can be added
+ */
+export function canAddMoreLegs(legs: ParlayLeg[]): boolean {
+  return legs.length < MAX_PARLAY_LEGS;
+}
+
+/**
+ * Get maximum allowed legs
+ */
+export function getMaxParlayLegs(): number {
+  return MAX_PARLAY_LEGS;
 }
