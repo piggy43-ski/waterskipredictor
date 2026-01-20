@@ -1,44 +1,58 @@
 /**
- * Risk configuration for house risk controls
+ * Risk Configuration
  * 
- * OPTION A: Fixed Multipliers with Hard Exposure Caps
- * - Multipliers are computed before publish and DO NOT change during OPEN markets
- * - Hard exposure caps block bets (no odds shortening)
- * - House bankruptcy is mathematically impossible
- * 
- * CALIBRATION: Top-3 constraints ensure favorites have reasonable multipliers
+ * Centralized configuration for house safety, odds validation, and risk management.
+ * These values MUST match the edge function generate-market-odds/index.ts
  */
 
+// ============================================================
+// PROBABILITY FLOORS - Enforce minimum probabilities by rank
+// Multipliers are derived from probabilities, NOT clipped afterward
+// ============================================================
+export const PROBABILITY_FLOORS = {
+  WINNER: {
+    rank1Min: 0.25,  // Rank #1 ≥ 25% → max 4.0x
+    rank2Min: 0.18,  // Rank #2 ≥ 18% → max 5.5x
+    rank3Min: 0.12,  // Rank #3 ≥ 12% → max 8.3x
+  },
+  PODIUM: {
+    rank1Min: 0.55,  // Rank #1 ≥ 55% → max 1.8x
+    rank2Min: 0.45,  // Rank #2 ≥ 45% → max 2.2x
+    rank3Min: 0.35,  // Rank #3 ≥ 35% → max 2.8x
+  },
+  HIGHEST_SCORE: {
+    rank1Min: 0.22,  // Rank #1 ≥ 22% → max 4.5x
+    rank2Min: 0.15,  // Rank #2 ≥ 15% → max 6.6x
+    rank3Min: 0.10,  // Rank #3 ≥ 10% → max 10x
+  },
+} as const;
+
+// ============================================================
+// MAIN RISK CONFIG OBJECT
+// ============================================================
 export const RISK_CONFIG = {
-  /** Option A: Fixed Multiplier Mode (no live odds adjustments) */
-  FIXED_MULTIPLIER_MODE: true,
-  
-  /** Allow live odds adjustment (false in Option A) */
-  ALLOW_LIVE_ODDS_ADJUSTMENT: false,
-  
-  /** Maximum tokens per single entry */
+  /** Maximum stake per prediction in tokens */
   MAX_STAKE: 10000,
   
-  /** Maximum payout per single entry */
+  /** Maximum payout per prediction in tokens */
   MAX_PAYOUT: 150000,
   
-  /** Maximum % of market pool on one athlete (Option A hard cap) */
-  MAX_ATHLETE_EXPOSURE_PCT: 0.30,
-  
-  /** Safety margin for pre-publish check (max payout must be ≤ this % of max pool) */
-  PUBLISH_SAFETY_MARGIN: 0.95,
-  
-  /** Maximum % of user's tournament stake that can go to one athlete */
-  MAX_ATHLETE_ALLOCATION_PCT: 0.25,
-  
-  /** Liability caps by market type (as % of market handle) - used for warnings */
+  /** Liability caps per market type (in tokens) */
   LIABILITY_CAPS: {
-    WINNER: 0.35,
-    PODIUM: 0.30,
-    HIGHEST_SCORE: 0.30,
+    WINNER: 500000,
+    PODIUM: 300000,
+    HIGHEST_SCORE: 400000,
   } as const,
   
-  /** Target implied sum bands by market type */
+  /** Maximum athlete exposure as % of market pool (Option A risk control) */
+  MAX_ATHLETE_ALLOCATION_PCT: 0.30,
+  
+  MAX_ATHLETE_EXPOSURE_PCT: 0.30,
+  
+  /** Pre-publish safety margin (max payout must be ≤ 95% of possible pool) */
+  PUBLISH_SAFETY_MARGIN: 0.95,
+  
+  /** Target implied sum bands by market type (house edge enforcement) */
   IMPLIED_SUM_BANDS: {
     WINNER: { target: 0.909, min: 0.90, max: 0.915 },
     PODIUM: { target: 0.847, min: 0.84, max: 0.86 },
@@ -47,62 +61,52 @@ export const RISK_CONFIG = {
   
   /** Maximum risk ratio by market type (caps house downside at 10-15%) */
   MAX_RISK_RATIO: {
-    WINNER: 1.15,       // Max 15% downside
-    PODIUM: 1.10,       // Max 10% downside
-    HIGHEST_SCORE: 1.12 // Max 12% downside
+    WINNER: 1.15,
+    PODIUM: 1.10,
+    HIGHEST_SCORE: 1.12,
   } as const,
   
   /** Compression rules (disabled in Option A during OPEN markets) */
   COMPRESSION: {
-    /** Maximum single adjustment per update (8%) */
     MAX_ADJUSTMENT_PCT: 0.08,
-    /** Minimum % of total tokens to be eligible for compression */
     MIN_EXPOSURE_PCT: 0.05,
-    /** Multiplier floor (never compress below this) */
     MULTIPLIER_FLOOR: 1.20,
   } as const,
   
   /** 
-   * CALIBRATION: PRIOR-DOMINANT model
+   * CALIBRATION: PRIOR-DOMINANT model with probability floors
    * 80% prior (rank + rating), 20% MC
-   * Reduces temperature iteratively until top-3 constraints pass
-   * If fails after 20 iterations, market is BLOCKED
+   * Enforces probability floors BEFORE normalization
+   * Validates constraints as assertions (fail fast)
    */
   CALIBRATION: {
-    /** Initial temperature by market type (SHARP separation) */
     TEMPERATURE: {
-      WINNER: 5,          // Sharp: rank 1 should be ~2-4x
-      HIGHEST_SCORE: 6,   // Similar to winner
-      PODIUM: 4,          // Even sharper for top-3
+      WINNER: 5,
+      HIGHEST_SCORE: 6,
+      PODIUM: 4,
     } as const,
-    /** Prior/MC blending factor: 0.20 = 20% MC, 80% prior (PRIOR DOMINATES!) */
     PRIOR_BLEND_ALPHA: 0.20,
-    /** Temperature reduction per iteration (10%) */
     TEMP_REDUCTION_FACTOR: 0.90,
-    /** Max calibration iterations before BLOCKING publish */
     MAX_ITERATIONS: 20,
   } as const,
   
   /**
-   * TOP-3 MULTIPLIER CONSTRAINTS (MANDATORY HARD CONSTRAINTS)
-   * If violated, market creation FAILS
-   * Top-ranked athletes ALWAYS have the lowest multipliers
-   * Constraints are REALISTIC for typical 10-25 athlete fields
+   * TOP-3 MULTIPLIER CONSTRAINTS (ASSERTIONS - not adjustments)
+   * If violated after probability floors, market is INVALID
    */
   TOP3_CONSTRAINTS: {
-    WINNER: { top1Max: 4.0, top2Max: 8.0, top3Max: 12.0 },    // Relaxed for realism
-    HIGHEST_SCORE: { top1Max: 4.5, top2Max: 8.0, top3Max: 12.0 },
-    PODIUM: { top1Max: 2.2, top2Max: 3.5, top3Max: 5.0 },     // Tighter for podium
+    WINNER: { top1Max: 4.0, top2Max: 6.0, top3Max: 8.0 },
+    HIGHEST_SCORE: { top1Max: 4.5, top2Max: 6.5, top3Max: 9.0 },
+    PODIUM: { top1Max: 2.2, top2Max: 2.8, top3Max: 3.5 },
   } as const,
   
   /**
-   * HARD MULTIPLIER CAPS (MAX OVERALL)
-   * No elite athlete ever appears as a longshot
+   * HARD MULTIPLIER CAPS (safety backstop only)
    */
   MULTIPLIER_CAPS: {
-    WINNER: 15.0,         // Max ≤ 15.0× overall
-    HIGHEST_SCORE: 12.0,  // Max ≤ 12.0×
-    PODIUM: 8.0,          // Max ≤ 8.0×
+    WINNER: 15.0,
+    HIGHEST_SCORE: 12.0,
+    PODIUM: 8.0,
   } as const,
 } as const;
 
