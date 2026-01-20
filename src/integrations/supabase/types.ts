@@ -2191,8 +2191,11 @@ export type Database = {
           created_at: string | null
           custom_odds: number | null
           discipline: string
+          discipline_rank: number | null
           id: string
           override_rating: number | null
+          rating_0_100: number | null
+          seed_rank: number | null
           tournament_id: string
         }
         Insert: {
@@ -2200,8 +2203,11 @@ export type Database = {
           created_at?: string | null
           custom_odds?: number | null
           discipline: string
+          discipline_rank?: number | null
           id?: string
           override_rating?: number | null
+          rating_0_100?: number | null
+          seed_rank?: number | null
           tournament_id: string
         }
         Update: {
@@ -2209,8 +2215,11 @@ export type Database = {
           created_at?: string | null
           custom_odds?: number | null
           discipline?: string
+          discipline_rank?: number | null
           id?: string
           override_rating?: number | null
+          rating_0_100?: number | null
+          seed_rank?: number | null
           tournament_id?: string
         }
         Relationships: [

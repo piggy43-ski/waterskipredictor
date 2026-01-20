@@ -446,14 +446,27 @@ export default function TournamentEntries() {
         .from('athletes')
         .select('id, name, country, gender, disciplines, current_rank_slalom, current_rank_trick, current_rank_jump, current_rating_slalom, current_rating_trick, current_rating_jump');
 
-      // Create entries for each athlete's selected disciplines
+      // Create entries for each athlete's selected disciplines WITH rank/rating data
       const entriesToAdd: Array<{
         tournament_id: string;
         athlete_id: string;
         discipline: string;
         custom_odds: number;
         override_rating: number | null;
+        discipline_rank: number | null;
+        rating_0_100: number;
+        seed_rank: number | null;
       }> = [];
+
+      // Helper to get discipline-specific rank/rating
+      const getDisciplineData = (athlete: any, discipline: string) => {
+        const rankField = `current_rank_${discipline}` as keyof typeof athlete;
+        const ratingField = `current_rating_${discipline}` as keyof typeof athlete;
+        return {
+          rank: athlete?.[rankField] as number | null ?? null,
+          rating: athlete?.[ratingField] as number | null ?? 70,
+        };
+      };
 
       // Handle "also add rejected athletes" - add original matched athletes that were rejected
       const alsoAddAthletes = participants.filter(
@@ -468,6 +481,7 @@ export default function TournamentEntries() {
           // Find full athlete data for odds calculation
           const fullAthlete = refreshedAthletes?.find(a => a.id === athlete.id);
           const odds = calculateDefaultOdds(fullAthlete, uploadDiscipline);
+          const { rank, rating } = getDisciplineData(fullAthlete, uploadDiscipline);
           
           entriesToAdd.push({
             tournament_id: selectedTournamentId,
@@ -475,8 +489,12 @@ export default function TournamentEntries() {
             discipline: uploadDiscipline,
             custom_odds: odds,
             override_rating: null,
+            discipline_rank: rank,
+            rating_0_100: rating,
+            seed_rank: null, // Will be auto-assigned by trigger if rank is null
           });
           existingSet.add(key); // Prevent duplicates
+          console.log(`[ENTRY] AI-rejected-also-add: athlete=${athlete.name}, discipline=${uploadDiscipline}, rank=${rank}, rating=${rating}`);
         }
       }
 
@@ -487,14 +505,20 @@ export default function TournamentEntries() {
           if (!existingSet.has(key)) {
             const calculatedOdds = calculateDefaultOdds(athlete, discipline);
             const overrideRating = p.overrideRatings[discipline];
+            const { rank, rating } = getDisciplineData(athlete, discipline);
+            
             entriesToAdd.push({
               tournament_id: selectedTournamentId,
               athlete_id: p.matchedAthlete!.id,
               discipline,
               custom_odds: calculatedOdds,
               override_rating: overrideRating !== undefined ? overrideRating : null,
+              discipline_rank: rank,
+              rating_0_100: overrideRating ?? rating,
+              seed_rank: null, // Will be auto-assigned by trigger if rank is null
             });
             existingSet.add(key); // Prevent duplicates
+            console.log(`[ENTRY] AI-add: athlete=${p.matchedAthlete!.name}, discipline=${discipline}, rank=${rank}, rating=${overrideRating ?? rating}`);
           }
         }
       }
@@ -667,18 +691,34 @@ export default function TournamentEntries() {
         throw new Error('Please wait for athletes data to load and try again.');
       }
 
+      // Get discipline-specific rank/rating for each athlete
+      const getDisciplineData = (athlete: any) => {
+        const rankField = `current_rank_${selectedDiscipline}` as keyof typeof athlete;
+        const ratingField = `current_rating_${selectedDiscipline}` as keyof typeof athlete;
+        return {
+          rank: athlete?.[rankField] as number | null ?? null,
+          rating: athlete?.[ratingField] as number | null ?? 70,
+        };
+      };
+
       const entriesToAdd = Array.from(selectedAthletes).map(athleteId => {
         const athlete = athletes.find(a => a.id === athleteId);
         const customOddsValue = customOdds[athleteId];
         const calculatedOdds = customOddsValue 
           ? parseFloat(customOddsValue) 
           : calculateDefaultOdds(athlete, selectedDiscipline);
+        const { rank, rating } = getDisciplineData(athlete);
+
+        console.log(`[ENTRY] Manual-add: athlete=${athlete?.name}, discipline=${selectedDiscipline}, rank=${rank}, rating=${rating}`);
 
         return {
           tournament_id: selectedTournamentId,
           athlete_id: athleteId,
           discipline: selectedDiscipline,
           custom_odds: calculatedOdds,
+          discipline_rank: rank,
+          rating_0_100: rating,
+          seed_rank: null, // Will be auto-assigned by trigger if rank is null
         };
       });
 
