@@ -63,8 +63,8 @@ function getDynamicFloors(fieldSize: number, marketType: string): { rank1Min: nu
     return base;  // Use full floors for small fields
   }
   
-  // Scale down for larger fields: factor = 8/fieldSize, min 0.35
-  const scaleFactor = Math.max(REFERENCE_FIELD_SIZE / fieldSize, MIN_SCALE_FACTOR);
+  // Scale down for larger fields: factor = 8/fieldSize, min 0.55 (increased to ensure favorites get proper odds)
+  const scaleFactor = Math.max(REFERENCE_FIELD_SIZE / fieldSize, 0.55);
   
   console.log(`[DYNAMIC-FLOORS] fieldSize=${fieldSize}, scaleFactor=${scaleFactor.toFixed(3)}`);
   
@@ -123,13 +123,13 @@ const IMPLIED_SUM_RANGES: Record<string, { min: number; max: number }> = {
 
 const SIGMA: Record<string, number> = { slalom: 6, trick: 10, jump: 8 };
 
-// Odds ladder for rounding
+// Odds ladder for rounding (extended for large fields)
 const ODDS_LADDER = [
   1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.50, 1.55, 1.60, 1.65, 1.70, 1.75, 1.80, 1.85, 1.90, 1.95,
   2.00, 2.10, 2.20, 2.30, 2.40, 2.50, 2.60, 2.70, 2.80, 2.90,
   3.00, 3.20, 3.40, 3.60, 3.80,
   4.00, 4.50, 5.00, 5.50, 6.00, 6.50, 7.00, 7.50, 8.00, 8.50, 9.00, 9.50, 10.00,
-  11.00, 12.00, 13.00, 14.00, 15.00
+  11.00, 12.00, 13.00, 14.00, 15.00, 17.00, 20.00, 25.00, 30.00, 40.00, 50.00, 75.00, 100.00
 ];
 
 // ============================================================
@@ -358,7 +358,7 @@ function calculateHighestScoreProbabilities(athletes: AthleteOddsInput[], sigma:
 // ============================================================
 
 function applyProbabilityFloors(
-  athletes: { athleteId: string; rank: number | null; rawProb: number }[],
+  athletes: { athleteId: string; rank: number | null; rawProb: number; rating?: number }[],
   marketType: string,
   fieldSize: number
 ): Map<string, number> {
@@ -367,27 +367,43 @@ function applyProbabilityFloors(
   
   console.log(`[FLOORS] Using dynamic floors for ${fieldSize} athletes: rank1=${(floors.rank1Min*100).toFixed(1)}%, rank2=${(floors.rank2Min*100).toFixed(1)}%, rank3=${(floors.rank3Min*100).toFixed(1)}%`);
   
-  // Sort by rank (lowest rank = best athlete)
+  // CRITICAL FIX: Sort by FIELD POSITION, not absolute world rank
+  // 1. Athletes with world ranks come first (by rank ascending)
+  // 2. Unranked athletes sorted by rating (descending)
+  // This ensures the best athlete IN THE FIELD gets floor 1, not just world rank #1
   const sorted = [...athletes].sort((a, b) => {
-    const rankA = a.rank ?? 999;
-    const rankB = b.rank ?? 999;
-    return rankA - rankB;
+    const aHasRank = a.rank !== null && a.rank < 900;
+    const bHasRank = b.rank !== null && b.rank < 900;
+    
+    if (aHasRank && bHasRank) {
+      return a.rank! - b.rank!;  // Both ranked: lower rank = better
+    }
+    if (aHasRank && !bHasRank) return -1;  // Ranked before unranked
+    if (!aHasRank && bHasRank) return 1;   // Unranked after ranked
+    // Both unranked: higher rating = better
+    return (b.rating ?? 0) - (a.rating ?? 0);
   });
   
-  // Get top 3 by rank
-  const top1 = sorted[0];
-  const top2 = sorted[1];
-  const top3 = sorted[2];
+  // Top 3 IN THE FIELD (not by world rank value)
+  const fieldTop1 = sorted[0];
+  const fieldTop2 = sorted[1];
+  const fieldTop3 = sorted[2];
+  
+  console.log(`[FLOORS] Field top 3: ` +
+    `1st=${fieldTop1?.athleteId.slice(0,8)} (world rank ${fieldTop1?.rank ?? 'unranked'}, rating ${fieldTop1?.rating ?? '?'}), ` +
+    `2nd=${fieldTop2?.athleteId.slice(0,8)} (world rank ${fieldTop2?.rank ?? 'unranked'}, rating ${fieldTop2?.rating ?? '?'}), ` +
+    `3rd=${fieldTop3?.athleteId.slice(0,8)} (world rank ${fieldTop3?.rank ?? 'unranked'}, rating ${fieldTop3?.rating ?? '?'})`
+  );
   
   // Calculate initial probabilities with floors applied
   // But CAP each athlete's probability to prevent extreme concentration
   const MAX_PROB_CAP = 0.40; // No single athlete can have more than 40%
   
-  let prob1 = top1 ? Math.min(MAX_PROB_CAP, Math.max(top1.rawProb, floors.rank1Min)) : 0;
-  let prob2 = top2 ? Math.min(MAX_PROB_CAP, Math.max(top2.rawProb, floors.rank2Min)) : 0;
-  let prob3 = top3 ? Math.min(MAX_PROB_CAP, Math.max(top3.rawProb, floors.rank3Min)) : 0;
+  let prob1 = fieldTop1 ? Math.min(MAX_PROB_CAP, Math.max(fieldTop1.rawProb, floors.rank1Min)) : 0;
+  let prob2 = fieldTop2 ? Math.min(MAX_PROB_CAP, Math.max(fieldTop2.rawProb, floors.rank2Min)) : 0;
+  let prob3 = fieldTop3 ? Math.min(MAX_PROB_CAP, Math.max(fieldTop3.rawProb, floors.rank3Min)) : 0;
   
-  // ENFORCE MONOTONIC ORDERING: rank1 >= rank2 >= rank3
+  // ENFORCE MONOTONIC ORDERING: fieldTop1 >= fieldTop2 >= fieldTop3
   const EPSILON = 0.02; // Small gap to ensure strict ordering
   
   if (prob2 > prob1 - EPSILON) {
@@ -405,7 +421,7 @@ function applyProbabilityFloors(
   // Calculate sum of top 3
   let top3Sum = prob1 + prob2 + prob3;
   
-  console.log(`[FLOORS] Top 3 ordered probs: rank1=${(prob1*100).toFixed(1)}%, rank2=${(prob2*100).toFixed(1)}%, rank3=${(prob3*100).toFixed(1)}%, sum=${(top3Sum*100).toFixed(1)}%`);
+  console.log(`[FLOORS] Top 3 ordered probs: field1=${(prob1*100).toFixed(1)}%, field2=${(prob2*100).toFixed(1)}%, field3=${(prob3*100).toFixed(1)}%, sum=${(top3Sum*100).toFixed(1)}%`);
   
   // If top3 sum exceeds target (based on field size), scale down
   // Leave at least 15% for the rest of the field
@@ -422,9 +438,9 @@ function applyProbabilityFloors(
   
   // Set top 3 probabilities
   const probMap = new Map<string, number>();
-  if (top1) probMap.set(top1.athleteId, prob1);
-  if (top2) probMap.set(top2.athleteId, prob2);
-  if (top3) probMap.set(top3.athleteId, prob3);
+  if (fieldTop1) probMap.set(fieldTop1.athleteId, prob1);
+  if (fieldTop2) probMap.set(fieldTop2.athleteId, prob2);
+  if (fieldTop3) probMap.set(fieldTop3.athleteId, prob3);
   
   // Calculate remaining probability mass after top 3
   const remainingMass = Math.max(0.05, 1 - top3Sum);
@@ -449,9 +465,10 @@ function applyProbabilityFloors(
   // Log final top 3 for verification
   const finalTop3 = sorted.slice(0, 3).map(a => ({
     rank: a.rank,
+    rating: a.rating,
     prob: probMap.get(a.athleteId) || 0
   }));
-  console.log(`[FLOORS] Final top 3: ${finalTop3.map(t => `rank${t.rank}=${(t.prob*100).toFixed(1)}%`).join(', ')}`);
+  console.log(`[FLOORS] Final top 3 (by field position): ${finalTop3.map(t => `rank${t.rank ?? 'unranked'}(r${t.rating ?? '?'})=${(t.prob*100).toFixed(1)}%`).join(', ')}`);
   
   return probMap;
 }
@@ -537,33 +554,48 @@ function enforceTargetImpliedSum(
   maxMultiplier: number
 ): { correctedResults: OddsResult[]; scalingFactor: number; finalImpliedSum: number } {
   
-  // First, calculate what the implied sum would be from the fair odds
+  // CRITICAL FIX: Use adjustedProbability from the CALIBRATED results (1/finalOdds)
+  // NOT blendedProbability which is raw MC output
+  
+  // First, calculate implied sum from the current odds (after calibration/flooring)
   const currentImpliedSum = results.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
   
   console.log(`[ENFORCE] Initial: implied_sum=${currentImpliedSum.toFixed(4)}, target=${targetImpliedSum.toFixed(4)}`);
   
-  // The key insight: to hit target implied sum, we need to:
-  // 1. Normalize probabilities to sum to exactly targetImpliedSum
-  // 2. Then derive odds as 1/probability
+  // If we're already close enough, just return
+  if (Math.abs(currentImpliedSum - targetImpliedSum) < 0.02) {
+    console.log(`[ENFORCE] Already within tolerance, skipping adjustment`);
+    return {
+      correctedResults: results,
+      scalingFactor: 1.0,
+      finalImpliedSum: currentImpliedSum
+    };
+  }
   
-  // Get the blended probabilities (which sum to 1.0)
-  const probSum = results.reduce((sum, r) => sum + r.blendedProbability, 0);
+  // Calculate the scaling factor needed
+  // We want: sum(1/newOdds) = targetImpliedSum
+  // If currentImpliedSum > target, we need to INCREASE odds (decrease probability)
+  // If currentImpliedSum < target, we need to DECREASE odds (increase probability)
+  const scalingFactor = currentImpliedSum / targetImpliedSum;
   
-  // Scale probabilities to target implied sum
-  // Target implied sum = sum of (1/odds) = sum of adjusted probabilities
-  // So we want: adjusted_prob_i = blended_prob_i * targetImpliedSum
+  console.log(`[ENFORCE] Scaling odds by factor ${scalingFactor.toFixed(4)} (>1 means higher odds/lower prob)`);
+  
+  // Apply scaling to odds
   const scaledResults = results.map(r => {
-    // Scale probability to hit target implied sum
-    const adjustedProb = r.blendedProbability * targetImpliedSum;
+    // Scale the odds
+    let newOdds = r.finalOdds * scalingFactor;
     
-    // Derive fair odds from adjusted probability
-    let fairOdds = 1 / adjustedProb;
+    // Apply reasonable bounds (but don't hard-clamp at maxMultiplier which causes bloat)
+    newOdds = Math.max(ODDS_MIN, newOdds);
     
-    // Apply minimum odds (but don't cap at max - that causes implied sum bloat)
-    fairOdds = Math.max(ODDS_MIN, fairOdds);
+    // Only apply max cap if the original calibrated odds were below it
+    // This prevents inflating already-good favorites
+    if (r.finalOdds <= maxMultiplier) {
+      newOdds = Math.min(newOdds, maxMultiplier);
+    }
     
     // Round to ladder
-    const roundedOdds = roundToLadder(fairOdds);
+    const roundedOdds = roundToLadder(newOdds);
     
     return {
       ...r,
@@ -574,34 +606,12 @@ function enforceTargetImpliedSum(
   
   const finalImpliedSum = scaledResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
   
-  console.log(`[ENFORCE] After probability scaling: implied_sum=${finalImpliedSum.toFixed(4)}`);
-  
-  // If rounding pushed us off target, do one more adjustment pass
-  if (Math.abs(finalImpliedSum - targetImpliedSum) > 0.03) {
-    const correction = targetImpliedSum / finalImpliedSum;
-    console.log(`[ENFORCE] Applying correction factor ${correction.toFixed(4)}`);
-    
-    for (let i = 0; i < scaledResults.length; i++) {
-      const r = scaledResults[i];
-      let correctedOdds = r.finalOdds / correction; // Increase/decrease odds to hit target
-      correctedOdds = Math.max(ODDS_MIN, correctedOdds);
-      correctedOdds = roundToLadder(correctedOdds);
-      scaledResults[i] = {
-        ...r,
-        finalOdds: correctedOdds,
-        adjustedProbability: 1 / correctedOdds
-      };
-    }
-  }
-  
-  const finalAdjustedSum = scaledResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
-  
-  console.log(`[ENFORCE] Final: implied_sum=${finalAdjustedSum.toFixed(4)} (target was ${targetImpliedSum.toFixed(4)})`);
+  console.log(`[ENFORCE] After scaling: implied_sum=${finalImpliedSum.toFixed(4)}`);
   
   return {
     correctedResults: scaledResults,
-    scalingFactor: 1.0,
-    finalImpliedSum: finalAdjustedSum
+    scalingFactor,
+    finalImpliedSum
   };
 }
 
@@ -619,26 +629,39 @@ function validateConstraints(
   
   console.log(`[VALIDATE] Dynamic constraints for ${fieldSize} athletes: top1Max=${constraints.top1Max.toFixed(1)}, top2Max=${constraints.top2Max.toFixed(1)}, top3Max=${constraints.top3Max.toFixed(1)}`);
   
+  // CRITICAL FIX: Sort by FIELD POSITION, not absolute world rank
+  // Same logic as applyProbabilityFloors - ranked athletes first, then by rating
   const sorted = [...results].sort((a, b) => {
-    const rankA = a.rank ?? 999;
-    const rankB = b.rank ?? 999;
-    return rankA - rankB;
+    const aHasRank = a.rank !== null && a.rank < 900;
+    const bHasRank = b.rank !== null && b.rank < 900;
+    
+    if (aHasRank && bHasRank) {
+      return a.rank! - b.rank!;  // Both ranked: lower rank = better
+    }
+    if (aHasRank && !bHasRank) return -1;  // Ranked before unranked
+    if (!aHasRank && bHasRank) return 1;   // Unranked after ranked
+    // Both unranked: compare by rating (need to access from original data)
+    // Since we don't have rating in OddsResult, use powerScore as proxy
+    return (b.powerScore ?? 0) - (a.powerScore ?? 0);
   });
   
   const errors: string[] = [];
   
-  const top1 = sorted[0];
-  const top2 = sorted[1];
-  const top3 = sorted[2];
+  // Top 3 IN THE FIELD (not by world rank value)
+  const fieldTop1 = sorted[0];
+  const fieldTop2 = sorted[1];
+  const fieldTop3 = sorted[2];
   
-  if (top1 && top1.finalOdds > constraints.top1Max) {
-    errors.push(`Rank #1 multiplier ${top1.finalOdds.toFixed(2)}x exceeds max ${constraints.top1Max.toFixed(1)}x`);
+  console.log(`[VALIDATE] Field top 3: 1st=${fieldTop1?.athleteId.slice(0,8)} (rank ${fieldTop1?.rank}, odds ${fieldTop1?.finalOdds.toFixed(2)}x), 2nd=${fieldTop2?.athleteId.slice(0,8)} (rank ${fieldTop2?.rank}, odds ${fieldTop2?.finalOdds.toFixed(2)}x), 3rd=${fieldTop3?.athleteId.slice(0,8)} (rank ${fieldTop3?.rank}, odds ${fieldTop3?.finalOdds.toFixed(2)}x)`);
+  
+  if (fieldTop1 && fieldTop1.finalOdds > constraints.top1Max) {
+    errors.push(`Field #1 (world rank ${fieldTop1.rank}) multiplier ${fieldTop1.finalOdds.toFixed(2)}x exceeds max ${constraints.top1Max.toFixed(1)}x`);
   }
-  if (top2 && top2.finalOdds > constraints.top2Max) {
-    errors.push(`Rank #2 multiplier ${top2.finalOdds.toFixed(2)}x exceeds max ${constraints.top2Max.toFixed(1)}x`);
+  if (fieldTop2 && fieldTop2.finalOdds > constraints.top2Max) {
+    errors.push(`Field #2 (world rank ${fieldTop2.rank}) multiplier ${fieldTop2.finalOdds.toFixed(2)}x exceeds max ${constraints.top2Max.toFixed(1)}x`);
   }
-  if (top3 && top3.finalOdds > constraints.top3Max) {
-    errors.push(`Rank #3 multiplier ${top3.finalOdds.toFixed(2)}x exceeds max ${constraints.top3Max.toFixed(1)}x`);
+  if (fieldTop3 && fieldTop3.finalOdds > constraints.top3Max) {
+    errors.push(`Field #3 (world rank ${fieldTop3.rank}) multiplier ${fieldTop3.finalOdds.toFixed(2)}x exceeds max ${constraints.top3Max.toFixed(1)}x`);
   }
   
   return {
@@ -701,10 +724,12 @@ function calibrateOdds(
     const blendedProbs = blendProbabilities(priorProbs, mcProbs, PRIOR_BLEND_ALPHA);
     
     // 5. Apply probability floors (with dynamic scaling based on field size)
+    // CRITICAL: Include rating for proper field position sorting when ranks are missing/tied
     const athletesForFloors = athletes.map(a => ({
       athleteId: a.athleteId,
       rank: a.rank,
-      rawProb: blendedProbs.get(a.athleteId) || 0.01
+      rawProb: blendedProbs.get(a.athleteId) || 0.01,
+      rating: a.rating  // Pass rating for tie-breaking unranked athletes
     }));
     const flooredProbs = applyProbabilityFloors(athletesForFloors, marketType, fieldSize);
     
@@ -762,7 +787,8 @@ function calibrateOdds(
   const athletesForFloors = athletes.map(a => ({
     athleteId: a.athleteId,
     rank: a.rank,
-    rawProb: blendedProbs.get(a.athleteId) || 0.01
+    rawProb: blendedProbs.get(a.athleteId) || 0.01,
+    rating: a.rating  // Pass rating for tie-breaking unranked athletes
   }));
   const flooredProbs = applyProbabilityFloors(athletesForFloors, marketType, fieldSize);
   
@@ -1001,10 +1027,25 @@ Deno.serve(async (req) => {
       athleteInputs, marketType, sigma, houseEdge, multiplierMap
     );
 
-    // Enforce target implied sum
-    const { correctedResults, scalingFactor, finalImpliedSum } = enforceTargetImpliedSum(
-      calibratedResults, targetImpliedSum, maxMultiplier
-    );
+    // CRITICAL: Only apply implied sum enforcement if calibration produced valid constraints
+    // Otherwise, enforcing target implied sum can DESTROY the good calibrated odds
+    let correctedResults: OddsResult[];
+    let scalingFactor = 1.0;
+    let finalImpliedSum: number;
+    
+    if (calibrationPassed) {
+      // Calibration passed - use calibrated results directly
+      // The calibrated odds already satisfy top-3 constraints
+      correctedResults = calibratedResults;
+      finalImpliedSum = correctedResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
+      console.log(`[ENFORCE] Calibration passed - using calibrated odds directly, implied_sum=${finalImpliedSum.toFixed(4)}`);
+    } else {
+      // Calibration failed - try to enforce target implied sum as fallback
+      const enforced = enforceTargetImpliedSum(calibratedResults, targetImpliedSum, maxMultiplier);
+      correctedResults = enforced.correctedResults;
+      scalingFactor = enforced.scalingFactor;
+      finalImpliedSum = enforced.finalImpliedSum;
+    }
 
     // Final validation (pass fieldSize for dynamic constraints)
     const finalValidation = validateConstraints(correctedResults, marketType, athleteInputs.length);
