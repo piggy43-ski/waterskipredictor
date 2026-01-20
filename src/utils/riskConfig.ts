@@ -8,6 +8,7 @@
 // ============================================================
 // PROBABILITY FLOORS - Enforce minimum probabilities by rank
 // Multipliers are derived from probabilities, NOT clipped afterward
+// These are base values for 8-athlete fields - dynamically scaled for larger fields
 // ============================================================
 export const PROBABILITY_FLOORS = {
   WINNER: {
@@ -26,6 +27,43 @@ export const PROBABILITY_FLOORS = {
     rank3Min: 0.10,  // Rank #3 ≥ 10% → max 10x
   },
 } as const;
+
+// ============================================================
+// DYNAMIC FLOOR SCALING CONSTANTS
+// Used to adjust probability floors based on field size
+// ============================================================
+export const DYNAMIC_FLOOR_CONFIG = {
+  /** Reference field size (floors are designed for this) */
+  REFERENCE_FIELD_SIZE: 8,
+  /** Minimum scale factor (never go below 35% of original floors) */
+  MIN_SCALE_FACTOR: 0.35,
+} as const;
+
+/**
+ * Get dynamically scaled probability floors based on field size
+ * Larger fields need lower minimum probabilities to avoid implied sum > 1.0
+ */
+export const getDynamicFloors = (
+  fieldSize: number,
+  marketType: MarketType
+): { rank1Min: number; rank2Min: number; rank3Min: number } => {
+  const base = PROBABILITY_FLOORS[marketType] || PROBABILITY_FLOORS.WINNER;
+  
+  if (fieldSize <= DYNAMIC_FLOOR_CONFIG.REFERENCE_FIELD_SIZE) {
+    return base;
+  }
+  
+  const scaleFactor = Math.max(
+    DYNAMIC_FLOOR_CONFIG.REFERENCE_FIELD_SIZE / fieldSize,
+    DYNAMIC_FLOOR_CONFIG.MIN_SCALE_FACTOR
+  );
+  
+  return {
+    rank1Min: base.rank1Min * scaleFactor,
+    rank2Min: base.rank2Min * scaleFactor,
+    rank3Min: base.rank3Min * scaleFactor,
+  };
+};
 
 // ============================================================
 // MAIN RISK CONFIG OBJECT

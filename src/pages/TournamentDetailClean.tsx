@@ -853,7 +853,16 @@ const TournamentDetail = () => {
                                      market?.category === 'open_men' && 
                                      market?.market_type === 'WINNER';
                             })
-                            .sort((a, b) => a.decimal_odds - b.decimal_odds)
+                            .sort((a, b) => {
+                              // Primary: lowest odds first (best chance)
+                              if (a.decimal_odds !== b.decimal_odds) {
+                                return a.decimal_odds - b.decimal_odds;
+                              }
+                              // Secondary: by athlete rank when odds are identical
+                              const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
+                              const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
+                              return rankA - rankB;
+                            })
                             .map((selection) => (
                               <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                                 <SelectionCard
@@ -876,7 +885,12 @@ const TournamentDetail = () => {
                           );
                           const podiumSelections = selections
                             .filter(s => s.market_id === podiumMarket?.id)
-                            .sort((a, b) => a.decimal_odds - b.decimal_odds);
+                            .sort((a, b) => {
+                              if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
+                              const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
+                              const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
+                              return rankA - rankB;
+                            });
                           
                           const podiumState = getPodiumState(discipline, 'men');
                           
@@ -915,7 +929,12 @@ const TournamentDetail = () => {
                                    market?.category === 'open_men' && 
                                    market?.market_type === 'HIGHEST_SCORE';
                           })
-                          .sort((a, b) => a.decimal_odds - b.decimal_odds)
+                          .sort((a, b) => {
+                            if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
+                            const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
+                            const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
+                            return rankA - rankB;
+                          })
                           .map((selection) => (
                             <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
@@ -953,7 +972,12 @@ const TournamentDetail = () => {
                                    market?.category === 'open_women' && 
                                    market?.market_type === 'WINNER';
                           })
-                          .sort((a, b) => a.decimal_odds - b.decimal_odds)
+                          .sort((a, b) => {
+                            if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
+                            const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
+                            const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
+                            return rankA - rankB;
+                          })
                           .map((selection) => (
                             <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
@@ -975,7 +999,12 @@ const TournamentDetail = () => {
                           );
                           const podiumSelections = selections
                             .filter(s => s.market_id === podiumMarket?.id)
-                            .sort((a, b) => a.decimal_odds - b.decimal_odds);
+                            .sort((a, b) => {
+                              if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
+                              const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
+                              const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
+                              return rankA - rankB;
+                            });
                           
                           const podiumState = getPodiumState(discipline, 'women');
                           
@@ -1014,7 +1043,12 @@ const TournamentDetail = () => {
                                    market?.category === 'open_women' && 
                                    market?.market_type === 'HIGHEST_SCORE';
                           })
-                          .sort((a, b) => a.decimal_odds - b.decimal_odds)
+                          .sort((a, b) => {
+                            if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
+                            const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
+                            const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
+                            return rankA - rankB;
+                          })
                           .map((selection) => (
                             <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
