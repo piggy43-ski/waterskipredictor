@@ -332,22 +332,22 @@ Deno.serve(async (req) => {
       console.log(`  #${r.fieldRank} ${r.name}: p_base=${(r.p_base*100).toFixed(1)}%, p_mc=${(r.p_mc*100).toFixed(1)}%, p_final=${(r.p_final*100).toFixed(1)}% → ${r.multiplier}x`);
     });
 
-    // Update database - delete existing selections first to avoid stale data
+    // Update database using upsert (unique constraint on market_id, athlete_id)
     const validationStatus = validation.passed ? 'VALID' : 'INVALID';
     
-    // Delete all existing selections for this market
-    await supabase.from('selections').delete().eq('market_id', market_id);
-    
-    // Insert fresh selections
+    // Upsert selections - uses unique constraint on (market_id, athlete_id)
     for (const r of results) {
-      const american = decimalToAmerican(r.multiplier);
-      await supabase.from('selections').insert({
+      // Upsert selection (selections table only has: id, market_id, athlete_id, description, decimal_odds)
+      const { error: selError } = await supabase.from('selections').upsert({
         market_id,
         athlete_id: r.id,
         description: `${r.name} to win`,
-        decimal_odds: r.multiplier,
-        american_odds: american
-      });
+        decimal_odds: r.multiplier
+      }, { onConflict: 'market_id,athlete_id' });
+      
+      if (selError) {
+        console.error(`[ODDS] Selection upsert error for ${r.name}:`, selError);
+      }
       
       await supabase.from('market_odds').upsert({
         market_id,
