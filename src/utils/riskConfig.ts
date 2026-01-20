@@ -64,21 +64,22 @@ export const RISK_CONFIG = {
   
   /** 
    * CALIBRATION: Auto-calibrate probabilities to ensure reasonable multipliers
+   * Uses PRIOR-DOMINANT model: 60% prior, 40% MC
    * Reduces temperature iteratively until top-3 constraints pass
    */
   CALIBRATION: {
-    /** Initial temperature by market type (lower = sharper favorites) */
+    /** Initial temperature by market type (LOWER = sharper favorites) */
     TEMPERATURE: {
-      WINNER: 12,
-      HIGHEST_SCORE: 12,
-      PODIUM: 10,
+      WINNER: 8,         // was 12 - now stronger favorites
+      HIGHEST_SCORE: 9,  // was 12 - now stronger favorites
+      PODIUM: 6,         // was 10 - now stronger favorites
     } as const,
-    /** Prior/MC blending factor (0.65 = 65% MC, 35% prior) */
-    PRIOR_BLEND_ALPHA: 0.65,
+    /** Prior/MC blending factor: 0.40 = 40% MC, 60% prior (PRIOR DOMINATES!) */
+    PRIOR_BLEND_ALPHA: 0.40,  // was 0.65
     /** Temperature reduction per iteration (10%) */
     TEMP_REDUCTION_FACTOR: 0.90,
-    /** Max calibration iterations before failing */
-    MAX_ITERATIONS: 10,
+    /** Max calibration iterations before BLOCKING publish (increased for tighter calibration) */
+    MAX_ITERATIONS: 15,  // was 10
   } as const,
   
   /**

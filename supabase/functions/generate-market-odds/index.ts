@@ -35,21 +35,21 @@ async function writeAuditLog(supabase: any, entry: AuditLogEntry): Promise<void>
 }
 
 // ============ CALIBRATION CONFIG ============
-// Initial temperatures by market type (lower = sharper favorites)
+// Initial temperatures by market type (LOWER = sharper favorites, prior dominates)
 const INITIAL_TEMPERATURE: Record<string, number> = {
-  WINNER: 12,
-  HIGHEST_SCORE: 12,
-  PODIUM: 10
+  WINNER: 8,         // was 12 - now stronger favorites
+  HIGHEST_SCORE: 9,  // was 12 - now stronger favorites
+  PODIUM: 6          // was 10 - now stronger favorites
 };
 
-// Prior/MC blending factor (0.65 = 65% MC, 35% prior)
-const PRIOR_BLEND_ALPHA = 0.65;
+// Prior/MC blending factor: 0.40 = 40% MC, 60% prior (PRIOR DOMINATES!)
+const PRIOR_BLEND_ALPHA = 0.40;  // was 0.65
 
 // Temperature reduction per calibration iteration (10%)
 const TEMP_REDUCTION_FACTOR = 0.90;
 
-// Maximum calibration iterations
-const MAX_CALIBRATION_ITERATIONS = 10;
+// Maximum calibration iterations (increased for tighter calibration)
+const MAX_CALIBRATION_ITERATIONS = 15;  // was 10
 
 // Top-3 multiplier constraints by market type
 const TOP3_CONSTRAINTS: Record<string, { top1Max: number; top2Max: number; top3Max: number }> = {
@@ -180,20 +180,18 @@ interface OddsResult {
 
 // ============ POWER SCORE CALCULATION ============
 /**
- * Calculate power score from rating and rank
- * Rating is primary (0-100), rank provides bonus for top athletes
+ * Calculate power score from rating and rank using CONTINUOUS formula
+ * Rating is primary (0-100), rank provides continuous bonus
+ * Formula: power_score = rating + clamp((maxRank - rank) * 0.5, 0, 10)
  */
-function calculatePowerScore(rating: number, rank: number | null): number {
-  let score = rating;
+function calculatePowerScore(rating: number, rank: number | null, maxRankInField: number = 50): number {
+  let score = rating;  // rating_0_100 is primary
   
-  // Rank bonus for top athletes
+  // Continuous rank bonus for top athletes
   if (rank !== null && rank > 0) {
-    if (rank === 1) score += 10;
-    else if (rank === 2) score += 8;
-    else if (rank === 3) score += 6;
-    else if (rank <= 5) score += 4;
-    else if (rank <= 10) score += 2;
-    else if (rank <= 20) score += 1;
+    // Bonus = clamp((maxRank - rank) * 0.5, 0, 10)
+    const rankBonus = Math.max(0, Math.min(10, (maxRankInField - rank) * 0.5));
+    score += rankBonus;
   }
   
   return Math.max(50, Math.min(110, score));  // Allow slightly above 100 for top-ranked
@@ -202,11 +200,13 @@ function calculatePowerScore(rating: number, rank: number | null): number {
 // ============ PRIOR PROBABILITY CALCULATION ============
 /**
  * Calculate prior probabilities from power scores using softmax
+ * Lower temperature = sharper probability distribution (stronger favorites)
  */
 function calculatePriorProbabilities(
   athletes: { athleteId: string; powerScore: number }[],
   temperature: number
 ): Map<string, number> {
+  // Softmax: skill_i = exp(power_score_i / temperature)
   const skills = athletes.map(a => Math.exp(a.powerScore / temperature));
   const totalSkill = skills.reduce((a, b) => a + b, 0);
   
@@ -222,9 +222,9 @@ function calculatePriorProbabilities(
 /**
  * WINNER: Softmax produces probabilities that naturally sum to 1.0
  */
-function calculateWinnerProbabilities(athletes: AthleteOddsInput[], temperature: number): RawProbabilityResult[] {
+function calculateWinnerProbabilities(athletes: AthleteOddsInput[], temperature: number, maxRankInField: number): RawProbabilityResult[] {
   const strengths = athletes.map(a => {
-    const powerScore = calculatePowerScore(a.rating, a.rank);
+    const powerScore = calculatePowerScore(a.rating, a.rank, maxRankInField);
     return Math.exp(powerScore / temperature);
   });
   const totalStrength = strengths.reduce((a, b) => a + b, 0);
@@ -239,9 +239,9 @@ function calculateWinnerProbabilities(athletes: AthleteOddsInput[], temperature:
 /**
  * PODIUM: Monte Carlo simulation for top-3 finish
  */
-function calculatePodiumProbabilities(athletes: AthleteOddsInput[], temperature: number, sims: number): RawProbabilityResult[] {
+function calculatePodiumProbabilities(athletes: AthleteOddsInput[], temperature: number, sims: number, maxRankInField: number): RawProbabilityResult[] {
   const weights = athletes.map(a => {
-    const powerScore = calculatePowerScore(a.rating, a.rank);
+    const powerScore = calculatePowerScore(a.rating, a.rank, maxRankInField);
     return Math.exp(powerScore / temperature);
   });
   const top3Counts = new Map<string, number>();
@@ -271,7 +271,7 @@ function calculatePodiumProbabilities(athletes: AthleteOddsInput[], temperature:
 /**
  * HIGHEST_SCORE: Monte Carlo with normal distribution
  */
-function calculateHighestScoreProbabilities(athletes: AthleteOddsInput[], sigma: number, sims: number): RawProbabilityResult[] {
+function calculateHighestScoreProbabilities(athletes: AthleteOddsInput[], sigma: number, sims: number, maxRankInField: number): RawProbabilityResult[] {
   const winCounts = new Map<string, number>();
   
   for (const athlete of athletes) {
@@ -283,7 +283,7 @@ function calculateHighestScoreProbabilities(athletes: AthleteOddsInput[], sigma:
     let winnerId = "";
     
     for (const athlete of athletes) {
-      const powerScore = calculatePowerScore(athlete.rating, athlete.rank);
+      const powerScore = calculatePowerScore(athlete.rating, athlete.rank, maxRankInField);
       const score = normalRandom(powerScore, sigma);
       if (score > maxScore) {
         maxScore = score;
@@ -309,7 +309,8 @@ function calculateHighestScoreProbabilities(athletes: AthleteOddsInput[], sigma:
 // ============ PROBABILITY BLENDING ============
 /**
  * Blend prior and Monte Carlo probabilities
- * alpha = 0.65 means 65% MC, 35% prior
+ * alpha = 0.40 means 40% MC, 60% prior (PRIOR DOMINATES)
+ * This ensures top-ranked athletes always have meaningfully higher probabilities
  */
 function blendProbabilities(
   priorProbs: Map<string, number>,
@@ -320,6 +321,7 @@ function blendProbabilities(
   
   for (const [athleteId, mcProb] of mcProbs) {
     const priorProb = priorProbs.get(athleteId) || mcProb;
+    // p_raw = alpha * p_mc + (1-alpha) * p_prior
     const blendedProb = alpha * mcProb + (1 - alpha) * priorProb;
     blended.set(athleteId, blendedProb);
   }
@@ -340,10 +342,11 @@ function deriveOddsFromBlendedProbabilities(
   mcProbs: Map<string, number>,
   blendedProbs: Map<string, number>,
   houseEdge: number,
-  multiplierMap: Map<string, number>
+  multiplierMap: Map<string, number>,
+  maxRankInField: number
 ): OddsResult[] {
   return athletes.map(athlete => {
-    const powerScore = calculatePowerScore(athlete.rating, athlete.rank);
+    const powerScore = calculatePowerScore(athlete.rating, athlete.rank, maxRankInField);
     const priorProb = priorProbs.get(athlete.athleteId) || 0.01;
     const mcProb = mcProbs.get(athlete.athleteId) || 0.01;
     const blendedProb = blendedProbs.get(athlete.athleteId) || 0.01;
@@ -464,6 +467,7 @@ function enforceTargetImpliedSum(
 // ============ AUTO-CALIBRATION LOOP ============
 /**
  * Iteratively reduce temperature until top-3 constraints pass
+ * If constraints still fail after MAX_CALIBRATION_ITERATIONS, market is marked INVALID
  */
 function calibrateOdds(
   athletes: AthleteOddsInput[],
@@ -474,34 +478,38 @@ function calibrateOdds(
 ): { results: OddsResult[]; temperatureUsed: number; iterations: number; calibrationPassed: boolean } {
   const constraints = TOP3_CONSTRAINTS[marketType] || TOP3_CONSTRAINTS.WINNER;
   const maxMultiplier = MULTIPLIER_CAPS[marketType] || 15.0;
-  let temperature = INITIAL_TEMPERATURE[marketType] || 12;
+  let temperature = INITIAL_TEMPERATURE[marketType] || 8;  // Lower default
   
-  console.log(`[CALIBRATION] Starting with temp=${temperature}, constraints: top1≤${constraints.top1Max}, top2≤${constraints.top2Max}, top3≤${constraints.top3Max}`);
+  // Calculate max rank in field for continuous power score
+  const maxRankInField = Math.max(...athletes.map(a => a.rank || 1), 50);
+  
+  console.log(`[CALIBRATION] Starting with temp=${temperature}, maxRank=${maxRankInField}, constraints: top1≤${constraints.top1Max}, top2≤${constraints.top2Max}, top3≤${constraints.top3Max}`);
+  console.log(`[CALIBRATION] Prior blend alpha=${PRIOR_BLEND_ALPHA} (${(1 - PRIOR_BLEND_ALPHA) * 100}% prior, ${PRIOR_BLEND_ALPHA * 100}% MC)`);
   
   for (let iter = 0; iter < MAX_CALIBRATION_ITERATIONS; iter++) {
-    // 1. Calculate power scores
+    // 1. Calculate power scores with continuous formula
     const athletesWithPower = athletes.map(a => ({
       athleteId: a.athleteId,
-      powerScore: calculatePowerScore(a.rating, a.rank)
+      powerScore: calculatePowerScore(a.rating, a.rank, maxRankInField)
     }));
     
-    // 2. Calculate prior probabilities
+    // 2. Calculate prior probabilities (dominant with 60% weight)
     const priorProbs = calculatePriorProbabilities(athletesWithPower, temperature);
     
-    // 3. Run Monte Carlo
+    // 3. Run Monte Carlo (secondary with 40% weight)
     let mcRaw: RawProbabilityResult[];
     switch (marketType) {
       case "WINNER":
-        mcRaw = calculateWinnerProbabilities(athletes, temperature);
+        mcRaw = calculateWinnerProbabilities(athletes, temperature, maxRankInField);
         break;
       case "PODIUM":
-        mcRaw = calculatePodiumProbabilities(athletes, temperature, SIMS);
+        mcRaw = calculatePodiumProbabilities(athletes, temperature, SIMS, maxRankInField);
         break;
       case "HIGHEST_SCORE":
-        mcRaw = calculateHighestScoreProbabilities(athletes, sigma, SIMS);
+        mcRaw = calculateHighestScoreProbabilities(athletes, sigma, SIMS, maxRankInField);
         break;
       default:
-        mcRaw = calculateWinnerProbabilities(athletes, temperature);
+        mcRaw = calculateWinnerProbabilities(athletes, temperature, maxRankInField);
     }
     
     // Normalize MC probabilities
@@ -509,28 +517,30 @@ function calibrateOdds(
     const mcProbs = new Map<string, number>();
     mcRaw.forEach(r => mcProbs.set(r.athleteId, r.rawProbability / mcSum));
     
-    // 4. Blend prior + MC
+    // 4. Blend prior + MC (prior dominates at 60%)
     const blendedProbs = blendProbabilities(priorProbs, mcProbs, PRIOR_BLEND_ALPHA);
     
     // 5. Derive odds
     let results = deriveOddsFromBlendedProbabilities(
-      athletes, priorProbs, mcProbs, blendedProbs, houseEdge, multiplierMap
+      athletes, priorProbs, mcProbs, blendedProbs, houseEdge, multiplierMap, maxRankInField
     );
     
     // 6. Sort by probability (highest first = best athlete)
     results.sort((a, b) => b.blendedProbability - a.blendedProbability);
     
-    // 7. Check top-3 constraints
+    // 7. Check top-3 constraints AND max multiplier
     const top1Mult = results[0]?.finalOdds || 99;
     const top2Mult = results[1]?.finalOdds || 99;
     const top3Mult = results[2]?.finalOdds || 99;
+    const maxMult = Math.max(...results.map(r => r.finalOdds));
     
-    console.log(`[CALIBRATION] Iter ${iter + 1}: temp=${temperature.toFixed(2)}, top1=${top1Mult.toFixed(2)}x, top2=${top2Mult.toFixed(2)}x, top3=${top3Mult.toFixed(2)}x`);
+    console.log(`[CALIBRATION] Iter ${iter + 1}: temp=${temperature.toFixed(2)}, top1=${top1Mult.toFixed(2)}x, top2=${top2Mult.toFixed(2)}x, top3=${top3Mult.toFixed(2)}x, max=${maxMult.toFixed(2)}x`);
     
     const passesConstraints = (
       top1Mult <= constraints.top1Max &&
       top2Mult <= constraints.top2Max &&
-      top3Mult <= constraints.top3Max
+      top3Mult <= constraints.top3Max &&
+      maxMult <= maxMultiplier  // Also check max cap
     );
     
     if (passesConstraints) {
@@ -538,33 +548,33 @@ function calibrateOdds(
       return { results, temperatureUsed: temperature, iterations: iter + 1, calibrationPassed: true };
     }
     
-    // 8. Reduce temperature by 10%
+    // 8. Reduce temperature by 10% (strengthen favorites)
     temperature = temperature * TEMP_REDUCTION_FACTOR;
   }
   
-  // Failed after max iterations - return last result with warning
-  console.warn(`[CALIBRATION] ✗ Failed after ${MAX_CALIBRATION_ITERATIONS} iterations`);
+  // Failed after max iterations - return last result with INVALID status
+  console.warn(`[CALIBRATION] ✗ BLOCKED: Failed after ${MAX_CALIBRATION_ITERATIONS} iterations. Market cannot be published.`);
   
   // Do one final calculation with lowest temperature
   const athletesWithPower = athletes.map(a => ({
     athleteId: a.athleteId,
-    powerScore: calculatePowerScore(a.rating, a.rank)
+    powerScore: calculatePowerScore(a.rating, a.rank, maxRankInField)
   }));
   const priorProbs = calculatePriorProbabilities(athletesWithPower, temperature);
   
   let mcRaw: RawProbabilityResult[];
   switch (marketType) {
     case "WINNER":
-      mcRaw = calculateWinnerProbabilities(athletes, temperature);
+      mcRaw = calculateWinnerProbabilities(athletes, temperature, maxRankInField);
       break;
     case "PODIUM":
-      mcRaw = calculatePodiumProbabilities(athletes, temperature, SIMS);
+      mcRaw = calculatePodiumProbabilities(athletes, temperature, SIMS, maxRankInField);
       break;
     case "HIGHEST_SCORE":
-      mcRaw = calculateHighestScoreProbabilities(athletes, sigma, SIMS);
+      mcRaw = calculateHighestScoreProbabilities(athletes, sigma, SIMS, maxRankInField);
       break;
     default:
-      mcRaw = calculateWinnerProbabilities(athletes, temperature);
+      mcRaw = calculateWinnerProbabilities(athletes, temperature, maxRankInField);
   }
   
   const mcSum = mcRaw.reduce((sum, r) => sum + r.rawProbability, 0);
@@ -573,7 +583,7 @@ function calibrateOdds(
   
   const blendedProbs = blendProbabilities(priorProbs, mcProbs, PRIOR_BLEND_ALPHA);
   let results = deriveOddsFromBlendedProbabilities(
-    athletes, priorProbs, mcProbs, blendedProbs, houseEdge, multiplierMap
+    athletes, priorProbs, mcProbs, blendedProbs, houseEdge, multiplierMap, maxRankInField
   );
   results.sort((a, b) => b.blendedProbability - a.blendedProbability);
   
@@ -757,17 +767,18 @@ Deno.serve(async (req) => {
 
     // Validation
     const isWithinRange = finalImpliedSum >= acceptableRange.min && finalImpliedSum <= acceptableRange.max;
-    let validationStatus = calibrationPassed ? 'VALID' : 'CALIBRATION_FAILED';
+    // CRITICAL: If calibration failed, market is INVALID and BLOCKED from publishing
+    let validationStatus = calibrationPassed ? 'VALID' : 'INVALID';  // Changed from CALIBRATION_FAILED
     let validationError: string | null = null;
 
     if (!calibrationPassed) {
-      validationError = `Calibration failed after ${iterations} iterations. Top-3 constraints not met.`;
-      console.warn(`[VALIDATION] ${validationError}`);
+      validationError = `BLOCKED: Calibration failed after ${iterations} iterations. Top-3 constraints not met. Reduce field size or check athlete ratings.`;
+      console.error(`[VALIDATION] ${validationError}`);
     } else if (finalImpliedSum < 0.70 || finalImpliedSum > 1.10) {
       validationStatus = 'INVALID';
-      validationError = `Implied sum ${finalImpliedSum.toFixed(4)} outside safe range 0.70-1.10`;
+      validationError = `BLOCKED: Implied sum ${finalImpliedSum.toFixed(4)} outside safe range 0.70-1.10`;
     } else if (!isWithinRange) {
-      validationError = `Implied sum ${finalImpliedSum.toFixed(4)} outside ideal band ${acceptableRange.min}-${acceptableRange.max}`;
+      validationError = `Warning: Implied sum ${finalImpliedSum.toFixed(4)} outside ideal band ${acceptableRange.min}-${acceptableRange.max}`;
     }
 
     const actualHouseEdgePct = ((1 / finalImpliedSum - 1) * 100).toFixed(2);
