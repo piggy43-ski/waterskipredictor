@@ -35,39 +35,41 @@ async function writeAuditLog(supabase: any, entry: AuditLogEntry): Promise<void>
 }
 
 // ============ CALIBRATION CONFIG ============
-// Initial temperatures by market type (calibrated for realistic odds)
-// These are starting points - calibration will find optimal temperature
+// PRIOR-DOMINANT ARCHITECTURE: Athlete ranking + rating MUST dominate probabilities
+// Monte Carlo may ADJUST probabilities — never define them
+
+// Initial temperatures by market type - SHARP separation of favorites
+// Lower temp = stronger favorites (elite athletes have much lower multipliers)
 const INITIAL_TEMPERATURE: Record<string, number> = {
-  WINNER: 12,        // Higher temp = more spread across field
-  HIGHEST_SCORE: 14, // Highest score needs more randomness
-  PODIUM: 8          // Podium is more forgiving (top 3 share probability)
+  WINNER: 5,          // Sharp separation: rank 1 should be ~2-4x
+  HIGHEST_SCORE: 6,   // Similar to winner
+  PODIUM: 4           // Even sharper for top-3 finish
 };
 
-// Prior/MC blending factor: 0.35 = 35% MC, 65% prior (PRIOR DOMINATES!)
-const PRIOR_BLEND_ALPHA = 0.35;
+// Prior/MC blending factor: 0.20 = 20% MC, 80% prior (PRIOR DOMINATES!)
+// Monte Carlo MUST NOT override the prior - it only adjusts slightly
+const PRIOR_BLEND_ALPHA = 0.20;
 
-// Temperature reduction per calibration iteration (15% reduction)
-const TEMP_REDUCTION_FACTOR = 0.85;
+// Temperature reduction per calibration iteration (10% reduction)
+const TEMP_REDUCTION_FACTOR = 0.90;
 
-// Maximum calibration iterations
-const MAX_CALIBRATION_ITERATIONS = 12;
+// Maximum calibration iterations (increased from 12)
+const MAX_CALIBRATION_ITERATIONS = 20;
 
-// Top-3 multiplier constraints by market type
-// These are REALISTIC constraints based on probability math:
-// - For 15 athletes: if top-1 is 25%, odds = 4.0x; top-2 at 18% = 5.5x; top-3 at 14% = 7.1x
-// - The constraint is on TOP-1 only to be ≤ 4.0x (favorite should have at least 25% win probability)
-// - Top-2 and Top-3 constraints are relaxed since they depend on field distribution
+// Top-3 multiplier constraints by market type (HARD CONSTRAINTS - AUTO-ENFORCED)
+// If violated, market creation FAILS
+// Constraints are REALISTIC for typical 10-25 athlete fields with varied ratings
 const TOP3_CONSTRAINTS: Record<string, { top1Max: number; top2Max: number; top3Max: number }> = {
-  WINNER: { top1Max: 4.0, top2Max: 10.0, top3Max: 15.0 },      // Realistic for 10-25 athlete fields
-  HIGHEST_SCORE: { top1Max: 5.0, top2Max: 12.0, top3Max: 15.0 },
-  PODIUM: { top1Max: 2.5, top2Max: 4.0, top3Max: 6.0 }         // Podium is easier to hit
+  WINNER: { top1Max: 4.0, top2Max: 8.0, top3Max: 12.0 },     // Relaxed top2/top3 for realism
+  HIGHEST_SCORE: { top1Max: 4.5, top2Max: 8.0, top3Max: 12.0 },
+  PODIUM: { top1Max: 2.2, top2Max: 3.5, top3Max: 5.0 }       // Tighter for podium (easier to hit)
 };
 
-// Hard multiplier caps (backstop for longshots)
+// Hard multiplier caps (backstop for longshots) - Max multiplier overall
 const MULTIPLIER_CAPS: Record<string, number> = {
-  WINNER: 20.0,      // Reduced from 25 to prevent extreme longshots
-  HIGHEST_SCORE: 15.0,
-  PODIUM: 10.0
+  WINNER: 15.0,       // Max ≤ 15.0× overall
+  HIGHEST_SCORE: 12.0,
+  PODIUM: 8.0
 };
 
 // ============ OTHER CONSTANTS ============
@@ -75,14 +77,21 @@ const SIGMA: Record<string, number> = { slalom: 6, trick: 10, jump: 8 };
 const SIMS = 20000;
 const BANKROLL_UNIT = 100000;
 const ODDS_MIN = 1.20;
-const ODDS_MAX = 25.0;
-const DEFAULT_MANUAL_MULTIPLIER = 0.97;
+const ODDS_MAX = 15.0;  // Reduced from 25 to enforce max cap
+const DEFAULT_MANUAL_MULTIPLIER = 1.0;  // Changed from 0.97 - no default adjustment
 
-// House edge by market type
+// House edge by market type (applied AFTER calibration, not during)
 const HOUSE_EDGE: Record<string, number> = {
-  WINNER: 0.10,
-  PODIUM: 0.18,
-  HIGHEST_SCORE: 0.14
+  WINNER: 0.10,       // 10% house edge
+  PODIUM: 0.18,       // 18% house edge
+  HIGHEST_SCORE: 0.14 // 14% house edge
+};
+
+// Target implied sum by market type (house edge enforcement)
+const TARGET_IMPLIED_SUM: Record<string, number> = {
+  WINNER: 0.909,      // 1 / (1 + 0.10) = 0.909
+  PODIUM: 0.847,      // 1 / (1 + 0.18) = 0.847
+  HIGHEST_SCORE: 0.877 // 1 / (1 + 0.14) = 0.877
 };
 
 // Acceptable ranges for implied sum validation
@@ -352,14 +361,19 @@ function blendProbabilities(
 }
 
 // ============ ODDS DERIVATION ============
+/**
+ * Derive odds from blended probabilities
+ * NO house edge applied here - that happens in enforceTargetImpliedSum
+ * This prevents double-application of house edge
+ */
 function deriveOddsFromBlendedProbabilities(
   athletes: AthleteOddsInput[],
   priorProbs: Map<string, number>,
   mcProbs: Map<string, number>,
   blendedProbs: Map<string, number>,
-  houseEdge: number,
   multiplierMap: Map<string, number>,
-  maxRankInField: number
+  maxRankInField: number,
+  maxMultiplier: number
 ): OddsResult[] {
   return athletes.map(athlete => {
     const powerScore = calculatePowerScore(athlete.rating, athlete.rank, maxRankInField);
@@ -370,19 +384,20 @@ function deriveOddsFromBlendedProbabilities(
     // Safety clamp
     const safeBlendedProb = Math.max(blendedProb, 0.001);
     
-    // Fair odds
-    const fairOdds = Math.min(1 / safeBlendedProb, ODDS_MAX);
+    // Fair odds (1/probability) - NO house edge applied yet
+    const fairOdds = 1 / safeBlendedProb;
     
-    // Adjusted probability with house edge
-    const adjustedProbability = safeBlendedProb * (1 + houseEdge);
-    const rawFinalOdds = 1 / adjustedProbability;
-    
-    // Apply manual multiplier
+    // Apply manual multiplier (default 1.0 = no change)
     const manualMultiplier = multiplierMap.get(athlete.athleteId) ?? DEFAULT_MANUAL_MULTIPLIER;
-    const adjustedOdds = rawFinalOdds * manualMultiplier;
+    const adjustedOdds = fairOdds * manualMultiplier;
     
-    // Round to ladder and clamp
-    const finalOdds = clampOdds(roundToLadder(adjustedOdds));
+    // Clamp to max multiplier
+    const clampedOdds = Math.min(adjustedOdds, maxMultiplier);
+    
+    // Round to ladder
+    const finalOdds = clampOdds(roundToLadder(clampedOdds), maxMultiplier);
+    
+    console.log(`[DERIVE] ${athlete.athleteId.slice(0, 8)}: power=${powerScore.toFixed(1)}, prior=${priorProb.toFixed(4)}, mc=${mcProb.toFixed(4)}, blend=${safeBlendedProb.toFixed(4)}, fair=${fairOdds.toFixed(2)}x, final=${finalOdds.toFixed(2)}x`);
     
     return {
       athleteId: athlete.athleteId,
@@ -392,7 +407,7 @@ function deriveOddsFromBlendedProbabilities(
       blendedProbability: blendedProb,
       normalizedProbability: safeBlendedProb,
       fairOdds,
-      adjustedProbability,
+      adjustedProbability: 1 / finalOdds,  // Derived from final odds
       finalOdds,
       manualMultiplier,
       rank: athlete.rank,
@@ -421,61 +436,64 @@ function applyHardMultiplierCaps(results: OddsResult[], marketType: string): Odd
 }
 
 // ============ ENFORCE TARGET IMPLIED SUM ============
+/**
+ * Adjust multipliers to achieve target implied sum (house edge)
+ * 
+ * Formula: implied_sum = SUM(1/multiplier)
+ * Target = 0.909 for WINNER means 10% house edge
+ * 
+ * When implied_sum > target: need to REDUCE multipliers (increase probs)
+ * When implied_sum < target: need to INCREASE multipliers (decrease probs)
+ */
 function enforceTargetImpliedSum(
   results: OddsResult[],
   targetImpliedSum: number,
   maxMultiplier: number
 ): { correctedResults: OddsResult[]; scalingFactor: number; finalImpliedSum: number } {
-  let workingResults = [...results];
-  let totalScalingFactor = 1.0;
-  const MAX_ITERATIONS = 5;
-  const TOLERANCE = 0.02;
+  // Calculate current implied sum
+  const currentImpliedSum = results.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
   
-  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-    const currentImpliedSum = workingResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
-    
-    console.log(`[ENFORCE] Iteration ${iter + 1}: implied_sum=${currentImpliedSum.toFixed(4)}, target=${targetImpliedSum.toFixed(4)}`);
-    
-    if (Math.abs(currentImpliedSum - targetImpliedSum) <= TOLERANCE) {
-      workingResults = workingResults.map(r => ({
-        ...r,
-        adjustedProbability: 1 / r.finalOdds
-      }));
-      return {
-        correctedResults: workingResults,
-        scalingFactor: Math.round(totalScalingFactor * 1000) / 1000,
-        finalImpliedSum: currentImpliedSum
-      };
-    }
-    
-    const iterScalingFactor = currentImpliedSum / targetImpliedSum;
-    const dampenedScalingFactor = 1 + (iterScalingFactor - 1) * 0.8;
-    totalScalingFactor *= dampenedScalingFactor;
-    
-    if (iter < MAX_ITERATIONS - 1) {
-      workingResults = workingResults.map(r => ({
-        ...r,
-        finalOdds: clampOdds(r.finalOdds * dampenedScalingFactor, maxMultiplier)
-      }));
-    } else {
-      workingResults = workingResults.map(r => ({
-        ...r,
-        finalOdds: clampOdds(roundToLadder(r.finalOdds * dampenedScalingFactor), maxMultiplier)
-      }));
-    }
+  console.log(`[ENFORCE] Initial: implied_sum=${currentImpliedSum.toFixed(4)}, target=${targetImpliedSum.toFixed(4)}`);
+  
+  // If already within tolerance, return as-is
+  const TOLERANCE = 0.02;
+  if (Math.abs(currentImpliedSum - targetImpliedSum) <= TOLERANCE) {
+    return {
+      correctedResults: results.map(r => ({ ...r, adjustedProbability: 1 / r.finalOdds })),
+      scalingFactor: 1.0,
+      finalImpliedSum: currentImpliedSum
+    };
   }
   
-  workingResults = workingResults.map(r => ({
-    ...r,
-    finalOdds: clampOdds(roundToLadder(r.finalOdds), maxMultiplier),
-    adjustedProbability: 1 / clampOdds(roundToLadder(r.finalOdds), maxMultiplier)
-  }));
+  // Calculate required scaling factor for ODDS
+  // If implied_sum = 1.5 and target = 0.909:
+  //   We need to INCREASE multipliers to DECREASE implied sum
+  //   scalingFactor = current / target = 1.5 / 0.909 = 1.65
+  //   new_multiplier = old_multiplier * 1.65
+  const oddsScalingFactor = currentImpliedSum / targetImpliedSum;
   
-  const finalImpliedSum = workingResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
+  console.log(`[ENFORCE] Scaling factor: ${oddsScalingFactor.toFixed(4)} (${oddsScalingFactor > 1 ? 'increasing' : 'decreasing'} multipliers)`);
+  
+  // Apply scaling to all odds
+  const scaledResults = results.map(r => {
+    const scaledOdds = r.finalOdds * oddsScalingFactor;
+    // Clamp to valid range
+    const clampedOdds = clampOdds(roundToLadder(Math.max(ODDS_MIN, Math.min(scaledOdds, maxMultiplier))), maxMultiplier);
+    
+    return {
+      ...r,
+      finalOdds: clampedOdds,
+      adjustedProbability: 1 / clampedOdds
+    };
+  });
+  
+  const finalImpliedSum = scaledResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
+  
+  console.log(`[ENFORCE] Final: implied_sum=${finalImpliedSum.toFixed(4)}`);
   
   return {
-    correctedResults: workingResults,
-    scalingFactor: Math.round(totalScalingFactor * 1000) / 1000,
+    correctedResults: scaledResults,
+    scalingFactor: Math.round(oddsScalingFactor * 1000) / 1000,
     finalImpliedSum
   };
 }
@@ -536,9 +554,9 @@ function calibrateOdds(
     // 4. Blend prior + MC (prior dominates at 60%)
     const blendedProbs = blendProbabilities(priorProbs, mcProbs, PRIOR_BLEND_ALPHA);
     
-    // 5. Derive odds
+    // 5. Derive odds (no house edge - applied in enforceTargetImpliedSum)
     let results = deriveOddsFromBlendedProbabilities(
-      athletes, priorProbs, mcProbs, blendedProbs, houseEdge, multiplierMap, maxRankInField
+      athletes, priorProbs, mcProbs, blendedProbs, multiplierMap, maxRankInField, maxMultiplier
     );
     
     // 6. Sort by probability (highest first = best athlete)
@@ -608,7 +626,7 @@ function calibrateOdds(
   
   const blendedProbs = blendProbabilities(priorProbs, mcProbs, PRIOR_BLEND_ALPHA);
   let results = deriveOddsFromBlendedProbabilities(
-    athletes, priorProbs, mcProbs, blendedProbs, houseEdge, multiplierMap, maxRankInField
+    athletes, priorProbs, mcProbs, blendedProbs, multiplierMap, maxRankInField, maxMultiplier
   );
   results.sort((a, b) => b.blendedProbability - a.blendedProbability);
   

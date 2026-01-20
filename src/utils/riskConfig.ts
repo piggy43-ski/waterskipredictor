@@ -63,44 +63,46 @@ export const RISK_CONFIG = {
   } as const,
   
   /** 
-   * CALIBRATION: Auto-calibrate probabilities to ensure reasonable multipliers
-   * Uses PRIOR-DOMINANT model: 65% prior, 35% MC
+   * CALIBRATION: PRIOR-DOMINANT model
+   * 80% prior (rank + rating), 20% MC
    * Reduces temperature iteratively until top-3 constraints pass
+   * If fails after 20 iterations, market is BLOCKED
    */
   CALIBRATION: {
-    /** Initial temperature by market type */
+    /** Initial temperature by market type (SHARP separation) */
     TEMPERATURE: {
-      WINNER: 12,        // Higher = more spread across field
-      HIGHEST_SCORE: 14, // Highest score needs more randomness
-      PODIUM: 8,         // Podium is more forgiving
+      WINNER: 5,          // Sharp: rank 1 should be ~2-4x
+      HIGHEST_SCORE: 6,   // Similar to winner
+      PODIUM: 4,          // Even sharper for top-3
     } as const,
-    /** Prior/MC blending factor: 0.35 = 35% MC, 65% prior (PRIOR DOMINATES!) */
-    PRIOR_BLEND_ALPHA: 0.35,
-    /** Temperature reduction per iteration (15%) */
-    TEMP_REDUCTION_FACTOR: 0.85,
+    /** Prior/MC blending factor: 0.20 = 20% MC, 80% prior (PRIOR DOMINATES!) */
+    PRIOR_BLEND_ALPHA: 0.20,
+    /** Temperature reduction per iteration (10%) */
+    TEMP_REDUCTION_FACTOR: 0.90,
     /** Max calibration iterations before BLOCKING publish */
-    MAX_ITERATIONS: 12,
+    MAX_ITERATIONS: 20,
   } as const,
   
   /**
-   * TOP-3 MULTIPLIER CONSTRAINTS (REALISTIC for typical field sizes)
-   * Based on probability math: 15 athletes, top-1 at 25% = 4.0x, top-2 at 18% = 5.5x
-   * Only TOP-1 is strictly enforced; top-2/3 are relaxed as they depend on field distribution
+   * TOP-3 MULTIPLIER CONSTRAINTS (MANDATORY HARD CONSTRAINTS)
+   * If violated, market creation FAILS
+   * Top-ranked athletes ALWAYS have the lowest multipliers
+   * Constraints are REALISTIC for typical 10-25 athlete fields
    */
   TOP3_CONSTRAINTS: {
-    WINNER: { top1Max: 4.0, top2Max: 10.0, top3Max: 15.0 },
-    HIGHEST_SCORE: { top1Max: 5.0, top2Max: 12.0, top3Max: 15.0 },
-    PODIUM: { top1Max: 2.5, top2Max: 4.0, top3Max: 6.0 },
+    WINNER: { top1Max: 4.0, top2Max: 8.0, top3Max: 12.0 },    // Relaxed for realism
+    HIGHEST_SCORE: { top1Max: 4.5, top2Max: 8.0, top3Max: 12.0 },
+    PODIUM: { top1Max: 2.2, top2Max: 3.5, top3Max: 5.0 },     // Tighter for podium
   } as const,
   
   /**
-   * HARD MULTIPLIER CAPS (backstop for longshots)
-   * After calibration, compress any odds exceeding these
+   * HARD MULTIPLIER CAPS (MAX OVERALL)
+   * No elite athlete ever appears as a longshot
    */
   MULTIPLIER_CAPS: {
-    WINNER: 20.0,
-    HIGHEST_SCORE: 15.0,
-    PODIUM: 10.0,
+    WINNER: 15.0,         // Max ≤ 15.0× overall
+    HIGHEST_SCORE: 12.0,  // Max ≤ 12.0×
+    PODIUM: 8.0,          // Max ≤ 8.0×
   } as const,
 } as const;
 
