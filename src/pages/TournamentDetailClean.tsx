@@ -53,6 +53,7 @@ const TournamentDetail = () => {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [markets, setMarkets] = useState<Market[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
+  const [tournamentEntries, setTournamentEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [predictionWindow, setPredictionWindow] = useState<ReturnType<typeof getPredictionWindowStatus> | null>(null);
   const [athleteResults, setAthleteResults] = useState<any[]>([]);
@@ -161,6 +162,16 @@ const TournamentDetail = () => {
         if (selectionsError) throw selectionsError;
         if (selectionsData) setSelections(selectionsData as any);
 
+        // Fetch tournament entries for ranking data
+        const { data: entriesData, error: entriesError } = await supabase
+          .from('tournament_entries')
+          .select('athlete_id, discipline, discipline_rank, seed_rank, rating_0_100')
+          .eq('tournament_id', tournamentData.id);
+        
+        if (!entriesError && entriesData) {
+          setTournamentEntries(entriesData);
+        }
+
         // If finished, fetch results
         if (tournamentData.status === 'finished') {
           const { data: resultsData, error: resultsError } = await supabase
@@ -251,6 +262,52 @@ const TournamentDetail = () => {
 
   const menMarkets = markets.filter(m => m.category === 'open_men');
   const womenMarkets = markets.filter(m => m.category === 'open_women');
+
+  // Helper to get effective rank for an athlete in a specific discipline
+  const getEffectiveRank = (athleteId: string, discipline: string): number => {
+    // First check tournament_entries for discipline-specific rank
+    const entry = tournamentEntries.find(
+      e => e.athlete_id === athleteId && e.discipline === discipline
+    );
+    
+    if (entry) {
+      // Prefer discipline_rank (world rank), fall back to seed_rank
+      if (entry.discipline_rank !== null && entry.discipline_rank !== undefined) {
+        return entry.discipline_rank;
+      }
+      if (entry.seed_rank !== null && entry.seed_rank !== undefined) {
+        return 1000 + entry.seed_rank; // Seed ranks come after world ranks
+      }
+    }
+    
+    return 9999; // Unknown rank goes last
+  };
+
+  // Helper to get rating for tie-breaking
+  const getEffectiveRating = (athleteId: string, discipline: string): number => {
+    const entry = tournamentEntries.find(
+      e => e.athlete_id === athleteId && e.discipline === discipline
+    );
+    return entry?.rating_0_100 ?? 50;
+  };
+
+  // Sorting function for selections
+  const sortSelections = (a: Selection, b: Selection, discipline: string) => {
+    // Primary: lowest odds first (best chance)
+    if (a.decimal_odds !== b.decimal_odds) {
+      return a.decimal_odds - b.decimal_odds;
+    }
+    // Secondary: by discipline-specific rank (from tournament_entries)
+    const rankA = getEffectiveRank(a.athlete_id, discipline);
+    const rankB = getEffectiveRank(b.athlete_id, discipline);
+    if (rankA !== rankB) {
+      return rankA - rankB;
+    }
+    // Tertiary: by rating (higher is better)
+    const ratingA = getEffectiveRating(a.athlete_id, discipline);
+    const ratingB = getEffectiveRating(b.athlete_id, discipline);
+    return ratingB - ratingA;
+  };
 
   const handleSelectSelection = (selection: Selection) => {
     if (!predictionWindow?.canPredict) {
@@ -853,16 +910,7 @@ const TournamentDetail = () => {
                                      market?.category === 'open_men' && 
                                      market?.market_type === 'WINNER';
                             })
-                            .sort((a, b) => {
-                              // Primary: lowest odds first (best chance)
-                              if (a.decimal_odds !== b.decimal_odds) {
-                                return a.decimal_odds - b.decimal_odds;
-                              }
-                              // Secondary: by athlete rank when odds are identical
-                              const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
-                              const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
-                              return rankA - rankB;
-                            })
+                            .sort((a, b) => sortSelections(a, b, discipline))
                             .map((selection) => (
                               <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                                 <SelectionCard
@@ -885,12 +933,7 @@ const TournamentDetail = () => {
                           );
                           const podiumSelections = selections
                             .filter(s => s.market_id === podiumMarket?.id)
-                            .sort((a, b) => {
-                              if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
-                              const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
-                              const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
-                              return rankA - rankB;
-                            });
+                            .sort((a, b) => sortSelections(a, b, discipline));
                           
                           const podiumState = getPodiumState(discipline, 'men');
                           
@@ -929,12 +972,7 @@ const TournamentDetail = () => {
                                    market?.category === 'open_men' && 
                                    market?.market_type === 'HIGHEST_SCORE';
                           })
-                          .sort((a, b) => {
-                            if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
-                            const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
-                            const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
-                            return rankA - rankB;
-                          })
+                          .sort((a, b) => sortSelections(a, b, discipline))
                           .map((selection) => (
                             <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
@@ -972,12 +1010,7 @@ const TournamentDetail = () => {
                                    market?.category === 'open_women' && 
                                    market?.market_type === 'WINNER';
                           })
-                          .sort((a, b) => {
-                            if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
-                            const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
-                            const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
-                            return rankA - rankB;
-                          })
+                          .sort((a, b) => sortSelections(a, b, discipline))
                           .map((selection) => (
                             <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard
@@ -999,12 +1032,7 @@ const TournamentDetail = () => {
                           );
                           const podiumSelections = selections
                             .filter(s => s.market_id === podiumMarket?.id)
-                            .sort((a, b) => {
-                              if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
-                              const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
-                              const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
-                              return rankA - rankB;
-                            });
+                            .sort((a, b) => sortSelections(a, b, discipline));
                           
                           const podiumState = getPodiumState(discipline, 'women');
                           
@@ -1043,12 +1071,7 @@ const TournamentDetail = () => {
                                    market?.category === 'open_women' && 
                                    market?.market_type === 'HIGHEST_SCORE';
                           })
-                          .sort((a, b) => {
-                            if (a.decimal_odds !== b.decimal_odds) return a.decimal_odds - b.decimal_odds;
-                            const rankA = (a.athlete as any)?.current_rank_slalom ?? (a.athlete as any)?.current_rank_trick ?? (a.athlete as any)?.current_rank_jump ?? 999;
-                            const rankB = (b.athlete as any)?.current_rank_slalom ?? (b.athlete as any)?.current_rank_trick ?? (b.athlete as any)?.current_rank_jump ?? 999;
-                            return rankA - rankB;
-                          })
+                          .sort((a, b) => sortSelections(a, b, discipline))
                           .map((selection) => (
                             <div key={selection.id} className={!predictionWindow?.canPredict ? 'opacity-50 pointer-events-none' : ''}>
                               <SelectionCard

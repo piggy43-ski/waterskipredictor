@@ -232,17 +232,27 @@ interface OddsResult {
 
 // ============================================================
 // POWER SCORE CALCULATION
+// Uses a formula that ensures rank #1 > #2 > #3 without saturation
 // ============================================================
 
 function calculatePowerScore(rating: number, rank: number | null, maxRankInField: number = 50): number {
   let score = rating;
   
   if (rank !== null && rank > 0) {
-    const rankBonus = Math.max(0, Math.min(10, (maxRankInField - rank) * 0.5));
+    // Balanced formula: provides differentiation without overwhelming rating
+    // Rank 1 → 20/1 = 20 bonus
+    // Rank 2 → 20/2 = 10 bonus  
+    // Rank 3 → 20/3 = 6.7 bonus
+    // Rank 5 → 20/5 = 4 bonus
+    // Rank 10 → 20/10 = 2 bonus
+    // This differentiates ranks without making rank 1 too dominant
+    const K = 20;
+    const rawBonus = K / rank;
+    const rankBonus = Math.min(rawBonus, 20); // Cap at 20 for rank 1
     score += rankBonus;
   }
   
-  return Math.max(50, Math.min(110, score));
+  return Math.max(50, Math.min(120, score));
 }
 
 // ============================================================
@@ -344,6 +354,7 @@ function calculateHighestScoreProbabilities(athletes: AthleteOddsInput[], sigma:
 // ============================================================
 // PROBABILITY FLOORS ENFORCEMENT (with dynamic scaling)
 // This is the CORE fix: enforce floors BEFORE normalization
+// ALSO: Enforce monotonic ordering: p(rank1) >= p(rank2) >= p(rank3)
 // ============================================================
 
 function applyProbabilityFloors(
@@ -368,68 +379,81 @@ function applyProbabilityFloors(
   const top2 = sorted[1];
   const top3 = sorted[2];
   
-  // Calculate how much probability we need to reserve for floors
-  const floorsNeeded = new Map<string, number>();
-  let floorSum = 0;
+  // Calculate initial probabilities with floors applied
+  // But CAP each athlete's probability to prevent extreme concentration
+  const MAX_PROB_CAP = 0.40; // No single athlete can have more than 40%
   
-  if (top1 && top1.rawProb < floors.rank1Min) {
-    floorsNeeded.set(top1.athleteId, floors.rank1Min);
-    floorSum += floors.rank1Min;
-  }
-  if (top2 && top2.rawProb < floors.rank2Min) {
-    floorsNeeded.set(top2.athleteId, floors.rank2Min);
-    floorSum += floors.rank2Min;
-  }
-  if (top3 && top3.rawProb < floors.rank3Min) {
-    floorsNeeded.set(top3.athleteId, floors.rank3Min);
-    floorSum += floors.rank3Min;
-  }
+  let prob1 = top1 ? Math.min(MAX_PROB_CAP, Math.max(top1.rawProb, floors.rank1Min)) : 0;
+  let prob2 = top2 ? Math.min(MAX_PROB_CAP, Math.max(top2.rawProb, floors.rank2Min)) : 0;
+  let prob3 = top3 ? Math.min(MAX_PROB_CAP, Math.max(top3.rawProb, floors.rank3Min)) : 0;
   
-  console.log(`[FLOORS] Floor sum needed: ${floorSum.toFixed(4)}, athletes getting floors: ${floorsNeeded.size}`);
+  // ENFORCE MONOTONIC ORDERING: rank1 >= rank2 >= rank3
+  const EPSILON = 0.02; // Small gap to ensure strict ordering
   
-  // Safety check: if floor sum exceeds 0.85, we can't distribute enough to others
-  if (floorSum > 0.85) {
-    console.warn(`[FLOORS] WARNING: Floor sum ${floorSum.toFixed(3)} exceeds safe threshold 0.85`);
+  if (prob2 > prob1 - EPSILON) {
+    prob2 = Math.max(prob1 - EPSILON, floors.rank2Min);
+  }
+  if (prob3 > prob2 - EPSILON) {
+    prob3 = Math.max(prob2 - EPSILON, floors.rank3Min);
   }
   
-  // If no floors needed, just normalize raw probabilities
-  if (floorsNeeded.size === 0) {
-    const total = athletes.reduce((sum, a) => sum + a.rawProb, 0);
-    const result = new Map<string, number>();
-    athletes.forEach(a => result.set(a.athleteId, a.rawProb / total));
-    return result;
+  // Ensure probabilities don't go below floors
+  prob1 = Math.max(prob1, floors.rank1Min);
+  prob2 = Math.max(prob2, floors.rank2Min);
+  prob3 = Math.max(prob3, floors.rank3Min);
+  
+  // Calculate sum of top 3
+  let top3Sum = prob1 + prob2 + prob3;
+  
+  console.log(`[FLOORS] Top 3 ordered probs: rank1=${(prob1*100).toFixed(1)}%, rank2=${(prob2*100).toFixed(1)}%, rank3=${(prob3*100).toFixed(1)}%, sum=${(top3Sum*100).toFixed(1)}%`);
+  
+  // If top3 sum exceeds target (based on field size), scale down
+  // Leave at least 15% for the rest of the field
+  const maxTop3Sum = Math.min(0.85, 0.60 + (0.02 * (10 - fieldSize)));
+  
+  if (top3Sum > maxTop3Sum && fieldSize > 3) {
+    const scaleFactor = maxTop3Sum / top3Sum;
+    prob1 *= scaleFactor;
+    prob2 *= scaleFactor;
+    prob3 *= scaleFactor;
+    top3Sum = prob1 + prob2 + prob3;
+    console.log(`[FLOORS] Scaled top3 down by ${scaleFactor.toFixed(2)}, new sum=${(top3Sum*100).toFixed(1)}%`);
   }
   
-  // Calculate remaining probability mass after floors
-  const remainingMass = Math.max(0.01, 1 - floorSum);
+  // Set top 3 probabilities
+  const probMap = new Map<string, number>();
+  if (top1) probMap.set(top1.athleteId, prob1);
+  if (top2) probMap.set(top2.athleteId, prob2);
+  if (top3) probMap.set(top3.athleteId, prob3);
   
-  // Get total raw probability of athletes NOT getting floors
-  const nonFloorAthletes = athletes.filter(a => !floorsNeeded.has(a.athleteId));
-  const nonFloorRawSum = nonFloorAthletes.reduce((sum, a) => sum + a.rawProb, 0);
+  // Calculate remaining probability mass after top 3
+  const remainingMass = Math.max(0.05, 1 - top3Sum);
   
-  // Distribute remaining mass proportionally based on power scores
-  const result = new Map<string, number>();
+  // Get non-top3 athletes
+  const restAthletes = sorted.slice(3);
+  const restRawSum = restAthletes.reduce((sum, a) => sum + a.rawProb, 0);
   
-  for (const athlete of athletes) {
-    if (floorsNeeded.has(athlete.athleteId)) {
-      // Use the floor
-      result.set(athlete.athleteId, floorsNeeded.get(athlete.athleteId)!);
-      console.log(`[FLOORS] ${athlete.athleteId.slice(0, 8)} (rank ${athlete.rank}): floored to ${(floorsNeeded.get(athlete.athleteId)! * 100).toFixed(1)}%`);
-    } else {
-      // Distribute remaining mass proportionally
-      const proportion = nonFloorRawSum > 0 ? athlete.rawProb / nonFloorRawSum : 1 / nonFloorAthletes.length;
-      const adjustedProb = remainingMass * proportion;
-      result.set(athlete.athleteId, Math.max(0.001, adjustedProb));
-    }
+  // Distribute remaining mass proportionally based on raw probabilities
+  for (const athlete of restAthletes) {
+    const proportion = restRawSum > 0 ? athlete.rawProb / restRawSum : 1 / restAthletes.length;
+    const adjustedProb = remainingMass * proportion;
+    probMap.set(athlete.athleteId, Math.max(0.005, adjustedProb));
   }
   
   // Final normalization to ensure sum = 1.0
-  const total = Array.from(result.values()).reduce((sum, p) => sum + p, 0);
-  for (const [id, prob] of result) {
-    result.set(id, prob / total);
+  const total = Array.from(probMap.values()).reduce((sum, p) => sum + p, 0);
+  for (const [id, prob] of probMap) {
+    probMap.set(id, prob / total);
   }
   
-  return result;
+  // Log final top 3 for verification
+  const finalTop3 = sorted.slice(0, 3).map(a => ({
+    rank: a.rank,
+    prob: probMap.get(a.athleteId) || 0
+  }));
+  console.log(`[FLOORS] Final top 3: ${finalTop3.map(t => `rank${t.rank}=${(t.prob*100).toFixed(1)}%`).join(', ')}`);
+  
+  return probMap;
 }
 
 // ============================================================
@@ -503,8 +527,8 @@ function deriveOddsFromProbabilities(
 
 // ============================================================
 // ENFORCE TARGET IMPLIED SUM (House Edge)
-// If implied_sum is too HIGH (odds too high), we need to DECREASE odds
-// If implied_sum is too LOW (odds too low), we need to INCREASE odds
+// Apply house edge in PROBABILITY SPACE, then derive odds
+// This ensures implied sum is exactly correct before any rounding
 // ============================================================
 
 function enforceTargetImpliedSum(
@@ -512,57 +536,72 @@ function enforceTargetImpliedSum(
   targetImpliedSum: number,
   maxMultiplier: number
 ): { correctedResults: OddsResult[]; scalingFactor: number; finalImpliedSum: number } {
+  
+  // First, calculate what the implied sum would be from the fair odds
   const currentImpliedSum = results.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
   
   console.log(`[ENFORCE] Initial: implied_sum=${currentImpliedSum.toFixed(4)}, target=${targetImpliedSum.toFixed(4)}`);
   
-  const TOLERANCE = 0.05; // Relaxed tolerance for large fields
-  if (Math.abs(currentImpliedSum - targetImpliedSum) <= TOLERANCE) {
-    return {
-      correctedResults: results.map(r => ({ ...r, adjustedProbability: 1 / r.finalOdds })),
-      scalingFactor: 1.0,
-      finalImpliedSum: currentImpliedSum
-    };
-  }
+  // The key insight: to hit target implied sum, we need to:
+  // 1. Normalize probabilities to sum to exactly targetImpliedSum
+  // 2. Then derive odds as 1/probability
   
-  // Direction of adjustment:
-  // - If current > target: implied sum too high → need to INCREASE odds (scale up)
-  // - If current < target: implied sum too low → need to DECREASE odds (scale down)
-  // 
-  // implied_sum = Σ(1/odds), so to hit target:
-  // new_odds = old_odds * (current_sum / target_sum)
-  // 
-  // Example: current=1.3, target=0.9 → factor=1.44 → odds increase → implied_sum decreases ✓
-  // Example: current=0.8, target=0.9 → factor=0.89 → odds decrease → implied_sum increases ✓
+  // Get the blended probabilities (which sum to 1.0)
+  const probSum = results.reduce((sum, r) => sum + r.blendedProbability, 0);
   
-  const oddsScalingFactor = currentImpliedSum / targetImpliedSum;
-  
-  console.log(`[ENFORCE] Scaling odds by factor: ${oddsScalingFactor.toFixed(4)} (${currentImpliedSum > targetImpliedSum ? 'increasing to lower implied sum' : 'decreasing to raise implied sum'})`);
-  
+  // Scale probabilities to target implied sum
+  // Target implied sum = sum of (1/odds) = sum of adjusted probabilities
+  // So we want: adjusted_prob_i = blended_prob_i * targetImpliedSum
   const scaledResults = results.map(r => {
-    let scaledOdds = r.finalOdds * oddsScalingFactor;
+    // Scale probability to hit target implied sum
+    const adjustedProb = r.blendedProbability * targetImpliedSum;
     
-    // Clamp to valid range
-    scaledOdds = Math.max(ODDS_MIN, Math.min(scaledOdds, maxMultiplier));
+    // Derive fair odds from adjusted probability
+    let fairOdds = 1 / adjustedProb;
+    
+    // Apply minimum odds (but don't cap at max - that causes implied sum bloat)
+    fairOdds = Math.max(ODDS_MIN, fairOdds);
     
     // Round to ladder
-    const clampedOdds = roundToLadder(scaledOdds);
+    const roundedOdds = roundToLadder(fairOdds);
     
     return {
       ...r,
-      finalOdds: clampedOdds,
-      adjustedProbability: 1 / clampedOdds
+      finalOdds: roundedOdds,
+      adjustedProbability: 1 / roundedOdds
     };
   });
   
   const finalImpliedSum = scaledResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
   
-  console.log(`[ENFORCE] Final: implied_sum=${finalImpliedSum.toFixed(4)} (target was ${targetImpliedSum.toFixed(4)})`);
+  console.log(`[ENFORCE] After probability scaling: implied_sum=${finalImpliedSum.toFixed(4)}`);
+  
+  // If rounding pushed us off target, do one more adjustment pass
+  if (Math.abs(finalImpliedSum - targetImpliedSum) > 0.03) {
+    const correction = targetImpliedSum / finalImpliedSum;
+    console.log(`[ENFORCE] Applying correction factor ${correction.toFixed(4)}`);
+    
+    for (let i = 0; i < scaledResults.length; i++) {
+      const r = scaledResults[i];
+      let correctedOdds = r.finalOdds / correction; // Increase/decrease odds to hit target
+      correctedOdds = Math.max(ODDS_MIN, correctedOdds);
+      correctedOdds = roundToLadder(correctedOdds);
+      scaledResults[i] = {
+        ...r,
+        finalOdds: correctedOdds,
+        adjustedProbability: 1 / correctedOdds
+      };
+    }
+  }
+  
+  const finalAdjustedSum = scaledResults.reduce((sum, r) => sum + (1 / r.finalOdds), 0);
+  
+  console.log(`[ENFORCE] Final: implied_sum=${finalAdjustedSum.toFixed(4)} (target was ${targetImpliedSum.toFixed(4)})`);
   
   return {
     correctedResults: scaledResults,
-    scalingFactor: Math.round(oddsScalingFactor * 1000) / 1000,
-    finalImpliedSum
+    scalingFactor: 1.0,
+    finalImpliedSum: finalAdjustedSum
   };
 }
 
@@ -1036,17 +1075,24 @@ Deno.serve(async (req) => {
       odds_validation_error: validationError
     }).eq('id', market_id);
 
-    // Sync selections table
-    const selectionsUpserts = correctedResults.map(result => ({
-      market_id,
-      athlete_id: result.athleteId,
-      decimal_odds: result.finalOdds,
-      description: `${marketType} - Probability Floors v4`,
-    }));
+    // Sync selections table ONLY if validation passed
+    // This prevents INVALID markets from showing misleading odds
+    if (validationStatus === 'VALID') {
+      const selectionsUpserts = correctedResults.map(result => ({
+        market_id,
+        athlete_id: result.athleteId,
+        decimal_odds: result.finalOdds,
+        description: `${marketType} - Probability Floors v4`,
+      }));
 
-    await supabase
-      .from("selections")
-      .upsert(selectionsUpserts, { onConflict: "market_id,athlete_id" });
+      await supabase
+        .from("selections")
+        .upsert(selectionsUpserts, { onConflict: "market_id,athlete_id" });
+      
+      console.log(`[SELECTIONS] Updated ${selectionsUpserts.length} selections with valid odds`);
+    } else {
+      console.warn(`[SELECTIONS] SKIPPED selection sync - market is ${validationStatus}`);
+    }
 
     // Write audit log
     await writeAuditLog(supabase, {
