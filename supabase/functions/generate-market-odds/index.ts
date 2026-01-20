@@ -728,11 +728,14 @@ Deno.serve(async (req) => {
     const disciplineLower = market.discipline.toLowerCase();
     const marketType = market.market_type.toUpperCase();
 
-    // Get athletes from tournament_entries
+    // Get athletes from tournament_entries WITH cached rank/rating data
     const { data: tournamentEntries, error: entriesError } = await supabase
       .from("tournament_entries")
       .select(`
         athlete_id,
+        discipline_rank,
+        rating_0_100,
+        seed_rank,
         athletes!inner (
           id,
           gender,
@@ -802,18 +805,63 @@ Deno.serve(async (req) => {
         };
       });
     } else {
-      athleteInputs = filteredEntries.map((e: any) => {
+      // USE CACHED ENTRY DATA (discipline_rank, rating_0_100, seed_rank)
+      // IMPORTANT: seed_rank is ONLY for ordering among unranked athletes
+      // World-ranked athletes ALWAYS take precedence over seed_rank athletes
+      
+      // First, separate athletes with world rank vs seed rank only
+      const entriesWithData = filteredEntries.map((e: any) => {
         const a = e.athletes;
-        const rating = disciplineLower === 'slalom' ? a.current_rating_slalom :
-                      disciplineLower === 'trick' ? a.current_rating_trick : a.current_rating_jump;
-        const rank = disciplineLower === 'slalom' ? a.current_rank_slalom :
-                    disciplineLower === 'trick' ? a.current_rank_trick : a.current_rank_jump;
+        
+        // Prefer entry-cached data, fallback to athlete table
+        const entryRating = e.rating_0_100;
+        const athleteRating = disciplineLower === 'slalom' ? a.current_rating_slalom :
+                              disciplineLower === 'trick' ? a.current_rating_trick : a.current_rating_jump;
+        const rating = entryRating ?? athleteRating ?? 70;
+        
+        // Get world rank (discipline_rank or from athlete table)
+        const entryDisciplineRank = e.discipline_rank;
+        const athleteRank = disciplineLower === 'slalom' ? a.current_rank_slalom :
+                           disciplineLower === 'trick' ? a.current_rank_trick : a.current_rank_jump;
+        const worldRank = entryDisciplineRank ?? athleteRank;
+        
         return {
           athleteId: e.athlete_id,
-          rating: rating ?? 70,
-          rank: rank ?? null,
+          rating: rating,
+          worldRank: worldRank, // null if no world rank
+          seedRank: e.seed_rank, // used only for unranked athletes
         };
       });
+      
+      // Sort: world-ranked athletes first (by rank), then unranked (by rating DESC)
+      const worldRanked = entriesWithData.filter(e => e.worldRank !== null).sort((a, b) => a.worldRank - b.worldRank);
+      const unranked = entriesWithData.filter(e => e.worldRank === null).sort((a, b) => b.rating - a.rating);
+      
+      // Assign effective ranks: world rank athletes keep their rank, unranked get ranks after the last world rank
+      const maxWorldRank = worldRanked.length > 0 ? Math.max(...worldRanked.map(e => e.worldRank!)) : 0;
+      
+      athleteInputs = [
+        ...worldRanked.map(e => ({
+          athleteId: e.athleteId,
+          rating: e.rating,
+          rank: e.worldRank!,
+        })),
+        ...unranked.map((e, idx) => ({
+          athleteId: e.athleteId,
+          rating: e.rating,
+          rank: maxWorldRank + idx + 1, // Assign ranks after world-ranked athletes
+        }))
+      ];
+      
+      // Log rank distribution for debugging
+      console.log(`[ODDS] Rank distribution: ${worldRanked.length} world-ranked, ${unranked.length} unranked (assigned ranks ${maxWorldRank + 1}+)`);
+      athleteInputs.slice(0, 5).forEach(a => {
+        console.log(`[ODDS] Top: id=${a.athleteId.slice(0,8)}, rank=${a.rank}, rating=${a.rating}`);
+      });
+      const nullRankCount = athleteInputs.filter(a => a.rank === null).length;
+      if (nullRankCount > 0) {
+        console.warn(`[ODDS] WARNING: ${nullRankCount}/${athleteInputs.length} athletes have null rank after resolution`);
+      }
     }
 
     console.log(`[GENERATE] Market: ${market_id}, Type: ${marketType}, Athletes: ${athleteInputs.length}`);
