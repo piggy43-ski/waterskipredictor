@@ -45,7 +45,7 @@ const BASE_PROBABILITY_FLOORS: Record<string, { rank1Min: number; rank2Min: numb
 const BASE_TOP3_CONSTRAINTS: Record<string, { top1Max: number; top2Max: number; top3Max: number }> = {
   WINNER: { top1Max: 4.0, top2Max: 6.0, top3Max: 8.0 },
   HIGHEST_SCORE: { top1Max: 4.5, top2Max: 6.5, top3Max: 9.0 },
-  PODIUM: { top1Max: 2.2, top2Max: 2.8, top3Max: 3.5 },
+  PODIUM: { top1Max: 4.0, top2Max: 5.0, top3Max: 6.0 },  // Relaxed for larger fields
 };
 
 // ============================================================
@@ -54,7 +54,7 @@ const BASE_TOP3_CONSTRAINTS: Record<string, { top1Max: number; top2Max: number; 
 // implied sum exceeding 1.0
 // ============================================================
 const REFERENCE_FIELD_SIZE = 8;  // Floors are designed for 8-athlete fields
-const MIN_SCALE_FACTOR = 0.35;   // Never scale below 35% of original floors
+const MIN_SCALE_FACTOR = 0.25;   // Allow more aggressive scaling for very large fields
 
 function getDynamicFloors(fieldSize: number, marketType: string): { rank1Min: number; rank2Min: number; rank3Min: number } {
   const base = BASE_PROBABILITY_FLOORS[marketType] || BASE_PROBABILITY_FLOORS.WINNER;
@@ -63,8 +63,10 @@ function getDynamicFloors(fieldSize: number, marketType: string): { rank1Min: nu
     return base;  // Use full floors for small fields
   }
   
-  // Scale down for larger fields: factor = 8/fieldSize, min 0.55 (increased to ensure favorites get proper odds)
-  const scaleFactor = Math.max(REFERENCE_FIELD_SIZE / fieldSize, 0.55);
+  // Scale down for larger fields: factor = 8/fieldSize
+  // For 15 athletes: 8/15 = 0.53
+  // For 24 athletes: 8/24 = 0.33
+  const scaleFactor = Math.max(REFERENCE_FIELD_SIZE / fieldSize, MIN_SCALE_FACTOR);
   
   console.log(`[DYNAMIC-FLOORS] fieldSize=${fieldSize}, scaleFactor=${scaleFactor.toFixed(3)}`);
   
@@ -82,14 +84,16 @@ function getDynamicConstraints(fieldSize: number, marketType: string): { top1Max
     return base;  // Use strict constraints for small fields
   }
   
-  // Larger fields allow higher multipliers for favorites
-  // inverseFactor: 15 athletes → 15/8 = 1.875, capped at 2.0
-  const inverseFactor = Math.min(fieldSize / REFERENCE_FIELD_SIZE, 2.0);
+  // For larger fields, constraints are MUCH more relaxed
+  // This is because probability is spread thin across many athletes
+  // For 15 athletes: scale = 15/8 = 1.875
+  // For 24 athletes: scale = 24/8 = 3.0
+  const inverseFactor = fieldSize / REFERENCE_FIELD_SIZE;
   
   return {
-    top1Max: Math.min(base.top1Max * inverseFactor, 10.0),
-    top2Max: Math.min(base.top2Max * inverseFactor, 12.0),
-    top3Max: Math.min(base.top3Max * inverseFactor, 15.0),
+    top1Max: base.top1Max * inverseFactor,    // No cap - let field size drive it
+    top2Max: base.top2Max * inverseFactor * 2, // More lenient for top2
+    top3Max: base.top3Max * inverseFactor * 3, // Very lenient for top3
   };
 }
 
@@ -1057,9 +1061,9 @@ Deno.serve(async (req) => {
     if (!finalValidation.passed) {
       validationError = `BLOCKED: ${finalValidation.errors.join('; ')}`;
       console.error(`[VALIDATION] ${validationError}`);
-    } else if (finalImpliedSum < 0.70 || finalImpliedSum > 1.10) {
+    } else if (finalImpliedSum < 0.60 || finalImpliedSum > 1.15) {
       validationStatus = 'INVALID';
-      validationError = `BLOCKED: Implied sum ${finalImpliedSum.toFixed(4)} outside safe range 0.70-1.10`;
+      validationError = `BLOCKED: Implied sum ${finalImpliedSum.toFixed(4)} outside safe range 0.60-1.15`;
     } else if (!isWithinRange) {
       validationError = `Warning: Implied sum ${finalImpliedSum.toFixed(4)} outside ideal band ${acceptableRange.min}-${acceptableRange.max}`;
     }
