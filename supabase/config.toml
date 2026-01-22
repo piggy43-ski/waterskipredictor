@@ -83,3 +83,6 @@ verify_jwt = true
 
 [functions.manage-multiplier-overrides]
 verify_jwt = false
+
+[functions.manage-probability-overrides]
+verify_jwt = false

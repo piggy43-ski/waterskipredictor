@@ -8,31 +8,44 @@ const corsHeaders = {
 // ============================================================
 // CONFIGURATION
 // ============================================================
-const SIMS = 5000;  // Light MC for adjustment only
-const W_BASE = 0.85;  // 85% weight on rank-based formula
-const W_MC = 0.15;    // 15% weight on Monte Carlo
+const SIMS = 5000;
+const W_BASE = 0.80;  // 80% weight on rank-based ladder
+const W_MC = 0.20;    // 20% weight on Monte Carlo
 
 const TARGET_IMPLIED_SUM = {
-  WINNER: { min: 0.90, max: 0.915 },
+  WINNER: { min: 0.90, max: 0.92 },
   PODIUM: { min: 0.84, max: 0.86 },
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
 };
 
 const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.5, max: 15.0 },
-  PODIUM: { min: 1.25, max: 8.0 },
+  WINNER: { min: 1.5, max: 20.0 },
+  PODIUM: { min: 1.10, max: 8.0 },
   HIGHEST_SCORE: { min: 1.5, max: 12.0 },
 };
 
+// Realistic WINNER probability weight ladder
+const WINNER_WEIGHT_LADDER: Record<number, number> = {
+  1: 1.00, 2: 0.75, 3: 0.60, 4: 0.45, 5: 0.38,
+  6: 0.32, 7: 0.27, 8: 0.23, 9: 0.20, 10: 0.18
+};
+
+// PODIUM transformation factor
+const K_PODIUM = 2.2;
+
+// HIGHEST_SCORE power transform
+const HIGHEST_SCORE_POWER = 0.85;
+
 const ODDS_LADDER = [
-  1.25, 1.30, 1.35, 1.40, 1.45, 1.50, 1.55, 1.60, 1.65, 1.70, 1.75, 1.80, 1.85, 1.90, 1.95,
+  1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.50, 1.55, 1.60, 1.65, 1.70, 1.75, 1.80, 1.85, 1.90, 1.95,
   2.00, 2.10, 2.20, 2.30, 2.40, 2.50, 2.60, 2.70, 2.80, 2.90,
   3.00, 3.20, 3.40, 3.60, 3.80,
   4.00, 4.20, 4.40, 4.60, 4.80,
   5.00, 5.25, 5.50, 5.75,
   6.00, 6.25, 6.50, 6.75,
   7.00, 7.50, 8.00, 8.50, 9.00, 9.50,
-  10.00, 10.50, 11.00, 11.50, 12.00, 12.50, 13.00, 13.50, 14.00, 14.50, 15.00
+  10.00, 10.50, 11.00, 11.50, 12.00, 12.50, 13.00, 13.50, 14.00, 14.50, 15.00,
+  16.00, 17.00, 18.00, 19.00, 20.00
 ];
 
 // ============================================================
@@ -78,25 +91,31 @@ interface Athlete {
   worldRank: number | null;
   rating: number;
   selectionId?: string;
-  manualMultiplier?: number | null;
+  manualProbability?: number | null;
 }
 
 interface AthleteResult extends Athlete {
   fieldRank: number;
   p_base: number;
   p_mc: number;
+  p_blended: number;
   p_final: number;
   multiplier: number;
+  source: 'auto' | 'manual';
 }
 
 // ============================================================
-// STEP 1: BASE PROBABILITY (Rank-based formula)
-// p_base ∝ 1 / (fieldRank ^ power)
-// Power varies by market type for sharper/flatter curves
+// STEP 1: BASE PROBABILITY using weight ladder
 // ============================================================
-function calculateBaseProbabilities(athletes: Athlete[], marketType: string): number[] {
-  const power = marketType === 'PODIUM' ? 0.8 : marketType === 'HIGHEST_SCORE' ? 1.0 : 1.2;
-  
+function getWinnerWeight(fieldRank: number): number {
+  if (fieldRank <= 10) {
+    return WINNER_WEIGHT_LADDER[fieldRank];
+  }
+  // Rank 11+: decay formula
+  return Math.max(WINNER_WEIGHT_LADDER[10] * (10 / fieldRank), 0.04);
+}
+
+function calculateWinnerBaseProbabilities(athletes: Athlete[]): { probs: number[], fieldRanks: Map<string, number> } {
   // Sort by world rank (lower = better), then by rating (higher = better)
   const sorted = [...athletes].sort((a, b) => {
     const aRank = a.worldRank ?? Infinity;
@@ -105,23 +124,43 @@ function calculateBaseProbabilities(athletes: Athlete[], marketType: string): nu
     return (b.rating ?? 0) - (a.rating ?? 0);
   });
   
-  // Assign field ranks and calculate raw scores
-  const rawScores: number[] = [];
+  // Assign field ranks and get weights
+  const weights: number[] = [];
+  const fieldRanks = new Map<string, number>();
+  
   for (let i = 0; i < sorted.length; i++) {
     const fieldRank = i + 1;
-    rawScores.push(1 / Math.pow(fieldRank, power));
+    fieldRanks.set(sorted[i].id, fieldRank);
+    weights.push(getWinnerWeight(fieldRank));
   }
   
-  // Return normalized probabilities in original order
-  const normalized = normalize(rawScores);
-  const rankMap = new Map(sorted.map((a, i) => [a.id, { fieldRank: i + 1, prob: normalized[i] }]));
+  // Normalize weights to probabilities
+  const normalized = normalize(weights);
+  const rankToProb = new Map(sorted.map((a, i) => [a.id, normalized[i]]));
   
-  return athletes.map(a => rankMap.get(a.id)!.prob);
+  // Return in original order
+  return {
+    probs: athletes.map(a => rankToProb.get(a.id)!),
+    fieldRanks
+  };
+}
+
+// Transform winner probabilities to Podium probabilities
+function transformToPodiumProbabilities(p_winner: number[]): number[] {
+  // p_podium = clamp(1 - (1 - p_winner)^k, 0.05, 0.90)
+  const raw = p_winner.map(p => clamp(1 - Math.pow(1 - p, K_PODIUM), 0.05, 0.90));
+  return normalize(raw);
+}
+
+// Transform winner probabilities to Highest Score probabilities
+function transformToHighestScoreProbabilities(p_winner: number[]): number[] {
+  // p_high = clamp(p_winner^0.85, 0.01, 0.50)
+  const raw = p_winner.map(p => clamp(Math.pow(p, HIGHEST_SCORE_POWER), 0.01, 0.50));
+  return normalize(raw);
 }
 
 // ============================================================
-// STEP 2: MONTE CARLO ADJUSTMENT (Light simulations)
-// Adds variance based on rating differences
+// STEP 2: MONTE CARLO ADJUSTMENT
 // ============================================================
 function runLightMonteCarlo(athletes: Athlete[], marketType: string): number[] {
   const rng = seededRandom(Date.now());
@@ -157,7 +196,7 @@ function runLightMonteCarlo(athletes: Athlete[], marketType: string): number[] {
 
 // ============================================================
 // STEP 3: BLEND & NORMALIZE
-// p_final = normalize(W_BASE * p_base + W_MC * p_mc)
+// p_blended = normalize(W_BASE * p_base + W_MC * p_mc)
 // ============================================================
 function blendProbabilities(p_base: number[], p_mc: number[]): number[] {
   const blended = p_base.map((pb, i) => W_BASE * pb + W_MC * p_mc[i]);
@@ -165,49 +204,80 @@ function blendProbabilities(p_base: number[], p_mc: number[]): number[] {
 }
 
 // ============================================================
-// STEP 4: APPLY HOUSE EDGE
-// Scale probabilities to hit target implied sum
+// STEP 4: VALIDATE PROBABILITIES
 // ============================================================
-function applyHouseEdge(probs: number[], marketType: string): number[] {
-  const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] 
-    || TARGET_IMPLIED_SUM.WINNER;
-  const targetMid = (target.min + target.max) / 2;
-  
-  // p_adj = p * targetMid (since sum(p) = 1, sum(p_adj) = targetMid)
-  return probs.map(p => p * targetMid);
+interface ProbabilityValidation {
+  passed: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
-// ============================================================
-// STEP 5: DERIVE MULTIPLIERS
-// M = 1 / p_adj, clamped and rounded
-// ============================================================
-function deriveMultipliers(p_adj: number[], marketType: string): number[] {
-  const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] 
-    || MULTIPLIER_CAPS.WINNER;
-  
-  return p_adj.map(p => {
-    if (p <= 0) return caps.max;
-    let m = 1 / p;
-    m = clamp(m, caps.min, caps.max);
-    return roundToLadder(m);
-  });
-}
-
-// ============================================================
-// VALIDATION
-// ============================================================
-function validate(athletes: AthleteResult[], marketType: string): { passed: boolean; errors: string[] } {
+function validateProbabilities(
+  athletes: { id: string; name: string; fieldRank: number; p_final: number }[],
+  marketType: string,
+  fieldSize: number
+): ProbabilityValidation {
   const errors: string[] = [];
+  const warnings: string[] = [];
+  
+  // Sort by field rank
   const sorted = [...athletes].sort((a, b) => a.fieldRank - b.fieldRank);
   
-  // Check rank ordering (lower rank should have lower or equal multiplier)
+  // 1. Monotonic check: better rank should have >= probability
   for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].multiplier < sorted[i - 1].multiplier - 0.01) {
-      errors.push(`Rank ${sorted[i].fieldRank} (${sorted[i].multiplier}x) < Rank ${sorted[i - 1].fieldRank} (${sorted[i - 1].multiplier}x)`);
+    if (sorted[i].p_final > sorted[i - 1].p_final + 0.001) {
+      errors.push(`Rank ${sorted[i].fieldRank} (${(sorted[i].p_final * 100).toFixed(1)}%) > Rank ${sorted[i - 1].fieldRank} (${(sorted[i - 1].p_final * 100).toFixed(1)}%)`);
     }
   }
   
-  return { passed: errors.length === 0, errors };
+  // 2. Cap favorite probability
+  const maxAllowed = fieldSize <= 6 ? 0.35 : 0.30;
+  const maxProb = Math.max(...athletes.map(a => a.p_final));
+  if (maxProb > maxAllowed) {
+    warnings.push(`Max probability ${(maxProb * 100).toFixed(1)}% exceeds ${(maxAllowed * 100).toFixed(0)}% cap`);
+  }
+  
+  // 3. Floor check
+  const minProb = Math.min(...athletes.map(a => a.p_final));
+  if (minProb < 0.005) {
+    warnings.push(`Min probability ${(minProb * 100).toFixed(2)}% below 0.5% floor`);
+  }
+  
+  return { 
+    passed: errors.length === 0, 
+    errors, 
+    warnings 
+  };
+}
+
+// ============================================================
+// STEP 5: APPLY HOUSE EDGE & DERIVE MULTIPLIERS
+// ============================================================
+function deriveMultipliers(
+  p_final: number[], 
+  marketType: string
+): { multipliers: number[], impliedSum: number, edgeFactor: number } {
+  const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
+  const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] || MULTIPLIER_CAPS.WINNER;
+  const targetMid = (target.min + target.max) / 2;
+  
+  // Calculate edge factor to hit target implied sum
+  // implied_sum = sum(1/m) = sum(p_adj) = sum(p_final * edge_factor)
+  // So edge_factor = target_implied_sum (since sum(p_final) = 1)
+  const edgeFactor = targetMid;
+  
+  // Apply edge and derive multipliers
+  const multipliers = p_final.map(p => {
+    const p_adj = p * edgeFactor;
+    if (p_adj <= 0) return caps.max;
+    let m = 1 / p_adj;
+    m = clamp(m, caps.min, caps.max);
+    return roundToLadder(m);
+  });
+  
+  const impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
+  
+  return { multipliers, impliedSum, edgeFactor };
 }
 
 // ============================================================
@@ -223,7 +293,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { market_id, force = false } = await req.json();
+    const { market_id, force = false, debug = false } = await req.json();
     if (!market_id) {
       return new Response(JSON.stringify({ error: "market_id required" }), 
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -266,14 +336,15 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Fetch existing manual overrides
-    const { data: overrides } = await supabase
-      .from('market_multiplier_overrides')
-      .select('athlete_id, manual_multiplier, is_enabled')
+    // Fetch probability overrides (not multiplier overrides)
+    const { data: probOverrides } = await supabase
+      .from('market_probability_overrides')
+      .select('athlete_id, manual_probability, is_enabled')
       .eq('market_id', market_id)
       .eq('is_enabled', true);
     
-    const overrideMap = new Map(overrides?.map(o => [o.athlete_id, o.manual_multiplier]) || []);
+    const probOverrideMap = new Map(probOverrides?.map(o => [o.athlete_id, o.manual_probability]) || []);
+    const hasManualProbabilities = probOverrideMap.size > 0;
 
     // Build athlete array
     const rankKey = `current_rank_${market.discipline}`;
@@ -286,71 +357,98 @@ Deno.serve(async (req) => {
         name: a.name,
         worldRank: e.discipline_rank || a[rankKey] || e.seed_rank,
         rating: e.rating_0_100 || a[ratingKey] || 70,
-        manualMultiplier: overrideMap.get(a.id) || null
+        manualProbability: probOverrideMap.get(a.id) || null
       };
     });
 
-    console.log(`[ODDS] ${athletes.length} athletes`);
+    console.log(`[ODDS] ${athletes.length} athletes, ${probOverrideMap.size} manual overrides`);
 
     // ========== CORE PIPELINE ==========
     
-    // Step 1: Base probabilities from rank formula
-    const p_base = calculateBaseProbabilities(athletes, marketType);
+    // Step 1: Calculate base winner probabilities using weight ladder
+    const { probs: p_winner_base, fieldRanks } = calculateWinnerBaseProbabilities(athletes);
     
-    // Step 2: Light Monte Carlo adjustment
+    // Transform to market-specific base probabilities
+    let p_base: number[];
+    if (marketType === 'PODIUM') {
+      p_base = transformToPodiumProbabilities(p_winner_base);
+    } else if (marketType === 'HIGHEST_SCORE') {
+      p_base = transformToHighestScoreProbabilities(p_winner_base);
+    } else {
+      p_base = p_winner_base;
+    }
+    
+    // Step 2: Monte Carlo adjustment
     const p_mc = runLightMonteCarlo(athletes, marketType);
     
     // Step 3: Blend
     const p_blended = blendProbabilities(p_base, p_mc);
     
-    // Step 4: House edge
-    const p_adj = applyHouseEdge(p_blended, marketType);
+    // Step 4: Apply manual overrides if any
+    let p_final: number[];
+    if (hasManualProbabilities) {
+      // Use manual probabilities where provided, otherwise use blended
+      const rawProbs = athletes.map((a, i) => {
+        if (a.manualProbability && a.manualProbability > 0) {
+          return a.manualProbability;
+        }
+        return p_blended[i];
+      });
+      // Re-normalize since manual might not sum to 1
+      p_final = normalize(rawProbs);
+    } else {
+      p_final = p_blended;
+    }
     
-    // Step 5: Derive multipliers
-    const multipliers = deriveMultipliers(p_adj, marketType);
+    // Step 5: Validate probabilities
+    const validationInput = athletes.map((a, i) => ({
+      id: a.id,
+      name: a.name,
+      fieldRank: fieldRanks.get(a.id)!,
+      p_final: p_final[i]
+    }));
+    const validation = validateProbabilities(validationInput, marketType, athletes.length);
+    
+    // Step 6: Derive multipliers with house edge
+    const { multipliers, impliedSum, edgeFactor } = deriveMultipliers(p_final, marketType);
 
-    // Build results with field ranks
-    const sortedForRank = [...athletes].sort((a, b) => {
-      const aR = a.worldRank ?? Infinity, bR = b.worldRank ?? Infinity;
-      if (aR !== bR) return aR - bR;
-      return (b.rating ?? 0) - (a.rating ?? 0);
-    });
-    const fieldRankMap = new Map(sortedForRank.map((a, i) => [a.id, i + 1]));
-
+    // Build results
     const results: AthleteResult[] = athletes.map((a, i) => ({
       ...a,
-      fieldRank: fieldRankMap.get(a.id)!,
+      fieldRank: fieldRanks.get(a.id)!,
       p_base: p_base[i],
       p_mc: p_mc[i],
-      p_final: p_blended[i],
-      multiplier: a.manualMultiplier && a.manualMultiplier > 0 
-        ? roundToLadder(a.manualMultiplier) 
-        : multipliers[i]
+      p_blended: p_blended[i],
+      p_final: p_final[i],
+      multiplier: multipliers[i],
+      source: (a.manualProbability && a.manualProbability > 0) ? 'manual' as const : 'auto' as const
     }));
 
-    // Validate
-    const validation = validate(results, marketType);
-    const impliedSum = results.reduce((s, r) => s + (1 / r.multiplier), 0);
-    
     console.log(`[ODDS] Implied sum: ${impliedSum.toFixed(4)}, Valid: ${validation.passed}`);
+    if (validation.errors.length > 0) {
+      console.log(`[ODDS] Errors: ${validation.errors.join('; ')}`);
+    }
+    if (validation.warnings.length > 0) {
+      console.log(`[ODDS] Warnings: ${validation.warnings.join('; ')}`);
+    }
 
     // Sort for logging
     const sortedResults = [...results].sort((a, b) => a.fieldRank - b.fieldRank);
-    console.log('[ODDS] Top 5:');
-    sortedResults.slice(0, 5).forEach(r => {
-      console.log(`  #${r.fieldRank} ${r.name}: p_base=${(r.p_base*100).toFixed(1)}%, p_mc=${(r.p_mc*100).toFixed(1)}%, p_final=${(r.p_final*100).toFixed(1)}% → ${r.multiplier}x`);
+    console.log('[ODDS] Full debug table:');
+    sortedResults.forEach(r => {
+      console.log(`  #${r.fieldRank} ${r.name}: rating=${r.rating}, p_base=${(r.p_base*100).toFixed(1)}%, p_mc=${(r.p_mc*100).toFixed(1)}%, p_final=${(r.p_final*100).toFixed(1)}% → ${r.multiplier}x [${r.source}]`);
     });
 
-    // Update database using upsert (unique constraint on market_id, athlete_id)
+    // Determine validation status
     const validationStatus = validation.passed ? 'VALID' : 'INVALID';
     
-    // Upsert selections - uses unique constraint on (market_id, athlete_id)
+    // Update database
     for (const r of results) {
-      // Upsert selection (selections table only has: id, market_id, athlete_id, description, decimal_odds)
+      // Upsert selection
       const { error: selError } = await supabase.from('selections').upsert({
         market_id,
         athlete_id: r.id,
-        description: `${r.name} to win`,
+        description: `${r.name} to ${marketType === 'PODIUM' ? 'finish top 3' : marketType === 'HIGHEST_SCORE' ? 'get highest score' : 'win'}`,
         decimal_odds: r.multiplier
       }, { onConflict: 'market_id,athlete_id' });
       
@@ -358,25 +456,37 @@ Deno.serve(async (req) => {
         console.error(`[ODDS] Selection upsert error for ${r.name}:`, selError);
       }
       
+      // Upsert market_odds with ALL probability columns
       await supabase.from('market_odds').upsert({
         market_id,
         athlete_id: r.id,
-        multiplier: r.multiplier,
-        american_odds: decimalToAmerican(r.multiplier),
-        raw_probability: r.p_mc,
+        // Core probability columns
+        base_probability: r.p_base,
+        prior_probability: r.p_base,
+        mc_probability: r.p_mc,
+        blended_probability: r.p_blended,
         normalized_probability: r.p_final,
         adjusted_probability: 1 / r.multiplier,
+        // Multiplier columns
+        multiplier: r.multiplier,
+        base_decimal_odds: r.multiplier,
+        final_decimal_odds: r.multiplier,
+        american_odds: decimalToAmerican(r.multiplier),
+        // Rank/rating info
         field_rank: r.fieldRank,
+        athlete_rank: r.fieldRank,
         world_rank: r.worldRank,
         rating: r.rating,
+        // Metadata
         sims_run: SIMS,
-        model_version: 'hybrid-v1'
+        model_version: 'ladder-v2',
+        probability_source: r.source
       }, { onConflict: 'market_id,athlete_id' });
     }
 
     await supabase.from('markets').update({
       odds_validation_status: validationStatus,
-      odds_validation_error: validation.passed ? null : validation.errors.join('; '),
+      odds_validation_error: validation.passed ? null : [...validation.errors, ...validation.warnings].join('; '),
       odds_generated_at: new Date().toISOString(),
       implied_sum: impliedSum
     }).eq('id', market_id);
@@ -389,14 +499,32 @@ Deno.serve(async (req) => {
         market_type: marketType,
         field_size: results.length,
         implied_sum: impliedSum,
-        model_version: 'hybrid-v1',
+        edge_factor: edgeFactor,
+        model_version: 'ladder-v2',
         sims: SIMS,
         w_base: W_BASE,
-        w_mc: W_MC
+        w_mc: W_MC,
+        has_manual_overrides: hasManualProbabilities,
+        validation_status: validationStatus,
+        validation_errors: validation.errors,
+        validation_warnings: validation.warnings
       }
     });
 
     console.log(`[ODDS] ✅ Done`);
+
+    // Build debug table for response
+    const debugTable = sortedResults.map(r => ({
+      athlete: r.name,
+      rank_used: r.fieldRank,
+      world_rank: r.worldRank,
+      rating_used: r.rating,
+      p_base: `${(r.p_base * 100).toFixed(1)}%`,
+      p_mc: `${(r.p_mc * 100).toFixed(1)}%`,
+      p_final: `${(r.p_final * 100).toFixed(1)}%`,
+      multiplier: `${r.multiplier}x`,
+      source: r.source
+    }));
 
     return new Response(JSON.stringify({
       success: true,
@@ -404,16 +532,22 @@ Deno.serve(async (req) => {
       market_type: marketType,
       field_size: results.length,
       implied_sum: impliedSum,
+      edge_factor: edgeFactor,
       validation_status: validationStatus,
-      model_version: 'hybrid-v1',
+      validation_errors: validation.errors,
+      validation_warnings: validation.warnings,
+      model_version: 'ladder-v2',
+      debug_table: debug ? debugTable : undefined,
       top_athletes: sortedResults.slice(0, 5).map(r => ({
         name: r.name,
         fieldRank: r.fieldRank,
         worldRank: r.worldRank,
-        p_base: (r.p_base * 100).toFixed(1) + '%',
-        p_mc: (r.p_mc * 100).toFixed(1) + '%',
-        p_final: (r.p_final * 100).toFixed(1) + '%',
-        multiplier: r.multiplier
+        rating: r.rating,
+        p_base: `${(r.p_base * 100).toFixed(1)}%`,
+        p_mc: `${(r.p_mc * 100).toFixed(1)}%`,
+        p_final: `${(r.p_final * 100).toFixed(1)}%`,
+        multiplier: r.multiplier,
+        source: r.source
       }))
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 

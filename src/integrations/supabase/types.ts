@@ -1269,6 +1269,64 @@ export type Database = {
           },
         ]
       }
+      market_probability_overrides: {
+        Row: {
+          athlete_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_enabled: boolean | null
+          manual_probability: number
+          market_id: string
+          reason: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          manual_probability: number
+          market_id: string
+          reason?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          manual_probability?: number
+          market_id?: string
+          reason?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_probability_overrides_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_probability_overrides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_probability_overrides_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_results: {
         Row: {
           athlete_id: string
