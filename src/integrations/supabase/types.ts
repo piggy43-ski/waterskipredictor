@@ -1381,6 +1381,7 @@ export type Database = {
           locked_at: string | null
           loss_probability: number | null
           market_type: string
+          multipliers_generated_at: string | null
           name: string
           odds_validation_error: string | null
           odds_validation_status: string | null
@@ -1389,6 +1390,8 @@ export type Database = {
           safe_mode_status: string | null
           tournament_id: string
           updated_at: string
+          validation_error: string | null
+          validation_status: string | null
         }
         Insert: {
           category: string
@@ -1401,6 +1404,7 @@ export type Database = {
           locked_at?: string | null
           loss_probability?: number | null
           market_type: string
+          multipliers_generated_at?: string | null
           name: string
           odds_validation_error?: string | null
           odds_validation_status?: string | null
@@ -1409,6 +1413,8 @@ export type Database = {
           safe_mode_status?: string | null
           tournament_id: string
           updated_at?: string
+          validation_error?: string | null
+          validation_status?: string | null
         }
         Update: {
           category?: string
@@ -1421,6 +1427,7 @@ export type Database = {
           locked_at?: string | null
           loss_probability?: number | null
           market_type?: string
+          multipliers_generated_at?: string | null
           name?: string
           odds_validation_error?: string | null
           odds_validation_status?: string | null
@@ -1429,6 +1436,8 @@ export type Database = {
           safe_mode_status?: string | null
           tournament_id?: string
           updated_at?: string
+          validation_error?: string | null
+          validation_status?: string | null
         }
         Relationships: [
           {
