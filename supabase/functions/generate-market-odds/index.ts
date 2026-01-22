@@ -204,6 +204,42 @@ function blendProbabilities(p_base: number[], p_mc: number[]): number[] {
 }
 
 // ============================================================
+// STEP 3.5: ENFORCE MONOTONIC PROBABILITIES (by field rank)
+// Higher field rank (1) must have >= probability than lower rank (2, 3, ...)
+// ============================================================
+function enforceMonotonic(
+  probs: number[], 
+  fieldRanks: Map<string, number>,
+  athleteIds: string[]
+): number[] {
+  // Create array of { id, fieldRank, prob } and sort by field rank
+  const withRanks = athleteIds.map((id, i) => ({
+    id,
+    idx: i,
+    fieldRank: fieldRanks.get(id)!,
+    prob: probs[i]
+  })).sort((a, b) => a.fieldRank - b.fieldRank);
+  
+  // Enforce: prob[i] >= prob[i+1] for all i (descending by rank)
+  for (let i = 1; i < withRanks.length; i++) {
+    if (withRanks[i].prob > withRanks[i - 1].prob) {
+      // Transfer excess probability from lower-ranked to higher-ranked
+      const excess = (withRanks[i].prob - withRanks[i - 1].prob) / 2 + 0.001;
+      withRanks[i].prob -= excess;
+      withRanks[i - 1].prob += excess;
+    }
+  }
+  
+  // Rebuild in original order and normalize
+  const result = new Array(probs.length);
+  withRanks.forEach(item => {
+    result[item.idx] = item.prob;
+  });
+  
+  return normalize(result);
+}
+
+// ============================================================
 // STEP 4: VALIDATE PROBABILITIES
 // ============================================================
 interface ProbabilityValidation {
@@ -255,23 +291,27 @@ function validateProbabilities(
 // ============================================================
 function deriveMultipliers(
   p_final: number[], 
-  marketType: string
+  marketType: string,
+  fieldSize: number
 ): { multipliers: number[], impliedSum: number, edgeFactor: number } {
   const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] || MULTIPLIER_CAPS.WINNER;
   const targetMid = (target.min + target.max) / 2;
   
+  // Dynamic cap scaling for large fields to prevent clumping at max
+  // For fields > 20, allow higher max to maintain spread
+  const fieldSizeAdjustment = Math.max(1, fieldSize / 20);
+  const dynamicMax = Math.min(caps.max * fieldSizeAdjustment, 25.0);
+  
   // Calculate edge factor to hit target implied sum
-  // implied_sum = sum(1/m) = sum(p_adj) = sum(p_final * edge_factor)
-  // So edge_factor = target_implied_sum (since sum(p_final) = 1)
   const edgeFactor = targetMid;
   
   // Apply edge and derive multipliers
   const multipliers = p_final.map(p => {
     const p_adj = p * edgeFactor;
-    if (p_adj <= 0) return caps.max;
+    if (p_adj <= 0) return dynamicMax;
     let m = 1 / p_adj;
-    m = clamp(m, caps.min, caps.max);
+    m = clamp(m, caps.min, dynamicMax);
     return roundToLadder(m);
   });
   
@@ -325,14 +365,41 @@ Deno.serve(async (req) => {
       .eq('discipline', market.discipline);
 
     const genderFilter = market.category === 'open_men' ? 'male' : 'female';
-    const filtered = entries?.filter(e => (e.athletes as any)?.gender === genderFilter) || [];
+    
+    // Define rank/rating keys BEFORE using them in filter
+    const rankKey = `current_rank_${market.discipline}`;
+    const ratingKey = `current_rating_${market.discipline}`;
+    
+    // Filter by gender AND discipline specialization
+    // Athletes must have a WORLD rank OR discipline_rank (from tournament) OR meaningful rating in THIS discipline
+    // seed_rank alone is NOT sufficient - it's just ordering, not actual ranking
+    const filtered = entries?.filter(e => {
+      const a = e.athletes as any;
+      if (a?.gender !== genderFilter) return false;
+      
+      // Check if athlete has discipline-specific data
+      const worldRank = a[rankKey]; // current_rank_{discipline} from athletes table
+      const disciplineRating = a[ratingKey]; // current_rating_{discipline} from athletes table
+      const entryDisciplineRank = e.discipline_rank; // actual discipline rank from entry (not seed_rank)
+      const entryRating = e.rating_0_100;
+      
+      // Must have REAL discipline data, not just seed_rank
+      // Include if: has world rank OR has entry discipline_rank OR has rating above default
+      const hasWorldRank = worldRank !== null && worldRank !== undefined;
+      const hasEntryDisciplineRank = entryDisciplineRank !== null && entryDisciplineRank !== undefined;
+      const hasMeaningfulRating = (entryRating && entryRating > 70) || (disciplineRating && disciplineRating > 70);
+      
+      return hasWorldRank || hasEntryDisciplineRank || hasMeaningfulRating;
+    }) || [];
+    
+    console.log(`[ODDS] Filtered: ${filtered.length} specialists from ${entries?.length || 0} entries (excluded seed-only athletes)`);
     
     if (filtered.length < 2) {
       await supabase.from('markets').update({
         odds_validation_status: 'INVALID',
-        odds_validation_error: 'Insufficient athletes'
+        odds_validation_error: 'Insufficient specialists for this discipline'
       }).eq('id', market_id);
-      return new Response(JSON.stringify({ error: "Insufficient athletes" }), 
+      return new Response(JSON.stringify({ error: "Insufficient specialists" }), 
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -345,10 +412,6 @@ Deno.serve(async (req) => {
     
     const probOverrideMap = new Map(probOverrides?.map(o => [o.athlete_id, o.manual_probability]) || []);
     const hasManualProbabilities = probOverrideMap.size > 0;
-
-    // Build athlete array
-    const rankKey = `current_rank_${market.discipline}`;
-    const ratingKey = `current_rating_${market.discipline}`;
     
     const athletes: Athlete[] = filtered.map(e => {
       const a = e.athletes as any;
@@ -382,7 +445,11 @@ Deno.serve(async (req) => {
     const p_mc = runLightMonteCarlo(athletes, marketType);
     
     // Step 3: Blend
-    const p_blended = blendProbabilities(p_base, p_mc);
+    const p_blended_raw = blendProbabilities(p_base, p_mc);
+    
+    // Step 3.5: Enforce monotonic ordering (rank 1 >= rank 2 >= rank 3 ...)
+    const athleteIds = athletes.map(a => a.id);
+    const p_blended = enforceMonotonic(p_blended_raw, fieldRanks, athleteIds);
     
     // Step 4: Apply manual overrides if any
     let p_final: number[];
@@ -410,7 +477,7 @@ Deno.serve(async (req) => {
     const validation = validateProbabilities(validationInput, marketType, athletes.length);
     
     // Step 6: Derive multipliers with house edge
-    const { multipliers, impliedSum, edgeFactor } = deriveMultipliers(p_final, marketType);
+    const { multipliers, impliedSum, edgeFactor } = deriveMultipliers(p_final, marketType, athletes.length);
 
     // Build results
     const results: AthleteResult[] = athletes.map((a, i) => ({
@@ -461,8 +528,8 @@ Deno.serve(async (req) => {
         market_id,
         athlete_id: r.id,
         // Core probability columns
-        base_probability: r.p_base,
-        prior_probability: r.p_base,
+        base_probability: r.p_final,  // Final probability for UI display
+        prior_probability: r.p_base,  // Raw ladder weight for audit
         mc_probability: r.p_mc,
         blended_probability: r.p_blended,
         normalized_probability: r.p_final,
