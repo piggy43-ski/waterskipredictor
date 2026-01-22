@@ -16,6 +16,7 @@ import { Plus, Trash2, Search, Upload, Check, AlertTriangle, X, Loader2, UserPlu
 import type { Discipline } from '@/types';
 import { decimalToAmerican } from '@/utils/oddsConverter';
 import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
+import { ProbabilityReviewPanel } from '@/components/admin/ProbabilityReviewPanel';
 
 const VALID_DISCIPLINES = ['slalom', 'trick', 'jump'] as const;
 
@@ -967,6 +968,17 @@ export default function TournamentEntries() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Probability Review Panel - shows after entries exist */}
+            {entries && entries.length > 0 && (
+              <ProbabilityReviewPanel 
+                tournamentId={selectedTournamentId}
+                onPublish={() => {
+                  queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
+                  toast.success('Markets are now live for betting!');
+                }}
+              />
+            )}
 
             <Card>
               <CardHeader>
