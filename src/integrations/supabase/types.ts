@@ -1373,6 +1373,7 @@ export type Database = {
           discipline: string
           expected_profit: number | null
           id: string
+          is_published: boolean
           last_safe_mode_check: string | null
           locked_at: string | null
           loss_probability: number | null
@@ -1381,6 +1382,7 @@ export type Database = {
           odds_validation_error: string | null
           odds_validation_status: string | null
           profit_p05: number | null
+          published_at: string | null
           safe_mode_status: string | null
           tournament_id: string
           updated_at: string
@@ -1391,6 +1393,7 @@ export type Database = {
           discipline: string
           expected_profit?: number | null
           id?: string
+          is_published?: boolean
           last_safe_mode_check?: string | null
           locked_at?: string | null
           loss_probability?: number | null
@@ -1399,6 +1402,7 @@ export type Database = {
           odds_validation_error?: string | null
           odds_validation_status?: string | null
           profit_p05?: number | null
+          published_at?: string | null
           safe_mode_status?: string | null
           tournament_id: string
           updated_at?: string
@@ -1409,6 +1413,7 @@ export type Database = {
           discipline?: string
           expected_profit?: number | null
           id?: string
+          is_published?: boolean
           last_safe_mode_check?: string | null
           locked_at?: string | null
           loss_probability?: number | null
@@ -1417,6 +1422,7 @@ export type Database = {
           odds_validation_error?: string | null
           odds_validation_status?: string | null
           profit_p05?: number | null
+          published_at?: string | null
           safe_mode_status?: string | null
           tournament_id?: string
           updated_at?: string
