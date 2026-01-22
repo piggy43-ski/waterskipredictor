@@ -112,7 +112,112 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action, market_id, athlete_id, manual_probability, reason, auto_normalize } = body;
 
-    console.log(`[PROB-OVERRIDE] Action: ${action}, Market: ${market_id}`);
+    console.log(`[PROB-OVERRIDE] Action: ${action}, Market: ${market_id || body.winner_market_id || 'N/A'}`);
+
+    // ===== ACTION: CASCADE_FROM_WINNER - Handle before market lookup =====
+    // This action uses winner_market_id instead of market_id
+    if (action === 'cascade_from_winner') {
+      const { winner_market_id, podium_market_id, highest_market_id } = body;
+      
+      if (!winner_market_id) {
+        return new Response(JSON.stringify({ error: "winner_market_id required" }), 
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Fetch WINNER probabilities (from overrides or market_odds)
+      const { data: winnerOdds } = await supabase
+        .from('market_odds')
+        .select('athlete_id, blended_probability, normalized_probability')
+        .eq('market_id', winner_market_id);
+
+      const { data: winnerOverrides } = await supabase
+        .from('market_probability_overrides')
+        .select('athlete_id, manual_probability')
+        .eq('market_id', winner_market_id)
+        .eq('is_enabled', true);
+
+      const overrideMap = new Map(winnerOverrides?.map(o => [o.athlete_id, o.manual_probability]) || []);
+
+      // Build final winner probabilities
+      const winnerProbs = (winnerOdds || []).map(o => ({
+        athlete_id: o.athlete_id,
+        p_winner: overrideMap.get(o.athlete_id) ?? o.blended_probability ?? o.normalized_probability ?? 0
+      }));
+
+      // Cascade formulas
+      const cascadeToPodium = (pWinner: number) => Math.min(0.90, Math.max(0.05, 1 - Math.pow(1 - pWinner, 2.2)));
+      const cascadeToHighest = (pWinner: number) => Math.min(0.50, Math.max(0.01, Math.pow(pWinner, 0.85)));
+
+      let podiumCount = 0;
+      let highestCount = 0;
+
+      // Cascade to PODIUM market
+      if (podium_market_id) {
+        for (const wp of winnerProbs) {
+          const pPodium = cascadeToPodium(wp.p_winner);
+          
+          await supabase.from('market_probability_overrides').upsert({
+            market_id: podium_market_id,
+            athlete_id: wp.athlete_id,
+            manual_probability: pPodium,
+            is_enabled: true,
+            is_cascaded: true,
+            created_by: user.id,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'market_id,athlete_id' });
+          
+          podiumCount++;
+        }
+      }
+
+      // Cascade to HIGHEST_SCORE market
+      if (highest_market_id) {
+        for (const wp of winnerProbs) {
+          const pHighest = cascadeToHighest(wp.p_winner);
+          
+          await supabase.from('market_probability_overrides').upsert({
+            market_id: highest_market_id,
+            athlete_id: wp.athlete_id,
+            manual_probability: pHighest,
+            is_enabled: true,
+            is_cascaded: true,
+            created_by: user.id,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'market_id,athlete_id' });
+          
+          highestCount++;
+        }
+      }
+
+      // Audit log
+      await supabase.from('audit_logs').insert({
+        event_type: 'PROBABILITY_CASCADED',
+        user_id: user.id,
+        target_type: 'market',
+        target_id: winner_market_id,
+        payload: {
+          winner_market_id,
+          podium_market_id,
+          highest_market_id,
+          podium_count: podiumCount,
+          highest_count: highestCount
+        }
+      });
+
+      console.log(`[PROB-OVERRIDE] Cascaded ${podiumCount} to PODIUM, ${highestCount} to HIGHEST`);
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        podium_count: podiumCount,
+        highest_count: highestCount
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // For all other actions, market_id is required
+    if (!market_id) {
+      return new Response(JSON.stringify({ error: "market_id required" }), 
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // Fetch market info
     const { data: market } = await supabase
@@ -401,104 +506,7 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ===== ACTION: CASCADE_FROM_WINNER =====
-    // Cascade WINNER probabilities to PODIUM and HIGHEST_SCORE markets
-    if (action === 'cascade_from_winner') {
-      const { winner_market_id, podium_market_id, highest_market_id } = body;
-      
-      if (!winner_market_id) {
-        return new Response(JSON.stringify({ error: "winner_market_id required" }), 
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-
-      // Fetch WINNER probabilities (from overrides or market_odds)
-      const { data: winnerOdds } = await supabase
-        .from('market_odds')
-        .select('athlete_id, blended_probability, normalized_probability')
-        .eq('market_id', winner_market_id);
-
-      const { data: winnerOverrides } = await supabase
-        .from('market_probability_overrides')
-        .select('athlete_id, manual_probability')
-        .eq('market_id', winner_market_id)
-        .eq('is_enabled', true);
-
-      const overrideMap = new Map(winnerOverrides?.map(o => [o.athlete_id, o.manual_probability]) || []);
-
-      // Build final winner probabilities
-      const winnerProbs = (winnerOdds || []).map(o => ({
-        athlete_id: o.athlete_id,
-        p_winner: overrideMap.get(o.athlete_id) ?? o.blended_probability ?? o.normalized_probability ?? 0
-      }));
-
-      // Cascade formulas
-      const cascadeToPodium = (pWinner: number) => Math.min(0.90, Math.max(0.05, 1 - Math.pow(1 - pWinner, 2.2)));
-      const cascadeToHighest = (pWinner: number) => Math.min(0.50, Math.max(0.01, Math.pow(pWinner, 0.85)));
-
-      let podiumCount = 0;
-      let highestCount = 0;
-
-      // Cascade to PODIUM market
-      if (podium_market_id) {
-        for (const wp of winnerProbs) {
-          const pPodium = cascadeToPodium(wp.p_winner);
-          
-          await supabase.from('market_probability_overrides').upsert({
-            market_id: podium_market_id,
-            athlete_id: wp.athlete_id,
-            manual_probability: pPodium,
-            is_enabled: true,
-            is_cascaded: true,
-            created_by: user.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'market_id,athlete_id' });
-          
-          podiumCount++;
-        }
-      }
-
-      // Cascade to HIGHEST_SCORE market
-      if (highest_market_id) {
-        for (const wp of winnerProbs) {
-          const pHighest = cascadeToHighest(wp.p_winner);
-          
-          await supabase.from('market_probability_overrides').upsert({
-            market_id: highest_market_id,
-            athlete_id: wp.athlete_id,
-            manual_probability: pHighest,
-            is_enabled: true,
-            is_cascaded: true,
-            created_by: user.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'market_id,athlete_id' });
-          
-          highestCount++;
-        }
-      }
-
-      // Audit log
-      await supabase.from('audit_logs').insert({
-        event_type: 'PROBABILITY_CASCADED',
-        user_id: user.id,
-        target_type: 'market',
-        target_id: winner_market_id,
-        payload: {
-          winner_market_id,
-          podium_market_id,
-          highest_market_id,
-          podium_count: podiumCount,
-          highest_count: highestCount
-        }
-      });
-
-      console.log(`[PROB-OVERRIDE] Cascaded ${podiumCount} to PODIUM, ${highestCount} to HIGHEST`);
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        podium_count: podiumCount,
-        highest_count: highestCount
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    // cascade_from_winner is now handled at the top of the function
 
     return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), 
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
