@@ -150,29 +150,34 @@ const TournamentDetail = () => {
         if (marketsError) throw marketsError;
         if (marketsData) setMarkets(marketsData as Market[]);
 
-        // Fetch selections with athletes and manual overrides
+        const marketIds = marketsData?.map(m => m.id) || [];
+        
+        // Fetch selections with athletes (separate from overrides to avoid FK issues)
         const { data: selectionsData, error: selectionsError } = await supabase
           .from('selections')
-          .select(`
-            *,
-            athlete:athletes(*),
-            override:market_multiplier_overrides(manual_multiplier, is_enabled)
-          `)
-          .in('market_id', marketsData?.map(m => m.id) || []);
+          .select(`*, athlete:athletes(*)`)
+          .in('market_id', marketIds);
 
         if (selectionsError) throw selectionsError;
         
-        // Apply manual overrides to decimal_odds for display
+        // Fetch enabled multiplier overrides separately
+        const { data: overridesData } = await supabase
+          .from('market_multiplier_overrides')
+          .select('market_id, athlete_id, manual_multiplier, is_enabled')
+          .in('market_id', marketIds)
+          .eq('is_enabled', true);
+        
+        // Merge overrides into selections client-side
         if (selectionsData) {
           const processedSelections = selectionsData.map((sel: any) => {
-            // Check if there's an enabled override for this selection
-            const override = sel.override?.find?.((o: any) => o.is_enabled) || 
-                           (sel.override?.is_enabled ? sel.override : null);
+            const override = overridesData?.find(
+              o => o.market_id === sel.market_id && o.athlete_id === sel.athlete_id
+            );
             
             return {
               ...sel,
               decimal_odds: override?.manual_multiplier ?? sel.decimal_odds,
-              multiplier_source: override?.manual_multiplier ? 'manual' : 'auto'
+              multiplier_source: override ? 'manual' : 'auto'
             };
           });
           setSelections(processedSelections as any);
