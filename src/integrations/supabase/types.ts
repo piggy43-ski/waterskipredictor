@@ -1275,6 +1275,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           id: string
+          is_cascaded: boolean
           is_enabled: boolean | null
           manual_probability: number
           market_id: string
@@ -1286,6 +1287,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          is_cascaded?: boolean
           is_enabled?: boolean | null
           manual_probability: number
           market_id: string
@@ -1297,6 +1299,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          is_cascaded?: boolean
           is_enabled?: boolean | null
           manual_probability?: number
           market_id?: string
