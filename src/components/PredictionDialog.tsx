@@ -13,7 +13,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Alert, AlertDescription } from './ui/alert';
 import { Coins, TrendingUp, AlertCircle, AlertTriangle } from 'lucide-react';
-import { decimalToAmerican, calculateParlayOdds } from '@/utils/oddsConverter';
+import { calculateCombinedMultiplier, formatMultiplier } from '@/utils/multiplierUtils';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 import { RISK_CONFIG, isPayoutOverMax } from '@/utils/riskConfig';
 
@@ -48,17 +48,17 @@ export const PredictionDialog = ({
   const isParlay = parlaySelections.length >= 2;
   
   // For parlay, calculate combined multiplier with platform edge
-  const combinedOdds = isParlay 
-    ? calculateParlayOdds(parlaySelections.map(s => s.decimal_odds), PARLAY_CONFIG.HOUSE_EDGE)
+  const combinedMultiplier = isParlay 
+    ? calculateCombinedMultiplier(parlaySelections.map(s => s.decimal_odds), PARLAY_CONFIG.HOUSE_EDGE)
     : selection?.decimal_odds || 1;
 
   const stake = parseInt(stakeAmount) || 0;
-  const potentialPayout = Math.floor(stake * combinedOdds);
-  const potentialProfit = potentialPayout - stake;
+  const projectedRewards = Math.floor(stake * combinedMultiplier);
+  const potentialProfit = projectedRewards - stake;
   
   // Validation
   const exceedsMaxStake = stake > PARLAY_CONFIG.MAX_STAKE;
-  const exceedsMaxPayout = isPayoutOverMax(stake, combinedOdds);
+  const exceedsMaxPayout = isPayoutOverMax(stake, combinedMultiplier);
   const isValidStake = stake > 0 && stake <= walletBalance && !exceedsMaxStake && !exceedsMaxPayout;
 
   const handleConfirm = () => {
@@ -113,7 +113,7 @@ export const PredictionDialog = ({
                 <div key={sel.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
                   <span className="text-sm">{idx + 1}. {sel.athlete.name}</span>
                   <span className="text-sm font-semibold text-primary">
-                    {decimalToAmerican(sel.decimal_odds)}
+                    {formatMultiplier(sel.decimal_odds)}
                   </span>
                 </div>
               ))}
@@ -127,7 +127,7 @@ export const PredictionDialog = ({
               </span>
               <span className="font-semibold text-primary flex items-center gap-1">
                 <TrendingUp className="w-4 h-4" />
-                {combinedOdds.toFixed(2)}x
+                {formatMultiplier(combinedMultiplier)}
               </span>
             </div>
             <div className="text-xs text-muted-foreground">
@@ -194,7 +194,7 @@ export const PredictionDialog = ({
             <div className="bg-primary/10 rounded-lg p-4 space-y-2 border border-primary/20">
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Projected Rewards</span>
-                <span className="font-bold text-lg">{potentialPayout.toLocaleString()}</span>
+                <span className="font-bold text-lg">{projectedRewards.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Potential Rewards</span>

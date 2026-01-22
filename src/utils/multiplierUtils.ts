@@ -225,6 +225,21 @@ export function calculateProjectedRewards(
   return Math.floor(entryAmount * multiplier);
 }
 
+/**
+ * Convert probability to multiplier with house edge
+ * @param probability Win probability (0-1)
+ * @param houseEdge House edge factor (default 10% = 0.10)
+ * @returns Final multiplier
+ */
+export function probabilityToMultiplier(
+  probability: number,
+  houseEdge: number = 0.10
+): number {
+  if (probability <= 0 || probability > 1) return 99.99;
+  const baseMultiplier = 1 / probability;
+  return baseMultiplier * (1 - houseEdge);
+}
+
 // ============================================================
 // DISPLAY FORMATTING
 // ============================================================

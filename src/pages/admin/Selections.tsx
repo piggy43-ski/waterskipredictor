@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Trash2, TrendingUp } from 'lucide-react';
-import { decimalToAmerican, americanToDecimal } from '@/utils/oddsConverter';
+import { formatMultiplier } from '@/utils/multiplierUtils';
 
 type Market = {
   id: string;
@@ -37,7 +37,7 @@ type Selection = {
 export default function AdminSelections() {
   const [open, setOpen] = useState(false);
   const [selectedMarketId, setSelectedMarketId] = useState<string>('');
-  const [americanOdds, setAmericanOdds] = useState('+150');
+  const [multiplierInput, setMultiplierInput] = useState('2.50');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -89,14 +89,13 @@ export default function AdminSelections() {
 
   const createMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const americanOddsValue = formData.get('odds') as string;
-      const decimalOdds = americanToDecimal(americanOddsValue);
+      const multiplierValue = parseFloat(formData.get('multiplier') as string) || 2.5;
       
       const selection = {
         market_id: selectedMarketId,
         athlete_id: formData.get('athlete_id') as string,
         description: formData.get('description') as string,
-        decimal_odds: decimalOdds,
+        decimal_odds: multiplierValue,
       };
 
       const { error } = await supabase.from('selections').insert(selection);
@@ -105,7 +104,7 @@ export default function AdminSelections() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-selections'] });
       setOpen(false);
-      setAmericanOdds('+150');
+      setMultiplierInput('2.50');
       toast({ title: 'Selection created successfully' });
     },
     onError: (error: Error) => {
@@ -133,9 +132,9 @@ export default function AdminSelections() {
     createMutation.mutate(formData);
   };
 
-  const validateAmericanOdds = (value: string): boolean => {
+  const validateMultiplier = (value: string): boolean => {
     const num = parseFloat(value);
-    return (num >= 100 || num <= -100) && !isNaN(num);
+    return num >= 1.01 && num <= 100 && !isNaN(num);
   };
 
   return (
@@ -209,28 +208,27 @@ export default function AdminSelections() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="odds">American Odds</Label>
+                      <Label htmlFor="multiplier">Multiplier</Label>
                       <Input
-                        id="odds"
-                        name="odds"
-                        value={americanOdds}
-                        onChange={(e) => setAmericanOdds(e.target.value)}
-                        placeholder="+150 or -200"
+                        id="multiplier"
+                        name="multiplier"
+                        type="number"
+                        step="0.1"
+                        min="1.01"
+                        max="100"
+                        value={multiplierInput}
+                        onChange={(e) => setMultiplierInput(e.target.value)}
+                        placeholder="2.50"
                         required
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Enter +100 or higher for underdogs, -100 or lower for favorites
+                        Enter multiplier value (e.g., 2.50 for 2.50x)
                       </p>
-                      {americanOdds && (
-                        <p className="text-xs text-primary mt-1">
-                          Decimal: {americanToDecimal(americanOdds).toFixed(2)}
-                        </p>
-                      )}
                     </div>
                     <Button 
                       type="submit" 
                       className="w-full" 
-                      disabled={createMutation.isPending || !validateAmericanOdds(americanOdds)}
+                      disabled={createMutation.isPending || !validateMultiplier(multiplierInput)}
                     >
                       {createMutation.isPending ? 'Creating...' : 'Create Selection'}
                     </Button>
@@ -274,10 +272,7 @@ export default function AdminSelections() {
                         <div className="flex items-center gap-2 text-primary">
                           <TrendingUp className="w-4 h-4" />
                           <span className="font-bold text-lg">
-                            {decimalToAmerican(selection.decimal_odds)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            ({selection.decimal_odds.toFixed(2)})
+                            {formatMultiplier(selection.decimal_odds)}
                           </span>
                         </div>
                         {selection.result && (

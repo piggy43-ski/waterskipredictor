@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { X, TrendingUp, AlertCircle } from 'lucide-react';
 import { Selection, Market } from '@/types';
-import { decimalToAmerican, calculateParlayOdds } from '@/utils/oddsConverter';
+import { calculateCombinedMultiplier, formatMultiplier } from '@/utils/multiplierUtils';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 
 interface ParlayCartProps {
@@ -26,11 +26,11 @@ export const ParlayCart = ({ selections, markets, onRemove, onPlaceParlay, onCle
   };
 
   // Calculate combined multiplier with 5% platform edge
-  const decimalOddsArray = selections.map(sel => sel.decimal_odds);
-  const adjustedOdds = calculateParlayOdds(decimalOddsArray, PARLAY_CONFIG.HOUSE_EDGE);
+  const multipliers = selections.map(sel => sel.decimal_odds);
+  const adjustedMultiplier = calculateCombinedMultiplier(multipliers, PARLAY_CONFIG.HOUSE_EDGE);
   
   // Display as multiplier
-  const multiplierDisplay = `${adjustedOdds.toFixed(2)}x`;
+  const multiplierDisplay = formatMultiplier(adjustedMultiplier);
   
   // Validation checks
   const hasMaxLegs = selections.length > PARLAY_CONFIG.MAX_LEGS;
