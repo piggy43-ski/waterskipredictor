@@ -15,7 +15,7 @@ import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
-import { decimalToAmerican } from '@/utils/oddsConverter';
+import { formatMultiplier } from '@/utils/multiplierUtils';
 import { toast } from 'sonner';
 
 interface ParlayBuilderProps {
@@ -697,7 +697,7 @@ export function ParlayBuilder({
                               <strong>Winner:</strong> {leg.winner?.athlete.name}
                             </div>
                             <Badge variant="secondary" className="text-xs h-5 px-1.5">
-                              {decimalToAmerican(leg.winner?.decimal_odds || 1)}
+                              {formatMultiplier(leg.winner?.decimal_odds || 1)}
                             </Badge>
                           </div>
                           <div className="flex items-center justify-between gap-2">
@@ -709,7 +709,7 @@ export function ParlayBuilder({
                               </span>
                             </div>
                             <Badge variant="secondary" className="text-xs h-5 px-1.5 whitespace-nowrap">
-                              {decimalToAmerican(
+                              {formatMultiplier(
                                 (leg.podium.first?.decimal_odds || 1) * 
                                 (leg.podium.second?.decimal_odds || 1) * 
                                 (leg.podium.third?.decimal_odds || 1)
@@ -722,7 +722,7 @@ export function ParlayBuilder({
                               <strong>Highest:</strong> {leg.highestScore?.athlete.name}
                             </div>
                             <Badge variant="secondary" className="text-xs h-5 px-1.5">
-                              {decimalToAmerican(leg.highestScore?.decimal_odds || 1)}
+                              {formatMultiplier(leg.highestScore?.decimal_odds || 1)}
                             </Badge>
                           </div>
                         </div>

@@ -14,7 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { Plus, Trash2, Search, Upload, Check, AlertTriangle, X, Loader2, UserPlus } from 'lucide-react';
 import type { Discipline } from '@/types';
-import { decimalToAmerican } from '@/utils/oddsConverter';
+import { formatMultiplier } from '@/utils/multiplierUtils';
 import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
 import { ProbabilityEditor } from '@/components/admin/ProbabilityEditor';
 
@@ -950,7 +950,7 @@ export default function TournamentEntries() {
                             {entry.athlete?.current_rank_jump && <span className="mr-2">J: {entry.athlete.current_rank_jump}</span>}
                           </div>
                           <span className="text-sm text-muted-foreground">
-                            Odds: {decimalToAmerican(entry.custom_odds || 2.5)}
+                            Multiplier: {formatMultiplier(entry.custom_odds || 2.5)}
                           </span>
                         </div>
                         <Button
@@ -1117,8 +1117,8 @@ export default function TournamentEntries() {
                               <div className="flex items-center gap-2">
                                 <Input
                                   type="number"
-                                  step="0.01"
-                                  placeholder={`Auto: ${decimalToAmerican(oddsValue)}`}
+                                  step="0.1"
+                                  placeholder={`Auto: ${formatMultiplier(oddsValue)}`}
                                   value={customOdds[athlete.id] || ''}
                                   onChange={(e) => setCustomOdds(prev => ({
                                     ...prev,

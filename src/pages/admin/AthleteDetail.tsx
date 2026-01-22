@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, RefreshCw, ExternalLink, TrendingUp, Trophy, Target } from 'lucide-react';
 import { calculatePerformanceIndex, calculateFantasyPrice } from '@/utils/athleteCalculations';
-import { formatAmericanOdds, probabilityToAmericanOdds } from '@/utils/oddsEngine';
+import { probabilityToMultiplier, formatMultiplier } from '@/utils/multiplierUtils';
 import type { AthleteResult } from '@/utils/athleteCalculations';
 import type { TierLevel } from '@/utils/athleteTiers';
 
@@ -135,13 +135,13 @@ export default function AthleteDetail() {
     }
   };
 
-  // Calculate implied probability and American odds from strength score
-  const getImpliedOdds = (strengthScore: number | null) => {
-    if (!strengthScore || strengthScore <= 0) return { probability: 0, americanOdds: '+9999' };
+  // Calculate implied probability and multiplier from strength score
+  const getImpliedMultiplier = (strengthScore: number | null) => {
+    if (!strengthScore || strengthScore <= 0) return { probability: 0, multiplier: '99.99x' };
     // Assume a typical field strength of 1.0 total for display purposes
     const probability = Math.min(0.9, Math.max(0.02, strengthScore));
-    const americanOdds = probabilityToAmericanOdds(probability, 0.10);
-    return { probability, americanOdds: formatAmericanOdds(americanOdds) };
+    const multiplier = probabilityToMultiplier(probability, 0.10);
+    return { probability, multiplier: formatMultiplier(multiplier) };
   };
 
   if (isLoading) {
@@ -188,7 +188,7 @@ export default function AthleteDetail() {
           {(['slalom', 'trick', 'jump'] as const).map((discipline) => {
             const tier = athlete[`strength_tier_${discipline}`] as string | null;
             const strengthScore = athlete[`odds_strength_score_${discipline}`] as number | null;
-            const { probability, americanOdds } = getImpliedOdds(strengthScore);
+            const { probability, multiplier } = getImpliedMultiplier(strengthScore);
             const seasonEvents = (athlete[`season_events_${discipline}`] as number) || 0;
             const seasonPodiums = (athlete[`season_podiums_${discipline}`] as number) || 0;
             const careerPodiums = (athlete[`career_podiums_${discipline}`] as number) || 0;
@@ -221,11 +221,11 @@ export default function AthleteDetail() {
                     </div>
                   </div>
 
-                  {/* Odds Engine Stats */}
+                  {/* Probability Engine Stats */}
                   <div className="bg-muted/50 rounded-lg p-3 space-y-2">
                     <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <TrendingUp className="w-4 h-4" />
-                      Odds Engine
+                      Probability Engine
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -235,9 +235,9 @@ export default function AthleteDetail() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Implied Odds</p>
+                        <p className="text-xs text-muted-foreground">Multiplier</p>
                         <p className="text-lg font-bold text-accent">
-                          {americanOdds}
+                          {multiplier}
                         </p>
                       </div>
                     </div>
