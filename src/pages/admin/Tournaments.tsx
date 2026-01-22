@@ -422,7 +422,7 @@ export default function AdminTournaments() {
                         </Badge>
                       )
                     )}
-                    {tournament.disciplines.map((disc) => (
+                    {(tournament.disciplines || []).map((disc) => (
                       <Badge key={disc} variant="outline" className="capitalize">
                         {disc}
                       </Badge>
