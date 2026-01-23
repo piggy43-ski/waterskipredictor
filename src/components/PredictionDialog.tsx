@@ -12,10 +12,12 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Alert, AlertDescription } from './ui/alert';
-import { Coins, TrendingUp, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Badge } from './ui/badge';
+import { Coins, TrendingUp, AlertCircle, AlertTriangle, Flame, Rocket } from 'lucide-react';
 import { calculateCombinedMultiplier, formatMultiplier } from '@/utils/multiplierUtils';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 import { RISK_CONFIG, isPayoutOverMax } from '@/utils/riskConfig';
+import { getRiskTierFromMultiplier, isUnderdog, getUnderdogMotivation, getRewardFraming } from '@/utils/riskTiers';
 
 interface PredictionDialogProps {
   selection: Selection | null;
@@ -47,6 +49,10 @@ export const PredictionDialog = ({
   
   const isParlay = parlaySelections.length >= 2;
   
+  // Risk tier for single selection
+  const riskTier = selection ? getRiskTierFromMultiplier(selection.decimal_odds) : null;
+  const isUnderdogPick = selection ? isUnderdog(selection.decimal_odds) : false;
+  
   // For parlay, calculate combined multiplier with platform edge
   const combinedMultiplier = isParlay 
     ? calculateCombinedMultiplier(parlaySelections.map(s => s.decimal_odds), PARLAY_CONFIG.HOUSE_EDGE)
@@ -74,10 +80,17 @@ export const PredictionDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-card border-border">
+      <DialogContent className={`sm:max-w-md bg-card border-border ${isUnderdogPick ? 'border-orange-500/50' : ''}`}>
         <DialogHeader>
-          <DialogTitle>
-            {isParlay ? `Confirm Combo Entry` : 'Confirm Entry'}
+          <DialogTitle className="flex items-center gap-2">
+            {isUnderdogPick && riskTier && (
+              <span className="text-lg">{riskTier.emoji}</span>
+            )}
+            {isParlay 
+              ? `Confirm Combo Entry` 
+              : isUnderdogPick 
+                ? `${riskTier?.label} Entry`
+                : 'Confirm Entry'}
           </DialogTitle>
           <DialogDescription>
             {marketContext && (
@@ -92,6 +105,35 @@ export const PredictionDialog = ({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Underdog Motivation Banner */}
+          {!isParlay && isUnderdogPick && riskTier && (
+            <div className={`rounded-lg p-3 border ${riskTier.tier === 'longshot' 
+              ? 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800' 
+              : 'bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800'}`}>
+              <div className="flex items-start gap-2">
+                {riskTier.tier === 'longshot' ? (
+                  <Rocket className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+                ) : (
+                  <Flame className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
+                )}
+                <div className="flex-1">
+                  <p className={`text-sm font-medium ${riskTier.tier === 'longshot' 
+                    ? 'text-red-800 dark:text-red-300' 
+                    : 'text-orange-800 dark:text-orange-300'}`}>
+                    {getUnderdogMotivation(riskTier.tier)}
+                  </p>
+                  {stake > 0 && (
+                    <p className={`text-xs mt-1 ${riskTier.tier === 'longshot' 
+                      ? 'text-red-600 dark:text-red-400' 
+                      : 'text-orange-600 dark:text-orange-400'}`}>
+                      {getRewardFraming(combinedMultiplier, stake)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
           {/* Prediction Summary for single predictions */}
           {!isParlay && marketContext && (
             <div className="bg-muted/50 rounded-lg p-3 space-y-1">
@@ -100,7 +142,17 @@ export const PredictionDialog = ({
               {selection && (
                 <>
                   <div className="text-xs text-muted-foreground mt-2">Selection</div>
-                  <div className="font-semibold">{selection.athlete.name}</div>
+                  <div className="font-semibold flex items-center gap-2">
+                    {selection.athlete.name}
+                    {riskTier && (
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${riskTier.colorClass}`}
+                      >
+                        {riskTier.emoji} {riskTier.label}
+                      </Badge>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -218,9 +270,17 @@ export const PredictionDialog = ({
             id="confirm-entry-btn"
             onClick={handleConfirm}
             disabled={!isValidStake || isValidating}
-            className="bg-primary hover:bg-primary/90"
+            className={isUnderdogPick && riskTier?.tier === 'longshot' 
+              ? "bg-red-600 hover:bg-red-700 text-white" 
+              : isUnderdogPick 
+                ? "bg-orange-600 hover:bg-orange-700 text-white"
+                : "bg-primary hover:bg-primary/90"}
           >
-            {isValidating ? 'Validating...' : 'Confirm Entry'}
+            {isValidating 
+              ? 'Validating...' 
+              : isUnderdogPick && riskTier
+                ? `${riskTier.emoji} Confirm ${riskTier.label}`
+                : 'Confirm Entry'}
           </Button>
         </DialogFooter>
       </DialogContent>

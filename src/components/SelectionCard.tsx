@@ -3,7 +3,7 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { TrendingUp, Medal, Check } from 'lucide-react';
-
+import { getRiskTierFromMultiplier } from '@/utils/riskTiers';
 interface SelectionCardProps {
   selection: Selection;
   onSelect: (selection: Selection) => void;
@@ -53,6 +53,7 @@ export const SelectionCard = ({
   remainingCapacity
 }: SelectionCardProps) => {
   const multiplierDisplay = `${selection.decimal_odds.toFixed(2)}×`;
+  const riskTier = getRiskTierFromMultiplier(selection.decimal_odds);
   
   // Get the appropriate rank based on discipline
   const getRank = () => {
@@ -99,12 +100,27 @@ export const SelectionCard = ({
           </p>
         </div>
         <div className="text-right flex flex-col items-end gap-2">
+          {/* Risk Tier Badge */}
+          <Badge 
+            variant="outline" 
+            className={`text-xs font-medium border ${riskTier.colorClass}`}
+          >
+            {riskTier.emoji} {riskTier.label}
+          </Badge>
+          
           <div id="multiplier-display" className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
             <span className="text-2xl font-bold text-primary">
               {multiplierDisplay}
             </span>
           </div>
+          
+          {/* Risk tier description for underdogs */}
+          {(riskTier.tier === 'bold_pick' || riskTier.tier === 'longshot') && (
+            <span className="text-xs text-muted-foreground max-w-[140px] text-right">
+              {riskTier.description}
+            </span>
+          )}
           
           {/* Option A: Show capacity warning */}
           {isAtCapacity && (
