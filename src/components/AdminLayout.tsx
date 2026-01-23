@@ -28,6 +28,7 @@ const navItems = [
   { path: '/admin/market-results', label: 'Contest Results', icon: Trophy },
   { path: '/admin/odds-review', label: 'Multiplier Review', icon: TrendingUp },
   { path: '/admin/monte-carlo-test', label: 'Monte Carlo Test', icon: FlaskConical },
+  { path: '/admin/tournament-simulator', label: 'Tournament Simulator', icon: FlaskConical },
   { path: '/admin/selections', label: 'Selections', icon: Trophy },
   { path: '/admin/rewards', label: 'Rewards', icon: Gift },
   { path: '/admin/liabilities', label: 'Reward Liabilities', icon: ClipboardList },
