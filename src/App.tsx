@@ -43,6 +43,7 @@ import AdminMarketResults from "./pages/admin/MarketResults";
 import AdminMarketOddsReview from "./pages/admin/MarketOddsReview";
 import AdminContestEntries from "./pages/admin/ContestEntries";
 import AdminMonteCarloTest from "./pages/admin/MonteCarloTest";
+import AdminTournamentSimulator from "./pages/admin/TournamentSimulator";
 import AdminMarketLiability from "./pages/admin/MarketLiability";
 import AdminAuditLogs from "./pages/admin/AuditLogs";
 import AdminRewardLiabilityDashboard from "./pages/admin/RewardLiabilityDashboard";
@@ -116,6 +117,7 @@ const App = () => (
               <Route path="/admin/odds-review" element={<AdminMarketOddsReview />} />
               <Route path="/admin/contest-entries" element={<AdminContestEntries />} />
               <Route path="/admin/monte-carlo-test" element={<AdminMonteCarloTest />} />
+              <Route path="/admin/tournament-simulator" element={<AdminTournamentSimulator />} />
               <Route path="/admin/market-liability" element={<AdminMarketLiability />} />
               <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
               <Route path="/admin/reward-dashboard" element={<AdminRewardLiabilityDashboard />} />

@@ -81,6 +81,9 @@ verify_jwt = true
 [functions.enforce-safe-mode]
 verify_jwt = true
 
+[functions.simulate-tournament-profit]
+verify_jwt = true
+
 [functions.manage-multiplier-overrides]
 verify_jwt = false
 
