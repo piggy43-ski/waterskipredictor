@@ -121,7 +121,8 @@ serve(async (req) => {
     console.log('Created tournament entries:', tournamentEntries.length);
 
     // Step 4: Create markets and selections
-    const markets: { id: string; tournament_id: string; name: string; market_type: string; discipline: string; category: string; gender: string }[] = [];
+    // Note: markets table uses 'category' (open_men/open_women), not 'gender'
+    const markets: { id: string; tournament_id: string; name: string; market_type: string; discipline: string; category: string }[] = [];
     const genderCategories = [
       { gender: 'male', category: 'open_men' },
       { gender: 'female', category: 'open_women' }
@@ -136,8 +137,7 @@ serve(async (req) => {
           name: `${gender} ${discipline} Winner`,
           market_type: 'WINNER',
           discipline,
-          category,
-          gender
+          category
         });
       }
     }
@@ -152,7 +152,9 @@ serve(async (req) => {
     // Create selections for each market
     const selections = [];
     for (const market of markets) {
-      const genderAthletes = market.gender === 'male' ? maleAthletes : femaleAthletes;
+      // Derive gender from category
+      const isMale = market.category === 'open_men';
+      const genderAthletes = isMale ? maleAthletes : femaleAthletes;
       for (let i = 0; i < genderAthletes.length; i++) {
         selections.push({
           id: crypto.randomUUID(),
@@ -443,7 +445,8 @@ serve(async (req) => {
     // Step 9: Mark winning selections
     // First athlete in each gender wins for each discipline
     for (const market of markets) {
-      const genderAthletes = market.gender === 'male' ? maleAthletes : femaleAthletes;
+      const isMale = market.category === 'open_men';
+      const genderAthletes = isMale ? maleAthletes : femaleAthletes;
       const winningAthleteId = genderAthletes[0].id;
       
       // Mark winner
