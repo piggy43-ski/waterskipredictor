@@ -56,7 +56,7 @@ export function getRiskTierFromMultiplier(multiplier: number): RiskTierInfo {
       tier: 'bold_pick',
       label: 'Bold Pick',
       emoji: '🔥',
-      description: 'Has upset potential, higher rewards',
+      description: '',
       colorClass: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800',
       badgeVariant: 'outline',
     };
@@ -66,7 +66,7 @@ export function getRiskTierFromMultiplier(multiplier: number): RiskTierInfo {
     tier: 'longshot',
     label: 'Longshot',
     emoji: '🚀',
-    description: 'High risk, maximum rewards',
+    description: '',
     colorClass: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
     badgeVariant: 'destructive',
   };
