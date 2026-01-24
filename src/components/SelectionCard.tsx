@@ -100,13 +100,6 @@ export const SelectionCard = ({
           </p>
         </div>
         <div className="text-right flex flex-col items-end gap-2">
-          {/* Risk Tier Badge */}
-          <Badge 
-            variant="outline" 
-            className={`text-xs font-medium border ${riskTier.colorClass}`}
-          >
-            {riskTier.emoji} {riskTier.label}
-          </Badge>
           
           <div id="multiplier-display" className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
