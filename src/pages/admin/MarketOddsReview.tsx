@@ -3,35 +3,59 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from '@/components/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Lock, Unlock, AlertTriangle, CheckCircle } from 'lucide-react';
+import { RefreshCw, Lock, Unlock, AlertTriangle, CheckCircle, Pencil, Trash2, Copy, RotateCcw } from 'lucide-react';
 
-interface MarketOddsRow {
-  id: string;
-  market_id: string;
+interface AthleteOverride {
   athlete_id: string;
-  base_probability: number;
-  base_decimal_odds: number;
-  manual_multiplier: number;
-  final_decimal_odds: number;
-  token_price: number;
-  is_frozen: boolean;
-  generated_at: string;
-  athletes: { name: string; country: string };
+  athlete_name: string;
+  rank: number;
+  auto_multiplier: number;
+  manual_multiplier: number | null;
+  final_multiplier: number;
+  source: 'auto' | 'manual';
+  is_enabled: boolean;
+  override_id: string | null;
+  reason: string | null;
+}
+
+interface OverrideMetrics {
+  implied_sum: number;
+  implied_sum_pct: string;
+  status: 'OK' | 'WARNING' | 'BLOCKED';
+  target_band: { min: number; max: number };
+  target_band_pct: string;
+  total_athletes: number;
+  manual_count: number;
+}
+
+interface OverrideResponse {
+  success: boolean;
+  market: { id: string; market_type: string; name: string };
+  athletes: AthleteOverride[];
+  metrics: OverrideMetrics;
+  caps: { min: number; max: number };
 }
 
 export default function MarketOddsReview() {
   const queryClient = useQueryClient();
   const [selectedTournament, setSelectedTournament] = useState<string>('');
   const [selectedMarket, setSelectedMarket] = useState<string>('');
-  const [localMultipliers, setLocalMultipliers] = useState<Record<string, number>>({});
+  
+  // Override dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingAthlete, setEditingAthlete] = useState<AthleteOverride | null>(null);
+  const [editMultiplier, setEditMultiplier] = useState<string>('');
+  const [editReason, setEditReason] = useState<string>('');
 
   // Fetch tournaments
   const { data: tournaments } = useQuery({
@@ -61,83 +85,108 @@ export default function MarketOddsReview() {
     enabled: !!selectedTournament,
   });
 
-  // Fetch odds for selected market
-  const { data: marketOdds, refetch: refetchOdds } = useQuery({
-    queryKey: ['admin-market-odds', selectedMarket],
+  // Fetch overrides for selected market using edge function
+  const { data: overrideData, refetch: refetchOverrides } = useQuery({
+    queryKey: ['admin-multiplier-overrides', selectedMarket],
     queryFn: async () => {
-      if (!selectedMarket) return [];
-      const { data, error } = await supabase
-        .from('market_odds')
-        .select(`
-          id,
-          market_id,
-          athlete_id,
-          base_probability,
-          base_decimal_odds,
-          manual_multiplier,
-          final_decimal_odds,
-          token_price,
-          is_frozen,
-          generated_at,
-          athletes(name, country)
-        `)
-        .eq('market_id', selectedMarket)
-        .order('base_probability', { ascending: false });
+      if (!selectedMarket) return null;
+      const { data, error } = await supabase.functions.invoke('manage-multiplier-overrides', {
+        body: { action: 'list', market_id: selectedMarket },
+      });
       if (error) throw error;
-      return data as MarketOddsRow[];
+      return data as OverrideResponse;
     },
     enabled: !!selectedMarket,
   });
 
-  // Calculate implied sum
-  const impliedSum = marketOdds?.reduce((sum, row) => {
-    const multiplier = localMultipliers[row.athlete_id] ?? row.manual_multiplier;
-    const finalOdds = row.base_decimal_odds * multiplier;
-    return sum + (1 / finalOdds);
-  }, 0) ?? 0;
-
-  // Update multiplier mutation
-  const updateMultiplierMutation = useMutation({
-    mutationFn: async ({ athleteId, multiplier }: { athleteId: string; multiplier: number }) => {
-      const { error } = await supabase
-        .from('market_odds')
-        .update({ 
+  // Upsert override mutation
+  const upsertMutation = useMutation({
+    mutationFn: async ({ athleteId, multiplier, reason }: { athleteId: string; multiplier: number; reason: string }) => {
+      const { data, error } = await supabase.functions.invoke('manage-multiplier-overrides', {
+        body: {
+          action: 'upsert',
+          market_id: selectedMarket,
+          athlete_id: athleteId,
           manual_multiplier: multiplier,
-          final_decimal_odds: Math.round((marketOdds?.find(o => o.athlete_id === athleteId)?.base_decimal_odds ?? 1) * multiplier * 100) / 100,
-        })
-        .eq('market_id', selectedMarket)
-        .eq('athlete_id', athleteId);
+          reason: reason || null,
+          is_enabled: true,
+        },
+      });
       if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to save override');
+      return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-market-odds'] });
-      toast.success('Multiplier updated');
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-multiplier-overrides'] });
+      toast.success(`Override saved: ${data.applied_multiplier}x${data.was_clamped ? ' (clamped to limits)' : ''}`);
+      setEditDialogOpen(false);
+      setEditingAthlete(null);
     },
     onError: (error: any) => {
-      toast.error('Failed to update: ' + error.message);
+      toast.error('Failed to save: ' + error.message);
     },
   });
 
-  // Toggle freeze mutation
-  const toggleFreezeMutation = useMutation({
-    mutationFn: async (isFrozen: boolean) => {
-      const { error } = await supabase
-        .from('market_odds')
-        .update({ is_frozen: isFrozen })
-        .eq('market_id', selectedMarket);
+  // Delete override mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (athleteId: string) => {
+      const { data, error } = await supabase.functions.invoke('manage-multiplier-overrides', {
+        body: {
+          action: 'delete',
+          market_id: selectedMarket,
+          athlete_id: athleteId,
+        },
+      });
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-market-odds'] });
-      toast.success('Contest freeze status updated');
+      queryClient.invalidateQueries({ queryKey: ['admin-multiplier-overrides'] });
+      toast.success('Override removed, reverted to auto multiplier');
     },
     onError: (error: any) => {
-      toast.error('Failed to update: ' + error.message);
+      toast.error('Failed to remove: ' + error.message);
     },
   });
 
-  // Regenerate odds mutation
-  const regenerateOddsMutation = useMutation({
+  // Bulk copy all auto to manual
+  const bulkCopyMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('manage-multiplier-overrides', {
+        body: { action: 'bulk_copy', market_id: selectedMarket },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-multiplier-overrides'] });
+      toast.success('All multipliers copied to manual overrides');
+    },
+    onError: (error: any) => {
+      toast.error('Failed: ' + error.message);
+    },
+  });
+
+  // Bulk reset all overrides
+  const bulkResetMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('manage-multiplier-overrides', {
+        body: { action: 'bulk_reset', market_id: selectedMarket },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-multiplier-overrides'] });
+      toast.success('All overrides removed, reverted to auto');
+    },
+    onError: (error: any) => {
+      toast.error('Failed: ' + error.message);
+    },
+  });
+
+  // Regenerate auto multipliers
+  const regenerateMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('generate-market-odds', {
         body: { market_id: selectedMarket, force: true },
@@ -146,50 +195,91 @@ export default function MarketOddsReview() {
       return data;
     },
     onSuccess: (data) => {
-      toast.success(`Multipliers regenerated. Implied sum: ${data.implied_sum.toFixed(3)}`);
-      queryClient.invalidateQueries({ queryKey: ['admin-market-odds'] });
-      setLocalMultipliers({});
+      toast.success(`Auto multipliers regenerated. Implied sum: ${data.implied_sum?.toFixed(3) || 'N/A'}`);
+      queryClient.invalidateQueries({ queryKey: ['admin-multiplier-overrides'] });
     },
     onError: (error: any) => {
       toast.error('Failed to regenerate: ' + error.message);
     },
   });
 
-  const handleMultiplierChange = (athleteId: string, value: number[]) => {
-    setLocalMultipliers(prev => ({ ...prev, [athleteId]: value[0] }));
+  const openEditDialog = (athlete: AthleteOverride) => {
+    setEditingAthlete(athlete);
+    setEditMultiplier(athlete.manual_multiplier?.toString() || athlete.auto_multiplier.toString());
+    setEditReason(athlete.reason || '');
+    setEditDialogOpen(true);
   };
 
-  const handleMultiplierCommit = (athleteId: string) => {
-    const multiplier = localMultipliers[athleteId];
-    if (multiplier !== undefined) {
-      updateMultiplierMutation.mutate({ athleteId, multiplier });
+  const handleSaveOverride = () => {
+    if (!editingAthlete) return;
+    const multiplier = parseFloat(editMultiplier);
+    if (isNaN(multiplier) || multiplier <= 0) {
+      toast.error('Please enter a valid multiplier');
+      return;
+    }
+    upsertMutation.mutate({
+      athleteId: editingAthlete.athlete_id,
+      multiplier,
+      reason: editReason,
+    });
+  };
+
+  const getDeviationWarning = () => {
+    if (!editingAthlete) return null;
+    const manual = parseFloat(editMultiplier);
+    if (isNaN(manual)) return null;
+    
+    const auto = editingAthlete.auto_multiplier;
+    const deviation = ((manual - auto) / auto) * 100;
+    
+    if (Math.abs(deviation) > 30) {
+      return {
+        message: `${deviation > 0 ? '+' : ''}${deviation.toFixed(0)}% from auto (${auto.toFixed(2)}x)`,
+        isHigher: deviation > 0,
+      };
+    }
+    return null;
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'OK': return 'text-green-500';
+      case 'WARNING': return 'text-yellow-500';
+      case 'BLOCKED': return 'text-red-500';
+      default: return 'text-muted-foreground';
     }
   };
 
-  const getImpliedSumStatus = () => {
-    if (impliedSum < 1.05) return { status: 'danger', message: 'Too low - unprofitable' };
-    if (impliedSum > 1.25) return { status: 'warning', message: 'High overround - may deter entries' };
-    return { status: 'success', message: 'Healthy margin' };
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'OK': return <Badge className="bg-green-500/20 text-green-500 border-green-500/30">OK</Badge>;
+      case 'WARNING': return <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">WARNING</Badge>;
+      case 'BLOCKED': return <Badge variant="destructive">BLOCKED</Badge>;
+      default: return null;
+    }
   };
 
-  const isFrozen = marketOdds?.[0]?.is_frozen ?? false;
   const selectedMarketData = markets?.find(m => m.id === selectedMarket);
+  const athletes = overrideData?.athletes || [];
+  const metrics = overrideData?.metrics;
+  const caps = overrideData?.caps || { min: 1.5, max: 20.0 };
 
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Multiplier Review</h1>
-          <p className="text-muted-foreground">Review and adjust contest multipliers with manual overrides</p>
+          <h1 className="text-3xl font-bold text-foreground">Multiplier Override</h1>
+          <p className="text-muted-foreground">Set exact multiplier values for any athlete in any market</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Select Contest</CardTitle>
+            <CardTitle>Select Market</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <Label className="mb-2 block">Tournament</Label>
                 <Select value={selectedTournament} onValueChange={(v) => { setSelectedTournament(v); setSelectedMarket(''); }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a tournament" />
@@ -204,9 +294,10 @@ export default function MarketOddsReview() {
                 </Select>
               </div>
               <div>
+                <Label className="mb-2 block">Market</Label>
                 <Select value={selectedMarket} onValueChange={setSelectedMarket} disabled={!selectedTournament}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a contest" />
+                    <SelectValue placeholder="Select a market" />
                   </SelectTrigger>
                   <SelectContent>
                     {markets?.map(m => (
@@ -221,12 +312,13 @@ export default function MarketOddsReview() {
           </CardContent>
         </Card>
 
-        {selectedMarket && marketOdds && marketOdds.length > 0 && (
+        {selectedMarket && metrics && (
           <>
-            <div className="grid grid-cols-3 gap-4">
+            {/* Metrics Cards */}
+            <div className="grid grid-cols-4 gap-4">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Contest Type</CardTitle>
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Market Type</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Badge variant="outline" className="text-lg">
@@ -240,149 +332,259 @@ export default function MarketOddsReview() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl font-bold">{impliedSum.toFixed(3)}</span>
-                    {getImpliedSumStatus().status === 'success' && <CheckCircle className="w-5 h-5 text-green-500" />}
-                    {getImpliedSumStatus().status === 'warning' && <AlertTriangle className="w-5 h-5 text-yellow-500" />}
-                    {getImpliedSumStatus().status === 'danger' && <AlertTriangle className="w-5 h-5 text-red-500" />}
+                    <span className={`text-2xl font-bold ${getStatusColor(metrics.status)}`}>
+                      {metrics.implied_sum_pct}%
+                    </span>
+                    {getStatusBadge(metrics.status)}
                   </div>
-                  <p className="text-sm text-muted-foreground">{getImpliedSumStatus().message}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Target: {metrics.target_band_pct}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Status</CardTitle>
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Override Count</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2">
-                    {isFrozen ? (
-                      <Badge variant="destructive" className="flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> Frozen
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="flex items-center gap-1">
-                        <Unlock className="w-3 h-3" /> Open
-                      </Badge>
-                    )}
-                  </div>
+                  <span className="text-2xl font-bold">{metrics.manual_count}</span>
+                  <span className="text-muted-foreground ml-1">/ {metrics.total_athletes}</span>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Multiplier Caps</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <span className="text-lg font-mono">{caps.min}x – {caps.max}x</span>
                 </CardContent>
               </Card>
             </div>
 
-            {getImpliedSumStatus().status !== 'success' && (
-              <Alert variant={getImpliedSumStatus().status === 'danger' ? 'destructive' : 'default'}>
+            {metrics.status === 'BLOCKED' && (
+              <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Implied Sum Warning</AlertTitle>
+                <AlertTitle>Implied Sum Out of Range</AlertTitle>
                 <AlertDescription>
-                  {getImpliedSumStatus().status === 'danger' 
-                    ? 'The implied sum is too low, which means the platform may lose money on this contest.'
-                    : 'The implied sum is quite high, which may discourage users from making entries.'}
+                  The implied sum is outside the safe range. Adjust multipliers to bring it within the target band.
                 </AlertDescription>
               </Alert>
             )}
 
+            {/* Athletes Table */}
             <Card>
               <CardHeader>
                 <CardTitle>Athlete Multipliers</CardTitle>
-                <CardDescription>Adjust manual multiplier (0.90 - 1.10) to fine-tune final multipliers</CardDescription>
+                <CardDescription>
+                  Click "Set Override" to enter an exact multiplier value. Manual overrides are highlighted.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">#</TableHead>
                       <TableHead>Athlete</TableHead>
-                      <TableHead>Base Probability</TableHead>
-                      <TableHead>Base Multiplier</TableHead>
-                      <TableHead className="w-48">Manual Adjustment</TableHead>
-                      <TableHead>Final Multiplier</TableHead>
-                      <TableHead>Token Price</TableHead>
+                      <TableHead className="text-right">Auto</TableHead>
+                      <TableHead className="text-right">Override</TableHead>
+                      <TableHead className="text-right">Final</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {marketOdds.map(row => {
-                      const currentMultiplier = localMultipliers[row.athlete_id] ?? row.manual_multiplier;
-                      const finalOdds = Math.round(row.base_decimal_odds * currentMultiplier * 100) / 100;
-                      
-                      return (
-                        <TableRow key={row.id}>
-                          <TableCell>
-                            <div className="font-medium">{row.athletes?.name}</div>
-                            <div className="text-xs text-muted-foreground">{row.athletes?.country}</div>
-                          </TableCell>
-                          <TableCell>{(row.base_probability * 100).toFixed(1)}%</TableCell>
-                          <TableCell>{row.base_decimal_odds.toFixed(2)}x</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Slider
-                                min={0.90}
-                                max={1.10}
-                                step={0.01}
-                                value={[currentMultiplier]}
-                                onValueChange={(v) => handleMultiplierChange(row.athlete_id, v)}
-                                onValueCommit={() => handleMultiplierCommit(row.athlete_id)}
-                                className="w-32"
-                                disabled={isFrozen}
-                              />
-                              <span className="text-sm w-12">{currentMultiplier.toFixed(2)}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="font-mono">
-                              {finalOdds.toFixed(2)}x
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {row.token_price?.toLocaleString() ?? '-'}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {athletes.map(athlete => (
+                      <TableRow 
+                        key={athlete.athlete_id}
+                        className={athlete.source === 'manual' ? 'bg-primary/5' : ''}
+                      >
+                        <TableCell className="font-mono text-muted-foreground">
+                          {athlete.rank}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{athlete.athlete_name}</span>
+                            {athlete.source === 'manual' && (
+                              <Badge variant="secondary" className="text-xs">MANUAL</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">
+                          {athlete.auto_multiplier.toFixed(2)}x
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {athlete.manual_multiplier ? (
+                            <span className="font-mono font-bold text-primary">
+                              {athlete.manual_multiplier.toFixed(2)}x
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge 
+                            variant={athlete.source === 'manual' ? 'default' : 'outline'}
+                            className="font-mono"
+                          >
+                            {athlete.final_multiplier.toFixed(2)}x
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
+                          {athlete.reason || '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditDialog(athlete)}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" />
+                              {athlete.source === 'manual' ? 'Edit' : 'Set Override'}
+                            </Button>
+                            {athlete.source === 'manual' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deleteMutation.mutate(athlete.athlete_id)}
+                                disabled={deleteMutation.isPending}
+                              >
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
 
+            {/* Bulk Actions */}
             <Card>
               <CardHeader>
-                <CardTitle>Actions</CardTitle>
+                <CardTitle>Bulk Actions</CardTitle>
               </CardHeader>
               <CardContent className="flex gap-4">
                 <Button
-                  onClick={() => regenerateOddsMutation.mutate()}
-                  disabled={regenerateOddsMutation.isPending}
+                  onClick={() => regenerateMutation.mutate()}
+                  disabled={regenerateMutation.isPending}
                   variant="secondary"
                 >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${regenerateOddsMutation.isPending ? 'animate-spin' : ''}`} />
-                  Regenerate Multipliers
+                  <RefreshCw className={`w-4 h-4 mr-2 ${regenerateMutation.isPending ? 'animate-spin' : ''}`} />
+                  Regenerate Auto
                 </Button>
                 <Button
-                  onClick={() => toggleFreezeMutation.mutate(!isFrozen)}
-                  disabled={toggleFreezeMutation.isPending}
-                  variant={isFrozen ? 'outline' : 'destructive'}
+                  onClick={() => bulkCopyMutation.mutate()}
+                  disabled={bulkCopyMutation.isPending}
+                  variant="outline"
                 >
-                  {isFrozen ? (
-                    <>
-                      <Unlock className="w-4 h-4 mr-2" />
-                      Unfreeze Contest
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="w-4 h-4 mr-2" />
-                      Freeze Contest
-                    </>
-                  )}
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy All to Manual
+                </Button>
+                <Button
+                  onClick={() => bulkResetMutation.mutate()}
+                  disabled={bulkResetMutation.isPending || metrics.manual_count === 0}
+                  variant="outline"
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Reset All to Auto
                 </Button>
               </CardContent>
             </Card>
           </>
         )}
 
-        {selectedMarket && (!marketOdds || marketOdds.length === 0) && (
+        {selectedMarket && !overrideData && (
           <Alert>
             <AlertDescription>
-              No multipliers generated yet for this contest. Go to Contest Results to generate them.
+              Loading multiplier data for this market...
             </AlertDescription>
           </Alert>
         )}
+
+        {/* Edit Override Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {editingAthlete?.source === 'manual' ? 'Edit' : 'Set'} Multiplier Override
+              </DialogTitle>
+              <DialogDescription>
+                {editingAthlete?.athlete_name} (Rank #{editingAthlete?.rank})
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Auto Multiplier</Label>
+                <div className="text-lg font-mono text-muted-foreground">
+                  {editingAthlete?.auto_multiplier.toFixed(2)}x
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="multiplier">Manual Override</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="multiplier"
+                    type="number"
+                    min={caps.min}
+                    max={caps.max}
+                    step={0.05}
+                    value={editMultiplier}
+                    onChange={(e) => setEditMultiplier(e.target.value)}
+                    className="font-mono text-lg"
+                    placeholder={`e.g. ${editingAthlete?.auto_multiplier.toFixed(2)}`}
+                  />
+                  <span className="text-muted-foreground">x</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Range: {caps.min}x – {caps.max}x
+                </p>
+                
+                {getDeviationWarning() && (
+                  <Alert variant={getDeviationWarning()?.isHigher ? 'default' : 'destructive'} className="mt-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      {getDeviationWarning()?.isHigher 
+                        ? `Higher multiplier increases your exposure if this athlete wins.`
+                        : `Lower multiplier reduces potential payout for users.`
+                      }
+                      <br />
+                      <span className="font-mono">{getDeviationWarning()?.message}</span>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="reason">Reason (optional)</Label>
+                <Textarea
+                  id="reason"
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  placeholder="e.g. Injured shoulder, new ski, weather conditions..."
+                  rows={2}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Recorded in audit log for your reference
+                </p>
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveOverride}
+                disabled={upsertMutation.isPending}
+              >
+                {upsertMutation.isPending ? 'Saving...' : 'Save Override'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );
