@@ -30,9 +30,12 @@ export const PROBABILITY_CONFIG = {
 };
 
 // Weight ladder for WINNER probability (rank-driven)
+// Ranks 1-3: Top tier with clear separation
+// Ranks 4-8: TIGHT CLUSTER - "very close and interchangeable" per domain knowledge
+// Ranks 9+: Gradual decay begins
 export const WINNER_WEIGHT_LADDER: Record<number, number> = {
-  1: 1.00, 2: 0.75, 3: 0.60, 4: 0.45, 5: 0.38,
-  6: 0.32, 7: 0.27, 8: 0.23, 9: 0.20, 10: 0.18
+  1: 1.00, 2: 0.80, 3: 0.65, 4: 0.48, 5: 0.45,
+  6: 0.42, 7: 0.40, 8: 0.38, 9: 0.30, 10: 0.24
 };
 
 // ============================================================

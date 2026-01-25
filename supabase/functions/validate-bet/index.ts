@@ -257,6 +257,60 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // === VALIDATION 6: Liability Cap (85% of handle) - BANKRUPTCY PROTECTION ===
+    const newLiability = newAthleteTokens * currentOdds;
+    const liabilityCap = newMarketHandle * 0.85;
+    if (newLiability > liabilityCap) {
+      console.log(`[VALIDATE] BLOCKED: Liability ${newLiability.toFixed(0)} exceeds 85% cap ${liabilityCap.toFixed(0)}`);
+      
+      await writeAuditLog(supabase, {
+        actor_type: 'system',
+        action_type: 'BET_BLOCKED_LIABILITY_CAP',
+        entity_type: 'bet_validation',
+        entity_id: `${marketId}_${athleteId}`,
+        metadata: {
+          user_id: userId,
+          stake_amount: stakeAmount,
+          new_liability: newLiability,
+          liability_cap: liabilityCap,
+          market_handle: newMarketHandle,
+        }
+      });
+
+      return new Response(JSON.stringify({
+        allowed: false,
+        reason: 'Market liability limit reached for this selection.',
+        warnings: [],
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // === VALIDATION 7: Max Payout Cap (95% of handle) - BANKRUPTCY PROTECTION ===
+    const maxPossiblePayout = newAthleteTokens * currentOdds;
+    const payoutCap = newMarketHandle * 0.95;
+    if (maxPossiblePayout > payoutCap) {
+      console.log(`[VALIDATE] BLOCKED: Max payout ${maxPossiblePayout.toFixed(0)} exceeds 95% cap ${payoutCap.toFixed(0)}`);
+      
+      await writeAuditLog(supabase, {
+        actor_type: 'system',
+        action_type: 'BET_BLOCKED_PAYOUT_CAP',
+        entity_type: 'bet_validation',
+        entity_id: `${marketId}_${athleteId}`,
+        metadata: {
+          user_id: userId,
+          stake_amount: stakeAmount,
+          max_payout: maxPossiblePayout,
+          payout_cap: payoutCap,
+          market_handle: newMarketHandle,
+        }
+      });
+
+      return new Response(JSON.stringify({
+        allowed: false,
+        reason: 'Maximum payout threshold reached for this market.',
+        warnings: [],
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // Add exposure info to result
     result.exposureInfo = {
       athleteName,
