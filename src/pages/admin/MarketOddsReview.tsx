@@ -56,6 +56,10 @@ export default function MarketOddsReview() {
   const [editingAthlete, setEditingAthlete] = useState<AthleteOverride | null>(null);
   const [editMultiplier, setEditMultiplier] = useState<string>('');
   const [editReason, setEditReason] = useState<string>('');
+  
+  // Inline edit state
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+  const [inlineValue, setInlineValue] = useState<string>('');
 
   // Fetch tournaments
   const { data: tournaments } = useQuery({
@@ -121,6 +125,7 @@ export default function MarketOddsReview() {
       toast.success(`Override saved: ${data.applied_multiplier}x${data.was_clamped ? ' (clamped to limits)' : ''}`);
       setEditDialogOpen(false);
       setEditingAthlete(null);
+      setInlineEditingId(null);
     },
     onError: (error: any) => {
       toast.error('Failed to save: ' + error.message);
@@ -222,6 +227,34 @@ export default function MarketOddsReview() {
       multiplier,
       reason: editReason,
     });
+  };
+
+  // Inline edit handlers
+  const startInlineEdit = (athlete: AthleteOverride) => {
+    setInlineEditingId(athlete.athlete_id);
+    setInlineValue(athlete.manual_multiplier?.toString() || athlete.auto_multiplier.toString());
+  };
+
+  const handleInlineSave = (athlete: AthleteOverride) => {
+    const multiplier = parseFloat(inlineValue);
+    if (isNaN(multiplier) || multiplier <= 0) {
+      toast.error('Please enter a valid multiplier');
+      return;
+    }
+    upsertMutation.mutate({
+      athleteId: athlete.athlete_id,
+      multiplier,
+      reason: athlete.reason || '', // Keep existing reason
+    });
+  };
+
+  const handleInlineKeyDown = (e: React.KeyboardEvent, athlete: AthleteOverride) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleInlineSave(athlete);
+    } else if (e.key === 'Escape') {
+      setInlineEditingId(null);
+    }
   };
 
   const getDeviationWarning = () => {
@@ -374,7 +407,7 @@ export default function MarketOddsReview() {
               <CardHeader>
                 <CardTitle>Athlete Multipliers</CardTitle>
                 <CardDescription>
-                  Click "Set Override" to enter an exact multiplier value. Manual overrides are highlighted.
+                  Click on any multiplier value to edit it inline. Press Enter to save, Escape to cancel.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -384,7 +417,7 @@ export default function MarketOddsReview() {
                       <TableHead className="w-12">#</TableHead>
                       <TableHead>Athlete</TableHead>
                       <TableHead className="text-right">Auto</TableHead>
-                      <TableHead className="text-right">Override</TableHead>
+                      <TableHead className="text-right w-32">Override (click to edit)</TableHead>
                       <TableHead className="text-right">Final</TableHead>
                       <TableHead>Reason</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -411,12 +444,37 @@ export default function MarketOddsReview() {
                           {athlete.auto_multiplier.toFixed(2)}x
                         </TableCell>
                         <TableCell className="text-right">
-                          {athlete.manual_multiplier ? (
-                            <span className="font-mono font-bold text-primary">
-                              {athlete.manual_multiplier.toFixed(2)}x
-                            </span>
+                          {inlineEditingId === athlete.athlete_id ? (
+                            <div className="flex items-center justify-end gap-1">
+                              <Input
+                                type="number"
+                                min={caps.min}
+                                max={caps.max}
+                                step={0.05}
+                                value={inlineValue}
+                                onChange={(e) => setInlineValue(e.target.value)}
+                                onKeyDown={(e) => handleInlineKeyDown(e, athlete)}
+                                onBlur={() => setInlineEditingId(null)}
+                                className="w-20 h-8 font-mono text-sm text-right"
+                                autoFocus
+                              />
+                              <span className="text-muted-foreground text-sm">x</span>
+                            </div>
                           ) : (
-                            <span className="text-muted-foreground">—</span>
+                            <button
+                              onClick={() => startInlineEdit(athlete)}
+                              className="font-mono cursor-pointer hover:bg-muted px-2 py-1 rounded transition-colors"
+                            >
+                              {athlete.manual_multiplier ? (
+                                <span className="font-bold text-primary">
+                                  {athlete.manual_multiplier.toFixed(2)}x
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground hover:text-foreground">
+                                  click to set
+                                </span>
+                              )}
+                            </button>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
