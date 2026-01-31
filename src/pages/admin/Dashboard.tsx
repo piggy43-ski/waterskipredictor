@@ -13,12 +13,13 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { UnpublishedMarketsCard } from '@/components/admin/UnpublishedMarketsCard';
 
-type EmailType = 'welcome' | 'bet_confirmation' | 'bet_result' | 'redemption_receipt';
+type EmailType = 'welcome' | 'bet_confirmation' | 'bet_result' | 'bet_result_lost' | 'redemption_receipt';
 
 const EMAIL_TYPES: { value: EmailType; label: string }[] = [
   { value: 'welcome', label: 'Welcome Email' },
   { value: 'bet_confirmation', label: 'Bet Confirmation' },
   { value: 'bet_result', label: 'Bet Result (Win)' },
+  { value: 'bet_result_lost', label: 'Bet Result (Lost)' },
   { value: 'redemption_receipt', label: 'Redemption Receipt' },
 ];
 
@@ -44,6 +45,13 @@ const TEST_DATA: Record<EmailType, Record<string, any>> = {
     result: 'won',
     stakedTokens: 500,
     payoutTokens: 1500,
+  },
+  bet_result_lost: {
+    username: 'TestUser',
+    athleteName: 'Freddie Winter',
+    tournamentName: 'World Championships 2025',
+    result: 'lost',
+    stakedTokens: 500,
   },
   redemption_receipt: {
     username: 'TestUser',
@@ -123,9 +131,10 @@ export default function AdminDashboard() {
     setLastResult(null);
 
     try {
+      const actualEmailType = emailType === 'bet_result_lost' ? 'bet_result' : emailType;
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
-          type: emailType,
+          type: actualEmailType,
           to: testEmail,
           data: TEST_DATA[emailType],
         },
