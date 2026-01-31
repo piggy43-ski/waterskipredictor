@@ -318,6 +318,37 @@ export function ParlayBuilder({
 
       if (walletError) throw walletError;
 
+      // Send bet confirmation email (non-blocking)
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData?.user?.email) {
+          // Build athlete names summary
+          const athleteNames = completeLegs.map(leg => leg.winner?.athlete.name || 'Unknown').join(', ');
+          const disciplines = completeLegs.map(leg => leg.discipline).join(', ');
+          
+          await supabase.functions.invoke('send-email', {
+            body: {
+              type: 'bet_confirmation',
+              to: userData.user.email,
+              userId: userId,
+              data: {
+                username: userData.user.email.split('@')[0],
+                athleteName: `Parlay: ${athleteNames}`,
+                tournamentName: tournament.name,
+                discipline: disciplines,
+                marketType: `PARLAY (${completeLegs.length} legs)`,
+                stakedTokens: stakeAmount,
+                potentialPayout: potentialPayout,
+                odds: multiplier
+              }
+            }
+          });
+        }
+      } catch (emailError) {
+        console.error('Parlay bet confirmation email failed:', emailError);
+        // Don't block parlay placement
+      }
+
       toast.success(`Parlay placed! ${multiplier}x multiplier`);
       onComplete();
       onClose();

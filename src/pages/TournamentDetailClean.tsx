@@ -606,6 +606,34 @@ const TournamentDetail = () => {
         description: `${stakeAmount} tokens entered on podium prediction`,
       });
 
+      // Send bet confirmation email (non-blocking)
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData?.user?.email) {
+          const athleteNames = `${podiumState.assignedPositions.first.athlete.name}, ${podiumState.assignedPositions.second.athlete.name}, ${podiumState.assignedPositions.third.athlete.name}`;
+          await supabase.functions.invoke('send-email', {
+            body: {
+              type: 'bet_confirmation',
+              to: userData.user.email,
+              userId: user.id,
+              data: {
+                username: userData.user.email.split('@')[0],
+                athleteName: athleteNames,
+                tournamentName: tournament.name,
+                discipline: currentPodiumContext.discipline,
+                marketType: 'PODIUM',
+                stakedTokens: stakeAmount,
+                potentialPayout: potentialPayout,
+                odds: combinedOdds
+              }
+            }
+          });
+        }
+      } catch (emailError) {
+        console.error('Podium bet confirmation email failed:', emailError);
+        // Don't block prediction placement
+      }
+
       await fetchWalletBalance();
       setPodiumDialogOpen(false);
       
@@ -772,6 +800,33 @@ const TournamentDetail = () => {
         title: "Prediction Placed!",
         description: `${stakeAmount} tokens entered on ${selectedSelection.athlete.name}`,
       });
+
+      // Send bet confirmation email (non-blocking)
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData?.user?.email) {
+          await supabase.functions.invoke('send-email', {
+            body: {
+              type: 'bet_confirmation',
+              to: userData.user.email,
+              userId: user.id,
+              data: {
+                username: userData.user.email.split('@')[0],
+                athleteName: selectedSelection.athlete.name,
+                tournamentName: tournament.name,
+                discipline: market.discipline,
+                marketType: market.market_type,
+                stakedTokens: stakeAmount,
+                potentialPayout: potentialPayout,
+                odds: finalOdds
+              }
+            }
+          });
+        }
+      } catch (emailError) {
+        console.error('Bet confirmation email failed:', emailError);
+        // Don't block prediction placement
+      }
 
       await fetchWalletBalance();
       setDialogOpen(false);

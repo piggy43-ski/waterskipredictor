@@ -1,13 +1,65 @@
+import { useState } from 'react';
 import { AdminLayout } from '@/components/AdminLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trophy, Users, FileCheck, Gift, ArrowRight } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Trophy, Users, FileCheck, Gift, ArrowRight, Mail, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
+
+type EmailType = 'welcome' | 'bet_confirmation' | 'bet_result' | 'redemption_receipt';
+
+const EMAIL_TYPES: { value: EmailType; label: string }[] = [
+  { value: 'welcome', label: 'Welcome Email' },
+  { value: 'bet_confirmation', label: 'Bet Confirmation' },
+  { value: 'bet_result', label: 'Bet Result (Win)' },
+  { value: 'redemption_receipt', label: 'Redemption Receipt' },
+];
+
+const TEST_DATA: Record<EmailType, Record<string, any>> = {
+  welcome: {
+    username: 'TestUser',
+    bonusTokens: 10000,
+  },
+  bet_confirmation: {
+    username: 'TestUser',
+    athleteName: 'Freddie Winter',
+    tournamentName: 'World Championships 2025',
+    discipline: 'Slalom',
+    marketType: 'WINNER',
+    stakedTokens: 500,
+    potentialPayout: 1500,
+    odds: 3.0,
+  },
+  bet_result: {
+    username: 'TestUser',
+    athleteName: 'Freddie Winter',
+    tournamentName: 'World Championships 2025',
+    result: 'won',
+    stakedTokens: 500,
+    payoutTokens: 1500,
+  },
+  redemption_receipt: {
+    username: 'TestUser',
+    rewardName: 'Pro Coaching Session',
+    rewardDescription: '1-hour session with a professional coach',
+    tokensSpent: 5000,
+    partnerName: 'Elite Water Sports',
+    redemptionId: 'test-12345678',
+  },
+};
 
 export default function AdminDashboard() {
+  const [testEmail, setTestEmail] = useState('');
+  const [emailType, setEmailType] = useState<EmailType>('welcome');
+  const [isSending, setIsSending] = useState(false);
+  const [lastResult, setLastResult] = useState<{ success: boolean; message: string } | null>(null);
+
   const { data: finishedTournaments } = useQuery({
     queryKey: ['admin-finished-tournaments'],
     queryFn: async () => {
@@ -59,6 +111,49 @@ export default function AdminDashboard() {
       return count || 0;
     },
   });
+
+  const handleSendTestEmail = async () => {
+    if (!testEmail || !testEmail.includes('@')) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    setIsSending(true);
+    setLastResult(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          type: emailType,
+          to: testEmail,
+          data: TEST_DATA[emailType],
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        setLastResult({
+          success: true,
+          message: data.skipped 
+            ? 'Email skipped (user preferences)' 
+            : `Email sent! ID: ${data.emailId}`,
+        });
+        toast.success('Test email sent successfully!');
+      } else {
+        throw new Error(data?.error || 'Unknown error');
+      }
+    } catch (error: any) {
+      console.error('Test email failed:', error);
+      setLastResult({
+        success: false,
+        message: error.message || 'Failed to send email',
+      });
+      toast.error(`Failed: ${error.message}`);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <AdminLayout>
@@ -115,6 +210,80 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Email Test Card */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Mail className="w-5 h-5 text-primary" />
+              <CardTitle>Email Test</CardTitle>
+            </div>
+            <CardDescription>
+              Send test emails to verify Resend configuration. Check email_logs table for delivery status.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="test-email">Recipient Email</Label>
+                <Input
+                  id="test-email"
+                  type="email"
+                  placeholder="test@example.com"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email-type">Email Type</Label>
+                <Select value={emailType} onValueChange={(v) => setEmailType(v as EmailType)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMAIL_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <Button onClick={handleSendTestEmail} disabled={isSending}>
+                {isSending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4 mr-2" />
+                    Send Test Email
+                  </>
+                )}
+              </Button>
+              
+              {lastResult && (
+                <div className={`flex items-center gap-2 text-sm ${lastResult.success ? 'text-emerald-600' : 'text-destructive'}`}>
+                  {lastResult.success ? (
+                    <CheckCircle2 className="w-4 h-4" />
+                  ) : (
+                    <XCircle className="w-4 h-4" />
+                  )}
+                  <span>{lastResult.message}</span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Note: Emails require FROM_EMAIL and APP_URL secrets to be configured. 
+              Domain must be verified in Resend for external delivery.
+            </p>
+          </CardContent>
+        </Card>
 
         {finishedTournaments && finishedTournaments.length > 0 && (
           <Card>
