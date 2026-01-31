@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, ThumbsUp, ThumbsDown, CheckCircle, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
+import DOMPurify from "dompurify";
 
 interface HelpArticle {
   id: string;
@@ -17,9 +18,23 @@ interface HelpArticle {
   body: string;
 }
 
-// Simple markdown renderer
+// Secure markdown renderer with XSS sanitization
 const renderMarkdown = (text: string): string => {
-  let html = text
+  // First escape any raw HTML in the input to prevent XSS
+  const escapeHtml = (str: string) => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  // Escape all HTML first
+  let escaped = escapeHtml(text);
+  
+  // Then apply markdown transformations (safe because we escaped HTML)
+  let html = escaped
     // Headers
     .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>')
     .replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold mt-6 mb-3">$1</h2>')
@@ -30,28 +45,24 @@ const renderMarkdown = (text: string): string => {
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     // Code
     .replace(/`(.*?)`/g, '<code class="bg-muted px-1 py-0.5 rounded text-sm">$1</code>')
-    // Links
-    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="text-primary underline" target="_blank" rel="noopener">$1</a>')
     // Unordered lists
     .replace(/^\- (.*$)/gim, '<li class="ml-4 list-disc">$1</li>')
     // Ordered lists
     .replace(/^\d+\. (.*$)/gim, '<li class="ml-4 list-decimal">$1</li>')
     // Emojis with spacing
     .replace(/(❌|✅|📧|🎯|⚽|🎁|💰|🏆)/g, '<span class="mr-1">$1</span>')
-    // Tables (basic)
-    .replace(/\| (.*) \|/g, (match) => {
-      const cells = match.split('|').filter(Boolean).map(c => c.trim());
-      if (cells.some(c => c.match(/^-+$/))) {
-        return '';
-      }
-      return `<div class="grid grid-cols-${cells.length} gap-2 py-1 border-b border-border">${cells.map(c => `<span class="text-sm">${c}</span>`).join('')}</div>`;
-    })
     // Paragraphs (double newlines)
     .replace(/\n\n/g, '</p><p class="mb-4">')
     // Single newlines
     .replace(/\n/g, '<br/>');
+
+  const rawHtml = `<p class="mb-4">${html}</p>`;
   
-  return `<p class="mb-4">${html}</p>`;
+  // Sanitize the output with DOMPurify as defense in depth
+  return DOMPurify.sanitize(rawHtml, {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'code', 'span'],
+    ALLOWED_ATTR: ['class']
+  });
 };
 
 const HelpArticle = () => {
