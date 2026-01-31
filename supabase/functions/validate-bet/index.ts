@@ -47,23 +47,18 @@ interface ValidationResult {
   allowed: boolean;
   reason?: string;
   warnings: string[];
-  exposureInfo?: {
-    athleteName: string;
-    currentExposurePct: number;
-    maxExposurePct: number;
-    remainingCapacity: number;
-    isAtCapacity: boolean;
+  solvencyInfo?: {
+    availableBankrollUsd: number;
+    worstCaseLossUsd: number;
+    solvencyStatus: 'SAFE' | 'BLOCKED';
   };
 }
 
-// Risk config defaults - Option A: Fixed Multipliers with Hard Caps
+// Risk config defaults - Global Solvency Model
 const DEFAULT_CONFIG = {
   max_stake_tokens: 10000,
   max_payout_tokens: 150000,
-  max_athlete_exposure_pct: 0.30,       // 30% hard cap
-  max_athlete_allocation_pct: 0.25,     // 25% user allocation limit
-  fixed_multiplier_mode: true,          // Option A enabled
-  allow_live_odds_adjustment: false,    // No odds shortening
+  token_value_usd: 0.01,
 };
 
 serve(async (req) => {
@@ -84,48 +79,23 @@ serve(async (req) => {
       warnings: [],
     };
 
-    // Fetch risk config from database
-    const { data: configData } = await supabase
-      .from('risk_config')
-      .select('key, value');
-    
-    const config = { ...DEFAULT_CONFIG };
-    if (configData) {
-      for (const row of configData) {
-        const key = row.key as string;
-        const val = row.value as string;
-        
-        // Parse boolean values
-        if (val === 'true') {
-          (config as any)[key] = true;
-        } else if (val === 'false') {
-          (config as any)[key] = false;
-        } else {
-          const numVal = parseFloat(val);
-          if (!isNaN(numVal)) {
-            (config as any)[key] = numVal;
-          }
-        }
-      }
-    }
-
-    console.log(`[VALIDATE] Option A Mode: ${config.fixed_multiplier_mode}, Allow Live Adjustment: ${config.allow_live_odds_adjustment}`);
+    console.log(`[VALIDATE] Global Solvency Model - Stake: ${stakeAmount}, Odds: ${currentOdds}`);
 
     // === VALIDATION 1: Stake Cap ===
-    if (stakeAmount > config.max_stake_tokens) {
+    if (stakeAmount > DEFAULT_CONFIG.max_stake_tokens) {
       return new Response(JSON.stringify({
         allowed: false,
-        reason: `Maximum stake is ${config.max_stake_tokens.toLocaleString()} tokens`,
+        reason: `Maximum stake is ${DEFAULT_CONFIG.max_stake_tokens.toLocaleString()} tokens`,
         warnings: [],
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // === VALIDATION 2: Payout Cap ===
     const potentialPayout = stakeAmount * currentOdds;
-    if (potentialPayout > config.max_payout_tokens) {
+    if (potentialPayout > DEFAULT_CONFIG.max_payout_tokens) {
       return new Response(JSON.stringify({
         allowed: false,
-        reason: `Maximum payout is ${config.max_payout_tokens.toLocaleString()} tokens. Reduce stake or pick different odds.`,
+        reason: `Maximum payout is ${DEFAULT_CONFIG.max_payout_tokens.toLocaleString()} tokens. Reduce stake or pick different odds.`,
         warnings: [],
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -142,61 +112,106 @@ serve(async (req) => {
     if (existingBets && existingBets.length > 0) {
       return new Response(JSON.stringify({
         allowed: false,
-        reason: 'You already have an active bet on this athlete in this market',
+        reason: 'You already have an active entry on this athlete in this market',
         warnings: [],
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // === VALIDATION 4: 25% User Allocation Limit ===
-    const { data: userTournamentBets } = await supabase
-      .from('bet_slips')
-      .select('total_stake_tokens, athlete_id')
-      .eq('user_id', userId)
-      .eq('tournament_id', tournamentId)
-      .eq('status', 'PENDING');
+    // === VALIDATION 4: GLOBAL SOLVENCY CHECK ===
+    // Fetch current bankroll status from the view
+    const { data: bankrollStatus, error: bankrollError } = await supabase
+      .from('house_bankroll_summary')
+      .select('*')
+      .single();
 
-    if (userTournamentBets && userTournamentBets.length > 0) {
-      const totalTournamentStake = userTournamentBets.reduce((sum, b) => sum + (b.total_stake_tokens || 0), 0) + stakeAmount;
-      const athleteStake = userTournamentBets
-        .filter(b => b.athlete_id === athleteId)
-        .reduce((sum, b) => sum + (b.total_stake_tokens || 0), 0) + stakeAmount;
+    if (bankrollError) {
+      console.error('[VALIDATE] Failed to fetch bankroll status:', bankrollError);
+      // If we can't check solvency, allow the bet but log warning
+      result.warnings.push('Solvency check unavailable');
+    } else {
+      const availableBankroll = bankrollStatus.available_bankroll_usd || 5000;
+      const tokenValueUsd = bankrollStatus.token_value_usd || 0.01;
       
-      const allocationPct = athleteStake / totalTournamentStake;
+      // Get current market handle and liability
+      const { data: marketLiability } = await supabase
+        .from('market_liability')
+        .select('athlete_id, total_stake_tokens, liability_if_wins')
+        .eq('market_id', marketId);
+
+      // Calculate current handle and max liability
+      const currentHandle = (marketLiability || []).reduce((sum, l) => sum + (l.total_stake_tokens || 0), 0);
+      const currentMaxLiability = Math.max(...(marketLiability || []).map(l => l.liability_if_wins || 0), 0);
       
-      if (allocationPct > config.max_athlete_allocation_pct) {
+      // Calculate new state after this bet
+      const currentAthleteLiability = (marketLiability || []).find(l => l.athlete_id === athleteId);
+      const newAthleteTokens = (currentAthleteLiability?.total_stake_tokens || 0) + stakeAmount;
+      const newAthleteLiability = newAthleteTokens * currentOdds;
+      const newHandle = currentHandle + stakeAmount;
+      
+      // New max liability is the higher of current max or this athlete's new liability
+      const newMaxLiability = Math.max(currentMaxLiability, newAthleteLiability);
+      
+      // Worst-case loss = max liability - handle (what house pays out minus what it collected)
+      const worstCaseLossTokens = Math.max(0, newMaxLiability - newHandle);
+      const worstCaseLossUsd = worstCaseLossTokens * tokenValueUsd;
+      
+      console.log(`[VALIDATE] Solvency Check: Available=${availableBankroll.toFixed(2)}, WorstCase=${worstCaseLossUsd.toFixed(2)}`);
+
+      // GLOBAL SOLVENCY CHECK: Block if worst-case loss exceeds available bankroll
+      if (worstCaseLossUsd > availableBankroll) {
+        console.log(`[VALIDATE] BLOCKED: WorstCaseLoss $${worstCaseLossUsd.toFixed(2)} > Available $${availableBankroll.toFixed(2)}`);
+        
+        // Write audit log for blocked bet
+        await writeAuditLog(supabase, {
+          actor_type: 'system',
+          action_type: 'BET_BLOCKED_SOLVENCY',
+          entity_type: 'bet_validation',
+          entity_id: `${marketId}_${athleteId}`,
+          before_state: {
+            available_bankroll_usd: availableBankroll,
+            current_max_liability: currentMaxLiability,
+            current_handle: currentHandle,
+          },
+          after_state: {
+            new_max_liability: newMaxLiability,
+            new_handle: newHandle,
+            worst_case_loss_usd: worstCaseLossUsd,
+          },
+          metadata: {
+            user_id: userId,
+            stake_amount: stakeAmount,
+            market_id: marketId,
+            market_type: marketType,
+            blocked_reason: 'GLOBAL_SOLVENCY_EXCEEDED',
+          }
+        });
+
         return new Response(JSON.stringify({
           allowed: false,
-          reason: `Cannot allocate more than ${Math.round(config.max_athlete_allocation_pct * 100)}% of your tournament stake to one athlete`,
+          reason: "This entry can't be placed right now. Please try a different selection.",
           warnings: [],
+          solvencyInfo: {
+            availableBankrollUsd: availableBankroll,
+            worstCaseLossUsd,
+            solvencyStatus: 'BLOCKED',
+          },
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Add solvency info to result
+      result.solvencyInfo = {
+        availableBankrollUsd: availableBankroll,
+        worstCaseLossUsd,
+        solvencyStatus: 'SAFE',
+      };
+
+      // Add warning if approaching limit (>80% of available)
+      if (worstCaseLossUsd > availableBankroll * 0.8) {
+        result.warnings.push(`High market exposure: ${((worstCaseLossUsd / availableBankroll) * 100).toFixed(0)}% of available bankroll`);
       }
     }
 
-    // === VALIDATION 5: OPTION A - Hard Exposure Cap (30% of market pool) ===
-    // Get current liability for this athlete in this market
-    const { data: liability } = await supabase
-      .from('market_liability')
-      .select('*')
-      .eq('market_id', marketId)
-      .eq('athlete_id', athleteId)
-      .maybeSingle();
-
-    // Get total market handle (all bets on this market)
-    const { data: allMarketLiability } = await supabase
-      .from('market_liability')
-      .select('total_stake_tokens')
-      .eq('market_id', marketId);
-
-    const currentMarketHandle = (allMarketLiability || []).reduce((sum, l) => sum + (l.total_stake_tokens || 0), 0);
-    const newMarketHandle = currentMarketHandle + stakeAmount;
-    
-    const currentAthleteTokens = liability?.total_stake_tokens || 0;
-    const newAthleteTokens = currentAthleteTokens + stakeAmount;
-
-    // Calculate max allowed tokens for this athlete (30% of new market total)
-    const maxAthleteTokens = newMarketHandle * config.max_athlete_exposure_pct;
-    
-    // Get athlete name for display
+    // Get athlete name for logging
     const { data: athleteData } = await supabase
       .from('athletes')
       .select('name')
@@ -204,128 +219,7 @@ serve(async (req) => {
       .single();
 
     const athleteName = athleteData?.name || 'Unknown';
-
-    // Calculate exposure percentages
-    const currentExposurePct = currentMarketHandle > 0 
-      ? (currentAthleteTokens / currentMarketHandle) * 100 
-      : 0;
-    const newExposurePct = newMarketHandle > 0 
-      ? (newAthleteTokens / newMarketHandle) * 100 
-      : 0;
-    const remainingCapacity = Math.max(0, Math.floor(maxAthleteTokens - currentAthleteTokens));
-
-    // OPTION A: Hard block if exposure would exceed 30% cap
-    if (newAthleteTokens > maxAthleteTokens) {
-      console.log(`[VALIDATE] BLOCKED: ${athleteName} would exceed ${config.max_athlete_exposure_pct * 100}% cap (${newExposurePct.toFixed(1)}%)`);
-      
-      // Write audit log for blocked bet
-      await writeAuditLog(supabase, {
-        actor_type: 'system',
-        action_type: 'BET_BLOCKED_EXPOSURE_CAP',
-        entity_type: 'bet_validation',
-        entity_id: `${marketId}_${athleteId}`,
-        before_state: {
-          current_exposure_pct: currentExposurePct,
-          current_athlete_tokens: currentAthleteTokens,
-        },
-        after_state: {
-          attempted_exposure_pct: newExposurePct,
-          attempted_athlete_tokens: newAthleteTokens,
-          max_allowed_tokens: maxAthleteTokens,
-        },
-        metadata: {
-          user_id: userId,
-          stake_amount: stakeAmount,
-          market_id: marketId,
-          athlete_name: athleteName,
-          exposure_cap_pct: config.max_athlete_exposure_pct * 100,
-          remaining_capacity: remainingCapacity,
-        }
-      });
-
-      return new Response(JSON.stringify({
-        allowed: false,
-        reason: `This selection has reached the maximum number of entries.`,
-        warnings: [],
-        exposureInfo: {
-          athleteName,
-          currentExposurePct,
-          maxExposurePct: config.max_athlete_exposure_pct * 100,
-          remainingCapacity,
-          isAtCapacity: true,
-        },
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    // === VALIDATION 6: Liability Cap (85% of handle) - BANKRUPTCY PROTECTION ===
-    const newLiability = newAthleteTokens * currentOdds;
-    const liabilityCap = newMarketHandle * 0.85;
-    if (newLiability > liabilityCap) {
-      console.log(`[VALIDATE] BLOCKED: Liability ${newLiability.toFixed(0)} exceeds 85% cap ${liabilityCap.toFixed(0)}`);
-      
-      await writeAuditLog(supabase, {
-        actor_type: 'system',
-        action_type: 'BET_BLOCKED_LIABILITY_CAP',
-        entity_type: 'bet_validation',
-        entity_id: `${marketId}_${athleteId}`,
-        metadata: {
-          user_id: userId,
-          stake_amount: stakeAmount,
-          new_liability: newLiability,
-          liability_cap: liabilityCap,
-          market_handle: newMarketHandle,
-        }
-      });
-
-      return new Response(JSON.stringify({
-        allowed: false,
-        reason: 'Market liability limit reached for this selection.',
-        warnings: [],
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    // === VALIDATION 7: Max Payout Cap (95% of handle) - BANKRUPTCY PROTECTION ===
-    const maxPossiblePayout = newAthleteTokens * currentOdds;
-    const payoutCap = newMarketHandle * 0.95;
-    if (maxPossiblePayout > payoutCap) {
-      console.log(`[VALIDATE] BLOCKED: Max payout ${maxPossiblePayout.toFixed(0)} exceeds 95% cap ${payoutCap.toFixed(0)}`);
-      
-      await writeAuditLog(supabase, {
-        actor_type: 'system',
-        action_type: 'BET_BLOCKED_PAYOUT_CAP',
-        entity_type: 'bet_validation',
-        entity_id: `${marketId}_${athleteId}`,
-        metadata: {
-          user_id: userId,
-          stake_amount: stakeAmount,
-          max_payout: maxPossiblePayout,
-          payout_cap: payoutCap,
-          market_handle: newMarketHandle,
-        }
-      });
-
-      return new Response(JSON.stringify({
-        allowed: false,
-        reason: 'Maximum payout threshold reached for this market.',
-        warnings: [],
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    // Add exposure info to result
-    result.exposureInfo = {
-      athleteName,
-      currentExposurePct,
-      maxExposurePct: config.max_athlete_exposure_pct * 100,
-      remainingCapacity,
-      isAtCapacity: false,
-    };
-
-    // Add warning if approaching cap (>25% of pool)
-    if (newExposurePct > 25) {
-      result.warnings.push(`${athleteName} is at ${newExposurePct.toFixed(1)}% of market pool (max ${config.max_athlete_exposure_pct * 100}%)`);
-    }
-
-    console.log(`[VALIDATE] ALLOWED: ${athleteName} at ${newExposurePct.toFixed(1)}% exposure`);
+    console.log(`[VALIDATE] ALLOWED: ${athleteName} - Stake: ${stakeAmount}, Payout: ${potentialPayout}`);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

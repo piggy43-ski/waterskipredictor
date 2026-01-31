@@ -141,6 +141,28 @@ serve(async (req) => {
         logStep("Transaction record created");
       }
 
+      // Log to deposit_ledger for global solvency tracking
+      // Convert tokens to USD: 100 tokens = $1 (token_value_usd = 0.01)
+      const depositAmountUsd = tokenAmount * 0.01;
+      const { error: ledgerError } = await supabaseClient
+        .from("deposit_ledger")
+        .insert({
+          user_id: userId,
+          transaction_type: "deposit",
+          amount_usd: depositAmountUsd,
+          tokens_amount: tokenAmount,
+          stripe_payment_intent_id: session.payment_intent as string,
+          stripe_session_id: session.id,
+          description: `Token purchase: ${packName} (${tokenAmount} tokens)`,
+        });
+
+      if (ledgerError) {
+        logStep("Error logging to deposit_ledger", { error: ledgerError.message });
+        // Don't throw - this is for tracking, not critical path
+      } else {
+        logStep("Deposit logged to ledger", { amountUsd: depositAmountUsd });
+      }
+
       // Update profile lifetime_deposited
       const { data: profile } = await supabaseClient
         .from("profiles")

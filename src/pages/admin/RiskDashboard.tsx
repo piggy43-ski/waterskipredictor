@@ -14,7 +14,7 @@ import { Progress } from '@/components/ui/progress';
 import { 
   Shield, AlertTriangle, TrendingUp, DollarSign, Download, RefreshCw, Eye, 
   Activity, Target, Users, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight,
-  FileJson, FileSpreadsheet, Lock, Zap
+  FileJson, FileSpreadsheet, Lock, Zap, Wallet, BanknoteIcon
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { RISK_CONFIG, getLiabilityCap, getMaxRiskRatio, MarketType } from '@/utils/riskConfig';
@@ -23,6 +23,29 @@ import { toast } from 'sonner';
 // Use risk config for bands
 const HOUSE_EDGE_BANDS = RISK_CONFIG.IMPLIED_SUM_BANDS;
 const MAX_RISK_RATIOS = RISK_CONFIG.MAX_RISK_RATIO;
+
+// Bankroll summary interface
+interface BankrollSummary {
+  base_bankroll_usd: number;
+  reserve_pct: number;
+  token_value_usd: number;
+  gross_deposits_usd: number;
+  refunds_usd: number;
+  fees_usd: number;
+  withdrawals_usd: number;
+  reserve_usd: number;
+  net_deposits_usd: number;
+  available_bankroll_usd: number;
+  total_handle_tokens: number;
+  total_liability_tokens: number;
+  max_single_liability_tokens: number;
+  total_handle_usd: number;
+  total_liability_usd: number;
+  max_single_liability_usd: number;
+  worst_case_loss_usd: number;
+  solvency_status: 'SAFE' | 'BLOCKED';
+  last_synced_at: string | null;
+}
 
 // Alert thresholds
 const ALERT_THRESHOLDS = {
@@ -513,6 +536,44 @@ const RiskDashboard = () => {
     },
   });
 
+  // Fetch global bankroll summary
+  const { data: bankrollSummary, refetch: refetchBankroll } = useQuery({
+    queryKey: ['admin-bankroll-summary'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('house_bankroll_summary')
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Bankroll summary error:', error);
+        // Return defaults if view doesn't exist yet
+        return {
+          base_bankroll_usd: 5000,
+          reserve_pct: 0.25,
+          token_value_usd: 0.01,
+          gross_deposits_usd: 0,
+          refunds_usd: 0,
+          fees_usd: 0,
+          withdrawals_usd: 0,
+          reserve_usd: 0,
+          net_deposits_usd: 0,
+          available_bankroll_usd: 5000,
+          total_handle_tokens: 0,
+          total_liability_tokens: 0,
+          max_single_liability_tokens: 0,
+          total_handle_usd: 0,
+          total_liability_usd: 0,
+          max_single_liability_usd: 0,
+          worst_case_loss_usd: 0,
+          solvency_status: 'SAFE' as const,
+          last_synced_at: null,
+        } as BankrollSummary;
+      }
+      return data as BankrollSummary;
+    },
+  });
+
   // Calculate KPIs
   const kpis = useMemo(() => {
     if (!marketsData) return null;
@@ -977,39 +1038,94 @@ const RiskDashboard = () => {
           </Card>
         </div>
 
-        {/* Option A: Profit Floor Analysis Card */}
-        <Card className="border-green-500/30 bg-green-500/5">
+        {/* Global Solvency Dashboard - Primary Risk Control */}
+        <Card className={`border-2 ${bankrollSummary?.solvency_status === 'SAFE' ? 'border-green-500/50 bg-green-500/5' : 'border-red-500/50 bg-red-500/5'}`}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Shield className="h-4 w-4 text-green-400" />
-              Option A: Profit Floor Analysis
-              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
-                Fixed Multipliers Active
+            <CardTitle className="text-lg font-bold flex items-center gap-3">
+              <Wallet className="h-5 w-5" />
+              Global Solvency Status
+              <Badge 
+                className={`text-sm px-3 py-1 ${
+                  bankrollSummary?.solvency_status === 'SAFE' 
+                    ? 'bg-green-500/20 text-green-400 border-green-500/30' 
+                    : 'bg-red-500/20 text-red-400 border-red-500/30'
+                }`}
+              >
+                {bankrollSummary?.solvency_status || 'SAFE'}
               </Badge>
             </CardTitle>
             <CardDescription>
-              Multipliers locked at publish • Hard 30% exposure cap per athlete • House bankruptcy impossible
+              Real-time house bankroll monitoring • Worst-case loss must be within available bankroll
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {/* Base Bankroll (B0) */}
               <div className="p-3 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground">Max Entry Per User</p>
-                <p className="text-lg font-bold">{RISK_CONFIG.MAX_STAKE.toLocaleString()} tokens</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <BanknoteIcon className="h-3 w-3" />
+                  Base Bankroll (B₀)
+                </p>
+                <p className="text-lg font-bold">${(bankrollSummary?.base_bankroll_usd || 5000).toLocaleString()}</p>
               </div>
+              
+              {/* Total Deposits (D) */}
               <div className="p-3 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground">Max Athlete Exposure</p>
-                <p className="text-lg font-bold">{(RISK_CONFIG.MAX_ATHLETE_EXPOSURE_PCT * 100).toFixed(0)}% of pool</p>
+                <p className="text-xs text-muted-foreground">Total Deposits (D)</p>
+                <p className="text-lg font-bold">${(bankrollSummary?.gross_deposits_usd || 0).toLocaleString()}</p>
               </div>
+              
+              {/* Reserve (R) */}
               <div className="p-3 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground">Total Active Exposure</p>
-                <p className="text-lg font-bold">{(kpis?.totalExposure || 0).toLocaleString()} tokens</p>
+                <p className="text-xs text-muted-foreground">Reserve ({((bankrollSummary?.reserve_pct || 0.25) * 100).toFixed(0)}%)</p>
+                <p className="text-lg font-bold text-yellow-400">${(bankrollSummary?.reserve_usd || 0).toLocaleString()}</p>
               </div>
+              
+              {/* Available Bankroll (B) */}
+              <div className="p-3 rounded-lg bg-primary/10 border border-primary/30">
+                <p className="text-xs text-muted-foreground font-medium">Available Bankroll (B)</p>
+                <p className="text-xl font-bold text-primary">${(bankrollSummary?.available_bankroll_usd || 5000).toLocaleString()}</p>
+              </div>
+              
+              {/* Market Handle */}
               <div className="p-3 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground">Safety Margin</p>
-                <p className="text-lg font-bold text-green-400">{(RISK_CONFIG.PUBLISH_SAFETY_MARGIN * 100).toFixed(0)}%</p>
-                <p className="text-xs text-muted-foreground">Max payout ≤ {(RISK_CONFIG.PUBLISH_SAFETY_MARGIN * 100).toFixed(0)}% of pool</p>
+                <p className="text-xs text-muted-foreground">Market Handle</p>
+                <p className="text-lg font-bold">
+                  {(bankrollSummary?.total_handle_tokens || 0).toLocaleString()} tokens
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  ${(bankrollSummary?.total_handle_usd || 0).toLocaleString()}
+                </p>
               </div>
+              
+              {/* Worst-Case Loss */}
+              <div className={`p-3 rounded-lg ${
+                (bankrollSummary?.worst_case_loss_usd || 0) > (bankrollSummary?.available_bankroll_usd || 5000) * 0.8
+                  ? 'bg-red-500/20 border border-red-500/30'
+                  : 'bg-muted/30'
+              }`}>
+                <p className="text-xs text-muted-foreground">Worst-Case Loss</p>
+                <p className={`text-lg font-bold ${
+                  (bankrollSummary?.worst_case_loss_usd || 0) > (bankrollSummary?.available_bankroll_usd || 5000) * 0.8
+                    ? 'text-red-400'
+                    : ''
+                }`}>
+                  ${(bankrollSummary?.worst_case_loss_usd || 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {((bankrollSummary?.worst_case_loss_usd || 0) / Math.max(bankrollSummary?.available_bankroll_usd || 1, 1) * 100).toFixed(1)}% of available
+                </p>
+              </div>
+            </div>
+
+            {/* Solvency Explanation */}
+            <div className="mt-4 p-3 rounded-lg bg-muted/20 text-sm">
+              <p className="text-muted-foreground">
+                <strong>Solvency Formula:</strong> B = B₀ + D - (D × Reserve%) - Refunds - Fees - Withdrawals
+              </p>
+              <p className="text-muted-foreground mt-1">
+                <strong>Check:</strong> If WorstCaseLoss &gt; B, new entries are BLOCKED until exposure decreases or deposits increase.
+              </p>
             </div>
           </CardContent>
         </Card>

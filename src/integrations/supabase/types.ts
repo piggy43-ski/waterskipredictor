@@ -498,6 +498,50 @@ export type Database = {
           },
         ]
       }
+      deposit_ledger: {
+        Row: {
+          amount_usd: number
+          created_at: string
+          description: string | null
+          id: string
+          stripe_payment_intent_id: string | null
+          stripe_session_id: string | null
+          tokens_amount: number | null
+          transaction_type: string
+          user_id: string | null
+        }
+        Insert: {
+          amount_usd: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          tokens_amount?: number | null
+          transaction_type: string
+          user_id?: string | null
+        }
+        Update: {
+          amount_usd?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          tokens_amount?: number | null
+          transaction_type?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposit_ledger_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_logs: {
         Row: {
           email_type: string
@@ -952,6 +996,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      house_bankroll_config: {
+        Row: {
+          description: string | null
+          id: string
+          key: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: []
       }
       house_rewards_liability: {
         Row: {
@@ -2552,7 +2620,30 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      house_bankroll_summary: {
+        Row: {
+          available_bankroll_usd: number | null
+          base_bankroll_usd: number | null
+          fees_usd: number | null
+          gross_deposits_usd: number | null
+          last_synced_at: string | null
+          max_single_liability_tokens: number | null
+          max_single_liability_usd: number | null
+          net_deposits_usd: number | null
+          refunds_usd: number | null
+          reserve_pct: number | null
+          reserve_usd: number | null
+          solvency_status: string | null
+          token_value_usd: number | null
+          total_handle_tokens: number | null
+          total_handle_usd: number | null
+          total_liability_tokens: number | null
+          total_liability_usd: number | null
+          withdrawals_usd: number | null
+          worst_case_loss_usd: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       deduct_tokens: {
