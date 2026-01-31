@@ -1,48 +1,78 @@
 
 
-# Fix Tournament Dates for E2E Testing
+# Add "Bet Result (Lost)" to Admin Email Test
 
-## Problem Identified
+## Overview
 
-The "Final Test" tournament has:
-- **Status**: `upcoming`
-- **Dates**: Jan 24-25, 2026 (past dates - today is Jan 31)
-- **Result**: Tournament doesn't appear in "Upcoming" or "Live" tabs, blocking predictions
+The email system already handles lost bet results in the backend template. This task adds a new option in the Admin Dashboard email test dropdown so you can preview/test the "lost" email variant.
 
-## Solution
+---
 
-Update the tournament dates to future dates so predictions can be placed.
+## Current State
 
-### Database Change Required
+| Component | Status |
+|-----------|--------|
+| `generateBetResultEmail()` | Already handles `result: 'lost'` with red background and "Better Luck Next Time" messaging |
+| Email Test Dropdown | Only shows 4 options, missing "lost" variant |
+| `settle-predictions` | Already sends `result: 'lost'` to the email endpoint |
 
-```sql
-UPDATE tournaments 
-SET start_date = '2026-02-02', 
-    end_date = '2026-02-03' 
-WHERE name = 'Final Test';
+---
+
+## Implementation
+
+### File: `src/pages/admin/Dashboard.tsx`
+
+**1. Update type definition (line 16)**
+
+Add a new type variant for testing:
+```typescript
+type EmailType = 'welcome' | 'bet_confirmation' | 'bet_result' | 'bet_result_lost' | 'redemption_receipt';
 ```
 
-This sets the tournament to:
-- **Start**: Feb 2, 2026 (2 days from now)
-- **End**: Feb 3, 2026
+**2. Add dropdown option (lines 18-23)**
 
-## After Fix - E2E Test Flow
+Insert new entry in `EMAIL_TYPES` array:
+```typescript
+const EMAIL_TYPES: { value: EmailType; label: string }[] = [
+  { value: 'welcome', label: 'Welcome Email' },
+  { value: 'bet_confirmation', label: 'Bet Confirmation' },
+  { value: 'bet_result', label: 'Bet Result (Win)' },
+  { value: 'bet_result_lost', label: 'Bet Result (Lost)' },  // NEW
+  { value: 'redemption_receipt', label: 'Redemption Receipt' },
+];
+```
 
-Once dates are updated:
+**3. Add test data for lost scenario (after line 47)**
 
-1. **Navigate** to Tournaments → Upcoming tab
-2. **Click** "Final Test" tournament
-3. **Select** a market (e.g., "Men's Slalom Winner")
-4. **Pick** an athlete and place a prediction
-5. **Verify** `bet_confirmation` email in `email_logs` table
-6. **Navigate** to Admin → Tournament Settlement
-7. **Run** settlement for the tournament
-8. **Verify** `bet_result` email in `email_logs` table
-9. **Check** wallet balance updated correctly
+```typescript
+bet_result_lost: {
+  username: 'TestUser',
+  athleteName: 'Freddie Winter',
+  tournamentName: 'World Championships 2025',
+  result: 'lost',
+  stakedTokens: 500,
+},
+```
 
-## Technical Notes
+**4. Map `bet_result_lost` to `bet_result` when sending (in the send handler)**
 
-- All 18 markets are now published and will be visible
-- Selection odds have been generated via Monte Carlo
-- Email integration is configured with verified domain
+When invoking the edge function, map the test type to the actual email type:
+```typescript
+const actualEmailType = emailType === 'bet_result_lost' ? 'bet_result' : emailType;
+```
+
+---
+
+## Result
+
+After implementation:
+- Admin dropdown shows 5 options including "Bet Result (Lost)"
+- Selecting it sends a test email with `result: 'lost'`
+- Email displays: 😔 "Better Luck Next Time" with red background
+
+---
+
+## No Backend Changes Required
+
+The `send-email` edge function already handles `result: 'lost'` correctly - it shows the appropriate styling and messaging. Only the admin test UI needs updating.
 
