@@ -2,8 +2,6 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.84.0";
 
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -16,6 +14,24 @@ interface EmailRequest {
   to: string;
   userId?: string;
   data: Record<string, any>;
+}
+
+// Validate required environment variables upfront
+function getRequiredEnvVars(): { fromEmail: string; appUrl: string; resendApiKey: string } {
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  const fromEmail = Deno.env.get("FROM_EMAIL");
+  const appUrl = Deno.env.get("APP_URL");
+  
+  const missing: string[] = [];
+  if (!resendApiKey) missing.push("RESEND_API_KEY");
+  if (!fromEmail) missing.push("FROM_EMAIL");
+  if (!appUrl) missing.push("APP_URL");
+  
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(", ")}. Configure these in Lovable Cloud secrets.`);
+  }
+  
+  return { fromEmail: fromEmail!, appUrl: appUrl!, resendApiKey: resendApiKey! };
 }
 
 // Generate HTML templates directly (avoiding npm import issues)
@@ -278,9 +294,7 @@ function generateRedemptionReceiptEmail(data: {
 </html>`;
 }
 
-function getEmailContent(type: EmailType, data: Record<string, any>): { html: string; subject: string } {
-  const appUrl = Deno.env.get("APP_URL") || "https://waterski-predictor.lovable.app";
-  
+function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: string): { html: string; subject: string } {
   switch (type) {
     case "welcome":
       return {
@@ -296,16 +310,16 @@ function getEmailContent(type: EmailType, data: Record<string, any>): { html: st
       return {
         html: generateBetConfirmationEmail({
           username: data.username || "Champion",
-          athleteName: data.athleteName,
-          tournamentName: data.tournamentName,
-          discipline: data.discipline,
-          marketType: data.marketType,
-          stakedTokens: data.stakedTokens,
-          potentialPayout: data.potentialPayout,
-          odds: data.odds,
+          athleteName: data.athleteName || "Athlete",
+          tournamentName: data.tournamentName || "Tournament",
+          discipline: data.discipline || "Unknown",
+          marketType: data.marketType || "Winner",
+          stakedTokens: data.stakedTokens || 0,
+          potentialPayout: data.potentialPayout || 0,
+          odds: data.odds || 1,
           appUrl,
         }),
-        subject: `Prediction Confirmed: ${data.athleteName}`,
+        subject: `Prediction Confirmed: ${data.athleteName || 'Your Pick'}`,
       };
     
     case "bet_result": {
@@ -314,14 +328,14 @@ function getEmailContent(type: EmailType, data: Record<string, any>): { html: st
       return {
         html: generateBetResultEmail({
           username: data.username || "Champion",
-          athleteName: data.athleteName,
-          tournamentName: data.tournamentName,
-          result: data.result,
-          stakedTokens: data.stakedTokens,
+          athleteName: data.athleteName || "Athlete",
+          tournamentName: data.tournamentName || "Tournament",
+          result: data.result || "lost",
+          stakedTokens: data.stakedTokens || 0,
           payoutTokens: data.payoutTokens,
           appUrl,
         }),
-        subject: `${resultEmoji} ${subjectPrefix}: ${data.athleteName}`,
+        subject: `${resultEmoji} ${subjectPrefix}: ${data.athleteName || 'Your Pick'}`,
       };
     }
     
@@ -329,14 +343,14 @@ function getEmailContent(type: EmailType, data: Record<string, any>): { html: st
       return {
         html: generateRedemptionReceiptEmail({
           username: data.username || "Champion",
-          rewardName: data.rewardName,
-          rewardDescription: data.rewardDescription,
-          tokensSpent: data.tokensSpent,
-          partnerName: data.partnerName,
-          redemptionId: data.redemptionId,
+          rewardName: data.rewardName || "Reward",
+          rewardDescription: data.rewardDescription || "",
+          tokensSpent: data.tokensSpent || 0,
+          partnerName: data.partnerName || "Partner",
+          redemptionId: data.redemptionId || "unknown",
           appUrl,
         }),
-        subject: `🎁 Reward Redeemed: ${data.rewardName}`,
+        subject: `🎁 Reward Redeemed: ${data.rewardName || 'Your Reward'}`,
       };
     
     default:
@@ -349,6 +363,7 @@ async function checkEmailPreferences(
   userId: string,
   emailType: EmailType
 ): Promise<boolean> {
+  // Transactional emails are always sent
   const transactionalTypes: EmailType[] = ["welcome", "bet_confirmation", "redemption_receipt"];
   if (transactionalTypes.includes(emailType)) {
     return true;
@@ -364,6 +379,7 @@ async function checkEmailPreferences(
     return true;
   }
   
+  // bet_result respects notifications preference
   if (emailType === "bet_result") {
     return (prefs as any).notifications;
   }
@@ -381,15 +397,22 @@ async function logEmail(
   resendId?: string,
   errorMessage?: string
 ) {
-  await supabase.from("email_logs").insert({
-    user_id: userId || null,
-    email_type: emailType,
-    recipient,
-    subject,
-    status,
-    resend_id: resendId || null,
-    error_message: errorMessage || null,
-  });
+  try {
+    await supabase.from("email_logs").insert({
+      user_id: userId || null,
+      email_type: emailType,
+      recipient,
+      subject,
+      status,
+      resend_id: resendId || null,
+      error_message: errorMessage || null,
+      metadata: {
+        timestamp: new Date().toISOString(),
+      }
+    });
+  } catch (logError) {
+    console.error("Failed to log email:", logError);
+  }
 }
 
 serve(async (req) => {
@@ -398,6 +421,11 @@ serve(async (req) => {
   }
 
   try {
+    // Validate environment variables first
+    const { fromEmail, appUrl, resendApiKey } = getRequiredEnvVars();
+    
+    const resend = new Resend(resendApiKey);
+    
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -405,12 +433,13 @@ serve(async (req) => {
 
     const { type, to, userId, data }: EmailRequest = await req.json();
 
-    console.log(`Processing ${type} email for ${to}`);
+    console.log(`[send-email] Processing ${type} email to ${to}`);
 
+    // Check user preferences if userId provided
     if (userId) {
       const shouldSend = await checkEmailPreferences(supabase, userId, type);
       if (!shouldSend) {
-        console.log(`Email ${type} skipped due to user preferences`);
+        console.log(`[send-email] Skipped ${type} for ${to} due to user preferences`);
         await logEmail(supabase, userId, type, to, "N/A", "skipped");
         return new Response(
           JSON.stringify({ success: true, skipped: true, reason: "User preferences" }),
@@ -419,9 +448,9 @@ serve(async (req) => {
       }
     }
 
-    const { html, subject } = getEmailContent(type, data);
+    const { html, subject } = getEmailContent(type, data, appUrl);
 
-    const fromEmail = Deno.env.get("FROM_EMAIL") || "WaterSki Predictor <onboarding@resend.dev>";
+    console.log(`[send-email] Sending ${type} email from ${fromEmail} to ${to}`);
     
     const { data: emailResult, error: emailError } = await resend.emails.send({
       from: fromEmail,
@@ -431,12 +460,12 @@ serve(async (req) => {
     });
 
     if (emailError) {
-      console.error("Error sending email:", emailError);
+      console.error(`[send-email] FAILED: ${type} to ${to}:`, emailError);
       await logEmail(supabase, userId, type, to, subject, "failed", undefined, emailError.message);
       throw new Error(emailError.message);
     }
 
-    console.log("Email sent successfully:", emailResult);
+    console.log(`[send-email] SUCCESS: ${type} to ${to}, resend_id=${emailResult?.id}`);
     await logEmail(supabase, userId, type, to, subject, "sent", emailResult?.id);
 
     return new Response(
@@ -444,7 +473,7 @@ serve(async (req) => {
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error: any) {
-    console.error("Error in send-email function:", error);
+    console.error("[send-email] Error:", error.message);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
