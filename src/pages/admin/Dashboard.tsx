@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { UnpublishedMarketsCard } from '@/components/admin/UnpublishedMarketsCard';
 
 type EmailType = 'welcome' | 'bet_confirmation' | 'bet_result' | 'redemption_receipt';
 
@@ -284,6 +285,9 @@ export default function AdminDashboard() {
             </p>
           </CardContent>
         </Card>
+
+        {/* Unpublished Markets Card */}
+        <UnpublishedMarketsCard />
 
         {finishedTournaments && finishedTournaments.length > 0 && (
           <Card>
