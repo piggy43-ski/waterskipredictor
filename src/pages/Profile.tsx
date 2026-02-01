@@ -625,6 +625,29 @@ const Profile = () => {
               Help Center
             </Button>
             <Button 
+              variant="outline" 
+              className="w-full flex flex-col items-center py-4 h-auto"
+              onClick={() => window.open('https://instagram.com/waterskipredictor', '_blank')}
+            >
+              <div className="flex items-center">
+                <svg 
+                  className="w-5 h-5 mr-2" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                </svg>
+                DM us on Instagram
+              </div>
+              <span className="text-xs text-muted-foreground mt-1">Something not working? Reach out!</span>
+            </Button>
+            <Button 
               variant="ghost" 
               className="w-full"
               onClick={async () => {
