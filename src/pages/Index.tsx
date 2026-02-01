@@ -4,7 +4,7 @@ import { BottomNav } from '@/components/BottomNav';
 import { TournamentCard } from '@/components/TournamentCard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Coins, TrendingUp, Trophy, LogIn, CheckCircle, XCircle, Calendar, ChevronRight } from 'lucide-react';
+import { Coins, TrendingUp, Trophy, CheckCircle, XCircle, Calendar, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -156,40 +156,7 @@ const Index = () => {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-background pb-20">
-        <PageHeader title={<>WaterSki <span className="text-primary">Predictor</span></>} showBalance={false} />
-        
-        <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-          {/* Welcome Card */}
-          <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium rounded-2xl">
-            <h2 className="text-2xl font-display font-bold mb-2">Welcome to WaterSki Predictor</h2>
-            <p className="opacity-90 mb-5 text-sm">
-              Predict tournament outcomes, earn tokens, and win exclusive rewards from top waterski brands and events.
-            </p>
-            <Button 
-              onClick={() => navigate('/auth')}
-              className="w-full bg-background text-primary hover:bg-background/90 font-bold rounded-xl h-12"
-            >
-              <LogIn className="w-4 h-4 mr-2" />
-              Get Started
-            </Button>
-          </Card>
-
-          {/* Featured Tournament Preview */}
-          {featuredTournament && (
-            <div>
-              <p className="section-title mb-3">UPCOMING EVENT</p>
-              <TournamentCard tournament={featuredTournament} />
-            </div>
-          )}
-        </div>
-
-        <BottomNav />
-      </div>
-    );
-  }
+  // User is guaranteed to be authenticated here due to ProtectedRoute
 
   const activePredictions = userPredictions;
 

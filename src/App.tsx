@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { TutorialProvider, TutorialOverlay, TutorialBubble } from "./components/tutorial";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Tournaments from "./pages/Tournaments";
 import TournamentDetail from "./pages/TournamentDetailClean";
@@ -69,56 +70,62 @@ const App = () => (
             <TutorialOverlay />
             <TutorialBubble />
             <Routes>
-              <Route path="/" element={<Index />} />
+              {/* Public routes */}
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/update-password" element={<UpdatePassword />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/transactions" element={<Transactions />} />
-              <Route path="/tournaments" element={<Tournaments />} />
-              <Route path="/tournaments/:id" element={<TournamentDetail />} />
-              <Route path="/wallet" element={<Wallet />} />
-              <Route path="/payment-success" element={<PaymentSuccess />} />
-              <Route path="/payment-canceled" element={<PaymentCanceled />} />
-              <Route path="/predictions" element={<Predictions />} />
-              <Route path="/rewards" element={<Rewards />} />
-              <Route path="/athletes/:id" element={<AthleteProfile />} />
-              <Route path="/fantasy" element={<Fantasy />} />
-              <Route path="/fantasy/:potId" element={<FantasyPotDetail />} />
-              <Route path="/fantasy/:potId/team/:entryId" element={<FantasyTeamView />} />
-              <Route path="/fantasy/:potId/team/:entryId/edit" element={<FantasyTeamEdit />} />
-              <Route path="/help" element={<HelpCenter />} />
-              <Route path="/help/:id" element={<HelpArticle />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/privacy" element={<Privacy />} />
+              
+              {/* Protected routes */}
+              <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
+              <Route path="/tournaments" element={<ProtectedRoute><Tournaments /></ProtectedRoute>} />
+              <Route path="/tournaments/:id" element={<ProtectedRoute><TournamentDetail /></ProtectedRoute>} />
+              <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
+              <Route path="/payment-success" element={<ProtectedRoute><PaymentSuccess /></ProtectedRoute>} />
+              <Route path="/payment-canceled" element={<ProtectedRoute><PaymentCanceled /></ProtectedRoute>} />
+              <Route path="/predictions" element={<ProtectedRoute><Predictions /></ProtectedRoute>} />
+              <Route path="/rewards" element={<ProtectedRoute><Rewards /></ProtectedRoute>} />
+              <Route path="/athletes/:id" element={<ProtectedRoute><AthleteProfile /></ProtectedRoute>} />
+              <Route path="/fantasy" element={<ProtectedRoute><Fantasy /></ProtectedRoute>} />
+              <Route path="/fantasy/:potId" element={<ProtectedRoute><FantasyPotDetail /></ProtectedRoute>} />
+              <Route path="/fantasy/:potId/team/:entryId" element={<ProtectedRoute><FantasyTeamView /></ProtectedRoute>} />
+              <Route path="/fantasy/:potId/team/:entryId/edit" element={<ProtectedRoute><FantasyTeamEdit /></ProtectedRoute>} />
+              <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
+              <Route path="/help/:id" element={<ProtectedRoute><HelpArticle /></ProtectedRoute>} />
+              
+              {/* Admin routes */}
               <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/admin/risk-dashboard" element={<AdminRiskDashboard />} />
-              <Route path="/admin/help-articles" element={<AdminHelpArticles />} />
-              <Route path="/admin/fantasy-pots" element={<AdminFantasyPots />} />
-              <Route path="/admin/athletes" element={<AdminAthletes />} />
-              <Route path="/admin/athletes/:id" element={<AdminAthleteDetail />} />
-              <Route path="/admin/rankings-sync" element={<AdminRankingsSync />} />
-              <Route path="/admin/rankings-import" element={<AdminRankingsImport />} />
-              <Route path="/admin/tournaments" element={<AdminTournaments />} />
-              <Route path="/admin/markets" element={<AdminMarkets />} />
-              <Route path="/admin/selections" element={<AdminSelections />} />
-              <Route path="/admin/rewards" element={<AdminRewards />} />
-              <Route path="/admin/tournament-settlement" element={<AdminTournamentSettlement />} />
-              <Route path="/admin/tournament-entries" element={<AdminTournamentEntries />} />
-              <Route path="/admin/data-integrity" element={<AdminDataIntegrity />} />
-              <Route path="/admin/house-ledger" element={<AdminHouseLedger />} />
-              <Route path="/admin/users" element={<AdminUsers />} />
-              <Route path="/admin/settlement-test" element={<AdminSettlementTest />} />
-              <Route path="/admin/liabilities" element={<AdminLiabilities />} />
-              <Route path="/admin/market-results" element={<AdminMarketResults />} />
-              <Route path="/admin/odds-review" element={<AdminMarketOddsReview />} />
-              <Route path="/admin/contest-entries" element={<AdminContestEntries />} />
-              <Route path="/admin/tournament-simulator" element={<AdminTournamentSimulator />} />
-              <Route path="/admin/market-liability" element={<AdminMarketLiability />} />
-              <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
-              <Route path="/admin/reward-dashboard" element={<AdminRewardLiabilityDashboard />} />
-              <Route path="/admin/probability-overrides" element={<AdminProbabilityOverrides />} />
+              <Route path="/admin/dashboard" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin/risk-dashboard" element={<ProtectedRoute><AdminRiskDashboard /></ProtectedRoute>} />
+              <Route path="/admin/help-articles" element={<ProtectedRoute><AdminHelpArticles /></ProtectedRoute>} />
+              <Route path="/admin/fantasy-pots" element={<ProtectedRoute><AdminFantasyPots /></ProtectedRoute>} />
+              <Route path="/admin/athletes" element={<ProtectedRoute><AdminAthletes /></ProtectedRoute>} />
+              <Route path="/admin/athletes/:id" element={<ProtectedRoute><AdminAthleteDetail /></ProtectedRoute>} />
+              <Route path="/admin/rankings-sync" element={<ProtectedRoute><AdminRankingsSync /></ProtectedRoute>} />
+              <Route path="/admin/rankings-import" element={<ProtectedRoute><AdminRankingsImport /></ProtectedRoute>} />
+              <Route path="/admin/tournaments" element={<ProtectedRoute><AdminTournaments /></ProtectedRoute>} />
+              <Route path="/admin/markets" element={<ProtectedRoute><AdminMarkets /></ProtectedRoute>} />
+              <Route path="/admin/selections" element={<ProtectedRoute><AdminSelections /></ProtectedRoute>} />
+              <Route path="/admin/rewards" element={<ProtectedRoute><AdminRewards /></ProtectedRoute>} />
+              <Route path="/admin/tournament-settlement" element={<ProtectedRoute><AdminTournamentSettlement /></ProtectedRoute>} />
+              <Route path="/admin/tournament-entries" element={<ProtectedRoute><AdminTournamentEntries /></ProtectedRoute>} />
+              <Route path="/admin/data-integrity" element={<ProtectedRoute><AdminDataIntegrity /></ProtectedRoute>} />
+              <Route path="/admin/house-ledger" element={<ProtectedRoute><AdminHouseLedger /></ProtectedRoute>} />
+              <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
+              <Route path="/admin/settlement-test" element={<ProtectedRoute><AdminSettlementTest /></ProtectedRoute>} />
+              <Route path="/admin/liabilities" element={<ProtectedRoute><AdminLiabilities /></ProtectedRoute>} />
+              <Route path="/admin/market-results" element={<ProtectedRoute><AdminMarketResults /></ProtectedRoute>} />
+              <Route path="/admin/odds-review" element={<ProtectedRoute><AdminMarketOddsReview /></ProtectedRoute>} />
+              <Route path="/admin/contest-entries" element={<ProtectedRoute><AdminContestEntries /></ProtectedRoute>} />
+              <Route path="/admin/tournament-simulator" element={<ProtectedRoute><AdminTournamentSimulator /></ProtectedRoute>} />
+              <Route path="/admin/market-liability" element={<ProtectedRoute><AdminMarketLiability /></ProtectedRoute>} />
+              <Route path="/admin/audit-logs" element={<ProtectedRoute><AdminAuditLogs /></ProtectedRoute>} />
+              <Route path="/admin/reward-dashboard" element={<ProtectedRoute><AdminRewardLiabilityDashboard /></ProtectedRoute>} />
+              <Route path="/admin/probability-overrides" element={<ProtectedRoute><AdminProbabilityOverrides /></ProtectedRoute>} />
+              
               <Route path="*" element={<NotFound />} />
             </Routes>
           </TutorialProvider>
