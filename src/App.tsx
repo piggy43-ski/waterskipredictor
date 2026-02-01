@@ -50,6 +50,7 @@ import AdminAuditLogs from "./pages/admin/AuditLogs";
 import AdminRewardLiabilityDashboard from "./pages/admin/RewardLiabilityDashboard";
 import AdminRiskDashboard from "./pages/admin/RiskDashboard";
 import AdminProbabilityOverrides from "./pages/admin/ProbabilityOverrides";
+import AdminReferrals from "./pages/admin/Referrals";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCanceled from "./pages/PaymentCanceled";
 import HelpCenter from "./pages/HelpCenter";
@@ -117,6 +118,7 @@ const App = () => (
               <Route path="/admin/data-integrity" element={<ProtectedRoute><AdminDataIntegrity /></ProtectedRoute>} />
               <Route path="/admin/house-ledger" element={<ProtectedRoute><AdminHouseLedger /></ProtectedRoute>} />
               <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
+              <Route path="/admin/referrals" element={<ProtectedRoute><AdminReferrals /></ProtectedRoute>} />
               <Route path="/admin/settlement-test" element={<ProtectedRoute><AdminSettlementTest /></ProtectedRoute>} />
               <Route path="/admin/liabilities" element={<ProtectedRoute><AdminLiabilities /></ProtectedRoute>} />
               <Route path="/admin/market-results" element={<ProtectedRoute><AdminMarketResults /></ProtectedRoute>} />
