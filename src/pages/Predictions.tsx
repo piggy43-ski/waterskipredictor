@@ -300,8 +300,8 @@ const Predictions = () => {
       // 2. Validate new stake
       if (newStake <= 0 || newStake > PARLAY_CONFIG.MAX_STAKE) {
         toast({
-          title: "Invalid stake",
-          description: `Stake must be between 1 and ${PARLAY_CONFIG.MAX_STAKE} tokens`,
+          title: "Invalid entry amount",
+          description: `Entry must be between 1 and ${PARLAY_CONFIG.MAX_STAKE} tokens`,
           variant: "destructive"
         });
         return;
@@ -377,21 +377,21 @@ const Predictions = () => {
     }
   };
 
-  const handleBetAgain = async (slip: BetSlip) => {
+  const handlePredictAgain = async (slip: BetSlip) => {
     try {
-      // Get athlete names from the bet legs
+      // Get athlete names from the entry legs
       const athleteNames = slip.legs?.map(leg => leg.athlete_name) || [];
       
       if (athleteNames.length === 0) {
         toast({
           title: "No athletes found",
-          description: "Unable to find athletes from this bet",
+          description: "Unable to find athletes from this entry",
           variant: "destructive"
         });
         return;
       }
 
-      // Find upcoming tournaments with open betting
+      // Find upcoming tournaments with open predictions
       const now = new Date().toISOString();
       const { data: upcomingTournaments, error: tournamentError } = await supabase
         .from('tournaments')
@@ -423,8 +423,8 @@ const Predictions = () => {
         // Navigate to the tournament with athlete names in state
         navigate(`/tournaments/${tournament.id}`, {
           state: {
-            betAgainAthletes: athleteNames,
-            fromBetSlip: slip.id
+            predictAgainAthletes: athleteNames,
+            fromEntry: slip.id
           }
         });
 
@@ -435,14 +435,14 @@ const Predictions = () => {
         return;
       }
 
-      // If no tournament with open betting found
+      // If no tournament with open prediction window found
       toast({
-        title: "No open betting windows",
-        description: "All upcoming tournaments have closed betting",
+        title: "No open prediction windows",
+        description: "All upcoming tournaments have closed predictions",
         variant: "destructive"
       });
     } catch (error) {
-      console.error('Error in bet again:', error);
+      console.error('Error in predict again:', error);
       toast({
         title: "Something went wrong",
         description: "Please try again",
@@ -466,7 +466,7 @@ const Predictions = () => {
     }
   };
 
-  const BetSlipCard = ({ slip, isActive }: { slip: BetSlip; isActive: boolean }) => {
+  const EntrySlipCard = ({ slip, isActive }: { slip: BetSlip; isActive: boolean }) => {
     // Use actual legs array length, not stale database field
     const actualLegCount = slip.legs?.length || 0;
     const isParlayDisplay = slip.type === 'parlay' || actualLegCount > 1;
@@ -481,7 +481,7 @@ const Predictions = () => {
     
     const canCancel = isActive && predictionWindow?.canPredict;
     
-    const getBetTypeLabel = (marketType: string) => {
+    const getEntryTypeLabel = (marketType: string) => {
       switch (marketType) {
         case 'WINNER': return '🏆 Winner';
         case 'PODIUM': return '🥇 Podium';
@@ -497,9 +497,9 @@ const Predictions = () => {
             <div className="flex-1">
               {!isParlayDisplay && slip.legs?.[0] && (
                 <div className="space-y-2">
-                  {/* Bet Type Badge */}
+                  {/* Entry Type Badge */}
                   <Badge variant="secondary" className="text-xs mb-2">
-                    {getBetTypeLabel(slip.legs[0].market_type)}
+                    {getEntryTypeLabel(slip.legs[0].market_type)}
                   </Badge>
                   
                   {/* For PODIUM: Show all 3 athletes with positions */}
@@ -628,7 +628,7 @@ const Predictions = () => {
             </div>
           </div>
 
-          {/* Settlement explanation for completed bets */}
+          {/* Settlement explanation for completed entries */}
           {!isActive && slip.legs?.[0]?.settlement_metadata && (
             <SettlementExplanation 
               settlement={{
@@ -649,7 +649,7 @@ const Predictions = () => {
             />
           )}
 
-          {/* Edit and Cancel buttons for active bets with open betting window */}
+          {/* Edit and Cancel buttons for active entries with open prediction window */}
           {canCancel && (
             <div className="pt-3 border-t border-border space-y-2">
               <div className="flex gap-2">
@@ -688,7 +688,7 @@ const Predictions = () => {
                 variant="outline" 
                 size="sm" 
                 className="w-full"
-                onClick={() => handleBetAgain(slip)}
+                onClick={() => handlePredictAgain(slip)}
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
                 Predict Again
@@ -712,19 +712,19 @@ const Predictions = () => {
     );
   }
 
-  // Calculate betting stats
-  const bettingStats = (() => {
-    const allSettledBets = completedBetSlips;
-    const totalWagered = allSettledBets.reduce((sum, slip) => sum + slip.total_stake_tokens, 0);
-    const totalWon = allSettledBets
+  // Calculate prediction stats
+  const predictionStats = (() => {
+    const allSettledEntries = completedBetSlips;
+    const totalEntered = allSettledEntries.reduce((sum, slip) => sum + slip.total_stake_tokens, 0);
+    const totalWon = allSettledEntries
       .filter(slip => slip.status === 'WON')
       .reduce((sum, slip) => sum + (slip.actual_payout_tokens || 0), 0);
-    const netProfit = totalWon - totalWagered;
-    const roi = totalWagered > 0 ? ((netProfit / totalWagered) * 100) : 0;
-    const winCount = allSettledBets.filter(slip => slip.status === 'WON').length;
-    const lossCount = allSettledBets.filter(slip => slip.status === 'LOST').length;
+    const netProfit = totalWon - totalEntered;
+    const roi = totalEntered > 0 ? ((netProfit / totalEntered) * 100) : 0;
+    const winCount = allSettledEntries.filter(slip => slip.status === 'WON').length;
+    const lossCount = allSettledEntries.filter(slip => slip.status === 'LOST').length;
     
-    return { totalWagered, totalWon, netProfit, roi, winCount, lossCount };
+    return { totalEntered, totalWon, netProfit, roi, winCount, lossCount };
   })();
 
   return (
@@ -741,36 +741,36 @@ const Predictions = () => {
                   <Coins className="w-4 h-4" />
                   <span className="text-xs">Entered</span>
                 </div>
-                <p className="font-bold text-lg">{bettingStats.totalWagered.toLocaleString()}</p>
+                <p className="font-bold text-lg">{predictionStats.totalEntered.toLocaleString()}</p>
               </div>
               <div>
                 <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                   <TrendingUp className="w-4 h-4" />
                   <span className="text-xs">Earned</span>
                 </div>
-                <p className="font-bold text-lg text-success">{bettingStats.totalWon.toLocaleString()}</p>
+                <p className="font-bold text-lg text-success">{predictionStats.totalWon.toLocaleString()}</p>
               </div>
               <div>
                 <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                   <Percent className="w-4 h-4" />
                   <span className="text-xs">ROI</span>
                 </div>
-                <p className={`font-bold text-lg ${bettingStats.roi >= 0 ? 'text-success' : 'text-destructive'}`}>
-                  {bettingStats.roi >= 0 ? '+' : ''}{bettingStats.roi.toFixed(1)}%
+                <p className={`font-bold text-lg ${predictionStats.roi >= 0 ? 'text-success' : 'text-destructive'}`}>
+                  {predictionStats.roi >= 0 ? '+' : ''}{predictionStats.roi.toFixed(1)}%
                 </p>
               </div>
             </div>
             <div className="flex justify-center gap-4 mt-3 pt-3 border-t border-border text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-success"></span>
-                {bettingStats.winCount} Correct
+                {predictionStats.winCount} Correct
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-secondary"></span>
-                {bettingStats.lossCount} Not Correct
+                {predictionStats.lossCount} Not Correct
               </span>
-              <span className={`font-medium ${bettingStats.netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
-                {bettingStats.netProfit >= 0 ? '+' : ''}{bettingStats.netProfit.toLocaleString()} net
+              <span className={`font-medium ${predictionStats.netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {predictionStats.netProfit >= 0 ? '+' : ''}{predictionStats.netProfit.toLocaleString()} net
               </span>
             </div>
           </Card>
@@ -796,7 +796,7 @@ const Predictions = () => {
               </Card>
             ) : (
               activeBetSlips.map((slip) => (
-                <BetSlipCard key={slip.id} slip={slip} isActive />
+                <EntrySlipCard key={slip.id} slip={slip} isActive />
               ))
             )}
           </TabsContent>
@@ -811,7 +811,7 @@ const Predictions = () => {
               </Card>
             ) : (
               completedBetSlips.map((slip) => (
-                <BetSlipCard key={slip.id} slip={slip} isActive={false} />
+                <EntrySlipCard key={slip.id} slip={slip} isActive={false} />
               ))
             )}
           </TabsContent>
