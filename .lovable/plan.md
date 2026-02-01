@@ -1,91 +1,79 @@
 
-# Require Authentication for All App Access
+
+# Add "Coming Soon" Empty State to Rewards Page
 
 ## Overview
-Force all visitors to sign up or log in before they can see any app content. When someone clicks a link to the app, they'll be immediately redirected to the authentication page.
+When there are no rewards available, display a friendly "Coming Soon" message instead of an empty page.
 
 ---
 
 ## Current Behavior
-
-- Visitors can access the home page and see a welcome card + featured tournament preview
-- Other pages (Profile, Wallet, etc.) individually redirect to `/auth` if not logged in
-- The Auth page checks if user is logged in and redirects to `/` if so
+- Page shows tabs but with empty content when no rewards exist
+- Only the "VIP" tab has a "Coming Soon" placeholder card
 
 ## New Behavior
-
-- ANY route except `/auth`, `/reset-password`, `/update-password`, `/terms`, and `/privacy` requires authentication
-- Unauthenticated visitors are immediately redirected to `/auth`
-- No app content is visible without signing in
+- When `rewards.length === 0`, show a single "Coming Soon" card instead of the tabs
+- Keep earning tokens message to encourage continued engagement
 
 ---
 
 ## Implementation
 
-### 1. Create a ProtectedRoute Component
+### File: `src/pages/Rewards.tsx`
 
-Create a new component that wraps protected routes and handles the redirect logic:
+**Change:** Add conditional rendering after the Trust Banner section (around line 438)
 
+**Logic:**
 ```text
-src/components/ProtectedRoute.tsx
+if (rewards.length === 0) {
+  → Show "Coming Soon" card with Gift icon
+  → Hide the tabs entirely
+} else {
+  → Show existing tabs and reward cards
+}
 ```
 
-This component will:
-- Check if the user is authenticated using `useAuth()`
-- Show a loading state while checking auth status
-- Redirect to `/auth` if not authenticated
-- Render the child content if authenticated
-
-### 2. Update App.tsx Routes
-
-Wrap all protected routes with the `ProtectedRoute` component:
-
-**Public routes (no wrapper):**
-- `/auth` - Authentication page
-- `/reset-password` - Password reset
-- `/update-password` - Update password (after email link)
-- `/terms` - Terms of Service (legal requirement)
-- `/privacy` - Privacy Policy (legal requirement)
-
-**Protected routes (wrapped):**
-- `/` - Home
-- `/profile` - User profile
-- `/tournaments` - Browse tournaments
-- `/tournaments/:id` - Tournament detail
-- `/wallet` - Token wallet
-- `/predictions` - User predictions
-- `/rewards` - Rewards page
-- `/fantasy/*` - All fantasy routes
-- `/athletes/:id` - Athlete profiles
-- `/help` - Help center
-- `/admin/*` - All admin routes
-- All other app routes
+**Empty State Card Design:**
+- Gift/Package icon in a circular container
+- "Rewards Coming Soon" title
+- "Coming Soon" badge
+- Encouraging message: "We're working on exciting rewards for you. Keep earning tokens!"
+- Consistent styling with the existing VIP "Coming Soon" card
 
 ---
 
-## Files Changed
+## Visual Preview
 
-| File | Change |
-|------|--------|
-| `src/components/ProtectedRoute.tsx` | **NEW** - Auth guard component |
-| `src/App.tsx` | Wrap routes with ProtectedRoute |
-| `src/pages/Index.tsx` | Remove unauthenticated welcome view (no longer needed) |
+```text
+┌─────────────────────────────────────────┐
+│           Rewards Store        [tokens] │
+├─────────────────────────────────────────┤
+│  ┌───────────────────────────────────┐  │
+│  │ Redeem tokens for real rewards... │  │
+│  └───────────────────────────────────┘  │
+│                                         │
+│          ┌─────────────────┐            │
+│          │    📦 (icon)    │            │
+│          │                 │            │
+│          │ Rewards Coming  │            │
+│          │     Soon        │            │
+│          │  [Coming Soon]  │            │
+│          │                 │            │
+│          │ We're working   │            │
+│          │ on exciting     │            │
+│          │ rewards...      │            │
+│          └─────────────────┘            │
+│                                         │
+└─────────────────────────────────────────┘
+```
 
 ---
 
-## User Experience
+## Code Change Summary
 
-1. User clicks any app link (e.g., shared tournament link)
-2. App checks authentication status
-3. If not logged in → redirect to `/auth` (landing page with Sign Up / Log In)
-4. User signs up or logs in
-5. Redirected to the home page (or original destination)
+| Location | Change |
+|----------|--------|
+| Line ~438 | Add `{rewards.length === 0 ? <ComingSoonCard /> : <Tabs>...</Tabs>}` |
 
----
+The empty state will use the `Package` icon (already imported) and match the styling of the existing VIP "Coming Soon" card for visual consistency.
 
-## Technical Notes
-
-- Uses existing `AuthContext` for auth state
-- Shows loading skeleton while checking auth
-- Terms and Privacy pages remain public (legal requirement)
-- Reset password flow remains public (needed for account recovery)
