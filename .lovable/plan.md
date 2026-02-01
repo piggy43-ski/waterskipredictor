@@ -1,154 +1,237 @@
 
-# Add Inline Multiplier Editing to Tournament Entries
+# Yearly Fantasy League with Buy/Sell Transfers
 
 ## Overview
-Add click-to-edit multiplier functionality directly in the "Current Entries" list on the Tournament Entries page. This allows you to see and modify multipliers for already-added athletes without leaving the page.
+Create a season-long fantasy league system where users:
+1. Pick an initial team at the start of the season
+2. Can buy/sell athletes between tournaments (transfer windows)
+3. Accumulate points across all tournaments throughout the year
+4. Compete for season-long prizes
 
 ---
 
-## Current Behavior
-- Current entries show multiplier as read-only text: `Multiplier: 2.50x`
-- To change a multiplier, you must navigate to the separate "Market Odds Review" or "Probability Editor"
-- No inline editing capability
+## Current State vs New Features
 
-## New Behavior
-- Click on the multiplier value to enter edit mode
-- An input field appears with the current value
-- Press **Enter** to save (creates a multiplier override)
-- Press **Escape** or click away to cancel
-- Shows "MANUAL" badge after override is saved
-- Instant visual feedback with save confirmation
+| Feature | Current State | New Behavior |
+|---------|--------------|--------------|
+| Season pot type | Database supports it | Full user-facing experience |
+| Team editing | Only before first tournament | Transfer windows between each tournament |
+| Pricing | Static at selection | Dynamic - prices change after each event |
+| Budget tracking | Fixed budget at start | Tracks remaining budget with buy/sell |
+| Roster lock | All or nothing | Per-tournament snapshots |
+| Transfer history | None | Full audit trail |
 
 ---
 
-## Implementation
+## Database Changes
 
-### File: `src/pages/admin/TournamentEntries.tsx`
-
-**1. Add State for Inline Editing (around line 70)**
-```text
-const [editingEntry, setEditingEntry] = useState<string | null>(null);
-const [editMultiplier, setEditMultiplier] = useState<string>('');
-```
-
-**2. Add Mutation for Saving Multiplier Override (after deleteEntryMutation)**
-```text
-const updateMultiplierMutation = useMutation({
-  → Fetch the WINNER market for this entry's discipline/category
-  → Upsert into market_multiplier_overrides with reason "Edited inline"
-  → Update selections.decimal_odds to match
-  → Invalidate queries
-});
-```
-
-**3. Modify the Entry Row Display (lines 1015-1037)**
-
-Replace the static multiplier text with an inline-editable component:
+### 1. New Table: `fantasy_transfers`
+Track every buy/sell transaction for audit and history.
 
 ```text
-Current:
-  <span className="text-sm text-muted-foreground">
-    Multiplier: {formatMultiplier(entry.custom_odds || 2.5)}
-  </span>
-
-New:
-  {editingEntry === entry.id ? (
-    <Input
-      type="number"
-      step="0.1"
-      min="1.5"
-      max="25"
-      value={editMultiplier}
-      onChange={(e) => setEditMultiplier(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={handleBlur}
-      autoFocus
-      className="w-20 h-7"
-    />
-  ) : (
-    <button onClick={() => startEditing(entry)}>
-      {formatMultiplier(multiplier)}
-      {hasOverride && <Badge>MANUAL</Badge>}
-    </button>
-  )}
+fantasy_transfers
+  - id (uuid, PK)
+  - entry_id (uuid, FK -> fantasy_entries)
+  - athlete_id (uuid, FK -> athletes)
+  - discipline (text)
+  - transfer_type (text: 'buy' | 'sell')
+  - price (integer)  -- price at time of transfer
+  - transfer_window (uuid, FK -> tournaments)  -- which window this occurred in
+  - created_at (timestamp)
 ```
 
-**4. Add Event Handlers**
-- `startEditing(entry)`: Set editingEntry ID and populate input
-- `handleKeyDown(e)`: If Enter, save; If Escape, cancel
-- `handleBlur()`: Cancel editing
-- `saveMultiplier()`: Call mutation to save override
-
----
-
-## Visual Flow
+### 2. New Table: `fantasy_roster_snapshots`
+Freeze roster state when each tournament starts for scoring.
 
 ```text
-┌────────────────────────────────────────────────────────────────┐
-│ Current Entries (5)                                            │
-├────────────────────────────────────────────────────────────────┤
-│ ┌──────────────────────────────────────────────────────────┐   │
-│ │ Freddie Winter    [slalom]    S:3   [2.50x] ←click  [🗑] │   │
-│ └──────────────────────────────────────────────────────────┘   │
-│ ┌──────────────────────────────────────────────────────────┐   │
-│ │ Joel Poland       [slalom]    S:5   [___3.25___] [🗑]    │   │
-│ │                                     ↑ editing mode       │   │
-│ └──────────────────────────────────────────────────────────┘   │
-│ ┌──────────────────────────────────────────────────────────┐   │
-│ │ Thomas Degasperi  [slalom]    S:7   [4.00x] MANUAL  [🗑] │   │
-│ │                                     ↑ has override       │   │
-│ └──────────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────────┘
+fantasy_roster_snapshots
+  - id (uuid, PK)
+  - entry_id (uuid, FK -> fantasy_entries)
+  - tournament_id (uuid, FK -> tournaments)
+  - snapshot (jsonb)  -- { athletes: [{id, discipline, price}...] }
+  - created_at (timestamp)
 ```
 
----
+### 3. Modify `fantasy_entries` Table
+Add budget tracking for season leagues.
 
-## Technical Details
-
-### Required Data Fetching
-Add a query to fetch existing multiplier overrides for this tournament's markets:
 ```text
-const { data: multiplierOverrides } = useQuery({
-  queryKey: ['tournament-multiplier-overrides', selectedTournamentId],
-  queryFn: async () => {
-    // Get all WINNER markets for this tournament
-    // Then fetch all overrides for those markets
-    return overrides;
-  }
-});
+Add columns:
+  - remaining_budget (integer, default 100000)
+  - transfers_made (integer, default 0)
 ```
 
-### Save Logic
-```sql
--- When saving multiplier override:
-INSERT INTO market_multiplier_overrides 
-  (market_id, athlete_id, manual_multiplier, is_enabled, reason)
-VALUES 
-  ($winner_market_id, $athlete_id, $new_multiplier, true, 'Edited inline on entries page')
-ON CONFLICT (market_id, athlete_id) 
-DO UPDATE SET manual_multiplier = $new_multiplier, is_enabled = true;
+### 4. Modify `fantasy_pots` Table
+Add season configuration options.
 
--- Also update selection:
-UPDATE selections 
-SET decimal_odds = $new_multiplier
-WHERE market_id = $winner_market_id AND athlete_id = $athlete_id;
+```text
+Add columns:
+  - transfer_fee_percent (numeric, default 0)  -- optional fee on sells
+  - max_transfers_per_window (integer, nullable)  -- limit swaps
 ```
-
-### Multiplier Caps
-Apply clamping: min 1.5, max 25 (WINNER markets)
 
 ---
 
-## Summary of Changes
+## Transfer Window Logic
 
-| Location | Change |
-|----------|--------|
-| Lines ~70 | Add `editingEntry` and `editMultiplier` state |
-| After line ~957 | Add `updateMultiplierMutation` mutation |
-| Lines 1015-1037 | Replace static multiplier with click-to-edit component |
-| Add new query | Fetch existing multiplier overrides to show MANUAL badge |
+```text
+Tournament Timeline:
+  ┌─────────────────────────────────────────────────────────────┐
+  │ Season Start                                                │
+  │ ↓                                                           │
+  │ [Initial Team Selection - Open]                             │
+  │ ↓                                                           │
+  │ Tournament 1 Starts → Roster LOCKED for T1                  │
+  │ ↓                                                           │
+  │ Tournament 1 Ends → Transfer Window Opens                   │
+  │ ↓                                                           │
+  │ [Buy/Sell Period] - Can swap athletes                       │
+  │ ↓                                                           │
+  │ Tournament 2 Starts → Roster LOCKED for T2                  │
+  │ ↓                                                           │
+  │ ... repeat ...                                              │
+  │ ↓                                                           │
+  │ Final Tournament Ends → Season Settled                      │
+  └─────────────────────────────────────────────────────────────┘
+```
+
+**Lock Rule Update:**
+- Season pots are NOT fully locked when a tournament is live
+- Instead, roster is "snapshot locked" for that specific tournament
+- Users can still plan transfers that take effect after the tournament ends
 
 ---
 
-## Result
-You can click any multiplier in the Current Entries list to edit it immediately. Changes are saved as proper multiplier overrides that persist through any automated odds recalculation. A "MANUAL" badge indicates which entries have been manually adjusted.
+## Buy/Sell Mechanics
+
+### Selling an Athlete
+1. User selects athlete to sell from roster
+2. System shows current market price (from `athletes.fantasy_price_{discipline}`)
+3. Optional: Apply transfer fee (e.g., 10% of sale price goes to "house")
+4. Credit remaining_budget with sale proceeds
+5. Remove from roster, add to transfer history
+
+### Buying an Athlete
+1. User browses available athletes
+2. System shows current market price
+3. Check: Has budget? Is roster slot available?
+4. Deduct from remaining_budget
+5. Add to roster, add to transfer history
+
+### Price Changes
+After each tournament, the existing pricing engine already adjusts prices:
+- Winners increase ~5%
+- Poor performers decrease ~2-5%
+- Creates market dynamics where "buying low" on underperformers can pay off
+
+---
+
+## User Interface Changes
+
+### 1. Season League Page (`FantasySeasonView.tsx`)
+New page showing:
+- Season standings (cumulative points)
+- Upcoming tournaments
+- Transfer window status
+- Quick link to edit team (when window open)
+
+### 2. Transfer Window UI (`FantasyTransferWindow.tsx`)
+When transfer window is open:
+- Show current roster with SELL buttons
+- Show "market" of available athletes with BUY buttons
+- Display remaining budget prominently
+- Show price change indicators (↑↓) since last window
+- Transaction confirmation dialog
+
+### 3. Update Fantasy Hub (`Fantasy.tsx`)
+- Add "Season Leagues" section separate from Tournament leagues
+- Show season progress bar
+- Highlight active transfer windows
+
+### 4. Update Team View (`FantasyTeamView.tsx`)
+For season entries:
+- Show cumulative points across tournaments
+- Show per-tournament breakdown
+- Show transfer history tab
+
+---
+
+## Backend Logic
+
+### 1. Update Lock Rules (`fantasyLockRules.ts`)
+```text
+For season pots:
+  - isLocked = false (allow ongoing access)
+  - canEditRoster = calculated based on transfer window status
+  - getActiveTransferWindow() returns current window or null
+```
+
+### 2. Transfer Window Detection
+```text
+function getTransferWindowStatus(pot, tournaments):
+  if no tournaments: return { status: 'initial', canTransfer: true }
+  
+  liveTournament = find tournament where status = 'live'
+  if liveTournament: return { status: 'locked', canTransfer: false, tournament: liveTournament }
+  
+  lastFinished = most recent tournament where status = 'finished'
+  nextUpcoming = next tournament where status = 'upcoming'
+  
+  if lastFinished && nextUpcoming:
+    return { status: 'transfer_window', canTransfer: true, 
+             window: lastFinished, deadline: nextUpcoming.start_datetime }
+  
+  return { status: 'season_ended', canTransfer: false }
+```
+
+### 3. Roster Snapshot Trigger
+Before each tournament starts, snapshot all season entries' rosters:
+- Edge function triggered by cron or manually before tournament
+- Copies current roster to `fantasy_roster_snapshots`
+- Scoring uses snapshot, not live roster
+
+### 4. Update Scoring Function
+Modify `score-fantasy` edge function:
+- For season pots, use roster snapshot for that tournament
+- Add points to season total (not replace)
+
+---
+
+## Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/pages/FantasySeasonView.tsx` | Season league dashboard |
+| `src/components/fantasy/TransferWindow.tsx` | Buy/sell interface |
+| `src/components/fantasy/TransferHistory.tsx` | Transaction log |
+| `src/utils/transferWindowRules.ts` | Transfer window logic |
+| `supabase/functions/snapshot-season-rosters/index.ts` | Pre-tournament snapshot |
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/pages/Fantasy.tsx` | Add season leagues section |
+| `src/pages/FantasyTeamView.tsx` | Season-specific views |
+| `src/utils/fantasyLockRules.ts` | Transfer window logic |
+| `supabase/functions/score-fantasy/index.ts` | Use snapshots for season |
+| `src/pages/admin/FantasyPots.tsx` | Season pot configuration |
+
+---
+
+## Phase 1 Implementation (Core)
+
+1. Database migrations for new tables
+2. Transfer window detection logic
+3. Basic buy/sell UI
+4. Roster snapshots before tournaments
+5. Season scoring updates
+
+## Phase 2 Enhancements (Later)
+
+- Transfer fee configuration
+- Max transfers per window limits
+- Price change notifications
+- "Watchlist" feature for athletes
+- Transfer deadline countdown
+- Season leaderboard with tiebreakers
