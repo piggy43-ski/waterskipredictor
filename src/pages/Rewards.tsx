@@ -435,49 +435,66 @@ const Rewards = () => {
             Need help with rewards?
           </Link>
         </div>
-        <Tabs defaultValue="all" className="w-full">
-          <TabsList className="w-full grid grid-cols-4 mb-6">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="coaching">Coaching</TabsTrigger>
-            <TabsTrigger value="gear">Gear</TabsTrigger>
-            <TabsTrigger value="experience">VIP</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="all" className="space-y-4">
-            {rewards.map((reward) => (
-              <RewardCard key={reward.id} reward={reward} />
-            ))}
-          </TabsContent>
-
-          <TabsContent value="coaching" className="space-y-4">
-            {categories.coaching.map((reward) => (
-              <RewardCard key={reward.id} reward={reward} />
-            ))}
-          </TabsContent>
-
-          <TabsContent value="gear" className="space-y-4">
-            {categories.gear.map((reward) => (
-              <RewardCard key={reward.id} reward={reward} />
-            ))}
-          </TabsContent>
-
-          <TabsContent value="experience" className="space-y-4">
-            <Card className="p-8 bg-gradient-card border-border/50 text-center">
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Sparkles className="w-8 h-8 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold mb-2">VIP Experiences</h3>
-                  <Badge variant="secondary" className="mb-3">Coming Soon</Badge>
-                  <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-                    More rewards are coming soon. Keep earning tokens!
-                  </p>
-                </div>
+        {rewards.length === 0 ? (
+          <Card className="p-8 bg-gradient-card border-border/50 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <Package className="w-8 h-8 text-primary" />
               </div>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              <div>
+                <h3 className="text-xl font-semibold mb-2">Rewards Coming Soon</h3>
+                <Badge variant="secondary" className="mb-3">Coming Soon</Badge>
+                <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+                  We're working on exciting rewards for you. Keep earning tokens!
+                </p>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <Tabs defaultValue="all" className="w-full">
+            <TabsList className="w-full grid grid-cols-4 mb-6">
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="coaching">Coaching</TabsTrigger>
+              <TabsTrigger value="gear">Gear</TabsTrigger>
+              <TabsTrigger value="experience">VIP</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="all" className="space-y-4">
+              {rewards.map((reward) => (
+                <RewardCard key={reward.id} reward={reward} />
+              ))}
+            </TabsContent>
+
+            <TabsContent value="coaching" className="space-y-4">
+              {categories.coaching.map((reward) => (
+                <RewardCard key={reward.id} reward={reward} />
+              ))}
+            </TabsContent>
+
+            <TabsContent value="gear" className="space-y-4">
+              {categories.gear.map((reward) => (
+                <RewardCard key={reward.id} reward={reward} />
+              ))}
+            </TabsContent>
+
+            <TabsContent value="experience" className="space-y-4">
+              <Card className="p-8 bg-gradient-card border-border/50 text-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Sparkles className="w-8 h-8 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2">VIP Experiences</h3>
+                    <Badge variant="secondary" className="mb-3">Coming Soon</Badge>
+                    <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+                      More rewards are coming soon. Keep earning tokens!
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
 
       {/* Confirmation Modal */}
