@@ -627,7 +627,7 @@ const Profile = () => {
             <Button 
               variant="outline" 
               className="w-full flex flex-col items-center py-4 h-auto"
-              onClick={() => window.open('https://instagram.com/waterskipredictor', '_blank')}
+              onClick={() => window.open('https://www.instagram.com/waterskipredictor?igsh=MWY1bjViMGxmdzczbw%3D%3D', '_blank')}
             >
               <div className="flex items-center">
                 <svg 
