@@ -1,73 +1,65 @@
 
-# Launch Token Reset: Clean Economic Slate
+# Add Instagram Contact to Profile
 
 ## Overview
-Reset all token balances and transaction history to start fresh for launch while preserving user accounts.
+Add an Instagram DM contact option in the Help & Support section of the Profile page for users to reach out when something isn't working.
 
 ---
 
-## What Gets Cleaned
+## Changes
 
-| Table | Current State | Action |
-|-------|---------------|--------|
-| `token_wallets` | 7 wallets, 20,025 tokens | Reset all to 0 |
-| `token_transactions` | 9 records | Delete all |
-| `bet_slips` | 10 pending entries | Delete all |
-| `parlay_legs` | Linked to bet_slips | Delete all |
-| `market_liability` | 3 rows | Truncate |
+### File: `src/pages/Profile.tsx`
 
-## What Stays
+**1. Add Instagram Icon Component**
 
-| Table | Status |
-|-------|--------|
-| `profiles` | 7 users preserved |
-| `tournaments` | All tournament data stays |
-| `markets` | All markets stay |
-| `selections` | All selections/multipliers stay |
-| `athletes` | All athlete data stays |
-| `house_bankroll_config` | $5,000 reserve stays |
-| `deposit_ledger` | Clear (no real deposits yet) |
+Since Lucide doesn't include brand icons like Instagram, I'll create a simple Instagram SVG icon as an inline component at the top of the file (after imports).
+
+**2. Update Help & Support Section (lines 615-640)**
+
+Add a new button between "Help Center" and "Replay Tutorial" that:
+- Shows the Instagram logo icon
+- Says "DM us on Instagram"
+- Links to your Instagram profile (opens in new tab)
+- Includes helper text explaining it's for reporting issues
 
 ---
 
-## Database Migration
+## Updated Help & Support Section
 
-The migration will:
-
-1. **Delete bet_slips** (cascades to parlay_legs via FK)
-2. **Delete token_transactions** (history cleared)
-3. **Reset token_wallets** to 0 balance for all users
-4. **Truncate market_liability** (already should be empty after bet_slips delete)
-5. **Clear deposit_ledger** if any test entries exist
-
----
-
-## Post-Reset State
-
-After the reset:
-- All 7 users keep their accounts (can log in)
-- All users have 0 tokens
-- No pending entries/predictions
-- Risk Dashboard shows $0 exposure
-- House bankroll: $5,000 available, $0 handle
-
-Users will need to either:
-- Purchase tokens via Stripe
-- Receive welcome bonus tokens (if you want to give them)
+```text
+Help & Support
+├── Help Center (existing)
+├── Something not working? DM us on Instagram (NEW)
+│   └── Opens instagram.com/YOUR_HANDLE in new tab
+└── Replay Tutorial (existing)
+```
 
 ---
 
-## Technical Notes
+## Visual Design
 
-- Foreign key constraints handled in correct order
-- RLS policies remain unchanged
-- No schema changes, only data cleanup
-- Triggers remain intact for future entries
+The Instagram button will:
+- Use `variant="outline"` to match other buttons
+- Display the Instagram logo (gradient-colored SVG or simple outline)
+- Include text: "DM us on Instagram"
+- Add a small subtitle: "Something not working? Reach out!"
+- Open Instagram in a new browser tab
 
 ---
 
-## Timeline
+## Technical Details
 
-- Migration execution: ~10 seconds
-- Verification queries: 1 minute
-- Total downtime: None (users see 0 balance immediately)
+**Instagram Icon**: Custom inline SVG (Instagram's camera icon outline)
+
+**Link behavior**: 
+```jsx
+onClick={() => window.open('https://instagram.com/YOUR_HANDLE', '_blank')}
+```
+
+**Note**: You'll need to provide your actual Instagram handle. I'll use a placeholder `waterskipredictor` that you can update.
+
+---
+
+## Expected Result
+
+Users will see a prominent Instagram contact option in their profile's Help & Support section, making it easy to DM you when they encounter issues.
