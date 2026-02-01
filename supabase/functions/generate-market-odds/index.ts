@@ -12,10 +12,13 @@ const SIMS = 5000;
 const W_BASE = 0.80;  // 80% weight on rank-based ladder
 const W_MC = 0.20;    // 20% weight on Monte Carlo
 
-const TARGET_IMPLIED_SUM = {
-  WINNER: { min: 0.90, max: 0.92 },
-  PODIUM: { min: 0.84, max: 0.86 },
-  HIGHEST_SCORE: { min: 0.87, max: 0.89 },
+// TARGET_EV_FACTOR: What fraction of fair odds players receive
+// e.g., 0.91 = players get 91% of fair value = 9% house edge
+// EV = probability × multiplier = probability × (fair_mult × ev_factor) = ev_factor
+const TARGET_EV_FACTOR = {
+  WINNER: { min: 0.90, max: 0.92 },       // 8-10% house edge
+  PODIUM: { min: 0.84, max: 0.86 },       // 14-16% house edge  
+  HIGHEST_SCORE: { min: 0.87, max: 0.89 }, // 11-13% house edge
 };
 
 const MULTIPLIER_CAPS = {
@@ -297,30 +300,63 @@ function deriveMultipliers(
   marketType: string,
   fieldSize: number
 ): { multipliers: number[], impliedSum: number, edgeFactor: number } {
-  const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
+  const target = TARGET_EV_FACTOR[marketType as keyof typeof TARGET_EV_FACTOR] || TARGET_EV_FACTOR.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] || MULTIPLIER_CAPS.WINNER;
   const targetMid = (target.min + target.max) / 2;
   
   // Dynamic cap scaling for large fields to prevent clumping at max
-  // For fields > 20, allow higher max to maintain spread
   const fieldSizeAdjustment = Math.max(1, fieldSize / 20);
   const dynamicMax = Math.min(caps.max * fieldSizeAdjustment, 25.0);
   
-  // Calculate edge factor to hit target implied sum
-  const edgeFactor = targetMid;
+  // HOUSE EDGE FORMULA:
+  // We want implied_sum = SUM(1/mult) = target (e.g., 0.91)
+  // If p_i are normalized probabilities (sum to 1), set:
+  //   q_i = p_i * targetImpliedSum  (adjusted prob, sums to targetImpliedSum)
+  //   mult_i = 1 / q_i
+  // Then implied_sum = SUM(1/mult_i) = SUM(q_i) = targetImpliedSum ✓
+  //
+  // EV for player betting on outcome i:
+  //   EV = p_i * mult_i = p_i / (p_i * target) = 1/target = 1/0.91 ≈ 1.10
+  //
+  // Wait - that means player has +EV! That's WRONG for house edge.
+  //
+  // CORRECT UNDERSTANDING:
+  // - Sportsbook implied_sum > 1 = house edge (overround)
+  // - Our target < 1 = actually gives players edge
+  //
+  // SOLUTION: Use actual house edge multiplier reduction
+  // House edge = 1 - EV_player = 1 - (p * mult) 
+  // We want EV_player < 1, so mult < 1/p
+  // mult = (1/p) * (1 - house_edge_pct)
+  //
+  // For 9% house edge: mult = (1/p) * 0.91
+  // Then EV = p * mult = p * (0.91/p) = 0.91 ✓ House keeps 9%
+  // BUT: implied_sum = SUM(1/mult) = SUM(p/0.91) = 1/0.91 ≈ 1.10
+  //
+  // So: implied_sum ~1.10 is CORRECT for 9% house edge!
+  // The target bands 0.90-0.92 were conceptually inverted.
+  //
+  // For now: implement multiplier = (1/p) * (1 - houseEdgePct)
+  // And accept implied_sum will be ~1.10 (which IS house edge)
   
-  // Apply edge and derive multipliers
-  const multipliers = p_final.map(p => {
-    const p_adj = p * edgeFactor;
-    if (p_adj <= 0) return dynamicMax;
-    let m = 1 / p_adj;
+  const houseEdgePct = 1 - targetMid; // e.g., 0.09 for 9% edge
+  const evFactor = 1 - houseEdgePct; // 0.91
+  
+  let multipliers = p_final.map(p => {
+    if (p <= 0) return dynamicMax;
+    const m_fair = 1 / p;
+    let m = m_fair * evFactor;  // Reduces multiplier = house edge
     m = clamp(m, caps.min, dynamicMax);
     return roundToLadder(m);
   });
   
+  // Calculate what implied_sum we actually got (will be ~1/evFactor if no clipping)
   const impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
   
-  return { multipliers, impliedSum, edgeFactor };
+  // Note: We no longer try to hit targetMid for implied_sum
+  // because our multiplier model creates implied_sum > 1 by design
+  
+  return { multipliers, impliedSum, edgeFactor: evFactor };
 }
 
 // ============================================================

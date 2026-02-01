@@ -2671,6 +2671,7 @@ export type Database = {
         Returns: undefined
       }
       is_pot_public: { Args: { _pot_id: string }; Returns: boolean }
+      rebuild_market_liability: { Args: never; Returns: undefined }
       user_has_accepted_invite: {
         Args: { _pot_id: string; _user_id: string }
         Returns: boolean
