@@ -1,9 +1,13 @@
 /**
  * Fantasy Lock Rules Utility
  * Determines when fantasy pots should be locked based on tournament status
+ * 
+ * For TOURNAMENT pots: locked when tournament is live or finished
+ * For SEASON pots: uses transfer window logic - only locked during live tournaments
  */
 
 import { calculateTournamentStatus } from './tournamentStatus';
+import { getTransferWindowStatus, type SeasonTournament, type TransferWindowInfo } from './transferWindowRules';
 
 export interface TournamentInfo {
   id: string;
@@ -12,6 +16,7 @@ export interface TournamentInfo {
   start_date?: string | null;
   end_date?: string | null;
   status?: string;
+  name?: string;
 }
 
 export interface FantasyPotInfo {
@@ -25,7 +30,7 @@ export interface FantasyPotInfo {
 /**
  * Check if a fantasy pot is locked based on tournament status
  * - For tournament pots: locked when the linked tournament is live or finished
- * - For season pots: locked when ANY of the season tournaments is live or finished
+ * - For season pots: uses transfer window logic (locked only during live tournaments)
  */
 export function isFantasyPotLocked(
   pot: FantasyPotInfo,
@@ -37,7 +42,7 @@ export function isFantasyPotLocked(
     return true;
   }
 
-  // Tournament fantasy pot
+  // Tournament fantasy pot - original behavior
   if (pot.pot_type === 'tournament' && tournament) {
     const tournamentStatus = calculateTournamentStatus(
       tournament.start_datetime || undefined,
@@ -48,20 +53,51 @@ export function isFantasyPotLocked(
     return tournamentStatus === 'live' || tournamentStatus === 'finished';
   }
 
-  // Season fantasy pot - locked if ANY tournament is live or finished
+  // Season fantasy pot - use transfer window logic
   if (pot.pot_type === 'season' && seasonTournaments && seasonTournaments.length > 0) {
-    return seasonTournaments.some(t => {
-      const status = calculateTournamentStatus(
-        t.start_datetime || undefined,
-        t.end_datetime || undefined,
-        t.start_date || undefined,
-        t.end_date || undefined
-      );
-      return status === 'live' || status === 'finished';
-    });
+    const windowInfo = getTransferWindowStatus(seasonTournaments as SeasonTournament[]);
+    // Only locked if a tournament is currently live
+    return windowInfo.status === 'locked';
   }
 
   return false;
+}
+
+/**
+ * Get detailed lock status for season pots (includes transfer window info)
+ */
+export function getSeasonLockStatus(
+  pot: FantasyPotInfo,
+  seasonTournaments?: TournamentInfo[]
+): TransferWindowInfo {
+  if (pot.pot_type !== 'season') {
+    return {
+      status: 'initial',
+      canTransfer: true,
+      canEditRoster: true,
+      message: 'Not a season pot'
+    };
+  }
+
+  if (pot.status === 'settled') {
+    return {
+      status: 'season_ended',
+      canTransfer: false,
+      canEditRoster: false,
+      message: 'Season has been settled'
+    };
+  }
+
+  if (pot.status === 'cancelled') {
+    return {
+      status: 'season_ended',
+      canTransfer: false,
+      canEditRoster: false,
+      message: 'Season was cancelled'
+    };
+  }
+
+  return getTransferWindowStatus(seasonTournaments as SeasonTournament[] || []);
 }
 
 /**
@@ -101,6 +137,47 @@ export function getLockStatusMessage(
     };
   }
 
+  // For season pots, provide more detailed info
+  if (pot.pot_type === 'season' && seasonTournaments) {
+    const windowInfo = getSeasonLockStatus(pot, seasonTournaments);
+    
+    if (windowInfo.status === 'locked') {
+      return {
+        isLocked: true,
+        message: windowInfo.message,
+        canJoin: false,
+        canEdit: false
+      };
+    }
+
+    if (windowInfo.status === 'season_ended') {
+      return {
+        isLocked: true,
+        message: 'Season has ended',
+        canJoin: false,
+        canEdit: false
+      };
+    }
+
+    if (windowInfo.status === 'transfer_window') {
+      return {
+        isLocked: false,
+        message: windowInfo.message,
+        canJoin: true,
+        canEdit: true
+      };
+    }
+
+    // Initial state
+    return {
+      isLocked: false,
+      message: windowInfo.message,
+      canJoin: true,
+      canEdit: true
+    };
+  }
+
+  // Tournament pot behavior
   if (isLocked) {
     return {
       isLocked: true,

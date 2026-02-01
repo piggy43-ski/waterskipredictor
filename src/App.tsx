@@ -37,6 +37,7 @@ import Fantasy from "./pages/Fantasy";
 import FantasyPotDetail from "./pages/FantasyPotDetail";
 import FantasyTeamView from "./pages/FantasyTeamView";
 import FantasyTeamEdit from "./pages/FantasyTeamEdit";
+import FantasySeasonView from "./pages/FantasySeasonView";
 import AdminFantasyPots from "./pages/admin/FantasyPots";
 import AdminSettlementTest from "./pages/admin/SettlementTest";
 import AdminLiabilities from "./pages/admin/Liabilities";
@@ -93,6 +94,7 @@ const App = () => (
               <Route path="/fantasy/:potId" element={<ProtectedRoute><FantasyPotDetail /></ProtectedRoute>} />
               <Route path="/fantasy/:potId/team/:entryId" element={<ProtectedRoute><FantasyTeamView /></ProtectedRoute>} />
               <Route path="/fantasy/:potId/team/:entryId/edit" element={<ProtectedRoute><FantasyTeamEdit /></ProtectedRoute>} />
+              <Route path="/fantasy/season/:potId/team/:entryId" element={<ProtectedRoute><FantasySeasonView /></ProtectedRoute>} />
               <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
               <Route path="/help/:id" element={<ProtectedRoute><HelpArticle /></ProtectedRoute>} />
               

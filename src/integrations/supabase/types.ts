@@ -666,9 +666,11 @@ export type Database = {
           id: string
           pot_id: string
           rank: number | null
+          remaining_budget: number
           team_name: string | null
           total_points: number
           total_team_value: number
+          transfers_made: number
           updated_at: string
           user_id: string
         }
@@ -677,9 +679,11 @@ export type Database = {
           id?: string
           pot_id: string
           rank?: number | null
+          remaining_budget?: number
           team_name?: string | null
           total_points?: number
           total_team_value?: number
+          transfers_made?: number
           updated_at?: string
           user_id: string
         }
@@ -688,9 +692,11 @@ export type Database = {
           id?: string
           pot_id?: string
           rank?: number | null
+          remaining_budget?: number
           team_name?: string | null
           total_points?: number
           total_team_value?: number
+          transfers_made?: number
           updated_at?: string
           user_id?: string
         }
@@ -800,6 +806,7 @@ export type Database = {
           id: string
           invite_code: string | null
           max_entrants: number | null
+          max_transfers_per_window: number | null
           name: string
           payout_split: Json
           payout_structure: string
@@ -810,6 +817,7 @@ export type Database = {
           status: string
           team_budget: number
           tournament_id: string | null
+          transfer_fee_percent: number
           updated_at: string
           visibility: string
         }
@@ -822,6 +830,7 @@ export type Database = {
           id?: string
           invite_code?: string | null
           max_entrants?: number | null
+          max_transfers_per_window?: number | null
           name: string
           payout_split?: Json
           payout_structure?: string
@@ -832,6 +841,7 @@ export type Database = {
           status?: string
           team_budget?: number
           tournament_id?: string | null
+          transfer_fee_percent?: number
           updated_at?: string
           visibility?: string
         }
@@ -844,6 +854,7 @@ export type Database = {
           id?: string
           invite_code?: string | null
           max_entrants?: number | null
+          max_transfers_per_window?: number | null
           name?: string
           payout_split?: Json
           payout_structure?: string
@@ -854,6 +865,7 @@ export type Database = {
           status?: string
           team_budget?: number
           tournament_id?: string | null
+          transfer_fee_percent?: number
           updated_at?: string
           visibility?: string
         }
@@ -867,6 +879,45 @@ export type Database = {
           },
           {
             foreignKeyName: "fantasy_pots_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fantasy_roster_snapshots: {
+        Row: {
+          created_at: string
+          entry_id: string
+          id: string
+          snapshot: Json
+          tournament_id: string
+        }
+        Insert: {
+          created_at?: string
+          entry_id: string
+          id?: string
+          snapshot?: Json
+          tournament_id: string
+        }
+        Update: {
+          created_at?: string
+          entry_id?: string
+          id?: string
+          snapshot?: Json
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fantasy_roster_snapshots_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "fantasy_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fantasy_roster_snapshots_tournament_id_fkey"
             columns: ["tournament_id"]
             isOneToOne: false
             referencedRelation: "tournaments"
@@ -923,6 +974,61 @@ export type Database = {
           {
             foreignKeyName: "fantasy_scoring_events_tournament_id_fkey"
             columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fantasy_transfers: {
+        Row: {
+          athlete_id: string
+          created_at: string
+          discipline: string
+          entry_id: string
+          id: string
+          price: number
+          transfer_type: string
+          transfer_window: string | null
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string
+          discipline: string
+          entry_id: string
+          id?: string
+          price: number
+          transfer_type: string
+          transfer_window?: string | null
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string
+          discipline?: string
+          entry_id?: string
+          id?: string
+          price?: number
+          transfer_type?: string
+          transfer_window?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fantasy_transfers_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fantasy_transfers_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "fantasy_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fantasy_transfers_transfer_window_fkey"
+            columns: ["transfer_window"]
             isOneToOne: false
             referencedRelation: "tournaments"
             referencedColumns: ["id"]
