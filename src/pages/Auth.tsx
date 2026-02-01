@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, Mail } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { ArrowLeft, Mail, Check, X } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
 type AuthView = 'landing' | 'signin' | 'signup';
@@ -32,6 +33,10 @@ const Auth = () => {
   // Age and ToS consent states
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [tosAccepted, setTosAccepted] = useState(false);
+  
+  // Referral code states
+  const [referralCode, setReferralCode] = useState('');
+  const [referralCodeStatus, setReferralCodeStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
   
   useEffect(() => {
     if (user) {
@@ -77,7 +82,7 @@ const Auth = () => {
       tosAccepted,
       tosVersion: '1.0',
       privacyVersion: '1.0'
-    });
+    }, referralCodeStatus === 'valid' ? referralCode : undefined);
     setFormLoading(false);
   };
 
@@ -86,6 +91,41 @@ const Auth = () => {
     // Reset consent checkboxes when going back
     setAgeConfirmed(false);
     setTosAccepted(false);
+    setReferralCode('');
+    setReferralCodeStatus('idle');
+  };
+
+  const validateReferralCode = async (code: string) => {
+    if (!code.trim()) {
+      setReferralCodeStatus('idle');
+      return;
+    }
+    
+    setReferralCodeStatus('validating');
+    
+    try {
+      const { data, error } = await supabase
+        .from('referral_codes')
+        .select('id, uses_count, max_uses_total')
+        .eq('code', code.toUpperCase().trim())
+        .eq('is_active', true)
+        .single();
+      
+      if (error || !data) {
+        setReferralCodeStatus('invalid');
+        return;
+      }
+      
+      // Check max uses
+      if (data.max_uses_total && data.uses_count >= data.max_uses_total) {
+        setReferralCodeStatus('invalid');
+        return;
+      }
+      
+      setReferralCodeStatus('valid');
+    } catch {
+      setReferralCodeStatus('invalid');
+    }
   };
 
   // Landing View
@@ -300,6 +340,40 @@ const Auth = () => {
           <p className="text-xs text-muted-foreground">
             Minimum 6 characters
           </p>
+        </div>
+
+        {/* Referral Code */}
+        <div className="space-y-2">
+          <Label htmlFor="referral-code" className="text-sm font-medium">
+            Have a referral code? (Optional)
+          </Label>
+          <div className="relative">
+            <Input 
+              id="referral-code" 
+              type="text" 
+              placeholder="Enter code"
+              value={referralCode} 
+              onChange={e => {
+                const code = e.target.value.toUpperCase();
+                setReferralCode(code);
+                if (!code) setReferralCodeStatus('idle');
+              }}
+              onBlur={() => validateReferralCode(referralCode)}
+              className="h-12 rounded-xl transition-shadow focus:shadow-md pr-10" 
+            />
+            {referralCodeStatus === 'valid' && (
+              <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
+            )}
+            {referralCodeStatus === 'invalid' && (
+              <X className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-red-500" />
+            )}
+          </div>
+          {referralCodeStatus === 'valid' && (
+            <p className="text-xs text-green-600">✓ Code applied</p>
+          )}
+          {referralCodeStatus === 'invalid' && (
+            <p className="text-xs text-red-600">Invalid or expired code</p>
+          )}
         </div>
 
         {/* Age Verification */}

@@ -1945,12 +1945,14 @@ export type Database = {
           country: string | null
           created_at: string
           email: string
+          first_purchase_at: string | null
           id: string
           lifetime_deposited: number | null
           lifetime_losses: number | null
           lifetime_winnings: number | null
           notification_preferences: Json | null
           privacy_version: string | null
+          referred_by_code_id: string | null
           tos_accepted: boolean | null
           tos_accepted_at: string | null
           tos_version: string | null
@@ -1966,12 +1968,14 @@ export type Database = {
           country?: string | null
           created_at?: string
           email: string
+          first_purchase_at?: string | null
           id: string
           lifetime_deposited?: number | null
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
           notification_preferences?: Json | null
           privacy_version?: string | null
+          referred_by_code_id?: string | null
           tos_accepted?: boolean | null
           tos_accepted_at?: string | null
           tos_version?: string | null
@@ -1987,12 +1991,14 @@ export type Database = {
           country?: string | null
           created_at?: string
           email?: string
+          first_purchase_at?: string | null
           id?: string
           lifetime_deposited?: number | null
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
           notification_preferences?: Json | null
           privacy_version?: string | null
+          referred_by_code_id?: string | null
           tos_accepted?: boolean | null
           tos_accepted_at?: string | null
           tos_version?: string | null
@@ -2001,7 +2007,15 @@ export type Database = {
           updated_at?: string
           username?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_referred_by_code_id_fkey"
+            columns: ["referred_by_code_id"]
+            isOneToOne: false
+            referencedRelation: "referral_codes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rating_adjustments: {
         Row: {
@@ -2185,6 +2199,138 @@ export type Database = {
             columns: ["reward_id"]
             isOneToOne: false
             referencedRelation: "rewards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_codes: {
+        Row: {
+          bonus_multiplier: number
+          code: string
+          created_at: string
+          created_by_admin: boolean
+          end_at: string | null
+          id: string
+          is_active: boolean
+          max_uses_total: number | null
+          notes: string | null
+          owner_user_id: string | null
+          referrer_reward_pct: number
+          reward_type: string
+          start_at: string | null
+          type: string
+          updated_at: string
+          uses_count: number
+        }
+        Insert: {
+          bonus_multiplier?: number
+          code: string
+          created_at?: string
+          created_by_admin?: boolean
+          end_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses_total?: number | null
+          notes?: string | null
+          owner_user_id?: string | null
+          referrer_reward_pct?: number
+          reward_type?: string
+          start_at?: string | null
+          type?: string
+          updated_at?: string
+          uses_count?: number
+        }
+        Update: {
+          bonus_multiplier?: number
+          code?: string
+          created_at?: string
+          created_by_admin?: boolean
+          end_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses_total?: number | null
+          notes?: string | null
+          owner_user_id?: string | null
+          referrer_reward_pct?: number
+          reward_type?: string
+          start_at?: string | null
+          type?: string
+          updated_at?: string
+          uses_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_codes_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_redemptions: {
+        Row: {
+          bonus_tokens_awarded: number
+          created_at: string
+          id: string
+          purchase_amount_tokens: number
+          purchase_amount_usd: number
+          purchase_id: string
+          referral_code_id: string
+          referred_user_id: string
+          referrer_paid_at: string | null
+          referrer_reward_type: string
+          referrer_reward_value: number
+          referrer_user_id: string | null
+        }
+        Insert: {
+          bonus_tokens_awarded: number
+          created_at?: string
+          id?: string
+          purchase_amount_tokens: number
+          purchase_amount_usd: number
+          purchase_id: string
+          referral_code_id: string
+          referred_user_id: string
+          referrer_paid_at?: string | null
+          referrer_reward_type: string
+          referrer_reward_value: number
+          referrer_user_id?: string | null
+        }
+        Update: {
+          bonus_tokens_awarded?: number
+          created_at?: string
+          id?: string
+          purchase_amount_tokens?: number
+          purchase_amount_usd?: number
+          purchase_id?: string
+          referral_code_id?: string
+          referred_user_id?: string
+          referrer_paid_at?: string | null
+          referrer_reward_type?: string
+          referrer_reward_value?: number
+          referrer_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_redemptions_referral_code_id_fkey"
+            columns: ["referral_code_id"]
+            isOneToOne: false
+            referencedRelation: "referral_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_redemptions_referred_user_id_fkey"
+            columns: ["referred_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_redemptions_referrer_user_id_fkey"
+            columns: ["referrer_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

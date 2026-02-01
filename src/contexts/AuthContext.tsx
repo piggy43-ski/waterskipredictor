@@ -14,7 +14,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, username: string, country?: string, consent?: ConsentData) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, username: string, country?: string, consent?: ConsentData, referralCode?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
@@ -83,7 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, username: string, country?: string, consent?: ConsentData) => {
+  const signUp = async (email: string, password: string, username: string, country?: string, consent?: ConsentData, referralCode?: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -114,17 +114,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (data.user) {
         const now = new Date().toISOString();
         
-        // Update profile with consent fields
+        // Prepare profile update data
+        const profileUpdate: Record<string, any> = {
+          age_confirmed: consent?.ageConfirmed ?? false,
+          age_confirmed_at: consent?.ageConfirmed ? now : null,
+          tos_accepted: consent?.tosAccepted ?? false,
+          tos_accepted_at: consent?.tosAccepted ? now : null,
+          tos_version: consent?.tosVersion ?? '1.0',
+          privacy_version: consent?.privacyVersion ?? '1.0'
+        };
+        
+        // If referral code provided, validate and attach it
+        if (referralCode) {
+          const { data: codeData } = await supabase
+            .from('referral_codes')
+            .select('id, uses_count, max_uses_total')
+            .eq('code', referralCode.toUpperCase().trim())
+            .eq('is_active', true)
+            .or('start_at.is.null,start_at.lte.now()')
+            .or('end_at.is.null,end_at.gt.now()')
+            .single();
+          
+          if (codeData) {
+            // Check max uses
+            if (!codeData.max_uses_total || codeData.uses_count < codeData.max_uses_total) {
+              profileUpdate.referred_by_code_id = codeData.id;
+              
+              // Increment uses_count on the referral code
+              await supabase
+                .from('referral_codes')
+                .update({ uses_count: codeData.uses_count + 1 })
+                .eq('id', codeData.id);
+              
+              console.log('Referral code attached:', referralCode);
+            }
+          }
+        }
+        
+        // Update profile with consent fields and referral code
         await supabase
           .from('profiles')
-          .update({
-            age_confirmed: consent?.ageConfirmed ?? false,
-            age_confirmed_at: consent?.ageConfirmed ? now : null,
-            tos_accepted: consent?.tosAccepted ?? false,
-            tos_accepted_at: consent?.tosAccepted ? now : null,
-            tos_version: consent?.tosVersion ?? '1.0',
-            privacy_version: consent?.privacyVersion ?? '1.0'
-          })
+          .update(profileUpdate)
           .eq('id', data.user.id);
       }
       

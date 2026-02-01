@@ -34,6 +34,188 @@ async function writeAuditLog(supabase: any, entry: {
   }
 }
 
+// Process referral bonus for first-time purchase
+async function processReferralBonus(
+  supabaseClient: any,
+  userId: string,
+  tokenAmount: number,
+  purchaseAmountUsd: number,
+  paymentIntentId: string
+): Promise<{ bonusTokens: number; referrerReward: number } | null> {
+  logStep("Checking referral eligibility", { userId });
+
+  // Get user profile with referral info
+  const { data: profile, error: profileError } = await supabaseClient
+    .from('profiles')
+    .select('referred_by_code_id, first_purchase_at')
+    .eq('id', userId)
+    .single();
+
+  if (profileError || !profile) {
+    logStep("No profile found or error", { error: profileError?.message });
+    return null;
+  }
+
+  // Check if this is a first purchase AND has a referral code
+  if (profile.first_purchase_at) {
+    logStep("Not first purchase, skipping referral bonus");
+    return null;
+  }
+
+  if (!profile.referred_by_code_id) {
+    logStep("No referral code attached to user");
+    // Still mark first_purchase_at even without referral
+    await supabaseClient
+      .from('profiles')
+      .update({ first_purchase_at: new Date().toISOString() })
+      .eq('id', userId);
+    return null;
+  }
+
+  // Get referral code details
+  const { data: referralCode, error: codeError } = await supabaseClient
+    .from('referral_codes')
+    .select('*')
+    .eq('id', profile.referred_by_code_id)
+    .single();
+
+  if (codeError || !referralCode) {
+    logStep("Referral code not found", { codeId: profile.referred_by_code_id });
+    return null;
+  }
+
+  if (!referralCode.is_active) {
+    logStep("Referral code is inactive");
+    return null;
+  }
+
+  logStep("Processing referral bonus", {
+    code: referralCode.code,
+    type: referralCode.type,
+    bonusMultiplier: referralCode.bonus_multiplier,
+    rewardPct: referralCode.referrer_reward_pct,
+  });
+
+  // Calculate bonus tokens: purchased × (multiplier - 1)
+  // e.g., 100 tokens × (1.5 - 1) = 50 bonus tokens
+  const bonusTokens = Math.floor(tokenAmount * (referralCode.bonus_multiplier - 1));
+  
+  // Calculate referrer reward
+  const referrerReward = purchaseAmountUsd * referralCode.referrer_reward_pct;
+
+  logStep("Bonus calculation", { bonusTokens, referrerReward });
+
+  // Credit bonus tokens to user's earned_tokens
+  if (bonusTokens > 0) {
+    const { data: wallet, error: walletError } = await supabaseClient
+      .from('token_wallets')
+      .select('earned_tokens')
+      .eq('user_id', userId)
+      .single();
+
+    if (!walletError && wallet) {
+      const newEarned = (wallet.earned_tokens || 0) + bonusTokens;
+      await supabaseClient
+        .from('token_wallets')
+        .update({ 
+          earned_tokens: newEarned,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId);
+
+      // Log bonus transaction
+      await supabaseClient
+        .from('token_transactions')
+        .insert({
+          user_id: userId,
+          type: 'bonus',
+          amount: bonusTokens,
+          balance_after: newEarned,
+          description: `Referral bonus (${referralCode.code}) - +${((referralCode.bonus_multiplier - 1) * 100).toFixed(0)}% on first purchase`,
+          reference_type: 'referral',
+          reference_id: referralCode.id,
+        });
+
+      logStep("Bonus tokens credited to user", { bonusTokens, newEarned });
+    }
+  }
+
+  // Create redemption record
+  const { error: redemptionError } = await supabaseClient
+    .from('referral_redemptions')
+    .insert({
+      referral_code_id: referralCode.id,
+      referred_user_id: userId,
+      referrer_user_id: referralCode.owner_user_id,
+      purchase_id: paymentIntentId,
+      purchase_amount_tokens: tokenAmount,
+      purchase_amount_usd: purchaseAmountUsd,
+      bonus_tokens_awarded: bonusTokens,
+      referrer_reward_value: referrerReward,
+      referrer_reward_type: referralCode.reward_type,
+    });
+
+  if (redemptionError) {
+    logStep("Error creating redemption record", { error: redemptionError.message });
+  } else {
+    logStep("Redemption record created");
+  }
+
+  // If reward type is tokens AND there's an owner, auto-credit tokens to referrer
+  if (referralCode.reward_type === 'tokens' && referralCode.owner_user_id && referrerReward > 0) {
+    // Convert USD reward to tokens (100 tokens = $1)
+    const referrerTokens = Math.floor(referrerReward * 100);
+    
+    const { data: referrerWallet } = await supabaseClient
+      .from('token_wallets')
+      .select('earned_tokens')
+      .eq('user_id', referralCode.owner_user_id)
+      .single();
+
+    if (referrerWallet) {
+      const newReferrerEarned = (referrerWallet.earned_tokens || 0) + referrerTokens;
+      await supabaseClient
+        .from('token_wallets')
+        .update({ 
+          earned_tokens: newReferrerEarned,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', referralCode.owner_user_id);
+
+      // Log referrer reward transaction
+      await supabaseClient
+        .from('token_transactions')
+        .insert({
+          user_id: referralCode.owner_user_id,
+          type: 'bonus',
+          amount: referrerTokens,
+          balance_after: newReferrerEarned,
+          description: `Referral reward for code ${referralCode.code}`,
+          reference_type: 'referral_reward',
+          reference_id: referralCode.id,
+        });
+
+      // Mark as paid since tokens were auto-credited
+      await supabaseClient
+        .from('referral_redemptions')
+        .update({ referrer_paid_at: new Date().toISOString() })
+        .eq('purchase_id', paymentIntentId);
+
+      logStep("Referrer tokens credited", { referrerTokens, referrerUserId: referralCode.owner_user_id });
+    }
+  }
+
+  // Update first_purchase_at on profile
+  await supabaseClient
+    .from('profiles')
+    .update({ first_purchase_at: new Date().toISOString() })
+    .eq('id', userId);
+
+  logStep("Marked first purchase complete");
+
+  return { bonusTokens, referrerReward };
+}
+
 serve(async (req) => {
   try {
     logStep("Webhook received");
@@ -176,6 +358,19 @@ serve(async (req) => {
         .update({ lifetime_deposited: currentDeposited + tokenAmount })
         .eq("id", userId);
 
+      // === PROCESS REFERRAL BONUS ===
+      const referralResult = await processReferralBonus(
+        supabaseClient,
+        userId,
+        tokenAmount,
+        depositAmountUsd,
+        session.payment_intent as string
+      );
+
+      if (referralResult) {
+        logStep("Referral bonus applied", referralResult);
+      }
+
       // Write audit log for token purchase
       await writeAuditLog(supabaseClient, {
         actor_type: 'system',
@@ -189,16 +384,18 @@ serve(async (req) => {
         after_state: {
           purchased_tokens: newPurchased,
           total_balance: newBalance,
+          referral_bonus: referralResult?.bonusTokens || 0,
         },
         metadata: {
           user_id: userId,
           token_amount: tokenAmount,
           pack_name: packName,
           stripe_session_id: session.id,
+          referral_applied: !!referralResult,
         }
       });
 
-      logStep("Checkout session processed successfully", { userId, tokenAmount });
+      logStep("Checkout session processed successfully", { userId, tokenAmount, referralApplied: !!referralResult });
     }
 
     return new Response(JSON.stringify({ received: true }), {
