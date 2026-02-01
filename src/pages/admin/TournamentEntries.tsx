@@ -79,6 +79,10 @@ export default function TournamentEntries() {
   // Pre-selected discipline for AI import
   const [uploadDiscipline, setUploadDiscipline] = useState<Discipline | ''>('');
 
+  // Inline multiplier editing state
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editMultiplierValue, setEditMultiplierValue] = useState<string>('');
+
   const queryClient = useQueryClient();
 
   const { data: tournaments } = useQuery({
@@ -140,6 +144,46 @@ export default function TournamentEntries() {
         .eq('tournament_id', selectedTournamentId);
       if (error) throw error;
       return (data || []);
+    },
+    enabled: !!selectedTournamentId,
+  });
+
+  // Query for existing multiplier overrides for this tournament
+  const { data: multiplierOverrides } = useQuery({
+    queryKey: ['tournament-multiplier-overrides', selectedTournamentId],
+    queryFn: async () => {
+      // Get all WINNER markets for this tournament
+      const { data: markets, error: marketsError } = await supabase
+        .from('markets')
+        .select('id, discipline, category')
+        .eq('tournament_id', selectedTournamentId)
+        .eq('market_type', 'WINNER');
+      if (marketsError) throw marketsError;
+      if (!markets || markets.length === 0) return {};
+
+      const marketIds = markets.map(m => m.id);
+
+      // Fetch all overrides for those markets
+      const { data: overrides, error: overridesError } = await supabase
+        .from('market_multiplier_overrides')
+        .select('market_id, athlete_id, manual_multiplier, is_enabled')
+        .in('market_id', marketIds)
+        .eq('is_enabled', true);
+      if (overridesError) throw overridesError;
+
+      // Create a lookup map: `${athleteId}-${discipline}` -> override
+      const overrideMap: Record<string, { multiplier: number; marketId: string }> = {};
+      for (const override of overrides || []) {
+        const market = markets.find(m => m.id === override.market_id);
+        if (market) {
+          const key = `${override.athlete_id}-${market.discipline}`;
+          overrideMap[key] = {
+            multiplier: override.manual_multiplier,
+            marketId: override.market_id
+          };
+        }
+      }
+      return overrideMap;
     },
     enabled: !!selectedTournamentId,
   });
@@ -956,6 +1000,111 @@ export default function TournamentEntries() {
     },
   });
 
+  // Mutation to update multiplier override inline
+  const updateMultiplierMutation = useMutation({
+    mutationFn: async ({ 
+      entry, 
+      newMultiplier 
+    }: { 
+      entry: any; 
+      newMultiplier: number 
+    }) => {
+      const athleteGender = entry.athlete?.gender;
+      const category = athleteGender === 'male' ? 'open_men' : 'open_women';
+      
+      // Find the WINNER market for this discipline/category
+      const { data: market, error: marketError } = await supabase
+        .from('markets')
+        .select('id')
+        .eq('tournament_id', selectedTournamentId)
+        .eq('discipline', entry.discipline)
+        .eq('category', category)
+        .eq('market_type', 'WINNER')
+        .single();
+      
+      if (marketError || !market) {
+        throw new Error('WINNER market not found for this entry');
+      }
+
+      // Clamp the multiplier
+      const clampedMultiplier = clampMultiplier('WINNER', newMultiplier);
+
+      // Upsert the multiplier override
+      const { error: upsertError } = await supabase
+        .from('market_multiplier_overrides')
+        .upsert({
+          market_id: market.id,
+          athlete_id: entry.athlete_id,
+          manual_multiplier: clampedMultiplier,
+          is_enabled: true,
+          reason: 'Edited inline on entries page'
+        }, { onConflict: 'market_id,athlete_id' });
+
+      if (upsertError) throw upsertError;
+
+      // Update the selection's decimal_odds to match
+      const { error: selectionError } = await supabase
+        .from('selections')
+        .update({ decimal_odds: clampedMultiplier })
+        .eq('market_id', market.id)
+        .eq('athlete_id', entry.athlete_id);
+
+      if (selectionError) throw selectionError;
+
+      // Also update tournament_entries.custom_odds for consistency
+      const { error: entryError } = await supabase
+        .from('tournament_entries')
+        .update({ custom_odds: clampedMultiplier })
+        .eq('id', entry.id);
+
+      if (entryError) throw entryError;
+
+      return clampedMultiplier;
+    },
+    onSuccess: (clampedMultiplier) => {
+      queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['tournament-multiplier-overrides'] });
+      setEditingEntryId(null);
+      setEditMultiplierValue('');
+      toast.success(`Multiplier set to ${formatMultiplier(clampedMultiplier)}`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update multiplier: ${error.message}`);
+    },
+  });
+
+  // Inline editing handlers
+  const startEditingMultiplier = (entry: any) => {
+    const overrideKey = `${entry.athlete_id}-${entry.discipline}`;
+    const override = multiplierOverrides?.[overrideKey];
+    const currentValue = override?.multiplier || entry.custom_odds || 2.5;
+    setEditingEntryId(entry.id);
+    setEditMultiplierValue(currentValue.toString());
+  };
+
+  const cancelEditingMultiplier = () => {
+    setEditingEntryId(null);
+    setEditMultiplierValue('');
+  };
+
+  const saveMultiplier = (entry: any) => {
+    const value = parseFloat(editMultiplierValue);
+    if (isNaN(value) || value <= 0) {
+      toast.error('Please enter a valid multiplier');
+      return;
+    }
+    updateMultiplierMutation.mutate({ entry, newMultiplier: value });
+  };
+
+  const handleMultiplierKeyDown = (e: React.KeyboardEvent, entry: any) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveMultiplier(entry);
+    } else if (e.key === 'Escape') {
+      cancelEditingMultiplier();
+    }
+  };
+
   const handleAddEntries = () => {
     if (!selectedTournamentId || selectedAthletes.size === 0 || !selectedDiscipline) {
       toast.error('Please select tournament, athletes, and discipline');
@@ -1012,29 +1161,61 @@ export default function TournamentEntries() {
               <CardContent>
                 {entries && entries.length > 0 ? (
                   <div className="space-y-2">
-                    {entries.map((entry: any) => (
-                      <div key={entry.id} className="flex items-center justify-between p-3 border rounded">
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium">{entry.athlete?.name}</span>
-                          <Badge variant="outline" className="capitalize">{entry.discipline}</Badge>
-                          <div className="text-sm text-muted-foreground">
-                            {entry.athlete?.current_rank_slalom && <span className="mr-2">S: {entry.athlete.current_rank_slalom}</span>}
-                            {entry.athlete?.current_rank_trick && <span className="mr-2">T: {entry.athlete.current_rank_trick}</span>}
-                            {entry.athlete?.current_rank_jump && <span className="mr-2">J: {entry.athlete.current_rank_jump}</span>}
+                    {entries.map((entry: any) => {
+                      const overrideKey = `${entry.athlete_id}-${entry.discipline}`;
+                      const override = multiplierOverrides?.[overrideKey];
+                      const displayMultiplier = override?.multiplier || entry.custom_odds || 2.5;
+                      const hasOverride = !!override;
+                      const isEditing = editingEntryId === entry.id;
+
+                      return (
+                        <div key={entry.id} className="flex items-center justify-between p-3 border rounded">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="font-medium">{entry.athlete?.name}</span>
+                            <Badge variant="outline" className="capitalize">{entry.discipline}</Badge>
+                            <div className="text-sm text-muted-foreground">
+                              {entry.athlete?.current_rank_slalom && <span className="mr-2">S: {entry.athlete.current_rank_slalom}</span>}
+                              {entry.athlete?.current_rank_trick && <span className="mr-2">T: {entry.athlete.current_rank_trick}</span>}
+                              {entry.athlete?.current_rank_jump && <span className="mr-2">J: {entry.athlete.current_rank_jump}</span>}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {isEditing ? (
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="2.0"
+                                  max="20.0"
+                                  value={editMultiplierValue}
+                                  onChange={(e) => setEditMultiplierValue(e.target.value)}
+                                  onKeyDown={(e) => handleMultiplierKeyDown(e, entry)}
+                                  onBlur={cancelEditingMultiplier}
+                                  autoFocus
+                                  className="w-20 h-7 text-sm"
+                                  disabled={updateMultiplierMutation.isPending}
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => startEditingMultiplier(entry)}
+                                  className="text-sm text-muted-foreground hover:text-foreground hover:underline cursor-pointer transition-colors"
+                                >
+                                  {formatMultiplier(displayMultiplier)}
+                                </button>
+                              )}
+                              {hasOverride && !isEditing && (
+                                <Badge variant="secondary" className="text-xs px-1.5 py-0">MANUAL</Badge>
+                              )}
+                            </div>
                           </div>
-                          <span className="text-sm text-muted-foreground">
-                            Multiplier: {formatMultiplier(entry.custom_odds || 2.5)}
-                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => deleteEntryMutation.mutate(entry.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteEntryMutation.mutate(entry.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-muted-foreground text-center py-8">No entries yet</p>
