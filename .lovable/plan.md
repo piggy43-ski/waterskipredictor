@@ -1,25 +1,23 @@
 
-# Add Multiplier Override When Adding Athletes to Tournament
+# Add Inline Multiplier Editing to Tournament Entries
 
 ## Overview
-Enable admins to set custom multipliers directly when adding athletes to a tournament, with those values being saved as proper multiplier overrides that persist and override auto-generated odds.
+Add click-to-edit multiplier functionality directly in the "Current Entries" list on the Tournament Entries page. This allows you to see and modify multipliers for already-added athletes without leaving the page.
 
 ---
 
 ## Current Behavior
-
-- When adding athletes manually, there's a "custom odds" input, but it only sets the initial `custom_odds` field on `tournament_entries`
-- The actual multiplier shown to users comes from `selections.decimal_odds` which gets overwritten by the `generate-market-odds` function
-- To truly lock in a specific multiplier, admins must go to a separate "Multiplier Override" page after entries are created
+- Current entries show multiplier as read-only text: `Multiplier: 2.50x`
+- To change a multiplier, you must navigate to the separate "Market Odds Review" or "Probability Editor"
+- No inline editing capability
 
 ## New Behavior
-
-- When adding athletes with a custom multiplier value, the system will:
-  1. Add the tournament entry as before
-  2. Create markets and selections as before
-  3. **NEW:** Also create entries in `market_multiplier_overrides` for any athlete with a custom value
-  4. Update the selection's `decimal_odds` to match the override
-- The multiplier will be truly locked and won't be changed by auto-generation
+- Click on the multiplier value to enter edit mode
+- An input field appears with the current value
+- Press **Enter** to save (creates a multiplier override)
+- Press **Escape** or click away to cancel
+- Shows "MANUAL" badge after override is saved
+- Instant visual feedback with save confirmation
 
 ---
 
@@ -27,109 +25,130 @@ Enable admins to set custom multipliers directly when adding athletes to a tourn
 
 ### File: `src/pages/admin/TournamentEntries.tsx`
 
-**1. Update the Manual Add Flow (lines ~800-855)**
-
-After creating markets and selections, add logic to create multiplier overrides for athletes that have custom odds specified:
-
+**1. Add State for Inline Editing (around line 70)**
 ```text
-For each athlete with customOdds[athleteId]:
-  → Find the created market(s) for this athlete's discipline/gender
-  → Insert into market_multiplier_overrides:
-    - market_id: the WINNER market ID
-    - athlete_id
-    - manual_multiplier: the custom value
-    - is_enabled: true
-    - reason: "Set on tournament entry"
-  → Also update selections.decimal_odds to match
+const [editingEntry, setEditingEntry] = useState<string | null>(null);
+const [editMultiplier, setEditMultiplier] = useState<string>('');
 ```
 
-**2. Update the UI Label (lines ~1117-1128)**
-
-Change the placeholder from "Auto: X.XXx" to clarify this is an override:
+**2. Add Mutation for Saving Multiplier Override (after deleteEntryMutation)**
 ```text
-placeholder="Override multiplier"
+const updateMultiplierMutation = useMutation({
+  → Fetch the WINNER market for this entry's discipline/category
+  → Upsert into market_multiplier_overrides with reason "Edited inline"
+  → Update selections.decimal_odds to match
+  → Invalidate queries
+});
 ```
 
-Add a tooltip or helper text:
+**3. Modify the Entry Row Display (lines 1015-1037)**
+
+Replace the static multiplier text with an inline-editable component:
+
 ```text
-"Leave blank for auto-calculated, or enter a value to lock this multiplier"
+Current:
+  <span className="text-sm text-muted-foreground">
+    Multiplier: {formatMultiplier(entry.custom_odds || 2.5)}
+  </span>
+
+New:
+  {editingEntry === entry.id ? (
+    <Input
+      type="number"
+      step="0.1"
+      min="1.5"
+      max="25"
+      value={editMultiplier}
+      onChange={(e) => setEditMultiplier(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
+      autoFocus
+      className="w-20 h-7"
+    />
+  ) : (
+    <button onClick={() => startEditing(entry)}>
+      {formatMultiplier(multiplier)}
+      {hasOverride && <Badge>MANUAL</Badge>}
+    </button>
+  )}
 ```
 
-**3. Update the AI Import Flow (optional enhancement)**
-
-The AI import preview dialog could also include an "Override Rating" input that gets converted to a locked multiplier.
+**4. Add Event Handlers**
+- `startEditing(entry)`: Set editingEntry ID and populate input
+- `handleKeyDown(e)`: If Enter, save; If Escape, cancel
+- `handleBlur()`: Cancel editing
+- `saveMultiplier()`: Call mutation to save override
 
 ---
 
-## Technical Flow
+## Visual Flow
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                   Admin: Add Athletes                           │
-├─────────────────────────────────────────────────────────────────┤
-│  [x] Athlete A   Rank: 3   [ 3.50 ] ← Custom multiplier        │
-│  [x] Athlete B   Rank: 7   [      ] ← Will use auto            │
-│  [x] Athlete C   Rank: 12  [ 8.00 ] ← Custom multiplier        │
-│                                                                 │
-│  [Add 3 Athletes & Generate Markets]                            │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-           ┌──────────────────────────────────────────┐
-           │  1. Create tournament_entries            │
-           │  2. Create/update markets               │
-           │  3. Create selections with auto odds    │
-           │  4. Run generate-market-odds            │
-           │  5. For A & C: insert into              │
-           │     market_multiplier_overrides         │
-           │  6. Update selections.decimal_odds      │
-           │     to match override                   │
-           └──────────────────────────────────────────┘
-                              ↓
-           Athletes A & C locked at 3.50x and 8.00x
-           Athlete B uses auto-generated multiplier
+┌────────────────────────────────────────────────────────────────┐
+│ Current Entries (5)                                            │
+├────────────────────────────────────────────────────────────────┤
+│ ┌──────────────────────────────────────────────────────────┐   │
+│ │ Freddie Winter    [slalom]    S:3   [2.50x] ←click  [🗑] │   │
+│ └──────────────────────────────────────────────────────────┘   │
+│ ┌──────────────────────────────────────────────────────────┐   │
+│ │ Joel Poland       [slalom]    S:5   [___3.25___] [🗑]    │   │
+│ │                                     ↑ editing mode       │   │
+│ └──────────────────────────────────────────────────────────┘   │
+│ ┌──────────────────────────────────────────────────────────┐   │
+│ │ Thomas Degasperi  [slalom]    S:7   [4.00x] MANUAL  [🗑] │   │
+│ │                                     ↑ has override       │   │
+│ └──────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Database Operations
+## Technical Details
 
-**New inserts after market creation:**
+### Required Data Fetching
+Add a query to fetch existing multiplier overrides for this tournament's markets:
+```text
+const { data: multiplierOverrides } = useQuery({
+  queryKey: ['tournament-multiplier-overrides', selectedTournamentId],
+  queryFn: async () => {
+    // Get all WINNER markets for this tournament
+    // Then fetch all overrides for those markets
+    return overrides;
+  }
+});
+```
 
+### Save Logic
 ```sql
--- For each athlete with custom multiplier:
+-- When saving multiplier override:
 INSERT INTO market_multiplier_overrides 
   (market_id, athlete_id, manual_multiplier, is_enabled, reason)
 VALUES 
-  ($market_id, $athlete_id, $custom_value, true, 'Set on tournament entry');
+  ($winner_market_id, $athlete_id, $new_multiplier, true, 'Edited inline on entries page')
+ON CONFLICT (market_id, athlete_id) 
+DO UPDATE SET manual_multiplier = $new_multiplier, is_enabled = true;
 
--- Also update the selection:
+-- Also update selection:
 UPDATE selections 
-SET decimal_odds = $custom_value
-WHERE market_id = $market_id AND athlete_id = $athlete_id;
+SET decimal_odds = $new_multiplier
+WHERE market_id = $winner_market_id AND athlete_id = $athlete_id;
 ```
 
----
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/pages/admin/TournamentEntries.tsx` | Add override creation logic after market generation |
+### Multiplier Caps
+Apply clamping: min 1.5, max 25 (WINNER markets)
 
 ---
 
-## Edge Cases Handled
+## Summary of Changes
 
-1. **Multiplier caps:** Apply min/max limits (2.0-20.0 for WINNER markets)
-2. **All market types:** Apply override to WINNER, PODIUM, and HIGHEST_SCORE markets (adjusting PODIUM multiplier accordingly)
-3. **Regeneration:** Overrides will persist even if `generate-market-odds` is run again, because the MarketOddsReview UI checks for overrides
+| Location | Change |
+|----------|--------|
+| Lines ~70 | Add `editingEntry` and `editMultiplier` state |
+| After line ~957 | Add `updateMultiplierMutation` mutation |
+| Lines 1015-1037 | Replace static multiplier with click-to-edit component |
+| Add new query | Fetch existing multiplier overrides to show MANUAL badge |
 
 ---
 
 ## Result
-
-Admins can set exact multipliers when adding athletes to tournaments. These overrides:
-- Are immediately applied to the selection's decimal_odds
-- Persist through any odds regeneration
-- Are visible in the "Multiplier Override" page with a "Set on tournament entry" reason
-- Can still be edited or removed later from the Multiplier Override page
+You can click any multiplier in the Current Entries list to edit it immediately. Changes are saved as proper multiplier overrides that persist through any automated odds recalculation. A "MANUAL" badge indicates which entries have been manually adjusted.
