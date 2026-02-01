@@ -12,11 +12,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
-import { Plus, Trash2, Search, Upload, Check, AlertTriangle, X, Loader2, UserPlus } from 'lucide-react';
+import { Plus, Trash2, Search, Upload, Check, AlertTriangle, X, Loader2, UserPlus, HelpCircle } from 'lucide-react';
 import type { Discipline } from '@/types';
 import { formatMultiplier } from '@/utils/multiplierUtils';
+import { clampMultiplier } from '@/utils/multiplierCaps';
 import { BatchImageUploader, type UploadedFile } from '@/components/admin/BatchImageUploader';
 import { ProbabilityEditor } from '@/components/admin/ProbabilityEditor';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const VALID_DISCIPLINES = ['slalom', 'trick', 'jump'] as const;
 
@@ -840,7 +842,7 @@ export default function TournamentEntries() {
       // After creating all markets and selections, generate proper Monte Carlo odds
       const { data: allMarkets } = await supabase
         .from('markets')
-        .select('id')
+        .select('id, market_type')
         .eq('tournament_id', selectedTournamentId);
 
       for (const market of allMarkets || []) {
@@ -851,6 +853,77 @@ export default function TournamentEntries() {
         } catch (err) {
           console.error(`Failed to generate odds for market ${market.id}:`, err);
         }
+      }
+
+      // NOW: Create multiplier overrides for athletes with custom odds
+      // This ensures the custom multipliers persist and won't be overwritten
+      const athletesWithCustomOdds = entriesToAdd.filter(e => customOdds[e.athlete_id]);
+      
+      if (athletesWithCustomOdds.length > 0 && allMarkets) {
+        for (const entry of athletesWithCustomOdds) {
+          const athlete = athletes.find(a => a.id === entry.athlete_id);
+          if (!athlete) continue;
+
+          const category = athlete.gender === 'male' ? 'open_men' : 'open_women';
+          const customValue = parseFloat(customOdds[entry.athlete_id]);
+          
+          // Find the WINNER market for this discipline/category
+          const winnerMarket = allMarkets.find(m => 
+            m.market_type === 'WINNER'
+          );
+
+          // We need to get full market details to match discipline/category
+          const { data: detailedMarkets } = await supabase
+            .from('markets')
+            .select('id, market_type, discipline, category')
+            .eq('tournament_id', selectedTournamentId)
+            .eq('discipline', selectedDiscipline)
+            .eq('category', category);
+
+          for (const market of detailedMarkets || []) {
+            // Apply multiplier caps based on market type
+            let clampedValue = customValue;
+            if (market.market_type === 'WINNER') {
+              clampedValue = clampMultiplier('WINNER', customValue);
+            } else if (market.market_type === 'PODIUM') {
+              // Podium multiplier is typically lower
+              clampedValue = clampMultiplier('PODIUM', customValue * 0.7);
+            } else if (market.market_type === 'HIGHEST_SCORE') {
+              clampedValue = clampMultiplier('HIGHEST_SCORE', customValue);
+            }
+
+            // Insert the multiplier override
+            const { error: overrideError } = await supabase
+              .from('market_multiplier_overrides')
+              .upsert({
+                market_id: market.id,
+                athlete_id: entry.athlete_id,
+                manual_multiplier: clampedValue,
+                is_enabled: true,
+                reason: 'Set on tournament entry',
+              }, {
+                onConflict: 'market_id,athlete_id',
+                ignoreDuplicates: false
+              });
+
+            if (overrideError) {
+              console.error('Failed to create multiplier override:', overrideError);
+            }
+
+            // Update the selection's decimal_odds to match
+            const { error: updateError } = await supabase
+              .from('selections')
+              .update({ decimal_odds: clampedValue })
+              .eq('market_id', market.id)
+              .eq('athlete_id', entry.athlete_id);
+
+            if (updateError) {
+              console.error('Failed to update selection odds:', updateError);
+            }
+          }
+        }
+        
+        console.log(`Created multiplier overrides for ${athletesWithCustomOdds.length} athletes`);
       }
     },
     onSuccess: () => {
@@ -1115,17 +1188,34 @@ export default function TournamentEntries() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                <Input
-                                  type="number"
-                                  step="0.1"
-                                  placeholder={`Auto: ${formatMultiplier(oddsValue)}`}
-                                  value={customOdds[athlete.id] || ''}
-                                  onChange={(e) => setCustomOdds(prev => ({
-                                    ...prev,
-                                    [athlete.id]: e.target.value
-                                  }))}
-                                  className="w-24"
-                                />
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center gap-1">
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          min="2.0"
+                                          max="20.0"
+                                          placeholder="Override"
+                                          value={customOdds[athlete.id] || ''}
+                                          onChange={(e) => setCustomOdds(prev => ({
+                                            ...prev,
+                                            [athlete.id]: e.target.value
+                                          }))}
+                                          className="w-24"
+                                        />
+                                        <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="max-w-xs">
+                                      <p className="text-xs">
+                                        <strong>Auto:</strong> {formatMultiplier(oddsValue)}<br/>
+                                        Leave blank for auto-calculated odds, or enter a value to lock this multiplier permanently.
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               </div>
                             </div>
                           </div>
