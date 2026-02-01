@@ -586,15 +586,24 @@ const Fantasy = () => {
             ) : (
               userEntries.map((entry) => {
                 const isLocked = getEntryLockStatus(entry);
+                const isSeasonPot = entry.pot.pot_type === 'season';
+                const teamViewPath = isSeasonPot 
+                  ? `/fantasy/season/${entry.pot_id}/team/${entry.id}`
+                  : `/fantasy/${entry.pot_id}/team/${entry.id}`;
                 return (
                   <Card 
                     key={entry.id} 
                     className="p-4 cursor-pointer hover:shadow-glow transition-all bg-gradient-card border-border/50"
-                    onClick={() => navigate(`/fantasy/${entry.pot_id}/team/${entry.id}`)}
+                    onClick={() => navigate(teamViewPath)}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className="font-bold">{entry.team_name || 'My Team'}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold">{entry.team_name || 'My Team'}</h3>
+                          {isSeasonPot && (
+                            <Badge variant="outline" className="text-xs">Season</Badge>
+                          )}
+                        </div>
                         <p className="text-sm text-muted-foreground">
                           {entry.pot.name}
                         </p>
