@@ -217,7 +217,7 @@ const Profile = () => {
       case 'bonus': return <Gift className="w-4 h-4" />;
       case 'win': return <TrendingUp className="w-4 h-4" />;
       case 'loss':
-      case 'bet': return <TrendingDown className="w-4 h-4" />;
+      case 'entry': return <TrendingDown className="w-4 h-4" />;
       default: return <ArrowRightLeft className="w-4 h-4" />;
     }
   };
@@ -227,7 +227,7 @@ const Profile = () => {
       case 'bonus':
       case 'win': return 'default';
       case 'loss':
-      case 'bet': return 'destructive';
+      case 'entry': return 'destructive';
       default: return 'secondary';
     }
   };

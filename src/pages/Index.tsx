@@ -117,7 +117,7 @@ const Index = () => {
           })));
         }
 
-        // Fetch user's recent settled bet slips (not individual predictions to avoid parlay leg issues)
+        // Fetch user's recent settled entries (not individual predictions to avoid parlay leg issues)
         const { data: settledData } = await supabase
           .from('bet_slips')
           .select('id, status, total_stake_tokens, actual_payout_tokens, settled_at')
@@ -191,7 +191,7 @@ const Index = () => {
           </div>
         </Card>
 
-        {/* Entries Section - Consolidated betting info */}
+        {/* Entries Section - Consolidated prediction info */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <p className="section-title">ENTRIES</p>

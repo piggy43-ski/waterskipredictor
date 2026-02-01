@@ -59,7 +59,7 @@ const TournamentDetail = () => {
   const [athleteResults, setAthleteResults] = useState<any[]>([]);
   const [userPredictions, setUserPredictions] = useState<any[]>([]);
   
-  // Podium betting state - scoped by discipline+gender
+  // Podium prediction state - scoped by discipline+gender
   const [podiumStateMap, setPodiumStateMap] = useState<Record<string, {
     selectedAthletes: Selection[];
     assignedPositions: { first: Selection; second: Selection; third: Selection } | null;
@@ -394,8 +394,8 @@ const TournamentDetail = () => {
     setPositionAssignerOpen(false);
   };
 
-  // Validate bet against risk controls
-  const validateBet = async (
+  // Validate entry against risk controls
+  const validateEntry = async (
     athleteId: string,
     marketId: string,
     stakeAmount: number,
@@ -437,9 +437,9 @@ const TournamentDetail = () => {
       // Calculate multiplier based on combined odds (simplified)
       let combinedOdds = 1.5;
       
-      // Validate bet before placing
+      // Validate entry before placing
       setIsValidating(true);
-      const validation = await validateBet(
+      const validation = await validateEntry(
         podiumState.assignedPositions.first.athlete_id,
         podiumMarket.id,
         stakeAmount,
@@ -451,7 +451,7 @@ const TournamentDetail = () => {
       if (!validation) {
         toast({
           title: "Validation Error",
-          description: "Unable to validate bet. Please try again.",
+          description: "Unable to validate entry. Please try again.",
           variant: "destructive"
         });
         return;
@@ -459,8 +459,8 @@ const TournamentDetail = () => {
       
       if (!validation.allowed) {
         toast({
-          title: "Bet Not Allowed",
-          description: validation.reason || "This bet cannot be placed",
+          title: "Entry Not Allowed",
+          description: validation.reason || "This entry cannot be placed",
           variant: "destructive"
         });
         return;
@@ -606,7 +606,7 @@ const TournamentDetail = () => {
         description: `${stakeAmount} tokens entered on podium prediction`,
       });
 
-      // Send bet confirmation email (non-blocking)
+      // Send entry confirmation email (non-blocking)
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (userData?.user?.email) {
@@ -630,7 +630,7 @@ const TournamentDetail = () => {
           });
         }
       } catch (emailError) {
-        console.error('Podium bet confirmation email failed:', emailError);
+        console.error('Podium entry confirmation email failed:', emailError);
         // Don't block prediction placement
       }
 
@@ -662,10 +662,10 @@ const TournamentDetail = () => {
       // OPTION A: Multipliers are fixed at publish - use original odds
       const finalOdds = selectedSelection.decimal_odds;
       
-      // Validate bet before placing
+      // Validate entry before placing
       setIsValidating(true);
       setValidationResult(null);
-      const validation = await validateBet(
+      const validation = await validateEntry(
         selectedSelection.athlete_id,
         selectedSelection.market_id,
         stakeAmount,
@@ -677,7 +677,7 @@ const TournamentDetail = () => {
       if (!validation) {
         toast({
           title: "Validation Error",
-          description: "Unable to validate bet. Please try again.",
+          description: "Unable to validate entry. Please try again.",
           variant: "destructive"
         });
         return;
@@ -685,8 +685,8 @@ const TournamentDetail = () => {
       
       if (!validation.allowed) {
         toast({
-          title: "Bet Not Allowed",
-          description: validation.reason || "This bet cannot be placed",
+          title: "Entry Not Allowed",
+          description: validation.reason || "This entry cannot be placed",
           variant: "destructive"
         });
         return;
@@ -801,7 +801,7 @@ const TournamentDetail = () => {
         description: `${stakeAmount} tokens entered on ${selectedSelection.athlete.name}`,
       });
 
-      // Send bet confirmation email (non-blocking)
+      // Send entry confirmation email (non-blocking)
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (userData?.user?.email) {
@@ -824,7 +824,7 @@ const TournamentDetail = () => {
           });
         }
       } catch (emailError) {
-        console.error('Bet confirmation email failed:', emailError);
+        console.error('Entry confirmation email failed:', emailError);
         // Don't block prediction placement
       }
 
