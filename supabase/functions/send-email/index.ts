@@ -35,7 +35,7 @@ function getRequiredEnvVars(): { fromEmail: string; appUrl: string; resendApiKey
 }
 
 // Generate HTML templates directly (avoiding npm import issues)
-function generateWelcomeEmail(data: { username: string; bonusTokens: number; appUrl: string }): string {
+function generateWelcomeEmail(data: { username: string; appUrl: string }): string {
   return `
 <!DOCTYPE html>
 <html>
@@ -50,31 +50,31 @@ function generateWelcomeEmail(data: { username: string; bonusTokens: number; app
     </div>
     
     <h1 style="color: #ffffff; font-size: 24px; font-weight: bold; text-align: center; margin: 0 0 24px;">
-      Welcome aboard, ${data.username}!
+      Welcome to WaterSki Predictor, ${data.username}!
     </h1>
     
     <p style="color: #d1d5db; font-size: 16px; line-height: 26px; margin: 16px 0;">
-      Your account is now active and loaded with <strong>${data.bonusTokens.toLocaleString()} bonus tokens</strong> to get you started.
+      Thanks for joining the ultimate water ski prediction platform. We're excited to have you on board!
     </p>
     
     <p style="color: #d1d5db; font-size: 16px; line-height: 26px; margin: 16px 0;">
-      Start making predictions on your favorite water ski athletes, compete in fantasy leagues, and redeem your winnings for exclusive rewards!
+      To start making predictions on your favorite water ski athletes, grab some tokens and jump into the action.
     </p>
     
     <div style="text-align: center; margin: 32px 0;">
-      <a href="${data.appUrl}" style="background-color: #3b82f6; border-radius: 8px; color: #ffffff; font-size: 16px; font-weight: bold; text-decoration: none; padding: 14px 28px; display: inline-block;">
-        Start Predicting
+      <a href="${data.appUrl}/wallet" style="background-color: #3b82f6; border-radius: 8px; color: #ffffff; font-size: 16px; font-weight: bold; text-decoration: none; padding: 14px 28px; display: inline-block;">
+        Buy Tokens to Start
       </a>
     </div>
     
-    <p style="color: #d1d5db; font-size: 16px; margin: 16px 0;"><strong>Quick tips to get started:</strong></p>
-    <p style="color: #9ca3af; font-size: 14px; margin: 4px 0 4px 8px;">• Browse upcoming tournaments and make your predictions</p>
-    <p style="color: #9ca3af; font-size: 14px; margin: 4px 0 4px 8px;">• Join fantasy pots to compete with other fans</p>
-    <p style="color: #9ca3af; font-size: 14px; margin: 4px 0 4px 8px;">• Check out athlete profiles and stats</p>
-    <p style="color: #9ca3af; font-size: 14px; margin: 4px 0 4px 8px;">• Redeem tokens for coaching sessions and gear</p>
+    <p style="color: #d1d5db; font-size: 16px; margin: 16px 0;"><strong>What you can do:</strong></p>
+    <p style="color: #9ca3af; font-size: 14px; margin: 4px 0 4px 8px;">• Predict winners at upcoming tournaments</p>
+    <p style="color: #9ca3af; font-size: 14px; margin: 4px 0 4px 8px;">• Compete in fantasy leagues with other fans</p>
+    <p style="color: #9ca3af; font-size: 14px; margin: 4px 0 4px 8px;">• Track athlete stats and performance</p>
+    <p style="color: #9ca3af; font-size: 14px; margin: 4px 0 4px 8px;">• Redeem winnings for exclusive rewards</p>
     
     <div style="color: #6b7280; font-size: 14px; line-height: 24px; margin-top: 40px; text-align: center; border-top: 1px solid #374151; padding-top: 24px;">
-      Happy predicting!<br>
+      See you on the water!<br>
       The WaterSki Predictor Team
     </div>
   </div>
@@ -300,7 +300,6 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
       return {
         html: generateWelcomeEmail({
           username: data.username || "Champion",
-          bonusTokens: data.bonusTokens || 10000,
           appUrl,
         }),
         subject: "Welcome to WaterSki Predictor! 🎿",

@@ -26,7 +26,6 @@ const EMAIL_TYPES: { value: EmailType; label: string }[] = [
 const TEST_DATA: Record<EmailType, Record<string, any>> = {
   welcome: {
     username: 'TestUser',
-    bonusTokens: 10000,
   },
   bet_confirmation: {
     username: 'TestUser',
