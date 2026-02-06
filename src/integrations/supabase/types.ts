@@ -2251,15 +2251,19 @@ export type Database = {
           code: string
           created_at: string
           created_by_admin: boolean
+          elite_bonus_pct: number | null
           end_at: string | null
           id: string
           is_active: boolean
           max_uses_total: number | null
           notes: string | null
           owner_user_id: string | null
+          pro_bonus_pct: number | null
           referrer_reward_pct: number
           reward_type: string
+          standard_bonus_pct: number | null
           start_at: string | null
+          starter_bonus_pct: number | null
           type: string
           updated_at: string
           uses_count: number
@@ -2269,15 +2273,19 @@ export type Database = {
           code: string
           created_at?: string
           created_by_admin?: boolean
+          elite_bonus_pct?: number | null
           end_at?: string | null
           id?: string
           is_active?: boolean
           max_uses_total?: number | null
           notes?: string | null
           owner_user_id?: string | null
+          pro_bonus_pct?: number | null
           referrer_reward_pct?: number
           reward_type?: string
+          standard_bonus_pct?: number | null
           start_at?: string | null
+          starter_bonus_pct?: number | null
           type?: string
           updated_at?: string
           uses_count?: number
@@ -2287,15 +2295,19 @@ export type Database = {
           code?: string
           created_at?: string
           created_by_admin?: boolean
+          elite_bonus_pct?: number | null
           end_at?: string | null
           id?: string
           is_active?: boolean
           max_uses_total?: number | null
           notes?: string | null
           owner_user_id?: string | null
+          pro_bonus_pct?: number | null
           referrer_reward_pct?: number
           reward_type?: string
+          standard_bonus_pct?: number | null
           start_at?: string | null
+          starter_bonus_pct?: number | null
           type?: string
           updated_at?: string
           uses_count?: number
@@ -2312,13 +2324,18 @@ export type Database = {
       }
       referral_redemptions: {
         Row: {
+          base_discount_pct: number | null
           bonus_tokens_awarded: number
+          commission_rate_used: number | null
           created_at: string
+          effective_discount_pct: number | null
           id: string
+          pack_name: string | null
           purchase_amount_tokens: number
           purchase_amount_usd: number
           purchase_id: string
           referral_code_id: string
+          referral_discount_pct: number | null
           referred_user_id: string
           referrer_paid_at: string | null
           referrer_reward_type: string
@@ -2326,13 +2343,18 @@ export type Database = {
           referrer_user_id: string | null
         }
         Insert: {
+          base_discount_pct?: number | null
           bonus_tokens_awarded: number
+          commission_rate_used?: number | null
           created_at?: string
+          effective_discount_pct?: number | null
           id?: string
+          pack_name?: string | null
           purchase_amount_tokens: number
           purchase_amount_usd: number
           purchase_id: string
           referral_code_id: string
+          referral_discount_pct?: number | null
           referred_user_id: string
           referrer_paid_at?: string | null
           referrer_reward_type: string
@@ -2340,13 +2362,18 @@ export type Database = {
           referrer_user_id?: string | null
         }
         Update: {
+          base_discount_pct?: number | null
           bonus_tokens_awarded?: number
+          commission_rate_used?: number | null
           created_at?: string
+          effective_discount_pct?: number | null
           id?: string
+          pack_name?: string | null
           purchase_amount_tokens?: number
           purchase_amount_usd?: number
           purchase_id?: string
           referral_code_id?: string
+          referral_discount_pct?: number | null
           referred_user_id?: string
           referrer_paid_at?: string | null
           referrer_reward_type?: string
