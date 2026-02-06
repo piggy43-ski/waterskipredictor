@@ -25,8 +25,8 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const { priceId, tokenAmount, packName } = await req.json();
-    logStep("Request body parsed", { priceId, tokenAmount, packName });
+    const { priceId, tokenAmount, packName, baseTokens } = await req.json();
+    logStep("Request body parsed", { priceId, tokenAmount, packName, baseTokens });
 
     if (!priceId || !tokenAmount) {
       throw new Error("Missing required fields: priceId and tokenAmount");
@@ -76,6 +76,7 @@ serve(async (req) => {
         user_id: user.id,
         token_amount: tokenAmount.toString(),
         pack_name: packName || "Token Pack",
+        base_tokens: (baseTokens || tokenAmount).toString(),
       },
     });
 
