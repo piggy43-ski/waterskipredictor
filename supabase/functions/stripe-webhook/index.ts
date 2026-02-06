@@ -373,8 +373,8 @@ serve(async (req) => {
       }
 
       // Log to deposit_ledger for global solvency tracking
-      // Convert tokens to USD: 100 tokens = $1 (token_value_usd = 0.01)
-      const depositAmountUsd = baseTokens * 0.01; // Use base tokens for USD calculation
+      // Use actual Stripe charge amount (most accurate - reflects exactly what was charged)
+      const depositAmountUsd = (session.amount_total || 0) / 100;
       const { error: ledgerError } = await supabaseClient
         .from("deposit_ledger")
         .insert({
