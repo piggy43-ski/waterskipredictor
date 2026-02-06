@@ -34,6 +34,9 @@ const Auth = () => {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [tosAccepted, setTosAccepted] = useState(false);
   
+  // Marketing opt-in state
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
+  
   // Referral code states
   const [referralCode, setReferralCode] = useState('');
   const [referralCodeStatus, setReferralCodeStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
@@ -82,7 +85,7 @@ const Auth = () => {
       tosAccepted,
       tosVersion: '1.0',
       privacyVersion: '1.0'
-    }, referralCodeStatus === 'valid' ? referralCode : undefined);
+    }, referralCodeStatus === 'valid' ? referralCode : undefined, marketingOptIn);
     setFormLoading(false);
   };
 
@@ -91,6 +94,7 @@ const Auth = () => {
     // Reset consent checkboxes when going back
     setAgeConfirmed(false);
     setTosAccepted(false);
+    setMarketingOptIn(false);
     setReferralCode('');
     setReferralCodeStatus('idle');
   };
@@ -403,12 +407,24 @@ const Auth = () => {
           </Label>
         </div>
 
+        {/* Marketing Opt-In (Optional) */}
+        <div className="flex items-start space-x-3">
+          <Checkbox 
+            id="marketing-optin" 
+            checked={marketingOptIn}
+            onCheckedChange={(checked) => setMarketingOptIn(checked === true)}
+          />
+          <Label htmlFor="marketing-optin" className="text-sm font-normal cursor-pointer leading-relaxed">
+            Keep me updated on tournaments, promotions, and news (optional)
+          </Label>
+        </div>
+
         {/* Age Disclaimer */}
         <p className="text-xs text-muted-foreground text-center pt-2">
           This app is intended for users 18+.
         </p>
 
-        <Button 
+        <Button
           type="submit" 
           className="w-full h-14 text-lg font-bold uppercase tracking-wide rounded-full mt-4 transition-transform hover:scale-[1.02] active:scale-[0.98]" 
           disabled={formLoading || !ageConfirmed || !tosAccepted}
