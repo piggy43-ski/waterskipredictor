@@ -35,6 +35,7 @@ import { formatTokensWithUSD, formatPL, tokensToUSD, TOKENS_PER_USD } from '@/ut
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import { format, parseISO, startOfMonth, subMonths } from 'date-fns';
 import { SettlementAuditTable } from '@/components/admin/SettlementAuditTable';
+import { TokenPurchasesTable } from '@/components/admin/TokenPurchasesTable';
 
 const HouseLedger = () => {
   const [selectedTournament, setSelectedTournament] = useState<{ id: string; name: string } | null>(null);
@@ -593,6 +594,9 @@ const HouseLedger = () => {
             </div>
           )}
         </Card>
+
+        {/* Token Purchases Table */}
+        <TokenPurchasesTable />
 
         {/* Monthly P/L Trend Chart */}
         <Card className="p-6">
