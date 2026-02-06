@@ -16,9 +16,9 @@ import { TokenDisclaimer } from '@/components/TokenDisclaimer';
 // Then apply bonus percentage on top
 const tokenPacks = [
   { name: 'Starter', price: 25, baseTokens: 2500, bonus: 0, popular: false, priceId: 'price_1SkYKkCpRLHrrx2GRXBgdwXG' },
-  { name: 'Standard', price: 50, baseTokens: 5000, bonus: 10, popular: true, priceId: 'price_1SkYLACpRLHrrx2GDI8vkP3G' },
-  { name: 'Pro', price: 100, baseTokens: 10000, bonus: 15, popular: false, priceId: 'price_1SkYM0CpRLHrrx2GCwCNySQs' },
-  { name: 'Elite', price: 250, baseTokens: 25000, bonus: 25, popular: false, priceId: 'price_1SkYMCCpRLHrrx2GQ6lHCyxS' },
+  { name: 'Standard', price: 50, baseTokens: 5000, bonus: 5, popular: true, priceId: 'price_1SkYLACpRLHrrx2GDI8vkP3G' },
+  { name: 'Pro', price: 100, baseTokens: 10000, bonus: 10, popular: false, priceId: 'price_1SkYM0CpRLHrrx2GCwCNySQs' },
+  { name: 'Elite', price: 250, baseTokens: 25000, bonus: 15, popular: false, priceId: 'price_1SkYMCCpRLHrrx2GQ6lHCyxS' },
 ].map(pack => ({
   ...pack,
   tokens: Math.floor(pack.baseTokens * (1 + pack.bonus / 100))
