@@ -14,7 +14,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, username: string, country?: string, consent?: ConsentData, referralCode?: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, username: string, country?: string, consent?: ConsentData, referralCode?: string, marketingOptIn?: boolean) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
@@ -83,7 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, username: string, country?: string, consent?: ConsentData, referralCode?: string) => {
+  const signUp = async (email: string, password: string, username: string, country?: string, consent?: ConsentData, referralCode?: string, marketingOptIn?: boolean) => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -180,6 +180,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } catch (emailError) {
           console.error('Failed to send welcome email:', emailError);
           // Don't block signup if email fails
+        }
+
+        // Subscribe to marketing audience if opted in
+        if (marketingOptIn) {
+          try {
+            await supabase.functions.invoke('subscribe-to-audience', {
+              body: {
+                email,
+                userId: data.user.id,
+                firstName: username || email.split('@')[0],
+                tags: ['registered-user', 'beta-user'],
+                source: 'signup',
+                marketingOptIn: true
+              }
+            });
+            console.log('Marketing subscription successful');
+          } catch (subscribeError) {
+            console.error('Failed to subscribe to audience:', subscribeError);
+            // Don't block signup if subscription fails
+          }
         }
       }
     }
