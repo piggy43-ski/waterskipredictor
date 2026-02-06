@@ -636,6 +636,48 @@ export type Database = {
           },
         ]
       }
+      email_subscriptions: {
+        Row: {
+          audience_id: string | null
+          contact_id: string | null
+          created_at: string
+          email: string
+          error_message: string | null
+          id: string
+          source: string | null
+          subscribed: boolean
+          tags: string[] | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          audience_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          email: string
+          error_message?: string | null
+          id?: string
+          source?: string | null
+          subscribed?: boolean
+          tags?: string[] | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          audience_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          email?: string
+          error_message?: string | null
+          id?: string
+          source?: string | null
+          subscribed?: boolean
+          tags?: string[] | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       fantasy_config: {
         Row: {
           description: string | null
