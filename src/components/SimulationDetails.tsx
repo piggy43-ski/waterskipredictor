@@ -14,7 +14,7 @@ export const SimulationDetails = ({ impliedSum, isAdmin = false, className = '' 
       <AlertTitle className="text-sm font-medium">Simulation Details</AlertTitle>
       <AlertDescription className="text-xs text-muted-foreground">
         <ul className="list-disc pl-4 mt-1 space-y-0.5">
-          <li>Simulations run: 20,000</li>
+          <li>Simulations run: 5,000</li>
           <li>Model: skill-based probability simulation</li>
           <li>Multipliers reflect difficulty, not guaranteed outcomes</li>
         </ul>
