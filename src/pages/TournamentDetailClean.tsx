@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Selection, Tournament, Market, MarketType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, MapPin, Clock, AlertCircle, Users, HelpCircle } from 'lucide-react';
+import { Calendar, MapPin, Clock, AlertCircle, Users, HelpCircle, Settings2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -885,14 +885,30 @@ const TournamentDetail = () => {
             </Alert>
           )}
           
-          {/* Help Link */}
-          <Link 
-            to="/help?section=Contests & Rules" 
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
-          >
-            <HelpCircle className="w-3 h-3" />
-            Need help with contests?
-          </Link>
+          {/* Help Link & Admin Quick Access */}
+          <div className="flex items-center justify-between">
+            <Link 
+              to="/help?section=Contests & Rules" 
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+            >
+              <HelpCircle className="w-3 h-3" />
+              Need help with contests?
+            </Link>
+            
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="gap-1.5 text-xs"
+              >
+                <Link to={`/admin/odds-review?tournament=${id}`}>
+                  <Settings2 className="h-3.5 w-3.5" />
+                  Edit Multipliers
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Parlay Builder Button */}
