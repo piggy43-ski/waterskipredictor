@@ -23,20 +23,8 @@ const TARGET_IMPLIED_SUM: Record<string, { min: number; max: number }> = {
   OVER_UNDER: { min: 0.95, max: 1.0 },
 };
 
-interface Override {
-  id: string;
-  market_id: string;
-  athlete_id: string;
-  manual_multiplier: number;
-  is_enabled: boolean;
-  reason: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 interface RequestBody {
-  action: 'list' | 'upsert' | 'delete' | 'bulk_copy' | 'bulk_reset';
+  action: 'list' | 'upsert' | 'delete' | 'bulk_copy' | 'bulk_reset' | 'bulk_disable' | 'repair_auto' | 'clear_and_regenerate';
   market_id: string;
   athlete_id?: string;
   manual_multiplier?: number;
@@ -51,7 +39,7 @@ function calculateImpliedSum(multipliers: number[]): number {
   return multipliers.reduce((sum, m) => sum + (1 / m), 0);
 }
 
-function getImpliedSumStatus(impliedSum: number, marketType: string): 'OK' | 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW' | 'BLOCKED' {
+function getImpliedSumStatus(impliedSum: number, marketType: string): 'OK' | 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW' {
   const band = TARGET_IMPLIED_SUM[marketType];
   if (!band) return 'WARNING';
   
@@ -64,14 +52,8 @@ function getImpliedSumStatus(impliedSum: number, marketType: string): 'OK' | 'CA
     return 'WARNING';
   }
   
-  // Within 10% tolerance = NEEDS_REVIEW (should regenerate)
-  const widerTolerance = 0.10;
-  if (impliedSum >= band.min * (1 - widerTolerance) && impliedSum <= band.max * (1 + widerTolerance)) {
-    return 'NEEDS_REVIEW';
-  }
-  
-  // Outside all tolerances = BLOCKED
-  return 'BLOCKED';
+  // Outside tolerance = NEEDS_REVIEW
+  return 'NEEDS_REVIEW';
 }
 
 function roundToStep(value: number, step: number = 0.05): number {
@@ -161,14 +143,25 @@ Deno.serve(async (req) => {
       `)
       .eq('market_id', market_id);
 
+    // Fetch market_odds to get TRUE auto-generated multipliers
+    const { data: marketOdds } = await supabase
+      .from('market_odds')
+      .select('athlete_id, final_decimal_odds')
+      .eq('market_id', market_id);
+    
+    const autoOddsMap = new Map(marketOdds?.map(o => [o.athlete_id, o.final_decimal_odds]) || []);
+
     // Fetch tournament entries for ranks
     const { data: entries } = await supabase
       .from('tournament_entries')
-      .select('athlete_id, entry_rank')
+      .select('athlete_id, entry_rank, discipline_rank, seed_rank')
       .eq('tournament_id', market.tournament_id)
       .eq('discipline', market.discipline);
 
-    const rankMap = new Map(entries?.map(e => [e.athlete_id, e.entry_rank]) || []);
+    const rankMap = new Map(entries?.map(e => [
+      e.athlete_id, 
+      e.discipline_rank || e.entry_rank || e.seed_rank || 999
+    ]) || []);
 
     // Fetch existing overrides
     const { data: existingOverrides } = await supabase
@@ -179,19 +172,15 @@ Deno.serve(async (req) => {
     const overrideMap = new Map(existingOverrides?.map(o => [o.athlete_id, o]) || []);
 
     // Helper to get user profile for audit log
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', user.id)
-      .single();
-
-    const createdBy = profile?.id || null;
+    const createdBy = user.id;
 
     // Build athlete data with final multipliers
+    // CRITICAL FIX: auto_multiplier comes from market_odds, NOT selections.decimal_odds
     const buildAthleteData = () => {
       return (selections || []).map(s => {
         const override = overrideMap.get(s.athlete_id);
-        const autoMultiplier = s.decimal_odds || 2.0;
+        // AUTO multiplier comes from market_odds (engine output), fallback to selections only if no market_odds
+        const autoMultiplier = autoOddsMap.get(s.athlete_id) || s.decimal_odds || 2.0;
         const finalMultiplier = (override?.is_enabled && override?.manual_multiplier)
           ? override.manual_multiplier
           : autoMultiplier;
@@ -218,6 +207,11 @@ Deno.serve(async (req) => {
       const status = getImpliedSumStatus(impliedSum, marketType);
       const band = TARGET_IMPLIED_SUM[marketType] || { min: 0.9, max: 1.0 };
       
+      // Also calculate auto implied sum (if we disabled all overrides)
+      const autoMultipliers = athletes.map(a => a.auto_multiplier);
+      const autoImpliedSum = calculateImpliedSum(autoMultipliers);
+      const autoStatus = getImpliedSumStatus(autoImpliedSum, marketType);
+      
       return {
         implied_sum: impliedSum,
         implied_sum_pct: (impliedSum * 100).toFixed(2),
@@ -225,7 +219,13 @@ Deno.serve(async (req) => {
         target_band: band,
         target_band_pct: `${(band.min * 100).toFixed(1)}%–${(band.max * 100).toFixed(1)}%`,
         total_athletes: athletes.length,
-        manual_count: athletes.filter(a => a.source === 'manual').length
+        manual_count: athletes.filter(a => a.source === 'manual').length,
+        // NEW: auto-only metrics
+        auto_implied_sum: autoImpliedSum,
+        auto_implied_sum_pct: (autoImpliedSum * 100).toFixed(2),
+        auto_status: autoStatus,
+        // NEW: diagnostics
+        overrides_causing_issue: status !== 'CALIBRATED' && autoStatus === 'CALIBRATED'
       };
     };
 
@@ -319,7 +319,7 @@ Deno.serve(async (req) => {
           reason: existingOverride.reason
         } : null;
 
-        // Upsert the override
+        // Upsert the override (DO NOT write to selections.decimal_odds)
         const { data: upserted, error: upsertError } = await supabase
           .from('market_multiplier_overrides')
           .upsert({
@@ -342,14 +342,9 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Update the selection's decimal_odds if override is enabled
-        if (is_enabled) {
-          await supabase
-            .from('selections')
-            .update({ decimal_odds: roundedMultiplier })
-            .eq('market_id', market_id)
-            .eq('athlete_id', athlete_id);
-        }
+        // REMOVED: No longer update selections.decimal_odds
+        // The override is stored in market_multiplier_overrides only
+        // User-facing code should use override layer on top of auto odds
 
         // Log audit
         const athlete = (selections || []).find(s => s.athlete_id === athlete_id);
@@ -406,17 +401,17 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Get the original auto multiplier to restore
-        const selection = (selections || []).find(s => s.athlete_id === athlete_id);
-        const autoMultiplier = selection?.decimal_odds || 2.0;
-
-        // Delete the override
+        // Delete the override only
         await supabase
           .from('market_multiplier_overrides')
           .delete()
           .eq('id', existingOverride.id);
 
+        // Get the auto multiplier for reference
+        const autoMultiplier = autoOddsMap.get(athlete_id) || 2.0;
+
         // Log audit
+        const selection = (selections || []).find(s => s.athlete_id === athlete_id);
         await logAudit(
           'MULTIPLIER_OVERRIDE_DELETED',
           existingOverride.id,
@@ -455,7 +450,7 @@ Deno.serve(async (req) => {
         const results: any[] = [];
         
         for (const selection of (selections || [])) {
-          const autoMultiplier = selection.decimal_odds || 2.0;
+          const autoMultiplier = autoOddsMap.get(selection.athlete_id) || selection.decimal_odds || 2.0;
           const roundedMultiplier = roundToStep(Math.max(caps.min, Math.min(caps.max, autoMultiplier)));
           
           const { data: upserted } = await supabase
@@ -494,7 +489,7 @@ Deno.serve(async (req) => {
         
         const athletes = (selections || []).map(s => {
           const override = newOverrideMap.get(s.athlete_id);
-          const autoMultiplier = s.decimal_odds || 2.0;
+          const autoMultiplier = autoOddsMap.get(s.athlete_id) || s.decimal_odds || 2.0;
           const finalMultiplier = (override?.is_enabled && override?.manual_multiplier)
             ? override.manual_multiplier
             : autoMultiplier;
@@ -544,24 +539,183 @@ Deno.serve(async (req) => {
         );
 
         // Rebuild with no overrides
-        const athletes = (selections || []).map(s => ({
-          athlete_id: s.athlete_id,
-          athlete_name: (s.athlete as any)?.name || 'Unknown',
-          rank: rankMap.get(s.athlete_id) || 999,
-          auto_multiplier: s.decimal_odds || 2.0,
-          manual_multiplier: null,
-          final_multiplier: s.decimal_odds || 2.0,
-          source: 'auto',
-          is_enabled: false,
-          override_id: null,
-          reason: null
-        })).sort((a, b) => a.rank - b.rank);
+        const athletes = (selections || []).map(s => {
+          const autoMultiplier = autoOddsMap.get(s.athlete_id) || s.decimal_odds || 2.0;
+          return {
+            athlete_id: s.athlete_id,
+            athlete_name: (s.athlete as any)?.name || 'Unknown',
+            rank: rankMap.get(s.athlete_id) || 999,
+            auto_multiplier: autoMultiplier,
+            manual_multiplier: null,
+            final_multiplier: autoMultiplier,
+            source: 'auto',
+            is_enabled: false,
+            override_id: null,
+            reason: null
+          };
+        }).sort((a, b) => a.rank - b.rank);
         
         const metrics = calculateMetrics(athletes);
 
         return new Response(JSON.stringify({
           success: true,
           deleted: count,
+          athletes,
+          metrics
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      case 'bulk_disable': {
+        // Disable all overrides for this market (preserves audit trail)
+        const count = existingOverrides?.length || 0;
+        
+        await supabase
+          .from('market_multiplier_overrides')
+          .update({ is_enabled: false, updated_at: new Date().toISOString() })
+          .eq('market_id', market_id);
+
+        // Log audit
+        await logAudit(
+          'MULTIPLIER_BULK_DISABLE',
+          market_id,
+          { count, is_enabled: true },
+          { count, is_enabled: false },
+          { market_id, market_type: marketType }
+        );
+
+        // Rebuild with disabled overrides
+        const athletes = (selections || []).map(s => {
+          const autoMultiplier = autoOddsMap.get(s.athlete_id) || s.decimal_odds || 2.0;
+          return {
+            athlete_id: s.athlete_id,
+            athlete_name: (s.athlete as any)?.name || 'Unknown',
+            rank: rankMap.get(s.athlete_id) || 999,
+            auto_multiplier: autoMultiplier,
+            manual_multiplier: null,
+            final_multiplier: autoMultiplier,
+            source: 'auto',
+            is_enabled: false,
+            override_id: null,
+            reason: null
+          };
+        }).sort((a, b) => a.rank - b.rank);
+        
+        const metrics = calculateMetrics(athletes);
+
+        return new Response(JSON.stringify({
+          success: true,
+          disabled: count,
+          athletes,
+          metrics
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      case 'repair_auto': {
+        // Repair: Set selections.decimal_odds = market_odds.final_decimal_odds
+        // This fixes any corruption from previous override writes
+        let repaired = 0;
+        
+        for (const selection of (selections || [])) {
+          const autoMultiplier = autoOddsMap.get(selection.athlete_id);
+          if (autoMultiplier && autoMultiplier !== selection.decimal_odds) {
+            await supabase
+              .from('selections')
+              .update({ decimal_odds: autoMultiplier })
+              .eq('id', selection.id);
+            repaired++;
+          }
+        }
+
+        // Log audit
+        await logAudit(
+          'MULTIPLIER_REPAIR_AUTO',
+          market_id,
+          null,
+          { repaired },
+          { market_id, market_type: marketType }
+        );
+
+        return new Response(JSON.stringify({
+          success: true,
+          repaired,
+          message: `Repaired ${repaired} selections to match auto-generated odds`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      case 'clear_and_regenerate': {
+        // 1. Delete all overrides
+        const overrideCount = existingOverrides?.length || 0;
+        await supabase
+          .from('market_multiplier_overrides')
+          .delete()
+          .eq('market_id', market_id);
+
+        console.log(`[OVERRIDE] Cleared ${overrideCount} overrides for market ${market_id}`);
+
+        // 2. Call generate-market-odds to regenerate
+        const { data: genData, error: genError } = await supabase.functions.invoke('generate-market-odds', {
+          body: { market_id, force: true, debug: true }
+        });
+
+        if (genError) {
+          console.error('[OVERRIDE] Regeneration error:', genError);
+          return new Response(JSON.stringify({ 
+            error: 'Failed to regenerate: ' + genError.message,
+            overrides_cleared: overrideCount
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        // Log audit
+        await logAudit(
+          'MULTIPLIER_CLEAR_AND_REGENERATE',
+          market_id,
+          { overrides_cleared: overrideCount },
+          { 
+            implied_sum: genData?.implied_sum,
+            calibration_status: genData?.calibration_status
+          },
+          { market_id, market_type: marketType }
+        );
+
+        // 3. Refetch fresh data
+        const { data: freshOdds } = await supabase
+          .from('market_odds')
+          .select('athlete_id, final_decimal_odds')
+          .eq('market_id', market_id);
+        
+        const freshAutoOddsMap = new Map(freshOdds?.map(o => [o.athlete_id, o.final_decimal_odds]) || []);
+
+        const athletes = (selections || []).map(s => {
+          const autoMultiplier = freshAutoOddsMap.get(s.athlete_id) || 2.0;
+          return {
+            athlete_id: s.athlete_id,
+            athlete_name: (s.athlete as any)?.name || 'Unknown',
+            rank: rankMap.get(s.athlete_id) || 999,
+            auto_multiplier: autoMultiplier,
+            manual_multiplier: null,
+            final_multiplier: autoMultiplier,
+            source: 'auto',
+            is_enabled: false,
+            override_id: null,
+            reason: null
+          };
+        }).sort((a, b) => a.rank - b.rank);
+        
+        const metrics = calculateMetrics(athletes);
+
+        return new Response(JSON.stringify({
+          success: true,
+          overrides_cleared: overrideCount,
+          regeneration: genData,
           athletes,
           metrics
         }), {

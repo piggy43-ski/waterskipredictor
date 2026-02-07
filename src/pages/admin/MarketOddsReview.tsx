@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Lock, Unlock, AlertTriangle, CheckCircle, Pencil, Trash2, Copy, RotateCcw } from 'lucide-react';
+import { RefreshCw, Lock, Unlock, AlertTriangle, CheckCircle, Pencil, Trash2, Copy, RotateCcw, Zap, Info } from 'lucide-react';
 
 interface AthleteOverride {
   athlete_id: string;
@@ -31,11 +31,16 @@ interface AthleteOverride {
 interface OverrideMetrics {
   implied_sum: number;
   implied_sum_pct: string;
-  status: 'OK' | 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW' | 'BLOCKED';
+  status: 'OK' | 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW';
   target_band: { min: number; max: number };
   target_band_pct: string;
   total_athletes: number;
   manual_count: number;
+  // New fields
+  auto_implied_sum: number;
+  auto_implied_sum_pct: string;
+  auto_status: 'OK' | 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW';
+  overrides_causing_issue: boolean;
 }
 
 interface OverrideResponse {
@@ -56,6 +61,10 @@ export default function MarketOddsReview() {
   const [editingAthlete, setEditingAthlete] = useState<AthleteOverride | null>(null);
   const [editMultiplier, setEditMultiplier] = useState<string>('');
   const [editReason, setEditReason] = useState<string>('');
+  
+  // Confirm dialog state
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'clear_regenerate' | 'bulk_reset' | null>(null);
   
   // Inline edit state
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
@@ -90,7 +99,7 @@ export default function MarketOddsReview() {
   });
 
   // Fetch overrides for selected market using edge function
-  const { data: overrideData, refetch: refetchOverrides } = useQuery({
+  const { data: overrideData, refetch: refetchOverrides, isLoading: isLoadingOverrides } = useQuery({
     queryKey: ['admin-multiplier-overrides', selectedMarket],
     queryFn: async () => {
       if (!selectedMarket) return null;
@@ -184,13 +193,35 @@ export default function MarketOddsReview() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-multiplier-overrides'] });
       toast.success('All overrides removed, reverted to auto');
+      setConfirmDialogOpen(false);
     },
     onError: (error: any) => {
       toast.error('Failed: ' + error.message);
     },
   });
 
-  // Regenerate auto multipliers
+  // Clear overrides and regenerate - THE MAIN FIX
+  const clearAndRegenerateMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('manage-multiplier-overrides', {
+        body: { action: 'clear_and_regenerate', market_id: selectedMarket },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-multiplier-overrides'] });
+      const status = data.regeneration?.calibration_status || 'unknown';
+      const impliedSum = data.regeneration?.implied_sum?.toFixed(3) || 'N/A';
+      toast.success(`Cleared ${data.overrides_cleared} overrides & regenerated. Status: ${status}, Implied sum: ${impliedSum}`);
+      setConfirmDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast.error('Failed: ' + error.message);
+    },
+  });
+
+  // Simple regenerate (without clearing overrides)
   const regenerateMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('generate-market-odds', {
@@ -244,7 +275,7 @@ export default function MarketOddsReview() {
     upsertMutation.mutate({
       athleteId: athlete.athlete_id,
       multiplier,
-      reason: athlete.reason || '', // Keep existing reason
+      reason: athlete.reason || '',
     });
   };
 
@@ -255,6 +286,19 @@ export default function MarketOddsReview() {
     } else if (e.key === 'Escape') {
       setInlineEditingId(null);
     }
+  };
+
+  const handleConfirmAction = () => {
+    if (confirmAction === 'clear_regenerate') {
+      clearAndRegenerateMutation.mutate();
+    } else if (confirmAction === 'bulk_reset') {
+      bulkResetMutation.mutate();
+    }
+  };
+
+  const openConfirmDialog = (action: 'clear_regenerate' | 'bulk_reset') => {
+    setConfirmAction(action);
+    setConfirmDialogOpen(true);
   };
 
   const getDeviationWarning = () => {
@@ -281,7 +325,6 @@ export default function MarketOddsReview() {
         return 'text-green-500';
       case 'WARNING': 
         return 'text-yellow-500';
-      case 'BLOCKED':
       case 'NEEDS_REVIEW': 
         return 'text-red-500';
       default: return 'text-muted-foreground';
@@ -294,7 +337,6 @@ export default function MarketOddsReview() {
       case 'CALIBRATED': return <Badge className="bg-green-500/20 text-green-500 border-green-500/30"><CheckCircle className="h-3 w-3 mr-1" />CALIBRATED</Badge>;
       case 'WARNING': return <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">WARNING</Badge>;
       case 'NEEDS_REVIEW': return <Badge className="bg-orange-500/20 text-orange-500 border-orange-500/30"><AlertTriangle className="h-3 w-3 mr-1" />NEEDS REVIEW</Badge>;
-      case 'BLOCKED': return <Badge variant="destructive">BLOCKED</Badge>;
       default: return null;
     }
   };
@@ -304,12 +346,14 @@ export default function MarketOddsReview() {
   const metrics = overrideData?.metrics;
   const caps = overrideData?.caps || { min: 1.5, max: 20.0 };
 
+  const isPending = clearAndRegenerateMutation.isPending || bulkResetMutation.isPending;
+
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Multiplier Override</h1>
-          <p className="text-muted-foreground">Set exact multiplier values for any athlete in any market</p>
+          <h1 className="text-3xl font-bold text-foreground">Multiplier Review</h1>
+          <p className="text-muted-foreground">Manage multiplier values and calibrate markets to target implied sum</p>
         </div>
 
         <Card>
@@ -352,10 +396,17 @@ export default function MarketOddsReview() {
           </CardContent>
         </Card>
 
+        {selectedMarket && isLoadingOverrides && (
+          <Alert>
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            <AlertDescription>Loading multiplier data...</AlertDescription>
+          </Alert>
+        )}
+
         {selectedMarket && metrics && (
           <>
             {/* Metrics Cards */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-5 gap-4">
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">Market Type</CardTitle>
@@ -368,7 +419,7 @@ export default function MarketOddsReview() {
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Implied Sum</CardTitle>
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Current Implied Sum</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-2">
@@ -378,6 +429,20 @@ export default function MarketOddsReview() {
                     {getStatusBadge(metrics.status)}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Target: {metrics.target_band_pct}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Auto Implied Sum</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xl font-mono ${getStatusColor(metrics.auto_status)}`}>
+                      {metrics.auto_implied_sum_pct}%
+                    </span>
+                    {getStatusBadge(metrics.auto_status)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Without overrides</p>
                 </CardContent>
               </Card>
               <Card>
@@ -399,13 +464,26 @@ export default function MarketOddsReview() {
               </Card>
             </div>
 
-            {(metrics.status === 'BLOCKED' || metrics.status === 'NEEDS_REVIEW') && (
+            {/* Overrides causing issue banner */}
+            {metrics.overrides_causing_issue && (
+              <Alert className="border-orange-500/50 bg-orange-500/10">
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                <AlertTitle className="text-orange-500">Overrides Causing Out-of-Band Pricing</AlertTitle>
+                <AlertDescription className="text-orange-500/80">
+                  The auto-generated odds are calibrated (Auto: {metrics.auto_implied_sum_pct}%), but {metrics.manual_count} manual override(s) 
+                  are forcing the implied sum to {metrics.implied_sum_pct}%. 
+                  <strong className="ml-1">Click "Clear Overrides & Regenerate" below to fix.</strong>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {metrics.status === 'NEEDS_REVIEW' && !metrics.overrides_causing_issue && (
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Implied Sum Out of Range</AlertTitle>
                 <AlertDescription>
                   The implied sum ({metrics.implied_sum_pct}%) is outside the target band ({metrics.target_band_pct}). 
-                  Click "Regenerate Auto" to auto-calibrate, or manually adjust multipliers.
+                  Click "Clear Overrides & Regenerate" to auto-calibrate the market.
                 </AlertDescription>
               </Alert>
             )}
@@ -419,6 +497,38 @@ export default function MarketOddsReview() {
                 </AlertDescription>
               </Alert>
             )}
+
+            {/* PRIMARY ACTION CARD */}
+            <Card className="border-2 border-primary/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-primary" />
+                  Quick Actions
+                </CardTitle>
+                <CardDescription>
+                  Use "Clear Overrides & Regenerate" to fix blocked or out-of-band markets
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex gap-4">
+                <Button
+                  onClick={() => openConfirmDialog('clear_regenerate')}
+                  disabled={isPending}
+                  variant="default"
+                  size="lg"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${clearAndRegenerateMutation.isPending ? 'animate-spin' : ''}`} />
+                  Clear Overrides & Regenerate
+                </Button>
+                <Button
+                  onClick={() => regenerateMutation.mutate()}
+                  disabled={regenerateMutation.isPending}
+                  variant="secondary"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${regenerateMutation.isPending ? 'animate-spin' : ''}`} />
+                  Regenerate Auto Only
+                </Button>
+              </CardContent>
+            </Card>
 
             {/* Athletes Table */}
             <Card>
@@ -535,20 +645,12 @@ export default function MarketOddsReview() {
               </CardContent>
             </Card>
 
-            {/* Bulk Actions */}
+            {/* Secondary Bulk Actions */}
             <Card>
               <CardHeader>
-                <CardTitle>Bulk Actions</CardTitle>
+                <CardTitle>Additional Actions</CardTitle>
               </CardHeader>
               <CardContent className="flex gap-4">
-                <Button
-                  onClick={() => regenerateMutation.mutate()}
-                  disabled={regenerateMutation.isPending}
-                  variant="secondary"
-                >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${regenerateMutation.isPending ? 'animate-spin' : ''}`} />
-                  Regenerate Auto
-                </Button>
                 <Button
                   onClick={() => bulkCopyMutation.mutate()}
                   disabled={bulkCopyMutation.isPending}
@@ -558,8 +660,8 @@ export default function MarketOddsReview() {
                   Copy All to Manual
                 </Button>
                 <Button
-                  onClick={() => bulkResetMutation.mutate()}
-                  disabled={bulkResetMutation.isPending || metrics.manual_count === 0}
+                  onClick={() => openConfirmDialog('bulk_reset')}
+                  disabled={isPending || metrics.manual_count === 0}
                   variant="outline"
                 >
                   <RotateCcw className="w-4 h-4 mr-2" />
@@ -570,13 +672,52 @@ export default function MarketOddsReview() {
           </>
         )}
 
-        {selectedMarket && !overrideData && (
+        {selectedMarket && !overrideData && !isLoadingOverrides && (
           <Alert>
             <AlertDescription>
-              Loading multiplier data for this market...
+              No data found for this market. Try regenerating odds first.
             </AlertDescription>
           </Alert>
         )}
+
+        {/* Confirm Dialog */}
+        <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {confirmAction === 'clear_regenerate' 
+                  ? 'Clear Overrides & Regenerate?' 
+                  : 'Reset All Overrides?'}
+              </DialogTitle>
+              <DialogDescription>
+                {confirmAction === 'clear_regenerate' ? (
+                  <>
+                    This will:
+                    <ol className="list-decimal ml-4 mt-2 space-y-1">
+                      <li>Delete all {metrics?.manual_count || 0} manual override(s)</li>
+                      <li>Regenerate odds using the auto-calibration engine</li>
+                      <li>Target implied sum of {metrics?.target_band_pct}</li>
+                    </ol>
+                    <p className="mt-2 text-sm">This action cannot be undone.</p>
+                  </>
+                ) : (
+                  <>
+                    This will remove all {metrics?.manual_count || 0} manual override(s) and revert to auto-generated multipliers.
+                    This action cannot be undone.
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmDialogOpen(false)} disabled={isPending}>
+                Cancel
+              </Button>
+              <Button onClick={handleConfirmAction} disabled={isPending} variant="destructive">
+                {isPending ? 'Processing...' : 'Confirm'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Edit Override Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
