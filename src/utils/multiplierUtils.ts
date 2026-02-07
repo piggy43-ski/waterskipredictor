@@ -12,18 +12,20 @@
 // CONFIGURATION
 // ============================================================
 export const MULTIPLIER_CONFIG = {
-  // Target implied sum bands (house edge enforcement)
+  // Target implied sum bands (Σ(1/multiplier) should fall within these)
+  // Lower values = more house edge
   TARGET_IMPLIED_SUM: {
     WINNER: { min: 0.90, max: 0.92 },
     PODIUM: { min: 0.84, max: 0.86 },
     HIGHEST_SCORE: { min: 0.87, max: 0.89 },
   },
   
-  // Multiplier caps per market type
+  // Multiplier caps per market type - UPDATED for proper calibration
+  // HIGHEST_SCORE max reduced to 8x to prevent longshot clumping
   MULTIPLIER_CAPS: {
-    WINNER: { min: 1.5, max: 15.0 },
-    PODIUM: { min: 1.10, max: 8.0 },
-    HIGHEST_SCORE: { min: 1.5, max: 12.0 },
+    WINNER: { min: 1.8, max: 12.0 },
+    PODIUM: { min: 1.4, max: 10.0 },
+    HIGHEST_SCORE: { min: 2.0, max: 8.0 },
   },
   
   // Rank-specific caps for WINNER market
@@ -35,6 +37,13 @@ export const MULTIPLIER_CONFIG = {
   
   // Rounding step
   ROUNDING_STEP: 0.1,
+  
+  // Softmax temperature per market type (lower = sharper favorites)
+  TEMPERATURE: {
+    WINNER: 0.85,
+    PODIUM: 1.05,
+    HIGHEST_SCORE: 1.00,
+  },
 };
 
 // Multiplier ladder for snapping to standard values

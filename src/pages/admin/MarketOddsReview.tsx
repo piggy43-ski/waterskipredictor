@@ -31,7 +31,7 @@ interface AthleteOverride {
 interface OverrideMetrics {
   implied_sum: number;
   implied_sum_pct: string;
-  status: 'OK' | 'WARNING' | 'BLOCKED';
+  status: 'OK' | 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW' | 'BLOCKED';
   target_band: { min: number; max: number };
   target_band_pct: string;
   total_athletes: number;
@@ -276,9 +276,14 @@ export default function MarketOddsReview() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'OK': return 'text-green-500';
-      case 'WARNING': return 'text-yellow-500';
-      case 'BLOCKED': return 'text-red-500';
+      case 'OK': 
+      case 'CALIBRATED': 
+        return 'text-green-500';
+      case 'WARNING': 
+        return 'text-yellow-500';
+      case 'BLOCKED':
+      case 'NEEDS_REVIEW': 
+        return 'text-red-500';
       default: return 'text-muted-foreground';
     }
   };
@@ -286,7 +291,9 @@ export default function MarketOddsReview() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'OK': return <Badge className="bg-green-500/20 text-green-500 border-green-500/30">OK</Badge>;
+      case 'CALIBRATED': return <Badge className="bg-green-500/20 text-green-500 border-green-500/30"><CheckCircle className="h-3 w-3 mr-1" />CALIBRATED</Badge>;
       case 'WARNING': return <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">WARNING</Badge>;
+      case 'NEEDS_REVIEW': return <Badge className="bg-orange-500/20 text-orange-500 border-orange-500/30"><AlertTriangle className="h-3 w-3 mr-1" />NEEDS REVIEW</Badge>;
       case 'BLOCKED': return <Badge variant="destructive">BLOCKED</Badge>;
       default: return null;
     }
@@ -392,12 +399,23 @@ export default function MarketOddsReview() {
               </Card>
             </div>
 
-            {metrics.status === 'BLOCKED' && (
+            {(metrics.status === 'BLOCKED' || metrics.status === 'NEEDS_REVIEW') && (
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Implied Sum Out of Range</AlertTitle>
                 <AlertDescription>
-                  The implied sum is outside the safe range. Adjust multipliers to bring it within the target band.
+                  The implied sum ({metrics.implied_sum_pct}%) is outside the target band ({metrics.target_band_pct}). 
+                  Click "Regenerate Auto" to auto-calibrate, or manually adjust multipliers.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {metrics.status === 'CALIBRATED' && (
+              <Alert className="border-green-500/30 bg-green-500/10">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                <AlertTitle className="text-green-500">Calibrated Successfully</AlertTitle>
+                <AlertDescription className="text-green-500/80">
+                  Implied sum is within target band. Market is ready for predictions.
                 </AlertDescription>
               </Alert>
             )}
