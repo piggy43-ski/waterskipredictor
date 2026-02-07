@@ -65,10 +65,10 @@ export const TokenPurchasesTable = () => {
   const totalTokensSold = purchases.reduce((sum, p) => sum + (p.tokens_amount || 0), 0);
   const uniqueBuyers = new Set(purchases.map(p => p.user_id)).size;
 
-  // Extract pack name from description (e.g., "Pro Pack Purchase" -> "Pro")
+  // Extract pack name from description (e.g., "Token purchase: Starter (2500 tokens)" -> "Starter")
   const getPackName = (description: string | null): string => {
     if (!description) return 'Unknown';
-    const match = description.match(/^(\w+)\s+Pack/i);
+    const match = description.match(/Token purchase:\s+(\w+)\s+\(/i);
     return match ? match[1] : 'Unknown';
   };
 
