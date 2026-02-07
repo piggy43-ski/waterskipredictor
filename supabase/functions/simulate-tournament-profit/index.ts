@@ -8,9 +8,10 @@ const corsHeaders = {
 interface MarketOdds {
   id: string;
   athlete_id: string;
-  probability: number;
-  adjusted_probability: number;
-  multiplier: number;
+  normalized_probability: number;
+  base_probability: number;
+  final_decimal_odds: number;
+  athlete_rank?: number;
 }
 
 interface MarketResult {
@@ -126,8 +127,9 @@ function simulateMarket(
     return { expected_profit: 0, loss_probability: 0, profit_p05: 0, profit_p95: 0 };
   }
 
-  const probabilities = odds.map(o => o.probability);
-  const multipliers = odds.map(o => o.multiplier);
+  // Use normalized_probability, fall back to base_probability
+  const probabilities = odds.map(o => o.normalized_probability || o.base_probability || 0.1);
+  const multipliers = odds.map(o => o.final_decimal_odds || 2);
   const stakes = distributePool(probabilities, pool, strategy);
 
   const profits: number[] = [];
@@ -173,10 +175,10 @@ function getImpliedSumStatus(impliedSum: number, marketType: string): 'OK' | 'WA
 }
 
 // Check for rank inversions (higher rank should have lower multiplier)
-function hasRankInversions(odds: (MarketOdds & { field_rank?: number })[]): boolean {
-  const sorted = [...odds].sort((a, b) => (a.field_rank || 999) - (b.field_rank || 999));
+function hasRankInversions(odds: MarketOdds[]): boolean {
+  const sorted = [...odds].sort((a, b) => (a.athlete_rank || 999) - (b.athlete_rank || 999));
   for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].multiplier < sorted[i - 1].multiplier) {
+    if (sorted[i].final_decimal_odds < sorted[i - 1].final_decimal_odds) {
       return true;
     }
   }
@@ -246,10 +248,10 @@ Deno.serve(async (req) => {
 
     // Process each market
     for (const market of markets || []) {
-      // Fetch market odds
+      // Fetch market odds (using correct column names from schema)
       const { data: odds, error: oddsError } = await supabase
         .from('market_odds')
-        .select('id, athlete_id, probability, adjusted_probability, multiplier, field_rank')
+        .select('id, athlete_id, normalized_probability, base_probability, final_decimal_odds, athlete_rank')
         .eq('market_id', market.id);
 
       if (oddsError || !odds || odds.length === 0) {
@@ -274,8 +276,8 @@ Deno.serve(async (req) => {
 
       marketsWithOdds++;
 
-      // Calculate implied sum
-      const impliedSum = odds.reduce((sum, o) => sum + (1 / o.multiplier), 0);
+      // Calculate implied sum using final_decimal_odds (multiplier)
+      const impliedSum = odds.reduce((sum, o) => sum + (1 / (o.final_decimal_odds || 2)), 0);
       const impliedSumStatus = getImpliedSumStatus(impliedSum, market.market_type);
       
       if (impliedSumStatus !== 'OK') {
@@ -290,7 +292,8 @@ Deno.serve(async (req) => {
       };
       const caps = multiplierCaps[market.market_type] || multiplierCaps.WINNER;
       for (const o of odds) {
-        if (o.multiplier < caps.min || o.multiplier > caps.max) {
+        const mult = o.final_decimal_odds || 2;
+        if (mult < caps.min || mult > caps.max) {
           allMultipliersCapped = false;
         }
       }
