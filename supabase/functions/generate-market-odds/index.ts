@@ -84,12 +84,24 @@ function normalize(arr: number[]): number[] {
   return sum > 0 ? arr.map(v => v / sum) : arr.map(() => 1 / arr.length);
 }
 
+// Deterministic seeded random - uses market_id hash for reproducibility
 function seededRandom(seed: number): () => number {
   let s = seed;
   return () => {
     s = (s * 1103515245 + 12345) & 0x7fffffff;
     return s / 0x7fffffff;
   };
+}
+
+function hashString(str: string | undefined): number {
+  if (!str) str = 'default-seed';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash) || 12345;
 }
 
 // ============================================================
@@ -195,11 +207,11 @@ function transformToHighestScoreProbabilities(p_winner: number[]): number[] {
   return normalize(raw);
 }
 
+// STEP 2: MONTE CARLO ADJUSTMENT (deterministic)
 // ============================================================
-// STEP 2: MONTE CARLO ADJUSTMENT
-// ============================================================
-function runLightMonteCarlo(athletes: Athlete[], marketType: string): number[] {
-  const rng = seededRandom(Date.now());
+function runLightMonteCarlo(athletes: Athlete[], marketType: string, marketId: string): number[] {
+  // Use market_id hash for deterministic reproducibility
+  const rng = seededRandom(hashString(marketId));
   const wins = new Array(athletes.length).fill(0);
   const sigma = marketType === 'PODIUM' ? 8 : 10;
   
@@ -579,8 +591,8 @@ Deno.serve(async (req) => {
       p_base = p_winner_base;
     }
     
-    // Step 2: Monte Carlo adjustment
-    const p_mc = runLightMonteCarlo(athletes, marketType);
+    // Step 2: Monte Carlo adjustment (deterministic using market_id)
+    const p_mc = runLightMonteCarlo(athletes, marketType, market_id);
     
     // Step 3: Blend
     const p_blended_raw = blendProbabilities(p_base, p_mc);

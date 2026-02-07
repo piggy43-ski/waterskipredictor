@@ -1389,6 +1389,8 @@ export type Database = {
           base_probability: number
           blended_probability: number | null
           calibration_iterations: number | null
+          clipped_count: number | null
+          dynamic_max_used: number | null
           final_decimal_odds: number
           generated_at: string | null
           id: string
@@ -1419,6 +1421,8 @@ export type Database = {
           base_probability: number
           blended_probability?: number | null
           calibration_iterations?: number | null
+          clipped_count?: number | null
+          dynamic_max_used?: number | null
           final_decimal_odds: number
           generated_at?: string | null
           id?: string
@@ -1449,6 +1453,8 @@ export type Database = {
           base_probability?: number
           blended_probability?: number | null
           calibration_iterations?: number | null
+          clipped_count?: number | null
+          dynamic_max_used?: number | null
           final_decimal_odds?: number
           generated_at?: string | null
           id?: string
@@ -2987,6 +2993,45 @@ export type Database = {
           strength_score: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "market_odds_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_odds_audit_v: {
+        Row: {
+          athlete_id: string | null
+          athlete_name: string | null
+          calibration_iterations: number | null
+          category: string | null
+          clipped_count: number | null
+          discipline: string | null
+          dynamic_max_used: number | null
+          field_rank: number | null
+          generated_at: string | null
+          implied_contrib: number | null
+          market_id: string | null
+          market_name: string | null
+          market_type: string | null
+          model_version: string | null
+          multiplier: number | null
+          odds_id: string | null
+          probability: number | null
+          strength_score: number | null
+          temperature_used: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_odds_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "market_odds_market_id_fkey"
             columns: ["market_id"]
