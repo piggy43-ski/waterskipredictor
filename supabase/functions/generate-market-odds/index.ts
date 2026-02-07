@@ -562,8 +562,8 @@ Deno.serve(async (req) => {
         console.error(`[ODDS] Selection upsert error for ${r.name}:`, selError);
       }
       
-      // Upsert market_odds with ALL probability columns
-      await supabase.from('market_odds').upsert({
+      // Upsert market_odds with columns that actually exist in the table
+      const { error: oddsError } = await supabase.from('market_odds').upsert({
         market_id,
         athlete_id: r.id,
         // Core probability columns
@@ -573,21 +573,20 @@ Deno.serve(async (req) => {
         blended_probability: r.p_blended,
         normalized_probability: r.p_final,
         adjusted_probability: 1 / r.multiplier,
-        // Multiplier columns
-        multiplier: r.multiplier,
+        // Multiplier columns (use existing column names)
         base_decimal_odds: r.multiplier,
         final_decimal_odds: r.multiplier,
-        american_odds: decimalToAmerican(r.multiplier),
-        // Rank/rating info
-        field_rank: r.fieldRank,
+        // Rank info (use existing column name)
         athlete_rank: r.fieldRank,
-        world_rank: r.worldRank,
-        rating: r.rating,
         // Metadata
         sims_run: SIMS,
         model_version: 'ladder-v2',
-        probability_source: r.source
+        generated_at: new Date().toISOString()
       }, { onConflict: 'market_id,athlete_id' });
+      
+      if (oddsError) {
+        console.error(`[ODDS] market_odds upsert error for ${r.name}:`, oddsError);
+      }
     }
 
     await supabase.from('markets').update({
