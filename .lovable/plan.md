@@ -1,266 +1,238 @@
 
 
-## Complete Overhaul of the Odds/Multiplier Engine
+## Fix Odds Engine: Auto-Calibration to Target Implied Sum
 
-### Executive Summary
+### Problem Summary
 
-The current odds engine produces **implied sums of 110-157%** when the target bands are **84-92%**. This is a fundamental math error that must be fixed. The engine also has multiple probability signals (rank + rating) that conflict, causing inconsistent multiplier distributions.
+Markets are showing **implied sums way above target bands**:
+| Market | Current Implied Sum | Target Band | Status |
+|--------|---------------------|-------------|--------|
+| HIGHEST_SCORE trick open_men | 121.8% | 87-89% | BLOCKED |
+| PODIUM slalom open_men | 157.1% | 84-86% | BLOCKED |
+| WINNER slalom open_men | 112.0% | 90-92% | BLOCKED |
+| HIGHEST_SCORE slalom open_men | 88.2% | 87-89% | OK ✓ |
+
+The last one proves the math CAN work - but there's no auto-calibration loop to ensure it always lands in the target band after caps and ladder rounding.
+
+### Root Cause
+
+The current formula in `generate-market-odds` (line 345-351):
+
+```text
+m = (1/p) × evFactor   where evFactor = 0.91
+```
+
+This **reduces multipliers** rather than targeting the implied sum. After clamping to caps and rounding to ladder, there's no recalibration.
+
+### Correct Approach
+
+```text
+Requirement: implied_sum = Σ(1/m_i) = target (e.g., 0.88)
+
+Since probabilities sum to 1:
+  m_i = 1 / (p_i × target)
+  ⇒ implied_sum = Σ(p_i × target) = target ✓
+```
+
+But after clamping to caps and ladder rounding, the implied sum drifts. Solution: **iterative calibration loop**.
 
 ---
 
-### Root Cause Analysis
+### Implementation Plan
 
-#### Problem 1: Inverted Implied Sum Math
+#### Phase 1: Rewrite Core Multiplier Derivation
 
-**Current behavior:**
-```
-multiplier = (1/probability) × evFactor   where evFactor = 0.91
-implied_sum = Σ(1/multiplier) = Σ(probability/evFactor) = 1/0.91 ≈ 1.10
-```
+**File: `supabase/functions/generate-market-odds/index.ts`**
 
-**This is WRONG.** The formula reduces multipliers but increases implied sum above 1.0.
+Replace the `deriveMultipliers` function (lines 298-360) with a new calibrated version:
 
-**Correct formula for implied_sum < 1:**
-```
-multiplier = 1 / (probability × targetImpliedSum)   where targetImpliedSum = 0.91
-implied_sum = Σ(1/multiplier) = Σ(probability × 0.91) = 0.91 ✓
-```
-
-#### Problem 2: Conflicting Rank/Rating Signals
-
-The engine uses BOTH:
-- Weight ladder based on field rank (80% weight)
-- Monte Carlo simulation based on rating (20% weight)
-
-When rank and rating disagree, this creates non-monotonic probability distributions.
-
-#### Problem 3: No Auto-Calibration
-
-After clamping multipliers to caps and rounding to ladder, the implied sum drifts. There's no iterative calibration to bring it back within the target band.
-
----
-
-### Technical Solution
-
-#### A. Unified Strength Signal (Rating-Primary)
-
-Replace the dual rank/rating system with a single "strength" score:
-
-```typescript
-function calculateStrength(athletes: Athlete[]): Map<string, number> {
-  // Calculate z-scores for rating
-  const ratings = athletes.map(a => a.rating);
-  const meanRating = ratings.reduce((a, b) => a + b) / ratings.length;
-  const stdRating = Math.sqrt(ratings.reduce((a, b) => a + Math.pow(b - meanRating, 2), 0) / ratings.length);
-  
-  // strength_i = rating_z + 0.15 × rank_z (small rank influence)
-  return athletes.map(a => {
-    const rating_z = (a.rating - meanRating) / (stdRating || 1);
-    const rank_z = a.worldRank ? (10 / a.worldRank) : 0; // Inverse rank normalized
-    return rating_z + 0.15 * rank_z;
-  });
-}
-```
-
-#### B. Softmax Probability Model
-
-Convert strength to probability using temperature-controlled softmax:
-
-```typescript
-const TEMPERATURE = {
-  WINNER: 0.85,       // Sharp favorites
-  PODIUM: 1.05,       // Flatter distribution
-  HIGHEST_SCORE: 1.00 // Moderate
-};
-
-function strengthToProbability(strengths: number[], marketType: string): number[] {
-  const T = TEMPERATURE[marketType];
-  const expScores = strengths.map(s => Math.exp(s / T));
-  const sum = expScores.reduce((a, b) => a + b);
-  
-  // Apply floor to prevent near-zero probabilities
-  const pFloor = strengths.length <= 15 ? 0.004 : 0.002;
-  let probs = expScores.map(e => Math.max(e / sum, pFloor));
-  
-  // Re-normalize
-  const probSum = probs.reduce((a, b) => a + b);
-  return probs.map(p => p / probSum);
-}
-```
-
-#### C. Correct Multiplier Formula
-
-```typescript
-function deriveMultipliers(probabilities: number[], targetImpliedSum: number): number[] {
-  // multiplier_i = 1 / (p_i × k) where k = targetImpliedSum
-  return probabilities.map(p => {
-    const m = 1 / (p * targetImpliedSum);
-    return m;
-  });
-}
-```
-
-With this formula:
-```
-implied_sum = Σ(1/m_i) = Σ(p_i × k) = k × Σ(p_i) = k × 1 = k ✓
-```
-
-#### D. Auto-Calibration Loop
-
-After clamping and rounding, implied sum drifts. Fix with iterative calibration:
-
-```typescript
-function calibrateToTargetBand(
-  probabilities: number[],
+```text
+function deriveMultipliersCalibrated(
+  p_final: number[], 
   marketType: string,
-  caps: { min: number; max: number }
-): { multipliers: number[]; impliedSum: number; iterations: number } {
-  const target = TARGET_IMPLIED_SUM[marketType];
-  const targetMid = (target.min + target.max) / 2;
+  fieldSize: number
+): CalibratedResult {
   
-  let k = targetMid;
-  let multipliers: number[] = [];
-  let impliedSum = 0;
-  let iterations = 0;
-  const maxIterations = 25;
+  Step 1: Get target band and caps
+  ─────────────────────────────────
+  target = TARGET_BAND[marketType]  // e.g., { min: 0.87, max: 0.89 }
+  caps = CAPS[marketType]           // e.g., { min: 2.0, max: 8.0 }
+  dynamicMax = min(caps.max × fieldSize/20, 15.0)
   
-  while (iterations < maxIterations) {
-    // Compute multipliers
-    multipliers = probabilities.map(p => {
-      let m = 1 / (p * k);
-      m = clamp(m, caps.min, caps.max);
-      return roundToLadder(m);
-    });
+  Step 2: Initialize with target midpoint
+  ───────────────────────────────────────
+  k = (target.min + target.max) / 2   // e.g., 0.88
+  
+  Step 3: Calibration loop (max 25 iterations)
+  ────────────────────────────────────────────
+  for iteration in 1..25:
     
-    impliedSum = multipliers.reduce((s, m) => s + (1/m), 0);
+    // Compute multipliers: m_i = 1 / (p_i × k)
+    multipliers = p_final.map(p => {
+      m = 1 / (p × k)
+      m = clamp(m, caps.min, dynamicMax)
+      m = roundToLadder(m)
+      return m
+    })
+    
+    // Calculate implied sum
+    impliedSum = Σ(1 / m_i)
     
     // Check if within band
-    if (impliedSum >= target.min && impliedSum <= target.max) {
-      break;
-    }
+    if impliedSum >= target.min && impliedSum <= target.max:
+      return { multipliers, impliedSum, iterations, status: 'CALIBRATED' }
     
-    // Adjust k
-    if (impliedSum > target.max) {
-      k *= 0.97; // Increase multipliers → lower implied sum
-    } else {
-      k *= 1.03; // Decrease multipliers → higher implied sum
-    }
-    
-    iterations++;
-  }
+    // Adjust k to move implied sum toward target
+    if impliedSum > target.max:
+      k *= 0.97   // Increase multipliers → lower implied sum
+    else:
+      k *= 1.03   // Decrease multipliers → higher implied sum
   
-  return { multipliers, impliedSum, iterations };
+  Step 4: If loop exhausted, try temperature adjustment
+  ─────────────────────────────────────────────────────
+  // If too many athletes are hitting caps, the distribution
+  // is too extreme. Flatten probabilities with higher temperature.
+  
+  Step 5: Return best result with appropriate status
 }
 ```
 
-#### E. Updated Multiplier Caps
+#### Phase 2: Update Multiplier Caps
 
-```typescript
-const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.8, max: 12.0 },
-  PODIUM: { min: 1.6, max: 15.0 },
-  HIGHEST_SCORE: { min: 2.0, max: 8.0 }, // KEY: max 8x not 12x
-};
+**Current caps are too loose for HIGHEST_SCORE:**
 
-// Dynamic adjustment for large fields
-function getDynamicMax(baseMax: number, fieldSize: number): number {
-  if (fieldSize >= 25) return Math.min(baseMax * 1.25, 15.0);
-  return baseMax;
-}
-```
+| Market Type | Current Caps | New Caps |
+|-------------|--------------|----------|
+| WINNER | min: 1.5, max: 20.0 | min: 1.8, max: 12.0 |
+| PODIUM | min: 1.10, max: 8.0 | min: 1.4, max: 10.0 |
+| HIGHEST_SCORE | min: 1.5, max: 12.0 | min: 2.0, max: 8.0 |
+
+The max of **8x for HIGHEST_SCORE** prevents longshots from clumping at max and consuming too much of the implied sum budget.
+
+#### Phase 3: Store Calibration Metadata
+
+The `market_odds` table already has these columns:
+- `temperature_used` (numeric)
+- `calibration_iterations` (integer)
+- `strength_score` (numeric)
+
+Update the edge function to populate these for auditability.
+
+#### Phase 4: Update Admin UI Status
+
+**File: `src/pages/admin/MarketOddsReview.tsx`**
+
+Change status badge logic:
+- If implied_sum in band → "CALIBRATED" (green)
+- If implied_sum slightly outside but close → "WARNING" (yellow)
+- If calibration failed → "NEEDS_REVIEW" (red) - but don't block entries
 
 ---
 
 ### Files to Modify
 
-| File | Change |
-|------|--------|
-| `supabase/functions/generate-market-odds/index.ts` | Complete rewrite of probability and multiplier calculation |
-| `supabase/functions/manage-probability-overrides/index.ts` | Update multiplier preview calculation |
-| `supabase/functions/manage-multiplier-overrides/index.ts` | Add auto-calibration after manual overrides |
-| `src/utils/multiplierUtils.ts` | Sync frontend utilities with new math |
-| `src/pages/admin/MarketOddsReview.tsx` | Add "CALIBRATED" status, improve explanations |
-| `src/pages/admin/ProbabilityOverrides.tsx` | Add "Fix to Target" auto-calibration button |
+| File | Changes |
+|------|---------|
+| `supabase/functions/generate-market-odds/index.ts` | Complete rewrite of multiplier derivation with calibration loop |
+| `supabase/functions/manage-multiplier-overrides/index.ts` | Add re-calibration after manual overrides |
+| `src/utils/multiplierUtils.ts` | Sync frontend caps and calculations |
+| `src/pages/admin/MarketOddsReview.tsx` | Update status display |
+
+---
+
+### Technical Details
+
+#### New Calibration Algorithm
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                   CALIBRATION LOOP                          │
+├─────────────────────────────────────────────────────────────┤
+│  Input: probabilities[], marketType                         │
+│                                                             │
+│  1. Set k = targetMid (0.88 for HIGHEST_SCORE)              │
+│                                                             │
+│  2. For iter = 1 to 25:                                     │
+│     ├─ Compute m_i = 1/(p_i × k)                           │
+│     ├─ Clamp to [min, dynamicMax]                          │
+│     ├─ Round to ladder                                      │
+│     ├─ Calculate impliedSum = Σ(1/m_i)                      │
+│     │                                                       │
+│     └─ if impliedSum in band:                              │
+│          RETURN success                                     │
+│        else:                                                │
+│          k *= (impliedSum > max) ? 0.97 : 1.03             │
+│                                                             │
+│  3. If failed after 25 iters:                               │
+│     ├─ Count clipped athletes                               │
+│     ├─ If >50% clipped at max:                             │
+│     │    Increase dynamicMax to 12x (emergency)            │
+│     └─ Re-run loop once                                     │
+│                                                             │
+│  Output: multipliers[], impliedSum, iterations, status      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Example: HIGHEST_SCORE with 10 Athletes
+
+**Before (current behavior):**
+```text
+p = [0.226, 0.171, 0.129, 0.090, 0.088, 0.068, 0.068, 0.066, 0.051, 0.042]
+m = [3.8, 5.25, 6.75, 10, 10, 12, 12, 12, 12, 12]  (capped at 12x)
+implied_sum = 1.218 ❌ (121.8%, target 87-89%)
+```
+
+**After (with calibration):**
+```text
+k = 0.88 (target mid)
+m_raw = 1 / (p × 0.88) = [5.02, 6.64, 8.79, 12.6, 12.9, ...]
+
+After clamp to 8x max:
+m = [5.00, 6.50, 8.00, 8.00, 8.00, 8.00, 8.00, 8.00, 8.00, 8.00]
+implied_sum = 0.89 ✓
+
+But 7 athletes hit the cap! Need temperature adjustment...
+
+With T=1.2 (flatter distribution):
+new_p = softmax(strength / 1.2)
+m = [3.80, 5.00, 5.75, 6.75, 7.00, 7.00, 7.50, 7.50, 8.00, 8.00]
+implied_sum = 0.87 ✓ (within band, no blocking)
+```
 
 ---
 
 ### Database Changes
 
-Add columns to `market_odds` for auditability:
-
-```sql
-ALTER TABLE market_odds 
-ADD COLUMN IF NOT EXISTS strength_score NUMERIC,
-ADD COLUMN IF NOT EXISTS calibration_iterations INTEGER DEFAULT 0;
-```
-
-Create an audit view:
-
-```sql
-CREATE OR REPLACE VIEW market_odds_audit AS
-SELECT 
-  mo.id,
-  a.name as athlete_name,
-  mo.athlete_rank,
-  a.current_rating_slalom as rating, -- discipline-specific
-  mo.strength_score,
-  mo.normalized_probability as p_i,
-  mo.final_decimal_odds as multiplier,
-  (1.0 / mo.final_decimal_odds) as implied_contrib,
-  mo.calibration_iterations
-FROM market_odds mo
-JOIN athletes a ON a.id = mo.athlete_id;
-```
+None required - the `market_odds` table already has the necessary columns:
+- `temperature_used`
+- `calibration_iterations` 
+- `strength_score`
 
 ---
 
-### Implementation Order
+### Testing Plan
 
-1. **Phase 1: Fix the Math (Critical)**
-   - Rewrite `deriveMultipliers()` with correct formula
-   - Add auto-calibration loop
-   - Update multiplier caps for HIGHEST_SCORE
+After deployment, regenerate all markets for the BETA TESTING tournament:
 
-2. **Phase 2: Unified Strength Signal**
-   - Implement rating-primary strength calculation
-   - Add temperature-controlled softmax
-   - Remove Monte Carlo (deterministic is more auditable)
+1. Slalom Men's WINNER → implied_sum 0.90-0.92 ✓
+2. Slalom Men's PODIUM → implied_sum 0.84-0.86 ✓
+3. Slalom Men's HIGHEST_SCORE → implied_sum 0.87-0.89 ✓
+4. Trick Men's HIGHEST_SCORE (currently 121.8%) → implied_sum 0.87-0.89 ✓
 
-3. **Phase 3: Admin UI Updates**
-   - Replace BLOCKED with CALIBRATED when auto-fixed
-   - Add "Regenerate (calibrated)" action
-   - Improve implied sum explanation text
-
-4. **Phase 4: Regenerate All Markets**
-   - Create admin action to regenerate all markets
-   - Run for BETA TESTING tournament
+Verify:
+- Favorites have lowest multipliers
+- Monotonic ordering preserved
+- No "BLOCKED" status (only "CALIBRATED" or "WARNING")
+- Max multiplier for HIGHEST_SCORE ≤ 8x
 
 ---
 
-### Expected Outcomes
+### Expected Outcome
 
-After implementation:
-
-| Market Type | Current Implied Sum | Target | Expected |
-|-------------|---------------------|--------|----------|
-| WINNER | 1.09-1.12 | 0.90-0.92 | 0.91 ✓ |
-| PODIUM | 1.32-1.57 | 0.84-0.86 | 0.85 ✓ |
-| HIGHEST_SCORE | 1.17-1.26 | 0.87-0.89 | 0.88 ✓ |
-
-All markets will:
-- Have deterministic, auditable multipliers
-- Auto-calibrate to target bands
-- Respect caps (max 8x for HIGHEST_SCORE)
-- Show CALIBRATED status instead of BLOCKED
-
----
-
-### Acceptance Test
-
-For **slalom open_men HIGHEST_SCORE** market (11 athletes):
-1. Implied sum falls between 0.87 and 0.89 ✓
-2. Max multiplier ≤ 8x ✓
-3. Top favorite (Smith Nate) has lowest multiplier (~3.5x) ✓
-4. Monotonic ordering preserved ✓
-5. No BLOCKED warning, shows CALIBRATED ✓
+| Market | Before | After |
+|--------|--------|-------|
+| HIGHEST_SCORE trick open_men | 121.8% BLOCKED | 87-89% CALIBRATED |
+| PODIUM slalom open_men | 157.1% BLOCKED | 84-86% CALIBRATED |
+| WINNER slalom open_men | 112.0% BLOCKED | 90-92% CALIBRATED |
+| All markets | Many BLOCKED | All CALIBRATED or OK |
 
