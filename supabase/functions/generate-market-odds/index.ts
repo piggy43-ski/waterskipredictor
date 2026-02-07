@@ -422,13 +422,14 @@ Deno.serve(async (req) => {
       const entryDisciplineRank = e.discipline_rank; // actual discipline rank from entry (not seed_rank)
       const entryRating = e.rating_0_100;
       
-      // Must have REAL discipline data, not just seed_rank
-      // Include if: has world rank OR has entry discipline_rank OR has rating above default
+      // Include athletes with REAL discipline data OR explicitly seeded entries
+      // Include if: has world rank OR has entry discipline_rank OR has seed_rank OR has rating >= 70
       const hasWorldRank = worldRank !== null && worldRank !== undefined;
       const hasEntryDisciplineRank = entryDisciplineRank !== null && entryDisciplineRank !== undefined;
-      const hasMeaningfulRating = (entryRating && entryRating > 70) || (disciplineRating && disciplineRating > 70);
+      const hasSeedRank = e.seed_rank !== null && e.seed_rank !== undefined;
+      const hasMeaningfulRating = (entryRating && entryRating >= 70) || (disciplineRating && disciplineRating >= 70);
       
-      return hasWorldRank || hasEntryDisciplineRank || hasMeaningfulRating;
+      return hasWorldRank || hasEntryDisciplineRank || hasSeedRank || hasMeaningfulRating;
     }) || [];
     
     console.log(`[ODDS] Filtered: ${filtered.length} specialists from ${entries?.length || 0} entries (excluded seed-only athletes)`);
