@@ -1,54 +1,101 @@
 
-## Fix Pack Name Extraction for All Packs
 
-### Problem Identified
+## Give 100 Bonus Tokens + Send Beta Launch Email to All Users
 
-The `getPackName()` function in `TokenPurchasesTable.tsx` uses an incorrect regex pattern that matches neither historical nor current descriptions.
+### Overview
 
-**Current implementation (line 71):**
-```typescript
-const match = description.match(/^(\w+)\s+Pack/i);
-```
-
-**Issue:** This looks for patterns like "Starter Pack...", but the actual descriptions from the stripe-webhook (line 387) are:
-```
-"Token purchase: Starter (2500 tokens)"
-"Token purchase: Standard (5000 tokens)"
-"Token purchase: Pro (10000 tokens)"
-"Token purchase: Elite (25000 tokens)"
-```
-
-The regex doesn't match this format, so all packs show as "Unknown".
+Award every user 100 bonus tokens and send them a personalized email announcing the beta launch with the upcoming tournament on **February 8th, 2026**.
 
 ---
 
-### Solution
+### What Will Happen
 
-Update the regex to extract the pack name from the `"Token purchase: {PackName} ({tokens} tokens)"` format:
-
-```typescript
-const getPackName = (description: string | null): string => {
-  if (!description) return 'Unknown';
-  // Match "Token purchase: PackName (tokens)" format
-  // Captures: Starter, Standard, Pro, or Elite
-  const match = description.match(/Token purchase:\s+(\w+)\s+\(/i);
-  return match ? match[1] : 'Unknown';
-};
-```
-
-**How it works:**
-- `Token purchase:` - matches the literal prefix
-- `\s+` - matches one or more whitespace characters
-- `(\w+)` - captures the pack name (one or more word characters)
-- `\s+` - matches one or more whitespace characters before the opening parenthesis
-- `\(` - matches the literal opening parenthesis
-
-This will correctly extract "Starter", "Standard", "Pro", or "Elite" from the description.
+| Action | Details |
+|--------|---------|
+| **Users affected** | 107 users |
+| **Tokens awarded** | 100 per user (10,700 total) |
+| **Email sent** | Beta launch announcement with tournament details |
 
 ---
 
-### Files to Modify
+### Implementation Steps
 
-**`src/components/admin/TokenPurchasesTable.tsx`**
-- Line 71: Update the regex pattern in the `getPackName()` function
+#### 1. Create New Edge Function: `send-beta-launch`
+
+A one-time edge function that:
+- Fetches all users from `profiles`
+- Adds 100 tokens to each user's wallet
+- Creates a bonus transaction record for tracking
+- Sends a personalized beta launch email
+
+#### 2. Email Content
+
+**Subject:** "🎿 Your Beta Tokens Are Here - Tournament Opens Tomorrow!"
+
+**Message:**
+- Thank them for signing up early for the beta
+- Announce they've received 100 free tokens
+- Tournament is on **February 8th, 2026**
+- Predictions open tomorrow
+- CTA button to explore the platform
+
+#### 3. Database Updates Per User
+
+For each of the 107 users:
+```sql
+-- Update wallet balance
+UPDATE token_wallets 
+SET earned_tokens = earned_tokens + 100 
+WHERE user_id = ?
+
+-- Record the transaction
+INSERT INTO token_transactions (user_id, type, amount, balance_after, description)
+VALUES (?, 'bonus', 100, ?, 'Beta launch bonus - early signup reward')
+```
+
+---
+
+### Technical Details
+
+**Files to Create:**
+- `supabase/functions/send-beta-launch/index.ts` - The one-time bulk send function
+
+**Email Template Style:**
+- Matches existing dark theme design (background: #0a0a0a)
+- Blue accent color (#3b82f6) for branding
+- Water ski emoji header
+- Clear CTA button to explore tournaments
+
+**Security:**
+- Function uses service role key to update all wallets
+- Admin-only trigger (won't be publicly callable after use)
+
+---
+
+### Execution Flow
+
+```text
+1. Admin triggers edge function
+       ↓
+2. Fetch all 107 users from profiles
+       ↓
+3. For each user:
+   ├── Update token_wallets (+100 earned_tokens)
+   ├── Insert token_transactions record
+   └── Send personalized email via Resend
+       ↓
+4. Return summary (success count, failures)
+```
+
+---
+
+### Edge Function Code Summary
+
+The function will:
+1. Query all profiles (email, username, id)
+2. Loop through each user
+3. Update their wallet balance
+4. Log the bonus transaction
+5. Send the beta launch email
+6. Return a summary of results
 
