@@ -12,25 +12,29 @@ const SIMS = 5000;
 const W_BASE = 0.80;  // 80% weight on rank-based ladder
 const W_MC = 0.20;    // 20% weight on Monte Carlo
 
-// TARGET_EV_FACTOR: What fraction of fair odds players receive
-// e.g., 0.91 = players get 91% of fair value = 9% house edge
-// EV = probability × multiplier = probability × (fair_mult × ev_factor) = ev_factor
-const TARGET_EV_FACTOR = {
-  WINNER: { min: 0.90, max: 0.92 },       // 8-10% house edge
-  PODIUM: { min: 0.84, max: 0.86 },       // 14-16% house edge  
-  HIGHEST_SCORE: { min: 0.87, max: 0.89 }, // 11-13% house edge
+// TARGET_IMPLIED_SUM: The target for Σ(1/multiplier)
+// Lower = more house edge (e.g., 0.88 = 12% theoretical edge)
+const TARGET_IMPLIED_SUM = {
+  WINNER: { min: 0.90, max: 0.92 },
+  PODIUM: { min: 0.84, max: 0.86 },
+  HIGHEST_SCORE: { min: 0.87, max: 0.89 },
 };
 
+// Updated caps - HIGHEST_SCORE max reduced to 8x to prevent longshot clumping
 const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.5, max: 20.0 },
-  PODIUM: { min: 1.10, max: 8.0 },
-  HIGHEST_SCORE: { min: 1.5, max: 12.0 },
+  WINNER: { min: 1.8, max: 12.0 },
+  PODIUM: { min: 1.4, max: 10.0 },
+  HIGHEST_SCORE: { min: 2.0, max: 8.0 },
+};
+
+// Softmax temperature per market type (lower = sharper favorites)
+const TEMPERATURE = {
+  WINNER: 0.85,
+  PODIUM: 1.05,
+  HIGHEST_SCORE: 1.00,
 };
 
 // Realistic WINNER probability weight ladder
-// Ranks 1-3: Top tier with clear separation
-// Ranks 4-8: TIGHT CLUSTER - "very close and interchangeable" per domain knowledge
-// Ranks 9+: Gradual decay begins
 const WINNER_WEIGHT_LADDER: Record<number, number> = {
   1: 1.00, 2: 0.80, 3: 0.65, 4: 0.48, 5: 0.45,
   6: 0.42, 7: 0.40, 8: 0.38, 9: 0.30, 10: 0.24
@@ -51,7 +55,7 @@ const ODDS_LADDER = [
   6.00, 6.25, 6.50, 6.75,
   7.00, 7.50, 8.00, 8.50, 9.00, 9.50,
   10.00, 10.50, 11.00, 11.50, 12.00, 12.50, 13.00, 13.50, 14.00, 14.50, 15.00,
-  16.00, 17.00, 18.00, 19.00, 20.00
+  16.00, 17.00, 18.00, 19.00, 20.00, 25.00
 ];
 
 // ============================================================
@@ -102,12 +106,22 @@ interface Athlete {
 
 interface AthleteResult extends Athlete {
   fieldRank: number;
+  strength: number;
   p_base: number;
   p_mc: number;
   p_blended: number;
   p_final: number;
   multiplier: number;
   source: 'auto' | 'manual';
+}
+
+interface CalibratedResult {
+  multipliers: number[];
+  impliedSum: number;
+  iterations: number;
+  temperatureUsed: number;
+  clippedCount: number;
+  status: 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW';
 }
 
 // ============================================================
@@ -121,7 +135,7 @@ function getWinnerWeight(fieldRank: number): number {
   return Math.max(WINNER_WEIGHT_LADDER[10] * (10 / fieldRank), 0.04);
 }
 
-function calculateWinnerBaseProbabilities(athletes: Athlete[]): { probs: number[], fieldRanks: Map<string, number> } {
+function calculateWinnerBaseProbabilities(athletes: Athlete[]): { probs: number[], fieldRanks: Map<string, number>, strengths: number[] } {
   // Sort by world rank (lower = better), then by rating (higher = better)
   const sorted = [...athletes].sort((a, b) => {
     const aRank = a.worldRank ?? Infinity;
@@ -130,24 +144,40 @@ function calculateWinnerBaseProbabilities(athletes: Athlete[]): { probs: number[
     return (b.rating ?? 0) - (a.rating ?? 0);
   });
   
-  // Assign field ranks and get weights
-  const weights: number[] = [];
+  // Calculate strength scores (rating-based z-scores + small rank influence)
+  const ratings = sorted.map(a => a.rating ?? 70);
+  const meanRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+  const variance = ratings.reduce((sum, r) => sum + Math.pow(r - meanRating, 2), 0) / ratings.length;
+  const stdRating = Math.sqrt(variance) || 10; // Prevent division by zero
+  
+  const strengths: number[] = [];
   const fieldRanks = new Map<string, number>();
+  const weights: number[] = [];
   
   for (let i = 0; i < sorted.length; i++) {
     const fieldRank = i + 1;
     fieldRanks.set(sorted[i].id, fieldRank);
+    
+    // Calculate unified strength: rating_z + 0.15 × rank_z
+    const rating_z = (sorted[i].rating - meanRating) / stdRating;
+    const rank_z = 10 / fieldRank; // Inverse rank (field rank 1 = 10, rank 10 = 1)
+    const strength = rating_z + 0.15 * rank_z;
+    strengths.push(strength);
+    
+    // Legacy weight for base probability
     weights.push(getWinnerWeight(fieldRank));
   }
   
   // Normalize weights to probabilities
   const normalized = normalize(weights);
   const rankToProb = new Map(sorted.map((a, i) => [a.id, normalized[i]]));
+  const idToStrength = new Map(sorted.map((a, i) => [a.id, strengths[i]]));
   
   // Return in original order
   return {
     probs: athletes.map(a => rankToProb.get(a.id)!),
-    fieldRanks
+    fieldRanks,
+    strengths: athletes.map(a => idToStrength.get(a.id)!)
   };
 }
 
@@ -202,7 +232,6 @@ function runLightMonteCarlo(athletes: Athlete[], marketType: string): number[] {
 
 // ============================================================
 // STEP 3: BLEND & NORMALIZE
-// p_blended = normalize(W_BASE * p_base + W_MC * p_mc)
 // ============================================================
 function blendProbabilities(p_base: number[], p_mc: number[]): number[] {
   const blended = p_base.map((pb, i) => W_BASE * pb + W_MC * p_mc[i]);
@@ -211,14 +240,12 @@ function blendProbabilities(p_base: number[], p_mc: number[]): number[] {
 
 // ============================================================
 // STEP 3.5: ENFORCE MONOTONIC PROBABILITIES (by field rank)
-// Higher field rank (1) must have >= probability than lower rank (2, 3, ...)
 // ============================================================
 function enforceMonotonic(
   probs: number[], 
   fieldRanks: Map<string, number>,
   athleteIds: string[]
 ): number[] {
-  // Create array of { id, fieldRank, prob } and sort by field rank
   const withRanks = athleteIds.map((id, i) => ({
     id,
     idx: i,
@@ -226,17 +253,14 @@ function enforceMonotonic(
     prob: probs[i]
   })).sort((a, b) => a.fieldRank - b.fieldRank);
   
-  // Enforce: prob[i] >= prob[i+1] for all i (descending by rank)
   for (let i = 1; i < withRanks.length; i++) {
     if (withRanks[i].prob > withRanks[i - 1].prob) {
-      // Transfer excess probability from lower-ranked to higher-ranked
       const excess = (withRanks[i].prob - withRanks[i - 1].prob) / 2 + 0.001;
       withRanks[i].prob -= excess;
       withRanks[i - 1].prob += excess;
     }
   }
   
-  // Rebuild in original order and normalize
   const result = new Array(probs.length);
   withRanks.forEach(item => {
     result[item.idx] = item.prob;
@@ -262,10 +286,9 @@ function validateProbabilities(
   const errors: string[] = [];
   const warnings: string[] = [];
   
-  // Sort by field rank
   const sorted = [...athletes].sort((a, b) => a.fieldRank - b.fieldRank);
   
-  // 1. Monotonic check: better rank should have >= probability
+  // 1. Monotonic check
   for (let i = 1; i < sorted.length; i++) {
     if (sorted[i].p_final > sorted[i - 1].p_final + 0.001) {
       errors.push(`Rank ${sorted[i].fieldRank} (${(sorted[i].p_final * 100).toFixed(1)}%) > Rank ${sorted[i - 1].fieldRank} (${(sorted[i - 1].p_final * 100).toFixed(1)}%)`);
@@ -293,70 +316,151 @@ function validateProbabilities(
 }
 
 // ============================================================
-// STEP 5: APPLY HOUSE EDGE & DERIVE MULTIPLIERS
+// STEP 5: CALIBRATED MULTIPLIER DERIVATION
+// This is the core fix - auto-calibrate to target implied sum
 // ============================================================
-function deriveMultipliers(
+function deriveMultipliersCalibrated(
   p_final: number[], 
   marketType: string,
-  fieldSize: number
-): { multipliers: number[], impliedSum: number, edgeFactor: number } {
-  const target = TARGET_EV_FACTOR[marketType as keyof typeof TARGET_EV_FACTOR] || TARGET_EV_FACTOR.WINNER;
+  fieldSize: number,
+  strengths?: number[]
+): CalibratedResult {
+  const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] || MULTIPLIER_CAPS.WINNER;
+  const baseTemperature = TEMPERATURE[marketType as keyof typeof TEMPERATURE] || 1.0;
+  
+  // Calculate MINIMUM possible implied sum with this field size at max cap
+  // If everyone is at maxCap: implied_sum_min = fieldSize / maxCap
+  // We need implied_sum_min <= target.max, so maxCap >= fieldSize / target.max
   const targetMid = (target.min + target.max) / 2;
+  const minRequiredMax = fieldSize / target.max;
   
-  // Dynamic cap scaling for large fields to prevent clumping at max
-  const fieldSizeAdjustment = Math.max(1, fieldSize / 20);
-  const dynamicMax = Math.min(caps.max * fieldSizeAdjustment, 25.0);
+  // Dynamic max cap - ensure it's high enough to reach target
+  // For small fields, we may need higher max than the base cap
+  let dynamicMax = Math.max(caps.max, minRequiredMax * 1.1); // 10% buffer
+  dynamicMax = Math.min(dynamicMax, 25.0); // Hard ceiling
   
-  // HOUSE EDGE FORMULA:
-  // We want implied_sum = SUM(1/mult) = target (e.g., 0.91)
-  // If p_i are normalized probabilities (sum to 1), set:
-  //   q_i = p_i * targetImpliedSum  (adjusted prob, sums to targetImpliedSum)
-  //   mult_i = 1 / q_i
-  // Then implied_sum = SUM(1/mult_i) = SUM(q_i) = targetImpliedSum ✓
-  //
-  // EV for player betting on outcome i:
-  //   EV = p_i * mult_i = p_i / (p_i * target) = 1/target = 1/0.91 ≈ 1.10
-  //
-  // Wait - that means player has +EV! That's WRONG for house edge.
-  //
-  // CORRECT UNDERSTANDING:
-  // - Sportsbook implied_sum > 1 = house edge (overround)
-  // - Our target < 1 = actually gives players edge
-  //
-  // SOLUTION: Use actual house edge multiplier reduction
-  // House edge = 1 - EV_player = 1 - (p * mult) 
-  // We want EV_player < 1, so mult < 1/p
-  // mult = (1/p) * (1 - house_edge_pct)
-  //
-  // For 9% house edge: mult = (1/p) * 0.91
-  // Then EV = p * mult = p * (0.91/p) = 0.91 ✓ House keeps 9%
-  // BUT: implied_sum = SUM(1/mult) = SUM(p/0.91) = 1/0.91 ≈ 1.10
-  //
-  // So: implied_sum ~1.10 is CORRECT for 9% house edge!
-  // The target bands 0.90-0.92 were conceptually inverted.
-  //
-  // For now: implement multiplier = (1/p) * (1 - houseEdgePct)
-  // And accept implied_sum will be ~1.10 (which IS house edge)
+  console.log(`[CALIBRATION] Field: ${fieldSize}, minRequiredMax: ${minRequiredMax.toFixed(2)}, dynamicMax: ${dynamicMax.toFixed(2)}`);
   
-  const houseEdgePct = 1 - targetMid; // e.g., 0.09 for 9% edge
-  const evFactor = 1 - houseEdgePct; // 0.91
+  // Probability floor to prevent near-zero probabilities
+  const pFloor = fieldSize <= 15 ? 0.004 : 0.002;
   
-  let multipliers = p_final.map(p => {
-    if (p <= 0) return dynamicMax;
-    const m_fair = 1 / p;
-    let m = m_fair * evFactor;  // Reduces multiplier = house edge
-    m = clamp(m, caps.min, dynamicMax);
-    return roundToLadder(m);
-  });
+  let temperature = baseTemperature;
+  let bestResult: CalibratedResult | null = null;
+  let temperatureAttempts = 0;
+  const maxTempAttempts = 5;
   
-  // Calculate what implied_sum we actually got (will be ~1/evFactor if no clipping)
-  const impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
+  // Outer loop: temperature adjustments if too many athletes hit caps
+  while (temperatureAttempts < maxTempAttempts) {
+    // Apply temperature to probabilities using softmax-like rescaling
+    let p_adjusted: number[];
+    if (strengths && temperatureAttempts > 0) {
+      // Re-derive probabilities with higher temperature (flatter distribution)
+      const expScores = strengths.map(s => Math.exp(s / temperature));
+      const expSum = expScores.reduce((a, b) => a + b, 0);
+      p_adjusted = expScores.map(e => Math.max(e / expSum, pFloor));
+      p_adjusted = normalize(p_adjusted);
+    } else {
+      // Apply floor and re-normalize
+      p_adjusted = p_final.map(p => Math.max(p, pFloor));
+      p_adjusted = normalize(p_adjusted);
+    }
+    
+    let k = targetMid;
+    let iterations = 0;
+    const maxIterations = 25;
+    
+    let multipliers: number[] = [];
+    let impliedSum = 0;
+    let clippedCount = 0;
+    
+    // Inner loop: iterative calibration to hit target implied sum
+    while (iterations < maxIterations) {
+      clippedCount = 0;
+      
+      // CORRECT FORMULA: m_i = 1 / (p_i × k)
+      // This ensures implied_sum = Σ(1/m_i) = Σ(p_i × k) = k (when no clipping)
+      multipliers = p_adjusted.map(p => {
+        if (p <= 0) {
+          clippedCount++;
+          return dynamicMax;
+        }
+        
+        let m = 1 / (p * k);
+        
+        // Clamp to caps
+        if (m < caps.min) {
+          clippedCount++;
+          m = caps.min;
+        } else if (m > dynamicMax) {
+          clippedCount++;
+          m = dynamicMax;
+        }
+        
+        // Round to ladder
+        return roundToLadder(m);
+      });
+      
+      // Calculate actual implied sum after clamping/rounding
+      impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
+      
+      // Check if within target band
+      if (impliedSum >= target.min && impliedSum <= target.max) {
+        // Success!
+        return { 
+          multipliers, 
+          impliedSum, 
+          iterations: iterations + 1, 
+          temperatureUsed: temperature, 
+          clippedCount, 
+          status: 'CALIBRATED' 
+        };
+      }
+      
+      // Adjust k to move implied sum toward target
+      if (impliedSum > target.max) {
+        // Implied sum too high → increase k → increase multipliers → decrease implied sum
+        k *= 0.97;
+      } else {
+        // Implied sum too low → decrease k → decrease multipliers → increase implied sum
+        k *= 1.03;
+      }
+      
+      iterations++;
+    }
+    
+    // Check if we should try temperature adjustment
+    const clippedRatio = clippedCount / p_adjusted.length;
+    
+    // Store best result so far
+    if (!bestResult || Math.abs(impliedSum - targetMid) < Math.abs(bestResult.impliedSum - targetMid)) {
+      const status = impliedSum >= target.min * 0.95 && impliedSum <= target.max * 1.05 ? 'WARNING' : 'NEEDS_REVIEW';
+      bestResult = { multipliers, impliedSum, iterations, temperatureUsed: temperature, clippedCount, status };
+    }
+    
+    // If too many athletes hit caps, flatten the distribution OR increase dynamic max
+    if (clippedRatio > 0.5 && temperatureAttempts < maxTempAttempts - 1) {
+      // If most are hitting the MAX cap, we need higher max
+      const hittingMaxCount = multipliers.filter(m => m >= dynamicMax - 0.1).length;
+      if (hittingMaxCount > fieldSize * 0.5 && dynamicMax < 25) {
+        // Increase dynamic max
+        dynamicMax = Math.min(dynamicMax * 1.3, 25.0);
+        console.log(`[CALIBRATION] ${hittingMaxCount}/${fieldSize} hitting max cap, increasing dynamicMax to ${dynamicMax.toFixed(2)}`);
+      } else {
+        // Flatten the distribution
+        console.log(`[CALIBRATION] ${(clippedRatio * 100).toFixed(0)}% clipped at caps, increasing temperature from ${temperature.toFixed(2)} to ${(temperature * 1.2).toFixed(2)}`);
+        temperature *= 1.2;
+      }
+      temperatureAttempts++;
+    } else {
+      // No more adjustments possible
+      break;
+    }
+  }
   
-  // Note: We no longer try to hit targetMid for implied_sum
-  // because our multiplier model creates implied_sum > 1 by design
-  
-  return { multipliers, impliedSum, edgeFactor: evFactor };
+  // Return best result we found
+  console.log(`[CALIBRATION] Final: implied_sum=${bestResult!.impliedSum.toFixed(4)}, Target: ${target.min.toFixed(2)}-${target.max.toFixed(2)}, Status: ${bestResult!.status}`);
+  return bestResult!;
 }
 
 // ============================================================
@@ -405,25 +509,19 @@ Deno.serve(async (req) => {
 
     const genderFilter = market.category === 'open_men' ? 'male' : 'female';
     
-    // Define rank/rating keys BEFORE using them in filter
     const rankKey = `current_rank_${market.discipline}`;
     const ratingKey = `current_rating_${market.discipline}`;
     
     // Filter by gender AND discipline specialization
-    // Athletes must have a WORLD rank OR discipline_rank (from tournament) OR meaningful rating in THIS discipline
-    // seed_rank alone is NOT sufficient - it's just ordering, not actual ranking
     const filtered = entries?.filter(e => {
       const a = e.athletes as any;
       if (a?.gender !== genderFilter) return false;
       
-      // Check if athlete has discipline-specific data
-      const worldRank = a[rankKey]; // current_rank_{discipline} from athletes table
-      const disciplineRating = a[ratingKey]; // current_rating_{discipline} from athletes table
-      const entryDisciplineRank = e.discipline_rank; // actual discipline rank from entry (not seed_rank)
+      const worldRank = a[rankKey];
+      const disciplineRating = a[ratingKey];
+      const entryDisciplineRank = e.discipline_rank;
       const entryRating = e.rating_0_100;
       
-      // Include athletes with REAL discipline data OR explicitly seeded entries
-      // Include if: has world rank OR has entry discipline_rank OR has seed_rank OR has rating >= 70
       const hasWorldRank = worldRank !== null && worldRank !== undefined;
       const hasEntryDisciplineRank = entryDisciplineRank !== null && entryDisciplineRank !== undefined;
       const hasSeedRank = e.seed_rank !== null && e.seed_rank !== undefined;
@@ -432,7 +530,7 @@ Deno.serve(async (req) => {
       return hasWorldRank || hasEntryDisciplineRank || hasSeedRank || hasMeaningfulRating;
     }) || [];
     
-    console.log(`[ODDS] Filtered: ${filtered.length} specialists from ${entries?.length || 0} entries (excluded seed-only athletes)`);
+    console.log(`[ODDS] Filtered: ${filtered.length} specialists from ${entries?.length || 0} entries`);
     
     if (filtered.length < 2) {
       await supabase.from('markets').update({
@@ -443,7 +541,7 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Fetch probability overrides (not multiplier overrides)
+    // Fetch probability overrides
     const { data: probOverrides } = await supabase
       .from('market_probability_overrides')
       .select('athlete_id, manual_probability, is_enabled')
@@ -468,8 +566,8 @@ Deno.serve(async (req) => {
 
     // ========== CORE PIPELINE ==========
     
-    // Step 1: Calculate base winner probabilities using weight ladder
-    const { probs: p_winner_base, fieldRanks } = calculateWinnerBaseProbabilities(athletes);
+    // Step 1: Calculate base winner probabilities using weight ladder + strength scores
+    const { probs: p_winner_base, fieldRanks, strengths } = calculateWinnerBaseProbabilities(athletes);
     
     // Transform to market-specific base probabilities
     let p_base: number[];
@@ -487,21 +585,19 @@ Deno.serve(async (req) => {
     // Step 3: Blend
     const p_blended_raw = blendProbabilities(p_base, p_mc);
     
-    // Step 3.5: Enforce monotonic ordering (rank 1 >= rank 2 >= rank 3 ...)
+    // Step 3.5: Enforce monotonic ordering
     const athleteIds = athletes.map(a => a.id);
     const p_blended = enforceMonotonic(p_blended_raw, fieldRanks, athleteIds);
     
     // Step 4: Apply manual overrides if any
     let p_final: number[];
     if (hasManualProbabilities) {
-      // Use manual probabilities where provided, otherwise use blended
       const rawProbs = athletes.map((a, i) => {
         if (a.manualProbability && a.manualProbability > 0) {
           return a.manualProbability;
         }
         return p_blended[i];
       });
-      // Re-normalize since manual might not sum to 1
       p_final = normalize(rawProbs);
     } else {
       p_final = p_blended;
@@ -516,22 +612,23 @@ Deno.serve(async (req) => {
     }));
     const validation = validateProbabilities(validationInput, marketType, athletes.length);
     
-    // Step 6: Derive multipliers with house edge
-    const { multipliers, impliedSum, edgeFactor } = deriveMultipliers(p_final, marketType, athletes.length);
+    // Step 6: Derive multipliers with AUTO-CALIBRATION to target implied sum
+    const calibration = deriveMultipliersCalibrated(p_final, marketType, athletes.length, strengths);
 
     // Build results
     const results: AthleteResult[] = athletes.map((a, i) => ({
       ...a,
       fieldRank: fieldRanks.get(a.id)!,
+      strength: strengths[i],
       p_base: p_base[i],
       p_mc: p_mc[i],
       p_blended: p_blended[i],
       p_final: p_final[i],
-      multiplier: multipliers[i],
+      multiplier: calibration.multipliers[i],
       source: (a.manualProbability && a.manualProbability > 0) ? 'manual' as const : 'auto' as const
     }));
 
-    console.log(`[ODDS] Implied sum: ${impliedSum.toFixed(4)}, Valid: ${validation.passed}`);
+    console.log(`[ODDS] Calibration: implied_sum=${calibration.impliedSum.toFixed(4)}, status=${calibration.status}, iterations=${calibration.iterations}, temp=${calibration.temperatureUsed.toFixed(2)}, clipped=${calibration.clippedCount}`);
     if (validation.errors.length > 0) {
       console.log(`[ODDS] Errors: ${validation.errors.join('; ')}`);
     }
@@ -543,11 +640,12 @@ Deno.serve(async (req) => {
     const sortedResults = [...results].sort((a, b) => a.fieldRank - b.fieldRank);
     console.log('[ODDS] Full debug table:');
     sortedResults.forEach(r => {
-      console.log(`  #${r.fieldRank} ${r.name}: rating=${r.rating}, p_base=${(r.p_base*100).toFixed(1)}%, p_mc=${(r.p_mc*100).toFixed(1)}%, p_final=${(r.p_final*100).toFixed(1)}% → ${r.multiplier}x [${r.source}]`);
+      console.log(`  #${r.fieldRank} ${r.name}: strength=${r.strength.toFixed(2)}, p_final=${(r.p_final*100).toFixed(1)}% → ${r.multiplier}x [${r.source}]`);
     });
 
-    // Determine validation status
-    const validationStatus = validation.passed ? 'VALID' : 'INVALID';
+    // Determine validation status based on calibration
+    const validationStatus = calibration.status === 'CALIBRATED' ? 'VALID' : 
+                            calibration.status === 'WARNING' ? 'VALID' : 'NEEDS_REVIEW';
     
     // Update database
     for (const r of results) {
@@ -563,25 +661,31 @@ Deno.serve(async (req) => {
         console.error(`[ODDS] Selection upsert error for ${r.name}:`, selError);
       }
       
-      // Upsert market_odds with columns that actually exist in the table
+      // Upsert market_odds
       const { error: oddsError } = await supabase.from('market_odds').upsert({
         market_id,
         athlete_id: r.id,
         // Core probability columns
-        base_probability: r.p_final,  // Final probability for UI display
-        prior_probability: r.p_base,  // Raw ladder weight for audit
+        base_probability: r.p_final,
+        prior_probability: r.p_base,
         mc_probability: r.p_mc,
         blended_probability: r.p_blended,
         normalized_probability: r.p_final,
         adjusted_probability: 1 / r.multiplier,
-        // Multiplier columns (use existing column names)
+        // Multiplier columns
         base_decimal_odds: r.multiplier,
         final_decimal_odds: r.multiplier,
-        // Rank info (use existing column name)
+        // Rank info
         athlete_rank: r.fieldRank,
-        // Metadata
+        // Calibration metadata
+        strength_score: r.strength,
+        temperature_used: calibration.temperatureUsed,
+        calibration_iterations: calibration.iterations,
+        target_implied_sum: (TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM]?.min + 
+                            TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM]?.max) / 2,
+        // Other metadata
         sims_run: SIMS,
-        model_version: 'ladder-v2',
+        model_version: 'calibrated-v1',
         generated_at: new Date().toISOString()
       }, { onConflict: 'market_id,athlete_id' });
       
@@ -593,20 +697,23 @@ Deno.serve(async (req) => {
     await supabase.from('markets').update({
       odds_validation_status: validationStatus,
       odds_validation_error: validation.passed ? null : [...validation.errors, ...validation.warnings].join('; '),
-      odds_generated_at: new Date().toISOString(),
-      implied_sum: impliedSum
+      multipliers_generated_at: new Date().toISOString()
     }).eq('id', market_id);
 
     await supabase.from('audit_logs').insert({
-      event_type: 'odds_generated',
-      target_type: 'market',
-      target_id: market_id,
-      payload: {
+      entity_type: 'market',
+      entity_id: market_id,
+      action_type: 'odds_generated',
+      actor_type: 'system',
+      metadata: {
         market_type: marketType,
         field_size: results.length,
-        implied_sum: impliedSum,
-        edge_factor: edgeFactor,
-        model_version: 'ladder-v2',
+        implied_sum: calibration.impliedSum,
+        calibration_status: calibration.status,
+        iterations: calibration.iterations,
+        temperature_used: calibration.temperatureUsed,
+        clipped_count: calibration.clippedCount,
+        model_version: 'calibrated-v1',
         sims: SIMS,
         w_base: W_BASE,
         w_mc: W_MC,
@@ -617,7 +724,7 @@ Deno.serve(async (req) => {
       }
     });
 
-    console.log(`[ODDS] ✅ Done`);
+    console.log(`[ODDS] ✅ Done - ${calibration.status}`);
 
     // Build debug table for response
     const debugTable = sortedResults.map(r => ({
@@ -625,6 +732,7 @@ Deno.serve(async (req) => {
       rank_used: r.fieldRank,
       world_rank: r.worldRank,
       rating_used: r.rating,
+      strength: r.strength.toFixed(2),
       p_base: `${(r.p_base * 100).toFixed(1)}%`,
       p_mc: `${(r.p_mc * 100).toFixed(1)}%`,
       p_final: `${(r.p_final * 100).toFixed(1)}%`,
@@ -637,20 +745,23 @@ Deno.serve(async (req) => {
       market_id,
       market_type: marketType,
       field_size: results.length,
-      implied_sum: impliedSum,
-      edge_factor: edgeFactor,
+      implied_sum: calibration.impliedSum,
+      calibration_status: calibration.status,
+      calibration_iterations: calibration.iterations,
+      temperature_used: calibration.temperatureUsed,
+      clipped_count: calibration.clippedCount,
       validation_status: validationStatus,
       validation_errors: validation.errors,
       validation_warnings: validation.warnings,
-      model_version: 'ladder-v2',
+      model_version: 'calibrated-v1',
+      target_band: TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM],
       debug_table: debug ? debugTable : undefined,
       top_athletes: sortedResults.slice(0, 5).map(r => ({
         name: r.name,
         fieldRank: r.fieldRank,
         worldRank: r.worldRank,
         rating: r.rating,
-        p_base: `${(r.p_base * 100).toFixed(1)}%`,
-        p_mc: `${(r.p_mc * 100).toFixed(1)}%`,
+        strength: r.strength.toFixed(2),
         p_final: `${(r.p_final * 100).toFixed(1)}%`,
         multiplier: r.multiplier,
         source: r.source

@@ -5,18 +5,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Multiplier caps per market type
+// Multiplier caps per market type - SYNCED with generate-market-odds
 const MULTIPLIER_CAPS: Record<string, { min: number; max: number }> = {
-  WINNER: { min: 2.0, max: 20.0 },
-  PODIUM: { min: 1.10, max: 8.0 },
-  HIGHEST_SCORE: { min: 2.0, max: 12.0 },
+  WINNER: { min: 1.8, max: 12.0 },
+  PODIUM: { min: 1.4, max: 10.0 },
+  HIGHEST_SCORE: { min: 2.0, max: 8.0 },
   HEAD_TO_HEAD: { min: 1.5, max: 5.0 },
   OVER_UNDER: { min: 1.5, max: 5.0 },
 };
 
 // Target implied sum bands per market type
 const TARGET_IMPLIED_SUM: Record<string, { min: number; max: number }> = {
-  WINNER: { min: 0.90, max: 0.915 },
+  WINNER: { min: 0.90, max: 0.92 },
   PODIUM: { min: 0.84, max: 0.86 },
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
   HEAD_TO_HEAD: { min: 0.95, max: 1.0 },
@@ -51,17 +51,26 @@ function calculateImpliedSum(multipliers: number[]): number {
   return multipliers.reduce((sum, m) => sum + (1 / m), 0);
 }
 
-function getImpliedSumStatus(impliedSum: number, marketType: string): 'OK' | 'WARNING' | 'BLOCKED' {
+function getImpliedSumStatus(impliedSum: number, marketType: string): 'OK' | 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW' | 'BLOCKED' {
   const band = TARGET_IMPLIED_SUM[marketType];
   if (!band) return 'WARNING';
   
-  if (impliedSum >= band.min && impliedSum <= band.max) return 'OK';
+  // Within target band = CALIBRATED (success)
+  if (impliedSum >= band.min && impliedSum <= band.max) return 'CALIBRATED';
   
-  const tolerance = 0.10;
+  // Within 5% tolerance = WARNING (close enough)
+  const tolerance = 0.05;
   if (impliedSum >= band.min * (1 - tolerance) && impliedSum <= band.max * (1 + tolerance)) {
     return 'WARNING';
   }
   
+  // Within 10% tolerance = NEEDS_REVIEW (should regenerate)
+  const widerTolerance = 0.10;
+  if (impliedSum >= band.min * (1 - widerTolerance) && impliedSum <= band.max * (1 + widerTolerance)) {
+    return 'NEEDS_REVIEW';
+  }
+  
+  // Outside all tolerances = BLOCKED
   return 'BLOCKED';
 }
 

@@ -1405,6 +1405,7 @@ export type Database = {
           scaling_factor: number | null
           sims: number | null
           sims_run: number | null
+          strength_score: number | null
           target_implied_sum: number | null
           tau: number | null
           temperature_used: number | null
@@ -1434,6 +1435,7 @@ export type Database = {
           scaling_factor?: number | null
           sims?: number | null
           sims_run?: number | null
+          strength_score?: number | null
           target_implied_sum?: number | null
           tau?: number | null
           temperature_used?: number | null
@@ -1463,6 +1465,7 @@ export type Database = {
           scaling_factor?: number | null
           sims?: number | null
           sims_run?: number | null
+          strength_score?: number | null
           target_implied_sum?: number | null
           tau?: number | null
           temperature_used?: number | null
@@ -2964,6 +2967,34 @@ export type Database = {
           worst_case_loss_usd: number | null
         }
         Relationships: []
+      }
+      market_odds_audit: {
+        Row: {
+          athlete_name: string | null
+          calibration_iterations: number | null
+          category: string | null
+          discipline: string | null
+          field_rank: number | null
+          generated_at: string | null
+          id: string | null
+          implied_contrib: number | null
+          market_id: string | null
+          market_name: string | null
+          market_type: string | null
+          multiplier: number | null
+          probability: number | null
+          rating: number | null
+          strength_score: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_odds_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
