@@ -20,11 +20,35 @@ const TARGET_IMPLIED_SUM = {
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
 };
 
-// Updated caps - HIGHEST_SCORE max reduced to 8x to prevent longshot clumping
+// Updated global caps - AGGRESSIVE to prevent bankruptcy
 const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.8, max: 12.0 },
-  PODIUM: { min: 1.4, max: 10.0 },
-  HIGHEST_SCORE: { min: 2.0, max: 8.0 },
+  WINNER: { min: 1.50, max: 8.0 },
+  PODIUM: { min: 1.25, max: 6.0 },
+  HIGHEST_SCORE: { min: 1.50, max: 7.0 },
+};
+
+// RANK-SPECIFIC CAPS - Favorites are capped VERY tight
+const RANK_CAPS: Record<string, Record<number, number>> = {
+  WINNER: {
+    1: 1.50,  // Rank 1 (best athlete) capped at 1.5x
+    2: 2.25,
+    3: 3.00,
+    4: 4.00,
+    5: 5.00,
+    // Rank 6+ use global max (8.0)
+  },
+  PODIUM: {
+    1: 1.25,
+    2: 1.75,
+    3: 2.25,
+    // Rank 4+ use global max (6.0)
+  },
+  HIGHEST_SCORE: {
+    1: 1.80,
+    2: 2.50,
+    3: 3.50,
+    // Rank 4+ use global max (7.0)
+  },
 };
 
 // Softmax temperature per market type (lower = sharper favorites)
@@ -53,9 +77,7 @@ const ODDS_LADDER = [
   4.00, 4.20, 4.40, 4.60, 4.80,
   5.00, 5.25, 5.50, 5.75,
   6.00, 6.25, 6.50, 6.75,
-  7.00, 7.50, 8.00, 8.50, 9.00, 9.50,
-  10.00, 10.50, 11.00, 11.50, 12.00, 12.50, 13.00, 13.50, 14.00, 14.50, 15.00,
-  16.00, 17.00, 18.00, 19.00, 20.00, 25.00
+  7.00, 7.50, 8.00
 ];
 
 // ============================================================
@@ -328,31 +350,23 @@ function validateProbabilities(
 }
 
 // ============================================================
-// STEP 5: CALIBRATED MULTIPLIER DERIVATION
-// This is the core fix - auto-calibrate to target implied sum
+// STEP 5: CALIBRATED MULTIPLIER DERIVATION WITH RANK CAPS
+// Core fix - apply rank-specific caps FIRST, then calibrate
 // ============================================================
 function deriveMultipliersCalibrated(
   p_final: number[], 
   marketType: string,
   fieldSize: number,
+  fieldRanks: Map<string, number>,
+  athleteIds: string[],
   strengths?: number[]
 ): CalibratedResult {
   const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] || MULTIPLIER_CAPS.WINNER;
+  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || RANK_CAPS.WINNER;
   const baseTemperature = TEMPERATURE[marketType as keyof typeof TEMPERATURE] || 1.0;
   
-  // Calculate MINIMUM possible implied sum with this field size at max cap
-  // If everyone is at maxCap: implied_sum_min = fieldSize / maxCap
-  // We need implied_sum_min <= target.max, so maxCap >= fieldSize / target.max
   const targetMid = (target.min + target.max) / 2;
-  const minRequiredMax = fieldSize / target.max;
-  
-  // Dynamic max cap - ensure it's high enough to reach target
-  // For small fields, we may need higher max than the base cap
-  let dynamicMax = Math.max(caps.max, minRequiredMax * 1.1); // 10% buffer
-  dynamicMax = Math.min(dynamicMax, 25.0); // Hard ceiling
-  
-  console.log(`[CALIBRATION] Field: ${fieldSize}, minRequiredMax: ${minRequiredMax.toFixed(2)}, dynamicMax: ${dynamicMax.toFixed(2)}`);
   
   // Probability floor to prevent near-zero probabilities
   const pFloor = fieldSize <= 15 ? 0.004 : 0.002;
@@ -361,6 +375,8 @@ function deriveMultipliersCalibrated(
   let bestResult: CalibratedResult | null = null;
   let temperatureAttempts = 0;
   const maxTempAttempts = 5;
+  
+  console.log(`[CALIBRATION] Field: ${fieldSize}, marketType: ${marketType}, globalCaps: ${caps.min}-${caps.max}`);
   
   // Outer loop: temperature adjustments if too many athletes hit caps
   while (temperatureAttempts < maxTempAttempts) {
@@ -390,28 +406,53 @@ function deriveMultipliersCalibrated(
     while (iterations < maxIterations) {
       clippedCount = 0;
       
-      // CORRECT FORMULA: m_i = 1 / (p_i × k)
-      // This ensures implied_sum = Σ(1/m_i) = Σ(p_i × k) = k (when no clipping)
-      multipliers = p_adjusted.map(p => {
+      // Calculate multipliers with RANK-SPECIFIC CAPS applied FIRST
+      multipliers = p_adjusted.map((p, idx) => {
+        const athleteId = athleteIds[idx];
+        const fieldRank = fieldRanks.get(athleteId) || 99;
+        
+        // Get rank-specific max cap (default to global max if not defined)
+        const rankMaxCap = rankCaps[fieldRank] ?? caps.max;
+        
         if (p <= 0) {
           clippedCount++;
-          return dynamicMax;
+          return rankMaxCap;
         }
         
         let m = 1 / (p * k);
         
-        // Clamp to caps
+        // Apply rank-specific cap FIRST (most restrictive)
+        if (m > rankMaxCap) {
+          clippedCount++;
+          m = rankMaxCap;
+        }
+        
+        // Then apply global min cap
         if (m < caps.min) {
           clippedCount++;
           m = caps.min;
-        } else if (m > dynamicMax) {
-          clippedCount++;
-          m = dynamicMax;
         }
         
         // Round to ladder
         return roundToLadder(m);
       });
+      
+      // ENFORCE MONOTONICITY: Rank N must have multiplier >= Rank N-1
+      const sortedByRank = athleteIds
+        .map((id, i) => ({ id, idx: i, fieldRank: fieldRanks.get(id)!, multiplier: multipliers[i] }))
+        .sort((a, b) => a.fieldRank - b.fieldRank);
+      
+      for (let i = 1; i < sortedByRank.length; i++) {
+        const prev = sortedByRank[i - 1];
+        const curr = sortedByRank[i];
+        
+        // If current multiplier is LESS than previous (violation), fix it
+        if (curr.multiplier < prev.multiplier) {
+          // Set current to be slightly higher than previous
+          const newMultiplier = roundToLadder(prev.multiplier + 0.05);
+          multipliers[curr.idx] = Math.min(newMultiplier, caps.max);
+        }
+      }
       
       // Calculate actual implied sum after clamping/rounding
       impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
@@ -435,6 +476,7 @@ function deriveMultipliersCalibrated(
         k *= 0.97;
       } else {
         // Implied sum too low → decrease k → decrease multipliers → increase implied sum
+        // BUT: if favorites are already at their caps, we can only increase tail multipliers
         k *= 1.03;
       }
       
@@ -450,19 +492,10 @@ function deriveMultipliersCalibrated(
       bestResult = { multipliers, impliedSum, iterations, temperatureUsed: temperature, clippedCount, status };
     }
     
-    // If too many athletes hit caps, flatten the distribution OR increase dynamic max
+    // If too many athletes hit caps, flatten the distribution
     if (clippedRatio > 0.5 && temperatureAttempts < maxTempAttempts - 1) {
-      // If most are hitting the MAX cap, we need higher max
-      const hittingMaxCount = multipliers.filter(m => m >= dynamicMax - 0.1).length;
-      if (hittingMaxCount > fieldSize * 0.5 && dynamicMax < 25) {
-        // Increase dynamic max
-        dynamicMax = Math.min(dynamicMax * 1.3, 25.0);
-        console.log(`[CALIBRATION] ${hittingMaxCount}/${fieldSize} hitting max cap, increasing dynamicMax to ${dynamicMax.toFixed(2)}`);
-      } else {
-        // Flatten the distribution
-        console.log(`[CALIBRATION] ${(clippedRatio * 100).toFixed(0)}% clipped at caps, increasing temperature from ${temperature.toFixed(2)} to ${(temperature * 1.2).toFixed(2)}`);
-        temperature *= 1.2;
-      }
+      console.log(`[CALIBRATION] ${(clippedRatio * 100).toFixed(0)}% clipped at caps, increasing temperature from ${temperature.toFixed(2)} to ${(temperature * 1.2).toFixed(2)}`);
+      temperature *= 1.2;
       temperatureAttempts++;
     } else {
       // No more adjustments possible
@@ -470,8 +503,25 @@ function deriveMultipliersCalibrated(
     }
   }
   
-  // Return best result we found
-  console.log(`[CALIBRATION] Final: implied_sum=${bestResult!.impliedSum.toFixed(4)}, Target: ${target.min.toFixed(2)}-${target.max.toFixed(2)}, Status: ${bestResult!.status}`);
+  // Validate rank-specific caps were enforced
+  if (bestResult) {
+    const sortedByRank = athleteIds
+      .map((id, i) => ({ id, idx: i, fieldRank: fieldRanks.get(id)!, multiplier: bestResult!.multipliers[i] }))
+      .sort((a, b) => a.fieldRank - b.fieldRank);
+    
+    // Check rank 1 is at or below its cap
+    const rank1 = sortedByRank.find(x => x.fieldRank === 1);
+    const rank1Cap = rankCaps[1] ?? caps.max;
+    if (rank1 && rank1.multiplier > rank1Cap) {
+      console.log(`[CALIBRATION] WARNING: Rank 1 at ${rank1.multiplier}x exceeds cap ${rank1Cap}x - forcing compliance`);
+      bestResult.multipliers[rank1.idx] = rank1Cap;
+      bestResult.status = 'NEEDS_REVIEW';
+    }
+    
+    console.log(`[CALIBRATION] Final: implied_sum=${bestResult.impliedSum.toFixed(4)}, Target: ${target.min.toFixed(2)}-${target.max.toFixed(2)}, Status: ${bestResult.status}`);
+    console.log(`[CALIBRATION] Top-3 multipliers: ${sortedByRank.slice(0, 3).map(x => `#${x.fieldRank}=${x.multiplier}x`).join(', ')}`);
+  }
+  
   return bestResult!;
 }
 
@@ -625,7 +675,15 @@ Deno.serve(async (req) => {
     const validation = validateProbabilities(validationInput, marketType, athletes.length);
     
     // Step 6: Derive multipliers with AUTO-CALIBRATION to target implied sum
-    const calibration = deriveMultipliersCalibrated(p_final, marketType, athletes.length, strengths);
+    // NOW WITH RANK-SPECIFIC CAPS
+    const calibration = deriveMultipliersCalibrated(
+      p_final, 
+      marketType, 
+      athletes.length, 
+      fieldRanks,
+      athleteIds,
+      strengths
+    );
 
     // Build results
     const results: AthleteResult[] = athletes.map((a, i) => ({
@@ -697,7 +755,7 @@ Deno.serve(async (req) => {
                             TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM]?.max) / 2,
         // Other metadata
         sims_run: SIMS,
-        model_version: 'calibrated-v1',
+        model_version: 'calibrated-v2-rank-caps',
         generated_at: new Date().toISOString()
       }, { onConflict: 'market_id,athlete_id' });
       
@@ -725,14 +783,15 @@ Deno.serve(async (req) => {
         iterations: calibration.iterations,
         temperature_used: calibration.temperatureUsed,
         clipped_count: calibration.clippedCount,
-        model_version: 'calibrated-v1',
+        model_version: 'calibrated-v2-rank-caps',
         sims: SIMS,
         w_base: W_BASE,
         w_mc: W_MC,
         has_manual_overrides: hasManualProbabilities,
         validation_status: validationStatus,
         validation_errors: validation.errors,
-        validation_warnings: validation.warnings
+        validation_warnings: validation.warnings,
+        rank_caps_applied: RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {}
       }
     });
 
@@ -765,8 +824,9 @@ Deno.serve(async (req) => {
       validation_status: validationStatus,
       validation_errors: validation.errors,
       validation_warnings: validation.warnings,
-      model_version: 'calibrated-v1',
+      model_version: 'calibrated-v2-rank-caps',
       target_band: TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM],
+      rank_caps_applied: RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {},
       debug_table: debug ? debugTable : undefined,
       top_athletes: sortedResults.slice(0, 5).map(r => ({
         name: r.name,

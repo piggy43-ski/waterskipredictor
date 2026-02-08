@@ -1,15 +1,36 @@
-// Multiplier caps and validation for manual overrides
+// Multiplier caps and validation for manual overrides - AGGRESSIVE to prevent bankruptcy
 
 export const MULTIPLIER_CAPS = {
-  WINNER: { min: 2.0, max: 20.0 },
-  PODIUM: { min: 1.10, max: 8.0 },
-  HIGHEST_SCORE: { min: 2.0, max: 12.0 },
+  WINNER: { min: 1.50, max: 8.0 },
+  PODIUM: { min: 1.25, max: 6.0 },
+  HIGHEST_SCORE: { min: 1.50, max: 7.0 },
   HEAD_TO_HEAD: { min: 1.5, max: 5.0 },
   OVER_UNDER: { min: 1.5, max: 5.0 },
 } as const;
 
+// Rank-specific caps - favorites are capped VERY tight
+export const RANK_CAPS = {
+  WINNER: {
+    1: 1.50,   // Rank 1 (best athlete) max 1.5x
+    2: 2.25,
+    3: 3.00,
+    4: 4.00,
+    5: 5.00,
+  } as Record<number, number>,
+  PODIUM: {
+    1: 1.25,
+    2: 1.75,
+    3: 2.25,
+  } as Record<number, number>,
+  HIGHEST_SCORE: {
+    1: 1.80,
+    2: 2.50,
+    3: 3.50,
+  } as Record<number, number>,
+};
+
 export const TARGET_IMPLIED_SUM = {
-  WINNER: { min: 0.90, max: 0.915 },
+  WINNER: { min: 0.90, max: 0.92 },
   PODIUM: { min: 0.84, max: 0.86 },
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
   HEAD_TO_HEAD: { min: 0.95, max: 1.0 },
@@ -25,11 +46,12 @@ export interface MultiplierValidation {
 }
 
 /**
- * Validate a multiplier against market-type caps
+ * Validate a multiplier against market-type and rank-specific caps
  */
 export function validateMultiplier(
   marketType: MarketTypeKey,
-  value: number
+  value: number,
+  fieldRank?: number
 ): MultiplierValidation {
   const caps = MULTIPLIER_CAPS[marketType];
   if (!caps) {
@@ -38,6 +60,21 @@ export function validateMultiplier(
   
   if (isNaN(value) || value <= 0) {
     return { valid: false, error: 'Multiplier must be a positive number' };
+  }
+  
+  // Check rank-specific cap first (most restrictive)
+  if (fieldRank && fieldRank >= 1 && fieldRank <= 5) {
+    const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS];
+    if (rankCaps && rankCaps[fieldRank]) {
+      const rankMaxCap = rankCaps[fieldRank];
+      if (value > rankMaxCap) {
+        return { 
+          valid: false, 
+          error: `Rank #${fieldRank} max is ${rankMaxCap}x for ${marketType}`,
+          clamped: rankMaxCap 
+        };
+      }
+    }
   }
   
   if (value < caps.min) {
