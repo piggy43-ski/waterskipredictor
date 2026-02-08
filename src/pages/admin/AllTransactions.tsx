@@ -12,8 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { PurchasesTable } from '@/components/admin/PurchasesTable';
 
 interface TransactionWithProfile {
   id: string;
@@ -171,13 +173,25 @@ export default function AllTransactions() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground">All Transactions</h1>
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
-        </div>
+        <h1 className="text-2xl font-bold text-foreground">All Transactions</h1>
+
+        <Tabs defaultValue="transactions" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="transactions">Token Transactions</TabsTrigger>
+            <TabsTrigger value="purchases">Purchases</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="purchases">
+            <PurchasesTable />
+          </TabsContent>
+
+          <TabsContent value="transactions" className="space-y-6">
+            <div className="flex justify-end">
+              <Button onClick={exportToCSV} variant="outline" size="sm">
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
+            </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -362,7 +376,9 @@ export default function AllTransactions() {
             )}
           </CardContent>
         </Card>
-      </div>
-    </AdminLayout>
+        </TabsContent>
+      </Tabs>
+    </div>
+  </AdminLayout>
   );
 }
