@@ -215,10 +215,10 @@ export function getTimeUntilLock(tournament?: TournamentInfo | null): string | n
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
   if (days > 0) {
-    return `${days}d ${hours}h until lock`;
+    return `Locks in ${days}d ${hours}h`;
   } else if (hours > 0) {
-    return `${hours}h ${minutes}m until lock`;
+    return `Locks in ${hours}h ${minutes}m`;
   } else {
-    return `${minutes}m until lock`;
+    return `Locks in ${minutes}m`;
   }
 }
