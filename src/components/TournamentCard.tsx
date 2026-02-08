@@ -81,18 +81,34 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
 
       {/* Prediction Window Status */}
       <div className="mt-4 pt-3 border-t border-border/50">
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-muted-foreground" />
-          <span className={`text-sm font-medium ${
-            predictionWindow.canPredict 
-              ? 'text-primary' 
-              : predictionWindow.status === 'upcoming' 
-                ? 'text-muted-foreground' 
-                : 'text-destructive'
-          }`}>
-            {predictionWindow.message}
-          </span>
-        </div>
+        {(() => {
+          const getStatusDisplay = () => {
+            if (predictionWindow.status === 'finished') {
+              return { badge: 'SETTLED', color: 'text-muted-foreground', bgColor: 'bg-muted/50' };
+            }
+            if (predictionWindow.status === 'closed') {
+              return { badge: '🔒 LOCKED', color: 'text-destructive', bgColor: 'bg-destructive/10' };
+            }
+            if (predictionWindow.canPredict) {
+              return { badge: '✓ OPEN', color: 'text-green-600 dark:text-green-400', bgColor: 'bg-green-500/10' };
+            }
+            return { badge: 'UNAVAILABLE', color: 'text-muted-foreground', bgColor: 'bg-muted/50' };
+          };
+          const status = getStatusDisplay();
+          return (
+            <div className="flex items-center gap-3">
+              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${status.bgColor}`}>
+                <Clock className="w-3.5 h-3.5" />
+                <span className={`text-xs font-bold uppercase tracking-wide ${status.color}`}>
+                  {status.badge}
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {predictionWindow.message}
+              </span>
+            </div>
+          );
+        })()}
       </div>
     </Card>
   );
