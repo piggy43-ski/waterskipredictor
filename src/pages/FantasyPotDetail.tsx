@@ -270,17 +270,35 @@ const FantasyPotDetail = () => {
     setSubmitting(true);
 
     try {
-      // Deduct entry fee from wallet
-      const newBalance = walletBalance - pot.entry_fee_tokens;
+      // Fetch current wallet state for correct deduction
+      const { data: walletData, error: walletFetchError } = await supabase
+        .from('token_wallets')
+        .select('purchased_tokens, earned_tokens')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (walletFetchError) throw walletFetchError;
+      if (!walletData) throw new Error('Wallet not found');
+
+      // Deduct from purchased first, then earned (correct accounting)
+      const entryFee = pot.entry_fee_tokens;
+      const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - entryFee);
+      const remaining = entryFee - walletData.purchased_tokens;
+      const newEarnedTokens = remaining > 0 
+        ? walletData.earned_tokens - remaining 
+        : walletData.earned_tokens;
+
       const { error: walletError } = await supabase
         .from('token_wallets')
-        .update({ 
-          earned_tokens: newBalance,
-          updated_at: new Date().toISOString()
+        .update({
+          purchased_tokens: newPurchasedTokens,
+          earned_tokens: Math.max(0, newEarnedTokens)
         })
         .eq('user_id', user.id);
 
       if (walletError) throw walletError;
+
+      const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
 
       // Create entry
       const { data: entryData, error: entryError } = await supabase
@@ -312,7 +330,7 @@ const FantasyPotDetail = () => {
 
       if (rosterError) throw rosterError;
 
-      // Log transaction
+      // Log transaction with metadata
       await supabase
         .from('token_transactions')
         .insert({
@@ -322,7 +340,13 @@ const FantasyPotDetail = () => {
           balance_after: newBalance,
           description: `Fantasy entry: ${pot.name}`,
           reference_id: entryData.id,
-          reference_type: 'fantasy_entry'
+          reference_type: 'fantasy_entry',
+          metadata: {
+            pot_name: pot.name,
+            team_name: teamName || 'My Team',
+            roster_size: roster.length,
+            team_value: usedBudget
+          }
         });
 
       toast({
