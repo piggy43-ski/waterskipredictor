@@ -340,7 +340,7 @@ export function ParlayBuilder({
       // Log transaction for audit trail
       await supabase.from('token_transactions').insert({
         user_id: userId,
-        type: 'prediction_placed',
+        type: 'bet_placed',
         amount: -stakeAmount,
         balance_after: newBalance,
         reference_type: 'bet_slip',
