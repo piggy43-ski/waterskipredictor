@@ -1,82 +1,86 @@
 
-# Fix: Token Transaction Type Constraint Violation
+## What’s actually failing (why admin works but normal users don’t)
+The backend is rejecting prediction placement because inserting a new bet slip triggers an audit log write that **violates a database constraint**:
 
-## Root Cause Found
-Database logs revealed the actual error:
-> **"new row for relation "token_transactions" violates check constraint "token_transactions_type_check"**
+- Error seen in database logs: **`new row for relation "audit_logs" violates check constraint "audit_logs_actor_type_check"`**
+- `audit_logs.actor_type` is currently constrained to only allow: **`'admin'` or `'system'`**
+- But the trigger on `bet_slips` writes audit logs with:
+  - `'admin'` for admins
+  - `'user'` for everyone else
 
-The `token_transactions` table has a check constraint that only allows these types:
-- `deposit`, `bet_placed`, `bet_won`, `bet_lost`, `bet_void`, `bonus`, `redemption`, `adjustment`, `burn`
+So:
+- Admin placement succeeds (`actor_type='admin'` passes)
+- Normal user placement fails (`actor_type='user'` is not allowed) and the whole `bet_slips` insert rolls back, which surfaces in the UI as “Failed to place prediction”.
 
-But the code is using:
-- `'prediction_placed'` (not allowed)
-- `'fantasy_entry'` (not allowed)
-
-**This is why it works for admins** - admins may have previously placed bets before this constraint was added, or they may be testing without logging transactions.
-
-## Solution
-
-### Option A: Fix the Code (Recommended - Quick Fix)
-Change all transaction type values to use allowed types:
-- `'prediction_placed'` → `'bet_placed'`
-- `'fantasy_entry'` → `'bet_placed'` (with description indicating it's a fantasy entry)
-
-### Option B: Update the Database Constraint
-Add new types to the allowed list. However, this is riskier as it requires a migration.
-
-**I recommend Option A** for a quick fix that unblocks your beta testers immediately.
+This impacts:
+- Single predictions (uses `bet_slips`)
+- Podium predictions (uses `bet_slips`)
+- Parlays (uses `bet_slips`)
+Fantasy entries may be unaffected unless they also touch `bet_slips`, but we’ll verify end-to-end.
 
 ---
 
-## Files to Modify
+## Implementation plan (to fully unblock normal users)
 
-### 1. `src/pages/TournamentDetailClean.tsx`
-**Line 585** (Podium prediction):
-```typescript
-// Before
-type: 'prediction_placed',
+### 1) Database migration: allow `user` actor type in audit logs
+Create a new database migration that updates the check constraint:
 
-// After
-type: 'bet_placed',
-```
+- Drop the existing constraint `audit_logs_actor_type_check`
+- Re-add it to allow: **`('admin', 'system', 'user')`**
 
-**Line 784** (Single prediction):
-```typescript
-// Before
-type: 'prediction_placed',
+This is safe for existing rows because existing values are already within the current allowed set.
 
-// After
-type: 'bet_placed',
-```
+### 2) Database migration: fix the `bet_slips` audit trigger to classify “system” correctly
+Update `public.audit_bet_slip_changes()` to compute actor_type like:
 
-### 2. `src/components/ParlayBuilder.tsx`
-**Line 343** (Parlay prediction):
-```typescript
-// Before
-type: 'prediction_placed',
+- If `auth.uid()` is NULL → `actor_type = 'system'`
+- Else if user has admin role → `actor_type = 'admin'`
+- Else → `actor_type = 'user'`
 
-// After
-type: 'bet_placed',
-```
+Reason: background/backend processes (service context) may not have a user id; those should not be logged as “user”.
 
-### 3. `src/pages/FantasyPotDetail.tsx`
-**Line 337** (Fantasy entry):
-```typescript
-// Before
-type: 'fantasy_entry',
+### 3) Verification checklist (must pass before calling it fixed)
+Using a non-admin test user with a funded wallet (100 tokens):
 
-// After
-type: 'bet_placed',
-```
+**A. Single prediction**
+- Place a single prediction stake (ex: 10)
+- Expect:
+  - `bet_slips` row created (status PENDING)
+  - `predictions` row created linked to `bet_slips`
+  - wallet tokens deducted correctly
+  - `token_transactions` row created (`type='bet_placed'`)
+  - `audit_logs` row created with `actor_type='user'` and `action_type='CREATE'`
+
+**B. Parlay**
+- Place a parlay (ex: 10)
+- Expect same as above with correct references + audit log insert success
+
+**C. Fantasy entry**
+- Join a fantasy pot
+- Expect:
+  - wallet deduction correct
+  - `token_transactions` insert succeeds with `type='bet_placed'`
+  - no hidden backend constraint failures
+
+### 4) (Optional but strongly recommended) Improve client-side error visibility for faster debugging
+Right now, some flows show generic “Failed to place prediction”.
+Update catch blocks (single/podium/parlay/fantasy) to:
+- `console.error('...', error)`
+- show `error.message` (or Supabase error details) in the toast
+
+This prevents “blind” debugging if another constraint/RLS issue appears during stress testing.
 
 ---
 
-## Technical Summary
-| File | Line | Change |
-|------|------|--------|
-| `TournamentDetailClean.tsx` | 585 | `'prediction_placed'` → `'bet_placed'` |
-| `TournamentDetailClean.tsx` | 784 | `'prediction_placed'` → `'bet_placed'` |
-| `ParlayBuilder.tsx` | 343 | `'prediction_placed'` → `'bet_placed'` |
-| `FantasyPotDetail.tsx` | 337 | `'fantasy_entry'` → `'bet_placed'` |
+## Why this will resolve it
+Your prediction placement begins by inserting into `bet_slips`. That insert triggers audit logging. For normal users, the trigger currently tries to write `actor_type='user'` into a table that forbids it, causing the insert to fail. Once the constraint and trigger logic are corrected, normal users can insert bet slips and the rest of the flow proceeds.
 
-After this fix, all users will be able to place predictions, parlays, and join fantasy leagues without errors.
+---
+
+## Files/areas affected
+- Database:
+  - `public.audit_logs` (constraint update)
+  - `public.audit_bet_slip_changes()` (trigger function update)
+
+No UI changes are required to unblock the core issue, but optional error-message improvements are recommended for stress testing.
+
