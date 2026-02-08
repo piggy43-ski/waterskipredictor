@@ -335,7 +335,7 @@ const FantasyPotDetail = () => {
         .from('token_transactions')
         .insert({
           user_id: user.id,
-          type: 'fantasy_entry',
+          type: 'bet_placed',
           amount: -pot.entry_fee_tokens,
           balance_after: newBalance,
           description: `Fantasy entry: ${pot.name}`,
