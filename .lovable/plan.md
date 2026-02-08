@@ -1,126 +1,69 @@
 
 
-# Consistent Tournament Timing Messages
+# Align Prediction and Fantasy Windows
 
-## Current Problem
+## Problem
+Currently there are two different rules:
+- **Fantasy**: Can join/edit teams anytime before tournament starts (locks at start)
+- **Predictions**: Can only predict within the 24-hour window before start
 
-For the same tournament, users see:
-- **Predictions**: "Predictions open in 22h"
-- **Fantasy**: "1d 22h until lock"
-
-This is confusing because they reference different events (window opening vs. tournament starting).
+This is confusing - users can set up their fantasy team but can't make predictions until the 24h window opens.
 
 ## Solution
+Match prediction availability to fantasy - both should be **open immediately** and **lock at tournament start**.
 
-Use tournament start as the universal anchor and make messaging consistent across features.
+## Technical Changes
 
-## Message Format Changes
+### File: `src/utils/predictionWindows.ts`
 
-### Before (Confusing)
+Remove the 24-hour restriction. Predictions should be open anytime before the tournament starts.
 
-| Feature | Message |
-|---------|---------|
-| Predictions | "Predictions open in 22h" |
-| Fantasy | "1d 22h until lock" |
-
-### After (Consistent)
-
-| Feature | Status | Message |
-|---------|--------|---------|
-| Predictions | Pre-open | "Opens in 22h (event starts in 1d 22h)" |
-| Predictions | Open | "Open - Locks in 23h 45m" |
-| Fantasy | Pre-start | "Locks in 1d 22h" |
-
-Both now clearly show time relative to when they **lock** (tournament start), so users understand the relationship.
-
----
-
-## Files to Modify
-
-### 1. `src/utils/predictionWindows.ts`
-
-Update the `getPredictionWindowStatus` function messages:
-
-**When predictions not yet open (line 98-102):**
+**Current logic (lines 41-42, 71-72, 91-120):**
 ```typescript
-// Before
-const message = days > 0 
-  ? `Predictions open in ${days}d ${hours}h`
-  : hours > 0
-    ? `Predictions open in ${hours}h ${minutes}m`
-    : `Predictions open in ${minutes}m`;
+// Predictions open 24 hours before tournament start
+const predictionsOpen = new Date(start.getTime() - 24 * 60 * 60 * 1000);
 
-// After - show BOTH times
-const timeUntilStart = start.getTime() - now.getTime();
-const startDays = Math.floor(timeUntilStart / (1000 * 60 * 60 * 24));
-const startHours = Math.floor((timeUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+// ...later...
+// Prediction window is open (within 24h before start)
+if (now >= predictionsOpen && now < start) { ... }
 
-const opensIn = days > 0 
-  ? `${days}d ${hours}h`
-  : hours > 0
-    ? `${hours}h ${minutes}m`
-    : `${minutes}m`;
-
-const locksIn = startDays > 0 
-  ? `${startDays}d ${startHours}h`
-  : `${startHours}h`;
-
-const message = `Opens in ${opensIn} · Locks in ${locksIn}`;
+// Too early - predictions not yet open
+// Shows "Opens in X · Locks in Y"
 ```
 
-**When predictions are open (line 78-82):**
+**New logic:**
 ```typescript
-// Before
-const message = days > 0 
-  ? `Predictions open – Starts in ${days}d ${hours}h`
-  : hours > 0
-    ? `Predictions open – Starts in ${hours}h ${minutes}m`
-    : `Predictions open – Starts in ${minutes}m`;
+// Predictions are open anytime before tournament starts
+// (no more 24h restriction - consistent with fantasy)
 
-// After - use "Locks in" terminology
-const message = days > 0 
-  ? `Open – Locks in ${days}d ${hours}h`
-  : hours > 0
-    ? `Open – Locks in ${hours}h ${minutes}m`
-    : `Open – Locks in ${minutes}m`;
-```
-
-### 2. `src/utils/fantasyLockRules.ts`
-
-Update `getTimeUntilLock` (line 217-223) to match format:
-
-```typescript
-// Before
-if (days > 0) {
-  return `${days}d ${hours}h until lock`;
-} else if (hours > 0) {
-  return `${hours}h ${minutes}m until lock`;
-} else {
-  return `${minutes}m until lock`;
-}
-
-// After - use "Locks in" for consistency
-if (days > 0) {
-  return `Locks in ${days}d ${hours}h`;
-} else if (hours > 0) {
-  return `Locks in ${hours}h ${minutes}m`;
-} else {
-  return `Locks in ${minutes}m`;
+// If before tournament start, predictions are open
+if (now < start) {
+  const timeLeft = start.getTime() - now.getTime();
+  const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+  
+  const message = days > 0 
+    ? `Open – Locks in ${days}d ${hours}h`
+    : hours > 0
+      ? `Open – Locks in ${hours}h ${minutes}m`
+      : `Open – Locks in ${minutes}m`;
+  
+  return {
+    status: 'open',
+    message,
+    canPredict: true
+  };
 }
 ```
-
----
 
 ## Result
 
-With these changes, users will see consistent messaging:
+| Time Before Event | Before (Predictions) | After (Predictions) | Fantasy |
+|-------------------|----------------------|---------------------|---------|
+| 2 days out | "Opens in 1d · Locks in 2d" | "Open – Locks in 2d" | "Locks in 2d" |
+| 22h out | "Opens in 22h · Locks in 1d 22h" | "Open – Locks in 22h" | "Locks in 22h" |
+| Event started | "Predictions locked" | "Predictions locked" | (Locked badge) |
 
-| Time Before Event | Predictions Message | Fantasy Message |
-|-------------------|---------------------|-----------------|
-| 46h (1d 22h) | "Opens in 22h · Locks in 1d 22h" | "Locks in 1d 22h" |
-| 23h | "Open – Locks in 23h" | "Locks in 23h" |
-| 1h | "Open – Locks in 1h" | "Locks in 1h" |
-| Event started | "Predictions locked – event in progress" | (Locked badge) |
-
-Both features now use "Locks in X" as the primary time reference, making it clear that everything locks at the same time (tournament start).
+Both features now open at the same time and lock at the same time, creating a consistent user experience.
 
