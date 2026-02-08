@@ -1,84 +1,126 @@
 
-# Fix: Race Condition Causing Non-Admin Users to Be Redirected
 
-## Problem Identified
+# Consistent Tournament Timing Messages
 
-The `TournamentDetailClean.tsx` page has a redundant authentication check that doesn't respect the loading state:
+## Current Problem
 
-```typescript
-// Line 85-89 - TournamentDetailClean.tsx
-useEffect(() => {
-  if (!user) {
-    navigate('/auth');  // ← PROBLEM: Runs before auth state is loaded
-    return;
-  }
-  fetchTournamentData();
-  fetchWalletBalance();
-}, [user, navigate, id]);
-```
+For the same tournament, users see:
+- **Predictions**: "Predictions open in 22h"
+- **Fantasy**: "1d 22h until lock"
 
-**What happens:**
-1. User clicks on tournament → `ProtectedRoute` checks auth (shows loading skeleton)
-2. Once loaded, `TournamentDetailClean` renders
-3. The component's `useEffect` runs immediately
-4. If there's any timing issue with `useAuth()` context, `user` can briefly be `null`
-5. This triggers `navigate('/auth')` which then redirects back to home (if user IS logged in)
-
-This explains why it works for you (admin) but not for other users — different network speeds, caching, or device performance can affect the timing.
+This is confusing because they reference different events (window opening vs. tournament starting).
 
 ## Solution
 
-Remove the redundant `navigate('/auth')` redirect from `TournamentDetailClean.tsx` since `ProtectedRoute` already guarantees the user is authenticated when the component renders.
+Use tournament start as the universal anchor and make messaging consistent across features.
 
-### File Change: `src/pages/TournamentDetailClean.tsx`
+## Message Format Changes
 
-**Before (lines 85-93):**
+### Before (Confusing)
+
+| Feature | Message |
+|---------|---------|
+| Predictions | "Predictions open in 22h" |
+| Fantasy | "1d 22h until lock" |
+
+### After (Consistent)
+
+| Feature | Status | Message |
+|---------|--------|---------|
+| Predictions | Pre-open | "Opens in 22h (event starts in 1d 22h)" |
+| Predictions | Open | "Open - Locks in 23h 45m" |
+| Fantasy | Pre-start | "Locks in 1d 22h" |
+
+Both now clearly show time relative to when they **lock** (tournament start), so users understand the relationship.
+
+---
+
+## Files to Modify
+
+### 1. `src/utils/predictionWindows.ts`
+
+Update the `getPredictionWindowStatus` function messages:
+
+**When predictions not yet open (line 98-102):**
 ```typescript
-useEffect(() => {
-  if (!user) {
-    navigate('/auth');
-    return;
-  }
-  
-  fetchTournamentData();
-  fetchWalletBalance();
-}, [user, navigate, id]);
+// Before
+const message = days > 0 
+  ? `Predictions open in ${days}d ${hours}h`
+  : hours > 0
+    ? `Predictions open in ${hours}h ${minutes}m`
+    : `Predictions open in ${minutes}m`;
+
+// After - show BOTH times
+const timeUntilStart = start.getTime() - now.getTime();
+const startDays = Math.floor(timeUntilStart / (1000 * 60 * 60 * 24));
+const startHours = Math.floor((timeUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+const opensIn = days > 0 
+  ? `${days}d ${hours}h`
+  : hours > 0
+    ? `${hours}h ${minutes}m`
+    : `${minutes}m`;
+
+const locksIn = startDays > 0 
+  ? `${startDays}d ${startHours}h`
+  : `${startHours}h`;
+
+const message = `Opens in ${opensIn} · Locks in ${locksIn}`;
 ```
 
-**After:**
+**When predictions are open (line 78-82):**
 ```typescript
-useEffect(() => {
-  if (!user) return; // Just skip if no user - ProtectedRoute handles auth
-  
-  fetchTournamentData();
-  fetchWalletBalance();
-}, [user, id]); // Removed navigate from deps
+// Before
+const message = days > 0 
+  ? `Predictions open – Starts in ${days}d ${hours}h`
+  : hours > 0
+    ? `Predictions open – Starts in ${hours}h ${minutes}m`
+    : `Predictions open – Starts in ${minutes}m`;
+
+// After - use "Locks in" terminology
+const message = days > 0 
+  ? `Open – Locks in ${days}d ${hours}h`
+  : hours > 0
+    ? `Open – Locks in ${hours}h ${minutes}m`
+    : `Open – Locks in ${minutes}m`;
 ```
 
-## Why This Fixes It
+### 2. `src/utils/fantasyLockRules.ts`
 
-| Before | After |
-|--------|-------|
-| Component redirects to `/auth` if user is null | Component waits for user to be populated |
-| Race condition causes premature redirect | ProtectedRoute guarantees user exists when rendered |
-| Some users get kicked to home page | All users can access tournament details |
+Update `getTimeUntilLock` (line 217-223) to match format:
 
-## Additional Safety
+```typescript
+// Before
+if (days > 0) {
+  return `${days}d ${hours}h until lock`;
+} else if (hours > 0) {
+  return `${hours}h ${minutes}m until lock`;
+} else {
+  return `${minutes}m until lock`;
+}
 
-We should also audit other pages to ensure they don't have similar issues. Pages to check:
-- `AthleteProfile.tsx`
-- `FantasyTeamView.tsx`  
-- `FantasyTeamEdit.tsx`
-- `FantasySeasonView.tsx`
+// After - use "Locks in" for consistency
+if (days > 0) {
+  return `Locks in ${days}d ${hours}h`;
+} else if (hours > 0) {
+  return `Locks in ${hours}h ${minutes}m`;
+} else {
+  return `Locks in ${minutes}m`;
+}
+```
 
-These should either:
-1. Not redirect at all (rely on ProtectedRoute)
-2. Or check the `loading` state before redirecting
+---
 
-## Testing
+## Result
 
-After the fix:
-1. Log in as user "paigepigozzi" (or any non-admin)
-2. Navigate to a tournament detail page
-3. Confirm the page loads properly without redirecting
-4. Confirm predictions can be placed
+With these changes, users will see consistent messaging:
+
+| Time Before Event | Predictions Message | Fantasy Message |
+|-------------------|---------------------|-----------------|
+| 46h (1d 22h) | "Opens in 22h · Locks in 1d 22h" | "Locks in 1d 22h" |
+| 23h | "Open – Locks in 23h" | "Locks in 23h" |
+| 1h | "Open – Locks in 1h" | "Locks in 1h" |
+| Event started | "Predictions locked – event in progress" | (Locked badge) |
+
+Both features now use "Locks in X" as the primary time reference, making it clear that everything locks at the same time (tournament start).
+
