@@ -1,120 +1,124 @@
 
-# Fix: Parlay Placement "Failed to place parlay" Error
+# Comprehensive Prediction System Audit & Fix
 
-## Problem
-A user attempted to place a parlay with 50 tokens (from their 100 token balance) and received "Failed to place parlay" error. Investigation revealed several bugs in the parlay submission code.
+## Summary
+I audited all token deduction flows (single predictions, podium predictions, parlays, and fantasy entries) to ensure users can reliably place predictions without errors. I found **1 critical bug** that still needs fixing.
 
-## Issues Identified
+## Audit Results
 
-### 1. Incorrect Wallet Deduction Logic (Critical)
-The current code blindly sets:
+### Already Fixed (Working Correctly)
+| Flow | File | Status |
+|------|------|--------|
+| **Single Predictions** | `TournamentDetailClean.tsx` (line 755-779) | Correct deduction logic with transaction logging |
+| **Podium Predictions** | `TournamentDetailClean.tsx` (line 556-604) | Correct deduction logic with transaction logging |
+| **Parlay Predictions** | `ParlayBuilder.tsx` (line 311-360) | Fixed in last commit - correct deduction with transaction logging |
+
+These flows all correctly:
+1. Fetch current `purchased_tokens` and `earned_tokens` separately
+2. Deduct from `purchased_tokens` first, then `earned_tokens`
+3. Log the transaction in `token_transactions`
+
+---
+
+### Bug Found: Fantasy Entry Fee Deduction
+
+**File:** `src/pages/FantasyPotDetail.tsx` (lines 272-283)
+
+**Problem:** The fantasy entry submission uses the **same incorrect pattern** the parlay had:
 ```typescript
-earned_tokens: walletBalance - stakeAmount
-```
-
-This is wrong because:
-- `walletBalance` is the **combined total** of purchased + earned tokens
-- The deduction should first come from `purchased_tokens`, then `earned_tokens`
-- If user has 0 purchased + 100 earned and stakes 50, the code would set `earned_tokens = 100 - 50 = 50` which happens to be correct by accident
-- But if user has 30 purchased + 70 earned (100 total) and stakes 50, it would wrongly set `earned_tokens = 50` instead of correctly deducting 30 from purchased and 20 from earned
-
-### 2. Missing Transaction Log
-The parlay placement doesn't create a `token_transactions` record, making stakes invisible in user transaction history and admin auditing.
-
-### 3. Generic Error Messages
-The catch block shows "Failed to place parlay" without specific error details, making debugging difficult.
-
-## Solution
-
-### File: `src/components/ParlayBuilder.tsx`
-
-**Replace the wallet update section (lines ~305-320) with proper logic:**
-
-1. **Fetch current wallet state** - Get actual `purchased_tokens` and `earned_tokens` values
-2. **Apply correct deduction** - Deduct from purchased first, then earned (same as TournamentDetailClean.tsx)
-3. **Log transaction** - Create `token_transactions` record for audit trail
-4. **Improve error handling** - Log specific error messages to help with debugging
-
-**Before (Buggy):**
-```typescript
-// Update wallet
+// BUGGY CODE:
+const newBalance = walletBalance - pot.entry_fee_tokens;
 const { error: walletError } = await supabase
   .from('token_wallets')
-  .update({
-    earned_tokens: walletBalance - stakeAmount
+  .update({ 
+    earned_tokens: newBalance,  // WRONG: walletBalance is combined total!
+    updated_at: new Date().toISOString()
   })
-  .eq('user_id', userId);
-
-if (walletError) throw walletError;
+  .eq('user_id', user.id);
 ```
 
-**After (Fixed):**
+**Issues:**
+1. `walletBalance` is the **combined** purchased + earned total
+2. It blindly sets `earned_tokens` to the new balance, which is wrong
+3. If user has 50 purchased + 50 earned (100 total) and pays 30 entry fee:
+   - Code sets `earned_tokens = 100 - 30 = 70`
+   - But `purchased_tokens` remains at 50
+   - Result: User now has 50 + 70 = **120 tokens** (they gained tokens!)
+
+**Impact:** Users could gain tokens when joining fantasy leagues, or the update could fail with constraint violations.
+
+---
+
+## The Fix
+
+### File: `src/pages/FantasyPotDetail.tsx`
+
+Replace the wallet deduction section (lines 272-283) with correct accounting:
+
 ```typescript
 // Fetch current wallet state
 const { data: walletData, error: walletFetchError } = await supabase
   .from('token_wallets')
   .select('purchased_tokens, earned_tokens')
-  .eq('user_id', userId)
+  .eq('user_id', user.id)
   .maybeSingle();
 
 if (walletFetchError) throw walletFetchError;
 if (!walletData) throw new Error('Wallet not found');
 
-// Deduct from purchased first, then earned
-const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - stakeAmount);
-const remaining = stakeAmount - walletData.purchased_tokens;
+// Deduct from purchased first, then earned (correct accounting)
+const entryFee = pot.entry_fee_tokens;
+const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - entryFee);
+const remaining = entryFee - walletData.purchased_tokens;
 const newEarnedTokens = remaining > 0 
   ? walletData.earned_tokens - remaining 
   : walletData.earned_tokens;
 
-const { error: walletUpdateError } = await supabase
+const { error: walletError } = await supabase
   .from('token_wallets')
   .update({
     purchased_tokens: newPurchasedTokens,
     earned_tokens: Math.max(0, newEarnedTokens)
   })
-  .eq('user_id', userId);
+  .eq('user_id', user.id);
 
-if (walletUpdateError) throw walletUpdateError;
+if (walletError) throw walletError;
 
 const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
-
-// Log transaction for audit trail
-await supabase.from('token_transactions').insert({
-  user_id: userId,
-  type: 'prediction_placed',
-  amount: -stakeAmount,
-  balance_after: newBalance,
-  reference_type: 'bet_slip',
-  reference_id: betSlip.id,
-  description: `Parlay entry (${completeLegs.length} legs) - ${tournament.name}`,
-  metadata: {
-    tournament_name: tournament.name,
-    leg_count: completeLegs.length,
-    multiplier: multiplier,
-    potential_payout: potentialPayout,
-    legs: completeLegs.map(leg => ({
-      discipline: leg.discipline,
-      gender: leg.gender,
-      winner: leg.winner?.athlete.name
-    }))
-  }
-});
 ```
 
-**Also improve the error catch block:**
+Also update the transaction logging to use the correct `newBalance`:
 ```typescript
-} catch (error: any) {
-  console.error('Error placing parlay:', error);
-  toast.error(error.message || 'Failed to place parlay. Please try again.');
-} finally {
+// Log transaction (already exists but needs correct balance)
+await supabase
+  .from('token_transactions')
+  .insert({
+    user_id: user.id,
+    type: 'fantasy_entry',
+    amount: -pot.entry_fee_tokens,
+    balance_after: newBalance,  // Use calculated balance, not walletBalance - fee
+    description: `Fantasy entry: ${pot.name}`,
+    reference_id: entryData.id,
+    reference_type: 'fantasy_entry',
+    metadata: {
+      pot_name: pot.name,
+      team_name: teamName || 'My Team',
+      roster_size: roster.length,
+      team_value: usedBudget
+    }
+  });
 ```
+
+---
 
 ## Files to Modify
-- `src/components/ParlayBuilder.tsx` - Fix wallet deduction logic, add transaction logging, improve error messages
+- `src/pages/FantasyPotDetail.tsx` - Fix wallet deduction logic (lines 272-283)
 
-## Testing
-After the fix, the user should be able to:
-1. Place a parlay bet successfully
-2. See the stake deduction in their transaction history
-3. Receive specific error messages if something fails
+## Testing Checklist
+After the fix, users should be able to:
+1. Place single predictions on tournaments
+2. Place podium predictions (3-athlete combos)
+3. Place parlay predictions (multi-leg combos)
+4. Join fantasy leagues with entry fees
+5. See all stakes deducted correctly in their transaction history
+6. Have correct token accounting (purchased depletes before earned)
