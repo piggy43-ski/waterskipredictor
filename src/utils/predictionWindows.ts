@@ -76,10 +76,10 @@ export const getPredictionWindowStatus = (
     const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
     
     const message = days > 0 
-      ? `Predictions open – Starts in ${days}d ${hours}h`
+      ? `Open – Locks in ${days}d ${hours}h`
       : hours > 0
-        ? `Predictions open – Starts in ${hours}h ${minutes}m`
-        : `Predictions open – Starts in ${minutes}m`;
+        ? `Open – Locks in ${hours}h ${minutes}m`
+        : `Open – Locks in ${minutes}m`;
     
     return {
       status: 'open',
@@ -95,11 +95,22 @@ export const getPredictionWindowStatus = (
   const minutes = Math.floor((timeUntilOpen % (1000 * 60 * 60)) / (1000 * 60));
   const seconds = Math.floor((timeUntilOpen % (1000 * 60)) / 1000);
   
-  const message = days > 0 
-    ? `Predictions open in ${days}d ${hours}h`
+  // Calculate time until tournament start (lock time)
+  const timeUntilStart = start.getTime() - now.getTime();
+  const startDays = Math.floor(timeUntilStart / (1000 * 60 * 60 * 24));
+  const startHours = Math.floor((timeUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  
+  const opensIn = days > 0 
+    ? `${days}d ${hours}h`
     : hours > 0
-      ? `Predictions open in ${hours}h ${minutes}m`
-      : `Predictions open in ${minutes}m`;
+      ? `${hours}h ${minutes}m`
+      : `${minutes}m`;
+  
+  const locksIn = startDays > 0 
+    ? `${startDays}d ${startHours}h`
+    : `${startHours}h`;
+  
+  const message = `Opens in ${opensIn} · Locks in ${locksIn}`;
   
   return {
     status: 'upcoming',
