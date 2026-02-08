@@ -22,7 +22,7 @@ import { Button } from '@/components/ui/button';
 import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SimulationDetails } from '@/components/SimulationDetails';
-import { useAdminCheck } from '@/hooks/useAdminCheck';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 
 interface ValidationResult {
   allowed: boolean;
@@ -43,7 +43,7 @@ const TournamentDetail = () => {
   const location = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { isAdmin } = useAdminCheck();
+  const { isAdmin } = useIsAdmin();
   
   // Get highlighted athletes from "Predict Again" navigation
   const betAgainAthletes: string[] = location.state?.betAgainAthletes || [];
