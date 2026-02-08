@@ -1,56 +1,101 @@
 
+# Fix: Tournament Detail Redirecting Non-Admin Users to Homepage
 
-# Fix: Update Tournament and Fantasy Dates
+## The Problem
 
-## Current Issue
-The BETA tournament is set to start **today at 8:00 AM UTC** which is causing timing conflicts:
-- **Prediction window**: Says "5h until predictions open" (confused by date/time)
-- **Fantasy**: Says "5h until lock"
+The `TournamentDetailClean.tsx` page incorrectly uses the `useAdminCheck()` hook, which was designed **only for admin pages**. This hook has aggressive navigation logic:
 
-This mismatch is confusing users and preventing them from making predictions.
-
-## The Fix
-Update the tournament times in the database to:
-- **Start**: Monday Feb 10, 2026 at 1:00 AM UTC
-- **End**: Monday Feb 10, 2026 at 6:00 PM UTC
-
-This gives users the entire weekend to create fantasy teams and place predictions.
-
-## Database Changes
-
-### 1. Update Tournament
-```sql
-UPDATE tournaments 
-SET 
-  start_date = '2026-02-10',
-  end_date = '2026-02-10',
-  start_datetime = '2026-02-10 01:00:00+00',
-  end_datetime = '2026-02-10 18:00:00+00'
-WHERE id = 'd26feef0-7dee-4eba-aa8b-d36df42b30f7';
+```typescript
+// Line 34-35 in useAdminCheck.tsx
+if (!adminStatus) {
+  navigate('/');  // ← Kicks ALL non-admins to homepage!
+}
 ```
 
-### 2. Fantasy Pot
-The fantasy pot (`986cefbc-b6d1-45f5-a46f-1202a630abd8`) is linked to the tournament via `tournament_id`. It uses the tournament's `start_datetime` to calculate lock time automatically through `fantasyLockRules.ts` — no separate update needed.
+**Impact:**
+- **121 total users** in the system
+- **Only 1 admin** (you)
+- **120 users cannot access tournament pages** ← Critical bug!
 
-## Expected Behavior After Fix
+## Root Cause
 
-### Prediction Window (Tournament Card)
-| Time | Status | Message |
-|------|--------|---------|
-| Now (Sunday) | **open** | "Predictions open – Starts in 1d 17h" |
-| Monday 1am | closed | "Predictions locked – event in progress" |
-| Monday 6pm | finished | "Tournament finished" |
+| File | Issue |
+|------|-------|
+| `src/pages/TournamentDetailClean.tsx` (line 46) | Uses `useAdminCheck()` which redirects non-admins |
+| `src/hooks/useAdminCheck.tsx` (line 34-35) | Navigates non-admins away from page |
 
-### Fantasy Pot Lock
-| Time | Status | Message |
-|------|--------|---------|
-| Now (Sunday) | **open** | "1d 17h until lock" |
-| Monday 1am | locked | "Tournament has started - entries locked" |
+## The Solution
 
-## No Code Changes Required
-Both systems already use `start_datetime` from the tournament:
-- `predictionWindows.ts` → Opens predictions 24h before start
-- `fantasyLockRules.ts` → Locks entries when tournament goes live
+Create a new **non-redirecting** admin check hook for pages that need to know admin status without enforcing admin-only access.
 
-Just need to update the database dates and everything will sync automatically.
+### Files to Modify
 
+#### 1. Create New Hook: `src/hooks/useIsAdmin.ts`
+
+```typescript
+/**
+ * Check if current user is an admin WITHOUT redirecting
+ * Use this for pages that show admin features but are accessible to all users
+ */
+export const useIsAdmin = () => {
+  const { user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!user) {
+        setIsAdmin(false);
+        setIsLoading(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+
+      setIsAdmin(!!data);
+      setIsLoading(false);
+    };
+
+    checkAdmin();
+  }, [user]);
+
+  return { isAdmin, isLoading };
+};
+```
+
+#### 2. Update `src/pages/TournamentDetailClean.tsx`
+
+**Before (line 25-46):**
+```typescript
+import { useAdminCheck } from '@/hooks/useAdminCheck';
+...
+const { isAdmin } = useAdminCheck();  // ← REDIRECTS NON-ADMINS!
+```
+
+**After:**
+```typescript
+import { useIsAdmin } from '@/hooks/useIsAdmin';
+...
+const { isAdmin } = useIsAdmin();  // ← Just checks, no redirect
+```
+
+## Summary
+
+| Change | Before | After |
+|--------|--------|-------|
+| Hook used | `useAdminCheck` (redirects) | `useIsAdmin` (no redirect) |
+| Non-admin users | Redirected to `/` | Can view tournament |
+| Admin features | Hidden for non-admins | Still hidden for non-admins |
+| Affected users | **120 users blocked** | **0 users blocked** |
+
+## Verification After Fix
+
+1. Log in as a non-admin user (e.g., Paigepigozzi)
+2. Navigate to a tournament detail page
+3. Confirm the page loads and predictions can be made
+4. Confirm admin-only features (if any) are still hidden
