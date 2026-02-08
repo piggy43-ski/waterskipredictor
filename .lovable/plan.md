@@ -1,104 +1,113 @@
 
 
-# Admin Dashboard: All User Transactions & Predictions
+# Enhanced All Transactions Page - Purchase Detail View
 
-## Overview
-Create two new admin pages that display all user transactions and predictions in a centralized, searchable, and filterable view. These pages will be accessible from the existing admin sidebar.
+## Problem Identified
+The current All Transactions page only displays records from `token_transactions`, which primarily contains bonus entries. It's missing:
+1. **Actual purchase transactions** - The purchase events themselves (stored in `deposit_ledger`)
+2. **Referral details** - Who referred the buyer, which code was used, bonus percentages
+3. **Complete audit trail** - USD spent, pack purchased, effective discounts
 
-## What You'll Get
+When Samson Clunie bought $25 (Starter pack), you only see the 100-token beta bonus, not his actual purchase of 2500 tokens.
 
-### 1. All Transactions Page
-A comprehensive view of every token transaction across all users with:
-- **Summary cards**: Total transactions, total inflow (deposits/bonuses/wins), total outflow (bets/burns), net flow
-- **Searchable table** with columns: User, Type, Amount, Balance After, Description, Date
-- **Filters**: Transaction type, date range, user search, amount range
-- **Export option**: Download as CSV
+## Solution
+Enhance the All Transactions page with a new "Purchases" filter/section that pulls from `deposit_ledger` and joins with referral data to show complete purchase history with all details.
 
-### 2. All Predictions Page  
-A comprehensive view of every prediction made by all users with:
-- **Summary cards**: Total predictions, win rate, total wagered, total paid out
-- **Searchable table** with columns: User, Tournament, Athlete, Contest Type, Stake, Multiplier, Status, Payout, Date
-- **Filters**: Status (Pending/Won/Lost/Void), tournament, contest type, user search, date range
-- **Click-through**: Click a user to see their full analytics drilldown
+## Data Sources to Join
 
-## Files to Create
+| Table | Data |
+|-------|------|
+| `deposit_ledger` | USD amount, tokens received, Stripe ID, timestamp |
+| `referral_redemptions` | Bonus tokens, referral code used, referrer, commission rates |
+| `referral_codes` | Code name (e.g., "BALLER"), code owner |
+| `profiles` | User info + `referred_by_code_id` for non-first purchases |
 
-### `src/pages/admin/AllTransactions.tsx`
-New admin page containing:
-- Summary stat cards at top
-- Filter panel with collapsible controls
-- Paginated table showing all token_transactions joined with profiles for user info
-- CSV export button
+## Implementation
 
-### `src/pages/admin/AllPredictions.tsx`
-New admin page containing:
-- Summary stat cards at top  
-- Filter panel with collapsible controls
-- Paginated table showing all predictions joined with profiles for user info
-- Click to drill down into specific user
+### File: `src/pages/admin/AllTransactions.tsx`
 
-## Files to Modify
+**Changes:**
+1. Add a new transaction type filter option: `'purchase'` in addition to existing types
+2. Create a separate query to fetch from `deposit_ledger` when "purchase" filter is selected
+3. Join with `referral_redemptions` and `referral_codes` to get full referral details
+4. Display enhanced columns for purchase rows:
+   - User (username + email)
+   - Pack Name (Starter/Standard/Pro/Elite)
+   - USD Amount ($25, $50, etc.)
+   - Base Tokens (what pack normally gives)
+   - Bonus Tokens (from referral)
+   - Total Tokens (base + bonus)
+   - Referral Code Used (if any)
+   - Referrer (who gets commission, if anyone)
+   - Commission Rate (%)
+   - Date
 
-### `src/components/AdminLayout.tsx`
-Add two new navigation items to the sidebar:
-```text
-{ path: '/admin/all-transactions', label: 'All Transactions', icon: History }
-{ path: '/admin/all-predictions', label: 'All Predictions', icon: Target }
+**Query logic for purchases:**
+```typescript
+// Fetch deposit_ledger with referral data
+const { data: deposits } = await supabase
+  .from('deposit_ledger')
+  .select('*')
+  .eq('transaction_type', 'deposit')
+  .order('created_at', { ascending: false });
+
+// Get all referral redemptions to match by purchase_id (stripe_payment_intent_id)
+const { data: redemptions } = await supabase
+  .from('referral_redemptions')
+  .select('*, referral_codes(code, owner_user_id)')
+  .in('purchase_id', deposits.map(d => d.stripe_payment_intent_id));
+
+// Get profiles for user info and referrer info
+const { data: profiles } = await supabase
+  .from('profiles')
+  .select('id, username, email');
+
+// Merge all data together
 ```
 
-### `src/App.tsx`
-Add routes for the two new admin pages:
-```text
-/admin/all-transactions -> AllTransactions
-/admin/all-predictions -> AllPredictions
-```
+**Enhanced purchase row display:**
 
----
+For each purchase, show:
+- **Date**: Feb 6, 2026 10:13 PM
+- **User**: Samson Clunie (samsonclunie@icloud.com)
+- **Pack**: Starter
+- **USD**: $25.00
+- **Base Tokens**: 2,500
+- **Bonus**: +0 (no referral used)
+- **Total**: 2,500
+- **Referral**: None
+- **Referrer**: —
 
-## Technical Details
+For a user with referral:
+- **Date**: Feb 5, 2026 10:04 PM  
+- **User**: Travis Anderson (travis...)
+- **Pack**: Standard
+- **USD**: $50.00
+- **Base Tokens**: 5,000
+- **Bonus**: +2,500 (50% via BALLER)
+- **Total**: 7,500 (includes base discount)
+- **Referral**: BALLER
+- **Referrer**: — (no owner set)
+- **Commission**: 22% ($11 value)
 
-### Database Queries
+### UI Updates
 
-**All Transactions Query:**
-```sql
-SELECT 
-  t.id, t.user_id, t.type, t.amount, t.balance_after, 
-  t.description, t.created_at,
-  p.username, p.email
-FROM token_transactions t
-JOIN profiles p ON p.id = t.user_id
-ORDER BY t.created_at DESC
-LIMIT 500
-```
+1. **Filter Panel**: Add "purchase" to the type dropdown alongside existing types
+2. **Table Columns**: When viewing purchases, show the enhanced columns above
+3. **Summary Cards**: Update stats when "purchase" filter is active:
+   - Total Revenue (USD)
+   - Tokens Sold
+   - Bonus Tokens Awarded
+   - Referrals Used
 
-**All Predictions Query:**
-```sql
-SELECT 
-  pred.id, pred.user_id, pred.tournament_name, pred.athlete_name,
-  pred.market_type, pred.discipline, pred.category,
-  pred.staked_tokens, pred.decimal_odds, pred.status, 
-  pred.payout_tokens, pred.created_at,
-  p.username, p.email
-FROM predictions pred
-JOIN profiles p ON p.id = pred.user_id
-ORDER BY pred.created_at DESC
-LIMIT 500
-```
+4. **Row Styling**: 
+   - Show referral bonus in green if present
+   - Show referral code as a badge
+   - Show commission details on hover/tooltip
 
-### Filtering Implementation
-- Client-side filtering for responsive UX
-- Type-ahead search for user lookup
-- Date range picker using existing Calendar component
-- Status/type dropdowns using Select component
+### Technical Notes
 
-### Reusable Patterns
-- Follow existing patterns from `src/pages/admin/HouseLedger.tsx` for stat cards
-- Follow patterns from `src/pages/Transactions.tsx` for filter panel design
-- Use existing `UserAnalyticsDrilldown` component for drill-down functionality
-
-### UI Components Used
-- Card, Table, Badge, Button from shadcn/ui (already installed)
-- Calendar, Popover for date filtering
-- Select for dropdown filters
-- Input for search/amount filters
+- The `deposit_ledger` uses `stripe_payment_intent_id` which matches `purchase_id` in `referral_redemptions`
+- `referral_redemptions` stores snapshot values at time of purchase (audit-safe)
+- For purchases without referrals, simply show the base transaction without bonus columns filled
 
