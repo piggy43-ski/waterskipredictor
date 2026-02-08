@@ -94,6 +94,18 @@ export default function AdminDashboard() {
     },
   });
 
+  const { data: totalPredictions } = useQuery({
+    queryKey: ['admin-total-predictions'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('predictions')
+        .select('*', { count: 'exact', head: true });
+      
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
   const { data: pendingPredictions } = useQuery({
     queryKey: ['admin-pending-predictions'],
     queryFn: async () => {
@@ -203,8 +215,8 @@ export default function AdminDashboard() {
               <FileCheck className="w-4 h-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{pendingPredictions}</div>
-              <p className="text-xs text-muted-foreground">Pending settlement</p>
+              <div className="text-2xl font-bold">{totalPredictions}</div>
+              <p className="text-xs text-muted-foreground">{pendingPredictions} pending settlement</p>
             </CardContent>
           </Card>
 
