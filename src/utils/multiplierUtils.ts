@@ -20,19 +20,34 @@ export const MULTIPLIER_CONFIG = {
     HIGHEST_SCORE: { min: 0.87, max: 0.89 },
   },
   
-  // Multiplier caps per market type - UPDATED for proper calibration
-  // HIGHEST_SCORE max reduced to 8x to prevent longshot clumping
+  // Multiplier caps per market type - AGGRESSIVE to prevent bankruptcy
   MULTIPLIER_CAPS: {
-    WINNER: { min: 1.8, max: 12.0 },
-    PODIUM: { min: 1.4, max: 10.0 },
-    HIGHEST_SCORE: { min: 2.0, max: 8.0 },
+    WINNER: { min: 1.50, max: 8.0 },
+    PODIUM: { min: 1.25, max: 6.0 },
+    HIGHEST_SCORE: { min: 1.50, max: 7.0 },
   },
   
-  // Rank-specific caps for WINNER market
+  // Rank-specific caps for WINNER market - AGGRESSIVE favorite caps
   WINNER_RANK_CAPS: {
-    1: 4.0,   // Rank 1 max 4.0x
-    2: 6.0,   // Rank 2 max 6.0x
-    3: 8.0,   // Rank 3 max 8.0x
+    1: 1.50,   // Rank 1 (best athlete) max 1.5x
+    2: 2.25,   // Rank 2 max 2.25x
+    3: 3.00,   // Rank 3 max 3.0x
+    4: 4.00,   // Rank 4 max 4.0x
+    5: 5.00,   // Rank 5 max 5.0x
+  } as Record<number, number>,
+  
+  // Rank-specific caps for PODIUM market
+  PODIUM_RANK_CAPS: {
+    1: 1.25,
+    2: 1.75,
+    3: 2.25,
+  } as Record<number, number>,
+  
+  // Rank-specific caps for HIGHEST_SCORE market
+  HIGHEST_SCORE_RANK_CAPS: {
+    1: 1.80,
+    2: 2.50,
+    3: 3.50,
   } as Record<number, number>,
   
   // Rounding step
