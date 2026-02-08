@@ -308,15 +308,56 @@ export function ParlayBuilder({
 
       if (predError) throw predError;
 
-      // Update wallet
-      const { error: walletError } = await supabase
+      // Fetch current wallet state
+      const { data: walletData, error: walletFetchError } = await supabase
+        .from('token_wallets')
+        .select('purchased_tokens, earned_tokens')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (walletFetchError) throw walletFetchError;
+      if (!walletData) throw new Error('Wallet not found');
+
+      // Deduct from purchased first, then earned (correct accounting)
+      const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - stakeAmount);
+      const remaining = stakeAmount - walletData.purchased_tokens;
+      const newEarnedTokens = remaining > 0 
+        ? walletData.earned_tokens - remaining 
+        : walletData.earned_tokens;
+
+      const { error: walletUpdateError } = await supabase
         .from('token_wallets')
         .update({
-          earned_tokens: walletBalance - stakeAmount
+          purchased_tokens: newPurchasedTokens,
+          earned_tokens: Math.max(0, newEarnedTokens)
         })
         .eq('user_id', userId);
 
-      if (walletError) throw walletError;
+      if (walletUpdateError) throw walletUpdateError;
+
+      const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
+
+      // Log transaction for audit trail
+      await supabase.from('token_transactions').insert({
+        user_id: userId,
+        type: 'prediction_placed',
+        amount: -stakeAmount,
+        balance_after: newBalance,
+        reference_type: 'bet_slip',
+        reference_id: betSlip.id,
+        description: `Parlay entry (${completeLegs.length} legs) - ${tournament.name}`,
+        metadata: {
+          tournament_name: tournament.name,
+          leg_count: completeLegs.length,
+          multiplier: multiplier,
+          potential_payout: potentialPayout,
+          legs: completeLegs.map(leg => ({
+            discipline: leg.discipline,
+            gender: leg.gender,
+            winner: leg.winner?.athlete.name
+          }))
+        }
+      });
 
       // Send bet confirmation email (non-blocking)
       try {
@@ -360,7 +401,7 @@ export function ParlayBuilder({
       setStake('');
     } catch (error: any) {
       console.error('Error placing parlay:', error);
-      toast.error('Failed to place parlay');
+      toast.error(error.message || 'Failed to place parlay. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
