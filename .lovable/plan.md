@@ -1,83 +1,104 @@
 
-# Add Visual Indicator for Prediction Status
 
-## Current State
-The `TournamentCard` component already displays prediction window status with:
-- A clock icon
-- Text message (e.g., "Open – Locks in 1d 22h")
-- Color coding based on `canPredict` and prediction status
+# Admin Dashboard: All User Transactions & Predictions
 
-However, the indicator is subtle and could be more visually prominent, especially to distinguish between:
-- **Open** (can predict) - predictions are available
-- **Closed** (locked) - predictions are locked because event is in progress
-- **Finished** - event has completed
+## Overview
+Create two new admin pages that display all user transactions and predictions in a centralized, searchable, and filterable view. These pages will be accessible from the existing admin sidebar.
 
-## Solution
-Enhance the visual indicator in `TournamentCard` to:
+## What You'll Get
 
-1. **Add a Status Badge** - Display a prominent badge next to or near the prediction status text showing:
-   - "✓ OPEN" (green) when `canPredict: true`
-   - "🔒 LOCKED" (red) when `canPredict: false` and status is `'closed'`
-   - "SETTLED" (gray) when status is `'finished'`
+### 1. All Transactions Page
+A comprehensive view of every token transaction across all users with:
+- **Summary cards**: Total transactions, total inflow (deposits/bonuses/wins), total outflow (bets/burns), net flow
+- **Searchable table** with columns: User, Type, Amount, Balance After, Description, Date
+- **Filters**: Transaction type, date range, user search, amount range
+- **Export option**: Download as CSV
 
-2. **Improve Visual Hierarchy** - Make the prediction status section more visually distinct from other information
+### 2. All Predictions Page  
+A comprehensive view of every prediction made by all users with:
+- **Summary cards**: Total predictions, win rate, total wagered, total paid out
+- **Searchable table** with columns: User, Tournament, Athlete, Contest Type, Stake, Multiplier, Status, Payout, Date
+- **Filters**: Status (Pending/Won/Lost/Void), tournament, contest type, user search, date range
+- **Click-through**: Click a user to see their full analytics drilldown
 
-3. **Color Coordination** - Use consistent colors:
-   - Green (`text-success`) for open predictions
-   - Red (`text-destructive`) for locked predictions
-   - Gray (`text-muted-foreground`) for finished/settled
+## Files to Create
+
+### `src/pages/admin/AllTransactions.tsx`
+New admin page containing:
+- Summary stat cards at top
+- Filter panel with collapsible controls
+- Paginated table showing all token_transactions joined with profiles for user info
+- CSV export button
+
+### `src/pages/admin/AllPredictions.tsx`
+New admin page containing:
+- Summary stat cards at top  
+- Filter panel with collapsible controls
+- Paginated table showing all predictions joined with profiles for user info
+- Click to drill down into specific user
 
 ## Files to Modify
 
-### `src/components/TournamentCard.tsx`
-
-**Location**: Lines 82-96 (Prediction Window Status section)
-
-**Changes**:
-- Replace the simple text display with an enhanced section that includes:
-  - A status badge showing "OPEN", "LOCKED", or "SETTLED"
-  - Better visual separation and styling
-  - Keep the countdown message below the status badge
-  - Use appropriate color classes based on `predictionWindow.status` and `canPredict`
-
-**Implementation approach**:
-```typescript
-// Create helper function to get status badge text and color
-const getPredictionStatusDisplay = () => {
-  if (predictionWindow.status === 'finished') {
-    return { badge: 'SETTLED', color: 'text-muted-foreground' };
-  }
-  if (predictionWindow.status === 'closed') {
-    return { badge: '🔒 LOCKED', color: 'text-destructive' };
-  }
-  if (predictionWindow.canPredict) {
-    return { badge: '✓ OPEN', color: 'text-success' };
-  }
-  return { badge: 'UNAVAILABLE', color: 'text-muted-foreground' };
-};
-
-// Update the JSX to show badge + message
-<div className="mt-4 pt-3 border-t border-border/50">
-  <div className="flex items-center gap-2 mb-2">
-    <Clock className="w-4 h-4 text-muted-foreground" />
-    <span className={`text-sm font-bold ${statusDisplay.color}`}>
-      {statusDisplay.badge}
-    </span>
-  </div>
-  <p className="text-xs text-muted-foreground ml-6">
-    {predictionWindow.message}
-  </p>
-</div>
+### `src/components/AdminLayout.tsx`
+Add two new navigation items to the sidebar:
+```text
+{ path: '/admin/all-transactions', label: 'All Transactions', icon: History }
+{ path: '/admin/all-predictions', label: 'All Predictions', icon: Target }
 ```
 
-## Result
+### `src/App.tsx`
+Add routes for the two new admin pages:
+```text
+/admin/all-transactions -> AllTransactions
+/admin/all-predictions -> AllPredictions
+```
 
-Users will now see clearer, more visually distinct indicators:
+---
 
-| Prediction Status | Display | Color |
-|-------------------|---------|-------|
-| Open | "✓ OPEN" + "Open – Locks in 22h" | Green + Gray countdown |
-| Locked (in progress) | "🔒 LOCKED" + "Predictions locked – event in progress" | Red |
-| Finished/Settled | "SETTLED" + "Tournament settled" | Gray |
+## Technical Details
 
-This makes it immediately obvious at a glance whether a user can place predictions on a tournament.
+### Database Queries
+
+**All Transactions Query:**
+```sql
+SELECT 
+  t.id, t.user_id, t.type, t.amount, t.balance_after, 
+  t.description, t.created_at,
+  p.username, p.email
+FROM token_transactions t
+JOIN profiles p ON p.id = t.user_id
+ORDER BY t.created_at DESC
+LIMIT 500
+```
+
+**All Predictions Query:**
+```sql
+SELECT 
+  pred.id, pred.user_id, pred.tournament_name, pred.athlete_name,
+  pred.market_type, pred.discipline, pred.category,
+  pred.staked_tokens, pred.decimal_odds, pred.status, 
+  pred.payout_tokens, pred.created_at,
+  p.username, p.email
+FROM predictions pred
+JOIN profiles p ON p.id = pred.user_id
+ORDER BY pred.created_at DESC
+LIMIT 500
+```
+
+### Filtering Implementation
+- Client-side filtering for responsive UX
+- Type-ahead search for user lookup
+- Date range picker using existing Calendar component
+- Status/type dropdowns using Select component
+
+### Reusable Patterns
+- Follow existing patterns from `src/pages/admin/HouseLedger.tsx` for stat cards
+- Follow patterns from `src/pages/Transactions.tsx` for filter panel design
+- Use existing `UserAnalyticsDrilldown` component for drill-down functionality
+
+### UI Components Used
+- Card, Table, Badge, Button from shadcn/ui (already installed)
+- Calendar, Popover for date filtering
+- Select for dropdown filters
+- Input for search/amount filters
+
