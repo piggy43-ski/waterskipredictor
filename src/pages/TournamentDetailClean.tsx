@@ -83,14 +83,11 @@ const TournamentDetail = () => {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      navigate('/auth');
-      return;
-    }
+    if (!user) return; // Just skip if no user - ProtectedRoute handles auth
     
     fetchTournamentData();
     fetchWalletBalance();
-  }, [user, navigate, id]);
+  }, [user, id]);
 
   // Show toast if user came from "Predict Again"
   useEffect(() => {
