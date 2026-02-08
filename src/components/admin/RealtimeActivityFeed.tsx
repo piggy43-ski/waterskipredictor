@@ -29,10 +29,10 @@ export function RealtimeActivityFeed() {
   useEffect(() => {
     const fetchInitialActivities = async () => {
       const { data: predictions, error: predError } = await supabase
-        .from('predictions')
+        .from('predictions' as any)
         .select('id, user_id, athlete_name, tournament_name, market_type, discipline, staked_tokens, decimal_odds, status, created_at')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(20) as { data: any[] | null; error: any };
 
       if (predError) {
         console.error('Error fetching predictions:', predError);
