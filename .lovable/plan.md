@@ -1,113 +1,120 @@
 
+# Fix: Parlay Placement "Failed to place parlay" Error
 
-# Enhanced All Transactions Page - Purchase Detail View
+## Problem
+A user attempted to place a parlay with 50 tokens (from their 100 token balance) and received "Failed to place parlay" error. Investigation revealed several bugs in the parlay submission code.
 
-## Problem Identified
-The current All Transactions page only displays records from `token_transactions`, which primarily contains bonus entries. It's missing:
-1. **Actual purchase transactions** - The purchase events themselves (stored in `deposit_ledger`)
-2. **Referral details** - Who referred the buyer, which code was used, bonus percentages
-3. **Complete audit trail** - USD spent, pack purchased, effective discounts
+## Issues Identified
 
-When Samson Clunie bought $25 (Starter pack), you only see the 100-token beta bonus, not his actual purchase of 2500 tokens.
-
-## Solution
-Enhance the All Transactions page with a new "Purchases" filter/section that pulls from `deposit_ledger` and joins with referral data to show complete purchase history with all details.
-
-## Data Sources to Join
-
-| Table | Data |
-|-------|------|
-| `deposit_ledger` | USD amount, tokens received, Stripe ID, timestamp |
-| `referral_redemptions` | Bonus tokens, referral code used, referrer, commission rates |
-| `referral_codes` | Code name (e.g., "BALLER"), code owner |
-| `profiles` | User info + `referred_by_code_id` for non-first purchases |
-
-## Implementation
-
-### File: `src/pages/admin/AllTransactions.tsx`
-
-**Changes:**
-1. Add a new transaction type filter option: `'purchase'` in addition to existing types
-2. Create a separate query to fetch from `deposit_ledger` when "purchase" filter is selected
-3. Join with `referral_redemptions` and `referral_codes` to get full referral details
-4. Display enhanced columns for purchase rows:
-   - User (username + email)
-   - Pack Name (Starter/Standard/Pro/Elite)
-   - USD Amount ($25, $50, etc.)
-   - Base Tokens (what pack normally gives)
-   - Bonus Tokens (from referral)
-   - Total Tokens (base + bonus)
-   - Referral Code Used (if any)
-   - Referrer (who gets commission, if anyone)
-   - Commission Rate (%)
-   - Date
-
-**Query logic for purchases:**
+### 1. Incorrect Wallet Deduction Logic (Critical)
+The current code blindly sets:
 ```typescript
-// Fetch deposit_ledger with referral data
-const { data: deposits } = await supabase
-  .from('deposit_ledger')
-  .select('*')
-  .eq('transaction_type', 'deposit')
-  .order('created_at', { ascending: false });
-
-// Get all referral redemptions to match by purchase_id (stripe_payment_intent_id)
-const { data: redemptions } = await supabase
-  .from('referral_redemptions')
-  .select('*, referral_codes(code, owner_user_id)')
-  .in('purchase_id', deposits.map(d => d.stripe_payment_intent_id));
-
-// Get profiles for user info and referrer info
-const { data: profiles } = await supabase
-  .from('profiles')
-  .select('id, username, email');
-
-// Merge all data together
+earned_tokens: walletBalance - stakeAmount
 ```
 
-**Enhanced purchase row display:**
+This is wrong because:
+- `walletBalance` is the **combined total** of purchased + earned tokens
+- The deduction should first come from `purchased_tokens`, then `earned_tokens`
+- If user has 0 purchased + 100 earned and stakes 50, the code would set `earned_tokens = 100 - 50 = 50` which happens to be correct by accident
+- But if user has 30 purchased + 70 earned (100 total) and stakes 50, it would wrongly set `earned_tokens = 50` instead of correctly deducting 30 from purchased and 20 from earned
 
-For each purchase, show:
-- **Date**: Feb 6, 2026 10:13 PM
-- **User**: Samson Clunie (samsonclunie@icloud.com)
-- **Pack**: Starter
-- **USD**: $25.00
-- **Base Tokens**: 2,500
-- **Bonus**: +0 (no referral used)
-- **Total**: 2,500
-- **Referral**: None
-- **Referrer**: —
+### 2. Missing Transaction Log
+The parlay placement doesn't create a `token_transactions` record, making stakes invisible in user transaction history and admin auditing.
 
-For a user with referral:
-- **Date**: Feb 5, 2026 10:04 PM  
-- **User**: Travis Anderson (travis...)
-- **Pack**: Standard
-- **USD**: $50.00
-- **Base Tokens**: 5,000
-- **Bonus**: +2,500 (50% via BALLER)
-- **Total**: 7,500 (includes base discount)
-- **Referral**: BALLER
-- **Referrer**: — (no owner set)
-- **Commission**: 22% ($11 value)
+### 3. Generic Error Messages
+The catch block shows "Failed to place parlay" without specific error details, making debugging difficult.
 
-### UI Updates
+## Solution
 
-1. **Filter Panel**: Add "purchase" to the type dropdown alongside existing types
-2. **Table Columns**: When viewing purchases, show the enhanced columns above
-3. **Summary Cards**: Update stats when "purchase" filter is active:
-   - Total Revenue (USD)
-   - Tokens Sold
-   - Bonus Tokens Awarded
-   - Referrals Used
+### File: `src/components/ParlayBuilder.tsx`
 
-4. **Row Styling**: 
-   - Show referral bonus in green if present
-   - Show referral code as a badge
-   - Show commission details on hover/tooltip
+**Replace the wallet update section (lines ~305-320) with proper logic:**
 
-### Technical Notes
+1. **Fetch current wallet state** - Get actual `purchased_tokens` and `earned_tokens` values
+2. **Apply correct deduction** - Deduct from purchased first, then earned (same as TournamentDetailClean.tsx)
+3. **Log transaction** - Create `token_transactions` record for audit trail
+4. **Improve error handling** - Log specific error messages to help with debugging
 
-- The `deposit_ledger` uses `stripe_payment_intent_id` which matches `purchase_id` in `referral_redemptions`
-- `referral_redemptions` stores snapshot values at time of purchase (audit-safe)
-- For purchases without referrals, simply show the base transaction without bonus columns filled
+**Before (Buggy):**
+```typescript
+// Update wallet
+const { error: walletError } = await supabase
+  .from('token_wallets')
+  .update({
+    earned_tokens: walletBalance - stakeAmount
+  })
+  .eq('user_id', userId);
 
+if (walletError) throw walletError;
+```
+
+**After (Fixed):**
+```typescript
+// Fetch current wallet state
+const { data: walletData, error: walletFetchError } = await supabase
+  .from('token_wallets')
+  .select('purchased_tokens, earned_tokens')
+  .eq('user_id', userId)
+  .maybeSingle();
+
+if (walletFetchError) throw walletFetchError;
+if (!walletData) throw new Error('Wallet not found');
+
+// Deduct from purchased first, then earned
+const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - stakeAmount);
+const remaining = stakeAmount - walletData.purchased_tokens;
+const newEarnedTokens = remaining > 0 
+  ? walletData.earned_tokens - remaining 
+  : walletData.earned_tokens;
+
+const { error: walletUpdateError } = await supabase
+  .from('token_wallets')
+  .update({
+    purchased_tokens: newPurchasedTokens,
+    earned_tokens: Math.max(0, newEarnedTokens)
+  })
+  .eq('user_id', userId);
+
+if (walletUpdateError) throw walletUpdateError;
+
+const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
+
+// Log transaction for audit trail
+await supabase.from('token_transactions').insert({
+  user_id: userId,
+  type: 'prediction_placed',
+  amount: -stakeAmount,
+  balance_after: newBalance,
+  reference_type: 'bet_slip',
+  reference_id: betSlip.id,
+  description: `Parlay entry (${completeLegs.length} legs) - ${tournament.name}`,
+  metadata: {
+    tournament_name: tournament.name,
+    leg_count: completeLegs.length,
+    multiplier: multiplier,
+    potential_payout: potentialPayout,
+    legs: completeLegs.map(leg => ({
+      discipline: leg.discipline,
+      gender: leg.gender,
+      winner: leg.winner?.athlete.name
+    }))
+  }
+});
+```
+
+**Also improve the error catch block:**
+```typescript
+} catch (error: any) {
+  console.error('Error placing parlay:', error);
+  toast.error(error.message || 'Failed to place parlay. Please try again.');
+} finally {
+```
+
+## Files to Modify
+- `src/components/ParlayBuilder.tsx` - Fix wallet deduction logic, add transaction logging, improve error messages
+
+## Testing
+After the fix, the user should be able to:
+1. Place a parlay bet successfully
+2. See the stake deduction in their transaction history
+3. Receive specific error messages if something fails
