@@ -434,8 +434,13 @@ const TournamentDetail = () => {
     try {
       const podiumMarket = currentPodiumContext.market;
       
-      // Calculate multiplier based on combined odds (simplified)
-      let combinedOdds = 1.5;
+      // Calculate combined multiplier using Sum × 2 formula
+      const { calculatePodiumCombinedMultiplier } = await import('@/utils/podiumMultipliers');
+      const combinedOdds = calculatePodiumCombinedMultiplier(
+        podiumState.assignedPositions.first.decimal_odds,
+        podiumState.assignedPositions.second.decimal_odds,
+        podiumState.assignedPositions.third.decimal_odds
+      );
       
       // Validate entry before placing
       setIsValidating(true);

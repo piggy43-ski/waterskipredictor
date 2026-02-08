@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Selection } from '@/types';
 import { Coins, Medal } from 'lucide-react';
+import { calculatePodiumCombinedMultiplier } from '@/utils/podiumMultipliers';
 
 interface PodiumPredictionDialogProps {
   selections: Selection[];
@@ -37,8 +38,12 @@ export const PodiumPredictionDialog = ({
 
   if (selections.length !== 3) return null;
 
-  // Calculate combined multiplier for podium (lower since it's easier to be correct)
-  const combinedOdds = selections.reduce((acc, sel) => acc * sel.decimal_odds, 1) * 0.3;
+  // Calculate combined multiplier using Sum × 2 formula for podium difficulty bonus
+  const combinedOdds = calculatePodiumCombinedMultiplier(
+    selections[0].decimal_odds,
+    selections[1].decimal_odds,
+    selections[2].decimal_odds
+  );
   const potentialPayout = Math.floor(Number(stakeAmount) * combinedOdds);
   const multiplierDisplay = `${combinedOdds.toFixed(2)}x`;
 
