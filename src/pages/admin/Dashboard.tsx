@@ -12,6 +12,7 @@ import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { UnpublishedMarketsCard } from '@/components/admin/UnpublishedMarketsCard';
+import { RealtimeActivityFeed } from '@/components/admin/RealtimeActivityFeed';
 
 type EmailType = 'welcome' | 'bet_confirmation' | 'bet_result' | 'bet_result_lost' | 'redemption_receipt';
 
@@ -231,6 +232,9 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Real-time Activity Feed */}
+        <RealtimeActivityFeed />
 
         {/* Email Test Card */}
         <Card>
