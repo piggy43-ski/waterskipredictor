@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database, DollarSign, UserCog, Crown, FlaskConical, ClipboardList, Menu, X, FileText, PieChart, Shield, Share2 } from 'lucide-react';
+import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database, DollarSign, UserCog, Crown, FlaskConical, ClipboardList, Menu, X, FileText, PieChart, Shield, Share2, History, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAdminCheck } from '@/hooks/useAdminCheck';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -17,6 +17,8 @@ const navItems = [
   { path: '/admin/house-ledger', label: 'Platform Ledger', icon: DollarSign },
   { path: '/admin/market-liability', label: 'Market Liability', icon: TrendingUp },
   { path: '/admin/users', label: 'Users', icon: UserCog },
+  { path: '/admin/all-transactions', label: 'All Transactions', icon: History },
+  { path: '/admin/all-predictions', label: 'All Predictions', icon: Target },
   { path: '/admin/referrals', label: 'Referral Codes', icon: Share2 },
   { path: '/admin/athletes', label: 'Athletes', icon: Users },
   { path: '/admin/rankings-sync', label: 'Rankings Auto-Sync', icon: TrendingUp },
