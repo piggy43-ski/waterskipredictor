@@ -1,10 +1,11 @@
 import { Tournament } from '@/types';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { Calendar, MapPin, Clock } from 'lucide-react';
+import { Calendar, MapPin, Clock, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { useState, useEffect } from 'react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface TournamentCardProps {
   tournament: Tournament;
@@ -103,9 +104,19 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
                   {status.badge}
                 </span>
               </div>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground flex-1">
                 {predictionWindow.message}
               </span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
+                    <Info className="w-4 h-4 text-muted-foreground hover:text-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[200px] text-center">
+                    <p className="text-xs">Predictions are open now and lock when the tournament starts.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           );
         })()}
