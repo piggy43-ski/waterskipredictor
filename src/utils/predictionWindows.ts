@@ -38,9 +38,6 @@ export const getPredictionWindowStatus = (
   const start = new Date(startDatetime);
   const end = endDatetime ? new Date(endDatetime) : null;
   
-  // Predictions open 24 hours before tournament start
-  const predictionsOpen = new Date(start.getTime() - 24 * 60 * 60 * 1000);
-  
   // Tournament has been settled
   if (settledAt) {
     return {
@@ -68,55 +65,23 @@ export const getPredictionWindowStatus = (
     };
   }
   
-  // Prediction window is open (within 24h before start)
-  if (now >= predictionsOpen && now < start) {
-    const timeLeft = start.getTime() - now.getTime();
-    const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-    
-    const message = days > 0 
-      ? `Open – Locks in ${days}d ${hours}h`
-      : hours > 0
-        ? `Open – Locks in ${hours}h ${minutes}m`
-        : `Open – Locks in ${minutes}m`;
-    
-    return {
-      status: 'open',
-      message,
-      canPredict: true
-    };
-  }
+  // Before tournament start - predictions are OPEN
+  // (consistent with fantasy - both lock at tournament start)
+  const timeLeft = start.getTime() - now.getTime();
+  const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
   
-  // Too early - predictions not yet open
-  const timeUntilOpen = predictionsOpen.getTime() - now.getTime();
-  const days = Math.floor(timeUntilOpen / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((timeUntilOpen % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((timeUntilOpen % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((timeUntilOpen % (1000 * 60)) / 1000);
-  
-  // Calculate time until tournament start (lock time)
-  const timeUntilStart = start.getTime() - now.getTime();
-  const startDays = Math.floor(timeUntilStart / (1000 * 60 * 60 * 24));
-  const startHours = Math.floor((timeUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  
-  const opensIn = days > 0 
-    ? `${days}d ${hours}h`
+  const message = days > 0 
+    ? `Open – Locks in ${days}d ${hours}h`
     : hours > 0
-      ? `${hours}h ${minutes}m`
-      : `${minutes}m`;
-  
-  const locksIn = startDays > 0 
-    ? `${startDays}d ${startHours}h`
-    : `${startHours}h`;
-  
-  const message = `Opens in ${opensIn} · Locks in ${locksIn}`;
+      ? `Open – Locks in ${hours}h ${minutes}m`
+      : `Open – Locks in ${minutes}m`;
   
   return {
-    status: 'upcoming',
+    status: 'open',
     message,
-    canPredict: false,
-    countdown: { days, hours, minutes, seconds }
+    canPredict: true
   };
 };
 
