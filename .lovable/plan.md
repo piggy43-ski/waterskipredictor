@@ -1,69 +1,83 @@
 
+# Add Visual Indicator for Prediction Status
 
-# Align Prediction and Fantasy Windows
+## Current State
+The `TournamentCard` component already displays prediction window status with:
+- A clock icon
+- Text message (e.g., "Open – Locks in 1d 22h")
+- Color coding based on `canPredict` and prediction status
 
-## Problem
-Currently there are two different rules:
-- **Fantasy**: Can join/edit teams anytime before tournament starts (locks at start)
-- **Predictions**: Can only predict within the 24-hour window before start
-
-This is confusing - users can set up their fantasy team but can't make predictions until the 24h window opens.
+However, the indicator is subtle and could be more visually prominent, especially to distinguish between:
+- **Open** (can predict) - predictions are available
+- **Closed** (locked) - predictions are locked because event is in progress
+- **Finished** - event has completed
 
 ## Solution
-Match prediction availability to fantasy - both should be **open immediately** and **lock at tournament start**.
+Enhance the visual indicator in `TournamentCard` to:
 
-## Technical Changes
+1. **Add a Status Badge** - Display a prominent badge next to or near the prediction status text showing:
+   - "✓ OPEN" (green) when `canPredict: true`
+   - "🔒 LOCKED" (red) when `canPredict: false` and status is `'closed'`
+   - "SETTLED" (gray) when status is `'finished'`
 
-### File: `src/utils/predictionWindows.ts`
+2. **Improve Visual Hierarchy** - Make the prediction status section more visually distinct from other information
 
-Remove the 24-hour restriction. Predictions should be open anytime before the tournament starts.
+3. **Color Coordination** - Use consistent colors:
+   - Green (`text-success`) for open predictions
+   - Red (`text-destructive`) for locked predictions
+   - Gray (`text-muted-foreground`) for finished/settled
 
-**Current logic (lines 41-42, 71-72, 91-120):**
+## Files to Modify
+
+### `src/components/TournamentCard.tsx`
+
+**Location**: Lines 82-96 (Prediction Window Status section)
+
+**Changes**:
+- Replace the simple text display with an enhanced section that includes:
+  - A status badge showing "OPEN", "LOCKED", or "SETTLED"
+  - Better visual separation and styling
+  - Keep the countdown message below the status badge
+  - Use appropriate color classes based on `predictionWindow.status` and `canPredict`
+
+**Implementation approach**:
 ```typescript
-// Predictions open 24 hours before tournament start
-const predictionsOpen = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+// Create helper function to get status badge text and color
+const getPredictionStatusDisplay = () => {
+  if (predictionWindow.status === 'finished') {
+    return { badge: 'SETTLED', color: 'text-muted-foreground' };
+  }
+  if (predictionWindow.status === 'closed') {
+    return { badge: '🔒 LOCKED', color: 'text-destructive' };
+  }
+  if (predictionWindow.canPredict) {
+    return { badge: '✓ OPEN', color: 'text-success' };
+  }
+  return { badge: 'UNAVAILABLE', color: 'text-muted-foreground' };
+};
 
-// ...later...
-// Prediction window is open (within 24h before start)
-if (now >= predictionsOpen && now < start) { ... }
-
-// Too early - predictions not yet open
-// Shows "Opens in X · Locks in Y"
-```
-
-**New logic:**
-```typescript
-// Predictions are open anytime before tournament starts
-// (no more 24h restriction - consistent with fantasy)
-
-// If before tournament start, predictions are open
-if (now < start) {
-  const timeLeft = start.getTime() - now.getTime();
-  const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-  
-  const message = days > 0 
-    ? `Open – Locks in ${days}d ${hours}h`
-    : hours > 0
-      ? `Open – Locks in ${hours}h ${minutes}m`
-      : `Open – Locks in ${minutes}m`;
-  
-  return {
-    status: 'open',
-    message,
-    canPredict: true
-  };
-}
+// Update the JSX to show badge + message
+<div className="mt-4 pt-3 border-t border-border/50">
+  <div className="flex items-center gap-2 mb-2">
+    <Clock className="w-4 h-4 text-muted-foreground" />
+    <span className={`text-sm font-bold ${statusDisplay.color}`}>
+      {statusDisplay.badge}
+    </span>
+  </div>
+  <p className="text-xs text-muted-foreground ml-6">
+    {predictionWindow.message}
+  </p>
+</div>
 ```
 
 ## Result
 
-| Time Before Event | Before (Predictions) | After (Predictions) | Fantasy |
-|-------------------|----------------------|---------------------|---------|
-| 2 days out | "Opens in 1d · Locks in 2d" | "Open – Locks in 2d" | "Locks in 2d" |
-| 22h out | "Opens in 22h · Locks in 1d 22h" | "Open – Locks in 22h" | "Locks in 22h" |
-| Event started | "Predictions locked" | "Predictions locked" | (Locked badge) |
+Users will now see clearer, more visually distinct indicators:
 
-Both features now open at the same time and lock at the same time, creating a consistent user experience.
+| Prediction Status | Display | Color |
+|-------------------|---------|-------|
+| Open | "✓ OPEN" + "Open – Locks in 22h" | Green + Gray countdown |
+| Locked (in progress) | "🔒 LOCKED" + "Predictions locked – event in progress" | Red |
+| Finished/Settled | "SETTLED" + "Tournament settled" | Gray |
 
+This makes it immediately obvious at a glance whether a user can place predictions on a tournament.
