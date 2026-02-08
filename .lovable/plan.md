@@ -1,124 +1,82 @@
 
-# Comprehensive Prediction System Audit & Fix
+# Fix: Token Transaction Type Constraint Violation
 
-## Summary
-I audited all token deduction flows (single predictions, podium predictions, parlays, and fantasy entries) to ensure users can reliably place predictions without errors. I found **1 critical bug** that still needs fixing.
+## Root Cause Found
+Database logs revealed the actual error:
+> **"new row for relation "token_transactions" violates check constraint "token_transactions_type_check"**
 
-## Audit Results
+The `token_transactions` table has a check constraint that only allows these types:
+- `deposit`, `bet_placed`, `bet_won`, `bet_lost`, `bet_void`, `bonus`, `redemption`, `adjustment`, `burn`
 
-### Already Fixed (Working Correctly)
-| Flow | File | Status |
-|------|------|--------|
-| **Single Predictions** | `TournamentDetailClean.tsx` (line 755-779) | Correct deduction logic with transaction logging |
-| **Podium Predictions** | `TournamentDetailClean.tsx` (line 556-604) | Correct deduction logic with transaction logging |
-| **Parlay Predictions** | `ParlayBuilder.tsx` (line 311-360) | Fixed in last commit - correct deduction with transaction logging |
+But the code is using:
+- `'prediction_placed'` (not allowed)
+- `'fantasy_entry'` (not allowed)
 
-These flows all correctly:
-1. Fetch current `purchased_tokens` and `earned_tokens` separately
-2. Deduct from `purchased_tokens` first, then `earned_tokens`
-3. Log the transaction in `token_transactions`
+**This is why it works for admins** - admins may have previously placed bets before this constraint was added, or they may be testing without logging transactions.
 
----
+## Solution
 
-### Bug Found: Fantasy Entry Fee Deduction
+### Option A: Fix the Code (Recommended - Quick Fix)
+Change all transaction type values to use allowed types:
+- `'prediction_placed'` → `'bet_placed'`
+- `'fantasy_entry'` → `'bet_placed'` (with description indicating it's a fantasy entry)
 
-**File:** `src/pages/FantasyPotDetail.tsx` (lines 272-283)
+### Option B: Update the Database Constraint
+Add new types to the allowed list. However, this is riskier as it requires a migration.
 
-**Problem:** The fantasy entry submission uses the **same incorrect pattern** the parlay had:
-```typescript
-// BUGGY CODE:
-const newBalance = walletBalance - pot.entry_fee_tokens;
-const { error: walletError } = await supabase
-  .from('token_wallets')
-  .update({ 
-    earned_tokens: newBalance,  // WRONG: walletBalance is combined total!
-    updated_at: new Date().toISOString()
-  })
-  .eq('user_id', user.id);
-```
-
-**Issues:**
-1. `walletBalance` is the **combined** purchased + earned total
-2. It blindly sets `earned_tokens` to the new balance, which is wrong
-3. If user has 50 purchased + 50 earned (100 total) and pays 30 entry fee:
-   - Code sets `earned_tokens = 100 - 30 = 70`
-   - But `purchased_tokens` remains at 50
-   - Result: User now has 50 + 70 = **120 tokens** (they gained tokens!)
-
-**Impact:** Users could gain tokens when joining fantasy leagues, or the update could fail with constraint violations.
-
----
-
-## The Fix
-
-### File: `src/pages/FantasyPotDetail.tsx`
-
-Replace the wallet deduction section (lines 272-283) with correct accounting:
-
-```typescript
-// Fetch current wallet state
-const { data: walletData, error: walletFetchError } = await supabase
-  .from('token_wallets')
-  .select('purchased_tokens, earned_tokens')
-  .eq('user_id', user.id)
-  .maybeSingle();
-
-if (walletFetchError) throw walletFetchError;
-if (!walletData) throw new Error('Wallet not found');
-
-// Deduct from purchased first, then earned (correct accounting)
-const entryFee = pot.entry_fee_tokens;
-const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - entryFee);
-const remaining = entryFee - walletData.purchased_tokens;
-const newEarnedTokens = remaining > 0 
-  ? walletData.earned_tokens - remaining 
-  : walletData.earned_tokens;
-
-const { error: walletError } = await supabase
-  .from('token_wallets')
-  .update({
-    purchased_tokens: newPurchasedTokens,
-    earned_tokens: Math.max(0, newEarnedTokens)
-  })
-  .eq('user_id', user.id);
-
-if (walletError) throw walletError;
-
-const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
-```
-
-Also update the transaction logging to use the correct `newBalance`:
-```typescript
-// Log transaction (already exists but needs correct balance)
-await supabase
-  .from('token_transactions')
-  .insert({
-    user_id: user.id,
-    type: 'fantasy_entry',
-    amount: -pot.entry_fee_tokens,
-    balance_after: newBalance,  // Use calculated balance, not walletBalance - fee
-    description: `Fantasy entry: ${pot.name}`,
-    reference_id: entryData.id,
-    reference_type: 'fantasy_entry',
-    metadata: {
-      pot_name: pot.name,
-      team_name: teamName || 'My Team',
-      roster_size: roster.length,
-      team_value: usedBudget
-    }
-  });
-```
+**I recommend Option A** for a quick fix that unblocks your beta testers immediately.
 
 ---
 
 ## Files to Modify
-- `src/pages/FantasyPotDetail.tsx` - Fix wallet deduction logic (lines 272-283)
 
-## Testing Checklist
-After the fix, users should be able to:
-1. Place single predictions on tournaments
-2. Place podium predictions (3-athlete combos)
-3. Place parlay predictions (multi-leg combos)
-4. Join fantasy leagues with entry fees
-5. See all stakes deducted correctly in their transaction history
-6. Have correct token accounting (purchased depletes before earned)
+### 1. `src/pages/TournamentDetailClean.tsx`
+**Line 585** (Podium prediction):
+```typescript
+// Before
+type: 'prediction_placed',
+
+// After
+type: 'bet_placed',
+```
+
+**Line 784** (Single prediction):
+```typescript
+// Before
+type: 'prediction_placed',
+
+// After
+type: 'bet_placed',
+```
+
+### 2. `src/components/ParlayBuilder.tsx`
+**Line 343** (Parlay prediction):
+```typescript
+// Before
+type: 'prediction_placed',
+
+// After
+type: 'bet_placed',
+```
+
+### 3. `src/pages/FantasyPotDetail.tsx`
+**Line 337** (Fantasy entry):
+```typescript
+// Before
+type: 'fantasy_entry',
+
+// After
+type: 'bet_placed',
+```
+
+---
+
+## Technical Summary
+| File | Line | Change |
+|------|------|--------|
+| `TournamentDetailClean.tsx` | 585 | `'prediction_placed'` → `'bet_placed'` |
+| `TournamentDetailClean.tsx` | 784 | `'prediction_placed'` → `'bet_placed'` |
+| `ParlayBuilder.tsx` | 343 | `'prediction_placed'` → `'bet_placed'` |
+| `FantasyPotDetail.tsx` | 337 | `'fantasy_entry'` → `'bet_placed'` |
+
+After this fix, all users will be able to place predictions, parlays, and join fantasy leagues without errors.
