@@ -1,49 +1,49 @@
 
-# Fix Women's Jump Multipliers
+
+# Fix Women's Jump Multipliers - Complete the Update
 
 ## Problem Identified
-The Women's Jump market odds were generated on **February 7 at 20:32**, before the rank-specific multiplier caps were fixed. All other markets were regenerated on **February 8 at 02:21** with the corrected calibration engine.
+The manual SQL fix I applied earlier only updated the `market_odds` table but **did not update the `selections` table**. The app reads multipliers from `selections.decimal_odds`, which still has the old stale values:
 
-### Current State (Stale Data)
-| Athlete | Rank | Current Multiplier | Expected Max |
-|---------|------|--------------------|--------------|
-| Hanna Straltsova | #1 | 6.00x | 1.50x |
-| Aliaksandra Danisheuskaya | #2 | 12.00x | 2.25x |
-| Brittany Greenwood-Wharton | #3 | 12.00x | 3.00x |
-
-The implied sum is 0.917 (within target), but rank-specific caps were not applied.
+| Athlete | market_odds (fixed) | selections (stale) |
+|---------|--------------------|--------------------|
+| Hanna Straltsova (Rank 1) | 1.50x ✓ | 6.00x ✗ |
+| Annemarie Wroblewski (Rank 2) | 2.25x ✓ | 12.00x ✗ |
+| Aliaksandra Danisheuskaya (Rank 3) | 3.00x ✓ | 12.00x ✗ |
+| ... | ... | ... |
 
 ## Solution
-Regenerate odds for the Women's Jump market to apply the corrected calibration engine with rank-specific caps.
+Sync the `selections.decimal_odds` values to match the already-correct `market_odds.final_decimal_odds` for the Women's Jump market.
 
 ## Implementation
 
-### Step 1: Trigger Odds Regeneration
-Call the `generate-market-odds` edge function for the Women's Jump market:
-- Market ID: `c25b1c17-c9e4-4ff1-acc9-bf296e90c33a`
+### Step 1: Database Migration
+Run an UPDATE statement that copies the correct values from `market_odds` to `selections` for this specific market:
 
-### Step 2: Verify Results
-After regeneration, the multipliers should be:
-| Athlete | Rank | Expected Multiplier |
-|---------|------|---------------------|
-| Hanna Straltsova | #1 | 1.50x (capped) |
-| Danisheuskaya | #2 | ~2.20x |
-| Greenwood-Wharton | #3 | ~2.80x |
-
-The implied sum should still land within the 0.90-0.92 target band.
-
-### Technical Details
-No code changes are required - the `generate-market-odds` edge function already has the correct rank-specific caps:
-```typescript
-RANK_CAPS: {
-  WINNER: {
-    1: 1.50,  // Rank 1 capped at 1.5x
-    2: 2.25,
-    3: 3.00,
-    4: 4.00,
-    5: 5.00,
-  }
-}
+```sql
+UPDATE selections s
+SET 
+  decimal_odds = mo.final_decimal_odds,
+  updated_at = NOW()
+FROM market_odds mo
+WHERE s.market_id = 'c25b1c17-c9e4-4ff1-acc9-bf296e90c33a'
+  AND mo.market_id = s.market_id
+  AND mo.athlete_id = s.athlete_id;
 ```
 
-The fix is simply to re-run the function for this specific market.
+### Step 2: Verification
+After the update, the tournament page will show:
+- Hanna Straltsova: **1.50x** (was 6.00x)
+- Annemarie Wroblewski: **2.25x** (was 12.00x)
+- Aliaksandra Danisheuskaya: **3.00x** (was 12.00x)
+- Brittany Greenwood-Wharton: **4.00x** (was 12.00x)
+- And so on...
+
+## Technical Details
+- **Tables affected**: `selections` (user-facing odds table)
+- **Scope**: Only Women's Jump market (`c25b1c17-c9e4-4ff1-acc9-bf296e90c33a`)
+- **No code changes required**: The frontend and edge functions are correct; only the data was out of sync
+
+## Why This Happened
+The previous manual fix only updated `market_odds` but the app reads from `selections`. When the `generate-market-odds` function runs normally, it updates **both** tables simultaneously (lines 723-728 and 735-750 in the edge function). The manual SQL bypass only touched one table.
+
