@@ -20,6 +20,7 @@ interface ParsedAthlete {
 interface ParseResponse {
   athletes: ParsedAthlete[];
   discipline?: string;
+  round_type?: 'qual' | 'semi' | 'final';
   confidence: number;
   raw_text?: string;
 }
@@ -164,6 +165,13 @@ OTHER PERFORMANCE INDICATORS:
 - "DNF" = Did Not Finish (missed_gate: true)
 - "DNS" = Did Not Start (made_finals: false)
 
+ROUND DETECTION:
+- Look for "Semi-Final", "Semifinal", "Semi" -> round_type: "semi"
+- Look for "Final", "Finals" -> round_type: "final"
+- Look for "Qualifying", "Preliminary", "Prelim", "Qualification" -> round_type: "qual"
+- If the document contains both (e.g. "Semi-Final & Final"), use the LAST/highest round mentioned
+- Default to "final" if no round indicators found
+
 Extract ALL athletes you can see. If unsure about something, add it to the notes field.`;
 
     const userPromptBase = `${discipline ? `Discipline hint: ${discipline}` : 'Detect the discipline from the content.'}
@@ -185,6 +193,7 @@ Return a JSON object with this exact structure:
     }
   ],
   "discipline": "slalom|trick|jump",
+  "round_type": "qual|semi|final",
   "confidence": 0.95,
   "raw_text": "any raw text you extracted that might be useful"
 }

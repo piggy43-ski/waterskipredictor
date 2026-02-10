@@ -80,6 +80,7 @@ type ParsedAthlete = {
 type AIParseResponse = {
   athletes: ParsedAthlete[];
   discipline?: string;
+  round_type?: RoundType;
   confidence: number;
   raw_text?: string;
   source_file?: string;
@@ -501,9 +502,47 @@ export default function TournamentSettlement() {
   const applyAIResults = () => {
     if (allParsedResults.length === 0) return;
 
+    // Auto-detect round type from AI results (majority vote)
+    const roundVotes = allParsedResults
+      .map(r => r.round_type)
+      .filter(Boolean) as RoundType[];
+    const detectedRound = roundVotes.length > 0
+      ? roundVotes.sort((a, b) =>
+          roundVotes.filter(v => v === b).length - roundVotes.filter(v => v === a).length
+        )[0]
+      : selectedRound;
+
+    // Auto-detect discipline from AI results
+    const disciplineVotes = allParsedResults
+      .map(r => r.discipline)
+      .filter(d => d === 'slalom' || d === 'trick' || d === 'jump') as Discipline[];
+    const detectedDiscipline = disciplineVotes.length > 0
+      ? disciplineVotes.sort((a, b) =>
+          disciplineVotes.filter(v => v === b).length - disciplineVotes.filter(v => v === a).length
+        )[0]
+      : selectedDiscipline;
+
+    // Auto-switch round and discipline
+    const targetRound = detectedRound;
+    const targetDiscipline = detectedDiscipline;
+    setSelectedRound(targetRound);
+    setSelectedDiscipline(targetDiscipline);
+
     const allAthletes = allParsedResults.flatMap(r => r.athletes);
-    const maleAthletes = allAthletes.filter(a => a.gender === 'male');
-    const femaleAthletes = allAthletes.filter(a => a.gender === 'female');
+
+    // Re-fetch athletes for the detected discipline
+    const malePool = getAllAthletes(targetDiscipline, 'male');
+    const femalePool = getAllAthletes(targetDiscipline, 'female');
+
+    // Re-match athletes against the correct discipline pool
+    const rematchedAthletes = allAthletes.map(a => {
+      const pool = a.gender === 'female' ? femalePool : malePool;
+      const match = matchAthleteByName(a.name, pool);
+      return { ...a, matched_athlete_id: match?.id, match_confidence: match?.confidence || 0 };
+    });
+
+    const maleAthletes = rematchedAthletes.filter(a => a.gender === 'male');
+    const femaleAthletes = rematchedAthletes.filter(a => a.gender === 'female');
     
     const createEntries = (athletes: ParsedAthlete[]): ResultEntry[] => {
       const seenIds = new Set<string>();
@@ -514,7 +553,7 @@ export default function TournamentSettlement() {
           return true;
         })
         .map(a => {
-          const parsed = parseAndCalculateScore(a.score, selectedDiscipline);
+          const parsed = parseAndCalculateScore(a.score, targetDiscipline);
           return {
             athlete_id: a.matched_athlete_id!,
             score: a.score,
@@ -532,17 +571,17 @@ export default function TournamentSettlement() {
     const maleEntries = createEntries(maleAthletes);
     const femaleEntries = createEntries(femaleAthletes);
 
-    const isFinal = selectedRound === 'final';
-    const maleWithRanks = calculateRankings(maleEntries, selectedDiscipline, isFinal);
-    const femaleWithRanks = calculateRankings(femaleEntries, selectedDiscipline, isFinal);
+    const isFinal = targetRound === 'final';
+    const maleWithRanks = calculateRankings(maleEntries, targetDiscipline, isFinal);
+    const femaleWithRanks = calculateRankings(femaleEntries, targetDiscipline, isFinal);
 
     setResults(prev => ({
       ...prev,
-      [selectedRound]: {
-        ...prev[selectedRound],
-        [selectedDiscipline]: {
-          male: maleWithRanks.length > 0 ? maleWithRanks : prev[selectedRound][selectedDiscipline].male,
-          female: femaleWithRanks.length > 0 ? femaleWithRanks : prev[selectedRound][selectedDiscipline].female,
+      [targetRound]: {
+        ...prev[targetRound],
+        [targetDiscipline]: {
+          male: maleWithRanks.length > 0 ? maleWithRanks : prev[targetRound][targetDiscipline].male,
+          female: femaleWithRanks.length > 0 ? femaleWithRanks : prev[targetRound][targetDiscipline].female,
         },
       },
     }));
@@ -550,10 +589,11 @@ export default function TournamentSettlement() {
     setAiPreviewOpen(false);
     setAllParsedResults([]);
     setUploadedFiles([]);
-    
+
+    const roundLabelsMap: Record<RoundType, string> = { qual: 'Qualifying', semi: 'Semi-Final', final: 'Final' };
     toast({ 
-      title: 'Results applied',
-      description: `Added ${maleEntries.length} male and ${femaleEntries.length} female entries to ${selectedRound} round.`
+      title: `Detected: ${roundLabelsMap[targetRound]}, ${targetDiscipline.charAt(0).toUpperCase() + targetDiscipline.slice(1)}`,
+      description: `Added ${maleEntries.length} male and ${femaleEntries.length} female entries.`
     });
   };
 
