@@ -1,67 +1,95 @@
 
 
-# Auto-Detect Round Type (Semi/Final) from AI Parsing
+# Fix: Prevent Loss of Score Data on Page Refresh
 
 ## Problem
-When you upload an image or link of tournament results, the AI parser extracts athletes and scores but does NOT detect which round (semifinal vs final) the results belong to. It always applies results to whichever round tab you have manually selected. You want the system to automatically figure out whether the content is semifinals or finals.
+When entering scores on the Tournament Settlement page, the page sometimes refreshes (due to code deployments or browser events), wiping all unsaved work. Scores are stored only in React state, so any full page reload loses everything.
 
 ## Solution
-Add round detection to the AI parsing pipeline:
-
-1. **Update the AI prompt** in the `parse-tournament-scores` edge function to also detect the round type from the content (looking for keywords like "Semi", "Final", "Semifinal", "Preliminary", "Qualification", etc.)
-2. **Return the detected round** in the AI response as a new `round_type` field
-3. **Auto-switch the round tab** on the frontend when AI results are applied, based on what was detected
-4. **Also auto-detect discipline** -- the AI already returns a `discipline` field but the frontend ignores it; we should use it too
+**Auto-save in-progress results to browser sessionStorage** so they persist across page refreshes. This is lightweight and doesn't require database changes.
 
 ## Implementation
 
-### 1. Edge Function: `supabase/functions/parse-tournament-scores/index.ts`
+### File: `src/pages/admin/TournamentSettlement.tsx`
 
-- Add `round_type` to the `ParseResponse` interface: `round_type?: 'qual' | 'semi' | 'final'`
-- Update the system prompt to include round detection instructions:
-  - Look for headers like "Semi-Final", "Semifinal", "Semi", "Final", "Finals", "Qualifying", "Preliminary"
-  - Default to "final" if unclear
-- Update the JSON response schema in the user prompt to include `"round_type": "qual|semi|final"`
+**1. Add a debounced auto-save to sessionStorage whenever results change**
 
-### 2. Frontend: `src/pages/admin/TournamentSettlement.tsx`
+Every time the `results` state updates, save it to `sessionStorage` under a key that includes the tournament ID. This happens automatically in the background.
 
-- Update the `AIParseResponse` type to include `round_type?: 'qual' | 'semi' | 'final'` and use the existing `discipline` field
-- In `applyAIResults()`:
-  - Read the detected `round_type` from parsed results (majority vote if multiple files)
-  - Auto-set `selectedRound` to the detected round
-  - Read the detected `discipline` and auto-set `selectedDiscipline`
-  - Show a toast confirming what was auto-detected: "Detected: Semi-Final, Slalom"
-- In the AI preview dialog, show the detected round and discipline so the admin can verify before applying
-
-### 3. ParsedAthlete type update
-- Add `round_type` to `ParsedAthlete` interface on both frontend and edge function
-
-## Technical Details
-
-### AI Prompt Addition (system prompt)
-```
-ROUND DETECTION:
-- Look for "Semi-Final", "Semifinal", "Semi" -> round_type: "semi"
-- Look for "Final", "Finals" -> round_type: "final" 
-- Look for "Qualifying", "Preliminary", "Prelim" -> round_type: "qual"
-- If the document says both (e.g. "Semi-Final & Final"), use the LAST/highest round
-- Default to "final" if no round indicators found
+```typescript
+// Save results to sessionStorage whenever they change
+useEffect(() => {
+  if (selectedTournament && hasLoadedInitialData) {
+    const key = `settlement-draft-${selectedTournament}`;
+    sessionStorage.setItem(key, JSON.stringify(results));
+  }
+}, [results, selectedTournament, hasLoadedInitialData]);
 ```
 
-### Response Schema Addition
-```json
-{
-  "round_type": "semi|final|qual",
-  "discipline": "slalom|trick|jump",
-  "athletes": [...],
-  "confidence": 0.95
-}
+**2. Restore from sessionStorage on load (before database data)**
+
+When a tournament is selected, check sessionStorage first. If a draft exists and is newer than what's in the database, use it instead.
+
+```typescript
+// In the existing "load initial data" useEffect, add sessionStorage check:
+useEffect(() => {
+  if (!selectedTournament || hasLoadedInitialData) return;
+
+  const key = `settlement-draft-${selectedTournament}`;
+  const savedDraft = sessionStorage.getItem(key);
+
+  if (savedDraft) {
+    try {
+      const parsed = JSON.parse(savedDraft);
+      setResults(parsed);
+      setHasLoadedInitialData(true);
+      toast({ title: 'Restored unsaved draft', description: 'Your previous entries were recovered.' });
+      return; // Skip loading from DB
+    } catch {}
+  }
+
+  // Fall through to existing DB load logic...
+}, [tournamentData?.existingResults, hasLoadedInitialData, selectedTournament]);
 ```
 
-### Frontend Auto-Apply Logic
-When AI results come back:
-1. Determine round from first result's `round_type` (or majority if multiple files)
-2. Determine discipline from first result's `discipline`
-3. Switch `selectedRound` and `selectedDiscipline` before applying entries
-4. Show confirmation toast with detected values
+**3. Clear the draft after successful save**
+
+When results are saved to the database successfully, remove the sessionStorage draft.
+
+```typescript
+// In the save mutation onSuccess:
+sessionStorage.removeItem(`settlement-draft-${selectedTournament}`);
+```
+
+**4. Also persist selectedTournament, selectedRound, and selectedDiscipline**
+
+So the user returns to exactly where they left off:
+
+```typescript
+useEffect(() => {
+  if (selectedTournament) {
+    sessionStorage.setItem('settlement-selected-tournament', selectedTournament);
+    sessionStorage.setItem('settlement-selected-round', selectedRound);
+    sessionStorage.setItem('settlement-selected-discipline', selectedDiscipline);
+  }
+}, [selectedTournament, selectedRound, selectedDiscipline]);
+
+// On mount, restore selections:
+const [selectedTournament, setSelectedTournament] = useState(
+  () => sessionStorage.getItem('settlement-selected-tournament') || ''
+);
+const [selectedRound, setSelectedRound] = useState<RoundType>(
+  () => (sessionStorage.getItem('settlement-selected-round') as RoundType) || 'final'
+);
+const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline>(
+  () => (sessionStorage.getItem('settlement-selected-discipline') as Discipline) || 'slalom'
+);
+```
+
+## What This Achieves
+- Scores survive page refreshes, code deployments, and accidental navigation
+- A toast notification confirms when a draft is restored
+- Drafts are automatically cleared after a successful save
+- The selected tournament, round, and discipline tabs are also preserved
+- No database changes needed
 
