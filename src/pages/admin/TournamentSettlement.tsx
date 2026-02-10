@@ -134,9 +134,15 @@ const parseAndCalculateScore = (scoreStr: string, discipline: Discipline): { dis
 };
 
 export default function TournamentSettlement() {
-  const [selectedTournament, setSelectedTournament] = useState('');
-  const [selectedRound, setSelectedRound] = useState<RoundType>('final');
-  const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline>('slalom');
+  const [selectedTournament, setSelectedTournament] = useState(
+    () => sessionStorage.getItem('settlement-selected-tournament') || ''
+  );
+  const [selectedRound, setSelectedRound] = useState<RoundType>(
+    () => (sessionStorage.getItem('settlement-selected-round') as RoundType) || 'final'
+  );
+  const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline>(
+    () => (sessionStorage.getItem('settlement-selected-discipline') as Discipline) || 'slalom'
+  );
   const [athleteSearch, setAthleteSearch] = useState<Record<string, string>>({});
   const [results, setResults] = useState<RoundResults>(initializeRoundResults());
   const [settlementPreviews, setSettlementPreviews] = useState<SettlementPreview[]>([]);
@@ -203,17 +209,51 @@ export default function TournamentSettlement() {
     refetchOnWindowFocus: false, // Prevent refetch when switching tabs
   });
 
+  // Persist selected tournament, round, and discipline to sessionStorage
+  useEffect(() => {
+    if (selectedTournament) {
+      sessionStorage.setItem('settlement-selected-tournament', selectedTournament);
+    }
+    sessionStorage.setItem('settlement-selected-round', selectedRound);
+    sessionStorage.setItem('settlement-selected-discipline', selectedDiscipline);
+  }, [selectedTournament, selectedRound, selectedDiscipline]);
+
+  // Auto-save results to sessionStorage whenever they change
+  useEffect(() => {
+    if (selectedTournament && hasLoadedInitialData) {
+      const key = `settlement-draft-${selectedTournament}`;
+      sessionStorage.setItem(key, JSON.stringify(results));
+    }
+  }, [results, selectedTournament, hasLoadedInitialData]);
+
   // Reset flag and results when tournament changes
   useEffect(() => {
     setHasLoadedInitialData(false);
     setResults(initializeRoundResults());
   }, [selectedTournament]);
 
-  // Load existing results only once per tournament
+  // Load existing results only once per tournament (check sessionStorage first)
   useEffect(() => {
-    if (!tournamentData?.existingResults || hasLoadedInitialData) return;
-    
-    if (tournamentData.existingResults.length > 0) {
+    if (!selectedTournament || hasLoadedInitialData) return;
+    // Wait for tournamentData to be available before deciding
+    if (tournamentData === undefined) return;
+
+    const key = `settlement-draft-${selectedTournament}`;
+    const savedDraft = sessionStorage.getItem(key);
+
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        setResults(parsed);
+        setHasLoadedInitialData(true);
+        toast({ title: 'Restored unsaved draft', description: 'Your previous entries were recovered.' });
+        return;
+      } catch {
+        // Invalid draft, fall through to DB load
+      }
+    }
+
+    if (tournamentData?.existingResults && tournamentData.existingResults.length > 0) {
       const newResults = initializeRoundResults();
 
       for (const result of tournamentData.existingResults) {
@@ -241,7 +281,7 @@ export default function TournamentSettlement() {
       setResults(newResults);
     }
     setHasLoadedInitialData(true);
-  }, [tournamentData?.existingResults, hasLoadedInitialData]);
+  }, [tournamentData, hasLoadedInitialData, selectedTournament]);
 
   const getAllAthletes = (discipline: Discipline, gender: 'male' | 'female') => {
     if (!tournamentData?.tournament?.tournament_entries) return [];
@@ -845,6 +885,7 @@ export default function TournamentSettlement() {
       }
     },
     onSuccess: async () => {
+      sessionStorage.removeItem(`settlement-draft-${selectedTournament}`);
       queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data'] });
       toast({ title: 'Results saved to tournament_results' });
       calculateSettlementPreview();
