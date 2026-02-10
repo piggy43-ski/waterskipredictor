@@ -31,6 +31,7 @@ type ResultEntry = {
   final_overall_rank?: number;
   score: string;
   raw_score: number;
+  tie_break_score: number;
   made_finals: boolean;
   advanced_to_next_round: boolean;
   stood_both_passes: boolean; // For trick
@@ -90,6 +91,7 @@ const emptyResultEntry = (): ResultEntry => ({
   athlete_id: '',
   score: '',
   raw_score: 0,
+  tie_break_score: 0,
   made_finals: false,
   advanced_to_next_round: false,
   stood_both_passes: true,
@@ -267,6 +269,7 @@ export default function TournamentSettlement() {
           athlete_id: result.athlete_id,
           score: result.score_display || result.raw_score?.toString() || '',
           raw_score: result.raw_score || 0,
+          tie_break_score: result.tie_break_score || 0,
           round_rank: result.round_rank || undefined,
           final_overall_rank: result.final_overall_rank || undefined,
           made_finals: result.made_finals ?? false,
@@ -311,14 +314,44 @@ export default function TournamentSettlement() {
       .filter(Boolean);
   };
 
-  // Calculate rankings based on score
-  const calculateRankings = (entries: ResultEntry[], discipline: Discipline, isFinal: boolean): ResultEntry[] => {
+  // Calculate rankings based on score, with tie-break support
+  const calculateRankings = (entries: ResultEntry[], discipline: Discipline, isFinal: boolean, roundType?: RoundType): ResultEntry[] => {
     const validEntries = entries.filter(e => e.athlete_id && e.raw_score > 0);
     const zeroScoreEntries = entries.filter(e => e.athlete_id && e.raw_score === 0);
     const emptyEntries = entries.filter(e => !e.athlete_id);
 
-    // Sort by raw_score (higher is better for all disciplines)
-    const sorted = [...validEntries].sort((a, b) => b.raw_score - a.raw_score);
+    // Sort by raw_score (higher is better), then by tie_break_score as secondary
+    const sorted = [...validEntries].sort((a, b) => {
+      const scoreDiff = b.raw_score - a.raw_score;
+      if (scoreDiff !== 0) return scoreDiff;
+      // Tie-break: higher tie_break_score wins
+      return (b.tie_break_score || 0) - (a.tie_break_score || 0);
+    });
+
+    // Auto-populate tie-break from preliminary round when in finals
+    if (isFinal && roundType === 'final') {
+      for (const entry of sorted) {
+        // Only auto-fill if tie_break_score is 0 (not manually set)
+        if (entry.tie_break_score === 0 && entry.athlete_id) {
+          const qualResults = results.qual[discipline];
+          const genderKey = Object.keys(qualResults).find(g => 
+            qualResults[g].some(q => q.athlete_id === entry.athlete_id)
+          );
+          if (genderKey) {
+            const qualEntry = qualResults[genderKey].find(q => q.athlete_id === entry.athlete_id);
+            if (qualEntry && qualEntry.raw_score > 0) {
+              entry.tie_break_score = qualEntry.raw_score;
+            }
+          }
+        }
+      }
+      // Re-sort after auto-populating tie-break scores
+      sorted.sort((a, b) => {
+        const scoreDiff = b.raw_score - a.raw_score;
+        if (scoreDiff !== 0) return scoreDiff;
+        return (b.tie_break_score || 0) - (a.tie_break_score || 0);
+      });
+    }
 
     const withRanks = sorted.map((entry, index) => ({
       ...entry,
@@ -392,7 +425,7 @@ export default function TournamentSettlement() {
       
       // Recalculate rankings
       const isFinal = roundType === 'final';
-      const withRanks = calculateRankings(updated, discipline, isFinal);
+      const withRanks = calculateRankings(updated, discipline, isFinal, roundType);
       
       return {
         ...prev,
@@ -598,6 +631,7 @@ export default function TournamentSettlement() {
             athlete_id: a.matched_athlete_id!,
             score: a.score,
             raw_score: parsed.raw,
+            tie_break_score: 0,
             made_finals: a.made_finals,
             advanced_to_next_round: false,
             stood_both_passes: true,
@@ -853,6 +887,7 @@ export default function TournamentSettlement() {
                   gender,
                   round_type: roundType,
                   raw_score: entry.raw_score,
+                  tie_break_score: entry.tie_break_score || null,
                   score_display: entry.score,
                   round_rank: entry.round_rank || null,
                   final_overall_rank: entry.final_overall_rank || null,
@@ -1413,7 +1448,7 @@ export default function TournamentSettlement() {
                                       </div>
                                     </div>
 
-                                    <div className="col-span-3">
+                                    <div className="col-span-2">
                                       <Label>
                                         Score 
                                         {discipline === 'slalom' && <span className="text-xs text-muted-foreground ml-1">(e.g., 2@43)</span>}
@@ -1430,9 +1465,24 @@ export default function TournamentSettlement() {
                                     </div>
 
                                     <div className="col-span-2">
+                                      <Label>
+                                        TB <span className="text-xs text-muted-foreground">(tie-break)</span>
+                                      </Label>
+                                      <Input
+                                        value={entry.tie_break_score > 0 ? entry.tie_break_score.toString() : ''}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value) || 0;
+                                          updateResultRow(selectedRound, discipline, gender, index, 'tie_break_score', val);
+                                        }}
+                                        placeholder="auto"
+                                        className={entry.tie_break_score > 0 ? 'border-primary/50' : ''}
+                                      />
+                                    </div>
+
+                                    <div className="col-span-1">
                                       {selectedRound === 'final' && entry.final_overall_rank && (
                                         <Badge variant="outline" className="bg-primary/10">
-                                          Final: #{entry.final_overall_rank}
+                                          #{entry.final_overall_rank}
                                         </Badge>
                                       )}
                                     </div>

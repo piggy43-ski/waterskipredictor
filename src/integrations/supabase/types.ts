@@ -2792,6 +2792,7 @@ export type Database = {
           round_type: string
           score_display: string | null
           stood_both_passes: boolean | null
+          tie_break_score: number | null
           tournament_id: string
           trick_points: number | null
           updated_at: string | null
@@ -2816,6 +2817,7 @@ export type Database = {
           round_type: string
           score_display?: string | null
           stood_both_passes?: boolean | null
+          tie_break_score?: number | null
           tournament_id: string
           trick_points?: number | null
           updated_at?: string | null
@@ -2840,6 +2842,7 @@ export type Database = {
           round_type?: string
           score_display?: string | null
           stood_both_passes?: boolean | null
+          tie_break_score?: number | null
           tournament_id?: string
           trick_points?: number | null
           updated_at?: string | null
