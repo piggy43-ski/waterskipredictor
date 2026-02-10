@@ -63,6 +63,8 @@ type SettlementPreview = {
   total_wagered: number;
   total_payout: number;
   affected_predictions: number;
+  won_count: number;
+  lost_count: number;
 };
 
 type ParsedAthlete = {
@@ -770,12 +772,30 @@ export default function TournamentSettlement() {
         let maxScore = 0;
         let highestScorerId = '';
         
+        // Check in-memory results across all rounds
         for (const roundType of ['qual', 'semi', 'final'] as RoundType[]) {
           const roundResults = results[roundType][discipline]?.[genderKey] || [];
           for (const entry of roundResults) {
             if (entry.raw_score > maxScore) {
               maxScore = entry.raw_score;
               highestScorerId = entry.athlete_id;
+            }
+          }
+        }
+        
+        // Also check saved DB results for rounds not in memory
+        const { data: dbResults } = await supabase
+          .from('tournament_results')
+          .select('athlete_id, raw_score, round_type')
+          .eq('tournament_id', selectedTournament)
+          .eq('discipline', discipline)
+          .eq('gender', genderKey);
+        
+        if (dbResults) {
+          for (const dbRow of dbResults) {
+            if ((dbRow.raw_score || 0) > maxScore) {
+              maxScore = dbRow.raw_score || 0;
+              highestScorerId = dbRow.athlete_id;
             }
           }
         }
@@ -793,7 +813,7 @@ export default function TournamentSettlement() {
       const { data: predictions } = await supabase
         .from('predictions')
         .select(`
-          id, selection_id, staked_tokens, potential_payout, market_type, discipline, category,
+          id, selection_id, staked_tokens, potential_payout, market_type, discipline, category, bet_slip_id,
           podium_selections (
             athlete_id,
             position_predicted
@@ -843,9 +863,59 @@ export default function TournamentSettlement() {
       }
 
       const totalWagered = predictions?.reduce((sum, p) => sum + p.staked_tokens, 0) || 0;
-      const totalPayout = predictions
-        ?.filter(p => winningPredictionIds.includes(p.id))
-        .reduce((sum, p) => sum + p.potential_payout, 0) || 0;
+      
+      // Calculate payout: for singles use potential_payout, for parlays query bet_slips
+      let totalPayout = 0;
+      
+      // Singles payout (non-parlay predictions that won)
+      const winningPredictions = predictions?.filter(p => winningPredictionIds.includes(p.id)) || [];
+      const singleWinners = winningPredictions.filter(p => !p.market_type?.includes('PARLAY') && (p.potential_payout || 0) > 0);
+      totalPayout += singleWinners.reduce((sum, p) => sum + p.potential_payout, 0);
+      
+      // Parlay payout: query bet_slips for any slips linked to winning predictions
+      if (winningPredictionIds.length > 0) {
+        const { data: parlaySlips } = await supabase
+          .from('bet_slips')
+          .select('id, total_stake_tokens, total_odds_decimal, potential_payout_tokens, leg_count, status')
+          .eq('tournament_id', selectedTournament)
+          .eq('status', 'pending')
+          .gt('leg_count', 1);
+        
+        if (parlaySlips && parlaySlips.length > 0) {
+          for (const slip of parlaySlips) {
+            // Get all prediction IDs for this slip
+            const { data: slipPredictions } = await supabase
+              .from('predictions')
+              .select('id')
+              .eq('bet_slip_id', slip.id)
+              .eq('status', 'PENDING');
+            
+            if (slipPredictions) {
+              // A parlay wins only if ALL its legs are in the winning set across all markets
+              const allLegsWon = slipPredictions.every(sp => winningPredictionIds.includes(sp.id));
+              if (allLegsWon) {
+                totalPayout += slip.potential_payout_tokens;
+              }
+            }
+          }
+        }
+        
+        // Also handle single bet_slips with potential_payout = 0 on predictions
+        // (some single bets may also have 0 potential_payout on prediction but correct on bet_slip)
+        const zeroPayoutWinners = winningPredictions.filter(p => (p.potential_payout || 0) === 0);
+        if (zeroPayoutWinners.length > 0) {
+          const { data: singleSlips } = await supabase
+            .from('bet_slips')
+            .select('id, potential_payout_tokens, leg_count')
+            .in('id', zeroPayoutWinners.map(p => p.bet_slip_id).filter(Boolean) as string[])
+            .eq('leg_count', 1)
+            .eq('status', 'pending');
+          
+          if (singleSlips) {
+            totalPayout += singleSlips.reduce((sum, s) => sum + s.potential_payout_tokens, 0);
+          }
+        }
+      }
 
       previews.push({
         market_id: market.id,
@@ -860,6 +930,8 @@ export default function TournamentSettlement() {
         total_wagered: totalWagered,
         total_payout: totalPayout,
         affected_predictions: predictions?.length || 0,
+        won_count: winningPredictionIds.length,
+        lost_count: losingPredictionIds.length,
       });
     }
 
@@ -1708,7 +1780,7 @@ export default function TournamentSettlement() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4 pt-3 border-t">
+                    <div className="grid grid-cols-4 gap-3 pt-3 border-t">
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                           <Users className="w-4 h-4" />
@@ -1717,18 +1789,25 @@ export default function TournamentSettlement() {
                         <p className="text-lg font-bold">{preview.affected_predictions}</p>
                       </div>
                       <div className="text-center">
-                        <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
-                          <Coins className="w-4 h-4" />
-                          <span className="text-xs">Wagered</span>
-                        </div>
-                        <p className="text-lg font-bold">{preview.total_wagered.toLocaleString()}</p>
-                      </div>
-                      <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-success mb-1">
                           <CheckCircle className="w-4 h-4" />
+                          <span className="text-xs">Won</span>
+                        </div>
+                        <p className="text-lg font-bold text-success">{preview.won_count}</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-1 text-destructive mb-1">
+                          <X className="w-4 h-4" />
+                          <span className="text-xs">Lost</span>
+                        </div>
+                        <p className="text-lg font-bold text-destructive">{preview.lost_count}</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                          <Coins className="w-4 h-4" />
                           <span className="text-xs">Payout</span>
                         </div>
-                        <p className="text-lg font-bold text-success">{preview.total_payout.toLocaleString()}</p>
+                        <p className="text-lg font-bold">{preview.total_payout.toLocaleString()}</p>
                       </div>
                     </div>
                   </div>
