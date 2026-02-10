@@ -800,7 +800,7 @@ export default function TournamentSettlement() {
 
     for (const market of tournamentData.markets) {
       const discipline = market.discipline as Discipline;
-      const genderKey = market.category.includes('men') ? 'male' : 'female';
+      const genderKey = market.category === 'open_men' ? 'male' : 'female';
       const disciplineResults = finalsResults[discipline]?.[genderKey] || [];
 
       if (disciplineResults.length === 0) continue;
