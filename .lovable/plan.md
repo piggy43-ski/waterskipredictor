@@ -1,40 +1,39 @@
 
 
-# Fix: Allow Decimal Input in Tie-Break Field
+# Fix: TB Score Input Not Working
 
-## Problem
-The TB (tie-break) input field strips the decimal point as you type. When you enter "2.", `parseFloat("2.")` immediately converts it to `2`, and the display value `(2).toString()` becomes `"2"` -- removing the decimal before you can type the next digit.
+## Root Cause
+Two issues prevent the tie-break field from working properly:
 
-## Solution
-Store the tie-break value as a **string** during editing and only convert to a number when saving or ranking. This preserves intermediate states like "2." and "2.5" while typing.
+1. **Index-based keys shift on reorder**: The `calculateRankings` function reorders entries by score every time `updateResultRow` is called. The TB edit state uses keys like `final-slalom-male-0` (index-based), but after reordering, index 0 may now be a different athlete. The entered value appears to vanish.
 
-## Changes (1 file)
+2. **Auto-populate overwrites manual edits**: Every time `calculateRankings` runs for finals, it checks `if (entry.tie_break_score === 0)` and overwrites it with the qual score. If the user clears the field to type a new value, the intermediate `0` state triggers auto-populate again.
+
+## Fix (1 file)
 
 ### `src/pages/admin/TournamentSettlement.tsx`
 
-1. **Change the input's `value` and `onChange`**: Instead of converting to float on every keystroke, store the raw string and only parse it on blur (when the user leaves the field).
+**Change 1: Use `athlete_id` instead of `index` for TB edit state keys**
+
+Replace the index-based key with the athlete's ID so the edit state follows the athlete even if rows reorder:
 
 ```typescript
-// BEFORE (broken):
-value={entry.tie_break_score > 0 ? entry.tie_break_score.toString() : ''}
-onChange={(e) => {
-  const val = parseFloat(e.target.value) || 0;
-  updateResultRow(..., 'tie_break_score', val);
-}}
-
-// AFTER (fixed):
-value={tbEditValue ?? (entry.tie_break_score > 0 ? entry.tie_break_score.toString() : '')}
-onChange={(e) => {
-  setTbEditValue(e.target.value); // Keep raw string while typing
-}}
-onBlur={() => {
-  const val = parseFloat(tbEditValue) || 0;
-  updateResultRow(..., 'tie_break_score', val);
-  setTbEditValue(null); // Clear edit state
-}}
+// BEFORE: key = `${selectedRound}-${discipline}-${gender}-${index}`
+// AFTER:  key = `tb-${entry.athlete_id}`
 ```
 
-2. **Add local edit state**: Track which TB field is being edited using a small piece of state (e.g., a `tbEditState` map keyed by `round-discipline-gender-index`) so only the actively edited field uses the raw string value.
+**Change 2: Stop reordering entries in-place during editing**
 
-This is the same pattern used to fix decimal input issues throughout the app -- the key insight is: never convert a string to a number and back to a string on every keystroke.
+The `calculateRankings` function should assign rank numbers (badges) without physically reordering the rows. Reordering while typing is disorienting and breaks index-based references. Only reorder on initial load or save.
+
+Specifically: change `updateResultRow` so it still calls `calculateRankings` to compute rank numbers, but applies those ranks back to the entries in their **original order** instead of sorting them.
+
+**Change 3: Guard auto-populate with a flag**
+
+Add a `tb_manually_set` boolean (or simply check: only auto-populate when no TB value has ever been committed for that entry). This prevents the auto-populate from fighting manual edits.
+
+Concretely:
+- When the user sets a TB value via the input, mark it as manually set
+- The auto-populate in `calculateRankings` only fills TB when it hasn't been manually set
+- This lets users override the qual-based tie-break with custom values
 
