@@ -722,18 +722,79 @@ export default function TournamentSettlement() {
     const previews: SettlementPreview[] = [];
     const finalsResults = results.final;
 
-    // Build a map of actual podium positions for each discipline/gender
+    // Helper: sort results by score (best first) using discipline-aware comparison
+    const sortByScore = (entries: { athlete_id: string; score: string; raw_score: number }[], discipline: Discipline) => {
+      return [...entries].filter(e => e.athlete_id && e.raw_score > 0).sort((a, b) => {
+        // For slalom, use score_display string; for trick/jump use raw_score
+        if (discipline === 'slalom') {
+          return compareScores(b.score, a.score, discipline);
+        }
+        return b.raw_score - a.raw_score;
+      });
+    };
+
+    // Helper: derive ranked positions from sorted results with tie support
+    const derivePositions = (sorted: { athlete_id: string; score: string; raw_score: number }[], discipline: Discipline): Map<number, string[]> => {
+      const positions = new Map<number, string[]>(); // position -> athlete_ids
+      if (sorted.length === 0) return positions;
+      
+      let currentPos = 1;
+      let i = 0;
+      while (i < sorted.length) {
+        // Collect all athletes tied at this position
+        const tiedGroup = [sorted[i]];
+        let j = i + 1;
+        while (j < sorted.length) {
+          const cmp = discipline === 'slalom'
+            ? compareScores(sorted[i].score, sorted[j].score, discipline)
+            : sorted[i].raw_score - sorted[j].raw_score;
+          if (cmp === 0) {
+            tiedGroup.push(sorted[j]);
+            j++;
+          } else {
+            break;
+          }
+        }
+        positions.set(currentPos, tiedGroup.map(g => g.athlete_id));
+        currentPos += tiedGroup.length; // skip positions for ties
+        i = j;
+      }
+      return positions;
+    };
+
+    // Build a map of actual podium positions for each discipline/gender (derived from scores)
     const actualPodiumMap = new Map<string, Map<number, string>>(); // key: "discipline-gender", value: Map<position, athlete_id>
+    // Also store derived positions for winner/podium logic
+    const derivedPositionsMap = new Map<string, Map<number, string[]>>();
     
     for (const discipline of ['slalom', 'trick', 'jump'] as Discipline[]) {
       for (const gender of ['male', 'female']) {
         const disciplineResults = finalsResults[discipline]?.[gender] || [];
-        const validResults = disciplineResults.filter(r => r.athlete_id && r.final_overall_rank && r.final_overall_rank <= 3);
+        const sorted = sortByScore(disciplineResults, discipline);
+        const positions = derivePositions(sorted, discipline);
+        derivedPositionsMap.set(`${discipline}-${gender}`, positions);
+        
+        // Build single-athlete podium map for exact-order podium bets
+        // For ties, the first athlete found gets the position (ties at a position share it)
         const positionMap = new Map<number, string>();
-        for (const result of validResults) {
-          positionMap.set(result.final_overall_rank!, result.athlete_id);
+        for (const [pos, athleteIds] of positions) {
+          if (pos <= 3) {
+            for (const aid of athleteIds) {
+              positionMap.set(pos, aid); // last one wins if tied — but for exact-order we need all
+            }
+          }
         }
-        actualPodiumMap.set(`${discipline}-${gender}`, positionMap);
+        // Actually for exact-order: store first athlete at each position
+        const exactPodiumMap = new Map<number, string>();
+        for (const [pos, athleteIds] of positions) {
+          if (pos <= 3) {
+            // If there's a tie at a podium position, each tied athlete occupies the same position
+            // For exact-order matching, we set each tied athlete at that position
+            // But Map<number, string> only holds one — we'll handle this in the prediction matching below
+            exactPodiumMap.set(pos, athleteIds[0]);
+          }
+        }
+        actualPodiumMap.set(`${discipline}-${gender}`, exactPodiumMap);
       }
     }
 
@@ -749,36 +810,45 @@ export default function TournamentSettlement() {
       let winningSelectionIds: string[] = [];
       let winningAthleteNames: string[] = [];
 
+      const positionsKey = `${discipline}-${genderKey}`;
+      const positions = derivedPositionsMap.get(positionsKey);
+
       if (market.market_type === 'WINNER') {
-        const winner = validResults.find(r => r.final_overall_rank === 1);
-        if (winner) {
-          const selection = market.selections?.find(s => s.athlete_id === winner.athlete_id);
-          if (selection) {
-            winningSelectionIds = [selection.id];
-            winningAthleteNames = [selection.athlete?.name || ''];
-          }
-        }
-      } else if (market.market_type === 'PODIUM') {
-        // Individual PODIUM selections: athlete just needs to be in top 3
-        const podiumFinishers = validResults.filter(r => r.final_overall_rank && r.final_overall_rank <= 3);
-        for (const finisher of podiumFinishers) {
-          const selection = market.selections?.find(s => s.athlete_id === finisher.athlete_id);
+        // Winner = athlete(s) at derived position 1
+        const winnersAtPos1 = positions?.get(1) || [];
+        for (const athleteId of winnersAtPos1) {
+          const selection = market.selections?.find(s => s.athlete_id === athleteId);
           if (selection) {
             winningSelectionIds.push(selection.id);
             winningAthleteNames.push(selection.athlete?.name || '');
           }
         }
+      } else if (market.market_type === 'PODIUM') {
+        // Podium = athletes at derived positions 1, 2, or 3 (ties included)
+        if (positions) {
+          for (const [pos, athleteIds] of positions) {
+            if (pos <= 3) {
+              for (const athleteId of athleteIds) {
+                const selection = market.selections?.find(s => s.athlete_id === athleteId);
+                if (selection) {
+                  winningSelectionIds.push(selection.id);
+                  winningAthleteNames.push(selection.athlete?.name || '');
+                }
+              }
+            }
+          }
+        }
       } else if (market.market_type === 'HIGHEST_SCORE') {
-        let maxScore = 0;
-        let highestScorerId = '';
+        // Highest score across ALL rounds, with tie support and discipline-aware comparison
+        type ScoreEntry = { athlete_id: string; score: string; raw_score: number };
+        const allScores: ScoreEntry[] = [];
         
-        // Check in-memory results across all rounds
+        // Collect in-memory results across all rounds
         for (const roundType of ['qual', 'semi', 'final'] as RoundType[]) {
           const roundResults = results[roundType][discipline]?.[genderKey] || [];
           for (const entry of roundResults) {
-            if (entry.raw_score > maxScore) {
-              maxScore = entry.raw_score;
-              highestScorerId = entry.athlete_id;
+            if (entry.athlete_id && entry.raw_score > 0) {
+              allScores.push({ athlete_id: entry.athlete_id, score: entry.score, raw_score: entry.raw_score });
             }
           }
         }
@@ -786,25 +856,60 @@ export default function TournamentSettlement() {
         // Also check saved DB results for rounds not in memory
         const { data: dbResults } = await supabase
           .from('tournament_results')
-          .select('athlete_id, raw_score, round_type')
+          .select('athlete_id, raw_score, score_display, round_type')
           .eq('tournament_id', selectedTournament)
           .eq('discipline', discipline)
           .eq('gender', genderKey);
         
         if (dbResults) {
           for (const dbRow of dbResults) {
-            if ((dbRow.raw_score || 0) > maxScore) {
-              maxScore = dbRow.raw_score || 0;
-              highestScorerId = dbRow.athlete_id;
+            if ((dbRow.raw_score || 0) > 0) {
+              // Avoid duplicates with in-memory data by checking athlete+round
+              const inMemory = allScores.some(s => s.athlete_id === dbRow.athlete_id && s.raw_score === dbRow.raw_score);
+              if (!inMemory) {
+                allScores.push({
+                  athlete_id: dbRow.athlete_id,
+                  score: dbRow.score_display || dbRow.raw_score?.toString() || '',
+                  raw_score: dbRow.raw_score || 0,
+                });
+              }
             }
           }
         }
         
-        if (highestScorerId) {
-          const selection = market.selections?.find(s => s.athlete_id === highestScorerId);
-          if (selection) {
-            winningSelectionIds = [selection.id];
-            winningAthleteNames = [selection.athlete?.name || ''];
+        // Find highest score(s) with tie support
+        if (allScores.length > 0) {
+          // Sort best first
+          const sorted = [...allScores].sort((a, b) => {
+            if (discipline === 'slalom') {
+              return compareScores(b.score, a.score, discipline);
+            }
+            return b.raw_score - a.raw_score;
+          });
+          
+          // Collect all athletes tied for the top score
+          const topScore = sorted[0];
+          const topScorers = [topScore];
+          for (let k = 1; k < sorted.length; k++) {
+            const cmp = discipline === 'slalom'
+              ? compareScores(topScore.score, sorted[k].score, discipline)
+              : topScore.raw_score - sorted[k].raw_score;
+            if (cmp === 0) {
+              topScorers.push(sorted[k]);
+            } else {
+              break; // sorted, so no more ties
+            }
+          }
+          
+          // Deduplicate by athlete_id (same athlete might appear in multiple rounds)
+          const uniqueAthleteIds = [...new Set(topScorers.map(s => s.athlete_id))];
+          
+          for (const athleteId of uniqueAthleteIds) {
+            const selection = market.selections?.find(s => s.athlete_id === athleteId);
+            if (selection) {
+              winningSelectionIds.push(selection.id);
+              winningAthleteNames.push(selection.athlete?.name || '');
+            }
           }
         }
       }
@@ -830,18 +935,18 @@ export default function TournamentSettlement() {
         const hasPodiumSelections = prediction.podium_selections && prediction.podium_selections.length > 0;
         
         if (prediction.market_type === 'PODIUM' && hasPodiumSelections) {
-          // EXACT-ORDER PODIUM BET: All predicted positions must match actual positions
-          const actualPositions = actualPodiumMap.get(`${discipline}-${genderKey}`);
+          // EXACT-ORDER PODIUM BET: All predicted positions must match derived positions
+          const derivedPos = derivedPositionsMap.get(`${discipline}-${genderKey}`);
           
-          if (!actualPositions) {
+          if (!derivedPos) {
             losingPredictionIds.push(prediction.id);
             continue;
           }
 
           let allMatch = true;
           for (const ps of prediction.podium_selections) {
-            const actualAthleteAtPosition = actualPositions.get(ps.position_predicted);
-            if (actualAthleteAtPosition !== ps.athlete_id) {
+            const athletesAtPosition = derivedPos.get(ps.position_predicted) || [];
+            if (!athletesAtPosition.includes(ps.athlete_id)) {
               allMatch = false;
               break;
             }
