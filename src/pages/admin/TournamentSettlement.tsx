@@ -31,7 +31,7 @@ type ResultEntry = {
   final_overall_rank?: number;
   score: string;
   raw_score: number;
-  tie_break_score: number;
+  tie_break_score: string;
   made_finals: boolean;
   advanced_to_next_round: boolean;
   stood_both_passes: boolean; // For trick
@@ -91,7 +91,7 @@ const emptyResultEntry = (): ResultEntry => ({
   athlete_id: '',
   score: '',
   raw_score: 0,
-  tie_break_score: 0,
+  tie_break_score: '',
   made_finals: false,
   advanced_to_next_round: false,
   stood_both_passes: true,
@@ -274,7 +274,7 @@ export default function TournamentSettlement() {
           athlete_id: result.athlete_id,
           score: result.score_display || result.raw_score?.toString() || '',
           raw_score: result.raw_score || 0,
-          tie_break_score: result.tie_break_score || 0,
+          tie_break_score: result.tie_break_score || '',
           round_rank: result.round_rank || undefined,
           final_overall_rank: result.final_overall_rank || undefined,
           made_finals: result.made_finals ?? false,
@@ -329,7 +329,7 @@ export default function TournamentSettlement() {
     // Auto-populate tie-break from preliminary round when in finals (only if not manually set)
     if (isFinal && roundType === 'final') {
       for (const entry of validEntries) {
-        if (entry.tie_break_score === 0 && entry.athlete_id && !manualTbAthletes.has(entry.athlete_id)) {
+        if (!entry.tie_break_score && entry.athlete_id && !manualTbAthletes.has(entry.athlete_id)) {
           const qualResults = results.qual[discipline];
           const genderKey = Object.keys(qualResults).find(g => 
             qualResults[g].some(q => q.athlete_id === entry.athlete_id)
@@ -337,7 +337,8 @@ export default function TournamentSettlement() {
           if (genderKey) {
             const qualEntry = qualResults[genderKey].find(q => q.athlete_id === entry.athlete_id);
             if (qualEntry && qualEntry.raw_score > 0) {
-              entry.tie_break_score = qualEntry.raw_score;
+              // Store the display string (with slalom notation) rather than raw number
+              entry.tie_break_score = qualEntry.score || qualEntry.raw_score.toString();
             }
           }
         }
@@ -348,7 +349,7 @@ export default function TournamentSettlement() {
     const sorted = [...validEntries].sort((a, b) => {
       const scoreDiff = b.raw_score - a.raw_score;
       if (scoreDiff !== 0) return scoreDiff;
-      return (b.tie_break_score || 0) - (a.tie_break_score || 0);
+      return compareScores(b.tie_break_score || '', a.tie_break_score || '', discipline);
     });
 
     // Build rank map: athlete_id -> rank position
@@ -634,7 +635,7 @@ export default function TournamentSettlement() {
             athlete_id: a.matched_athlete_id!,
             score: a.score,
             raw_score: parsed.raw,
-            tie_break_score: 0,
+            tie_break_score: '',
             made_finals: a.made_finals,
             advanced_to_next_round: false,
             stood_both_passes: true,
@@ -1472,26 +1473,25 @@ export default function TournamentSettlement() {
                                         TB <span className="text-xs text-muted-foreground">(tie-break)</span>
                                       </Label>
                                       <Input
-                                        value={tbEditState[`tb-${entry.athlete_id}`] ?? (entry.tie_break_score > 0 ? entry.tie_break_score.toString() : '')}
-                                        onChange={(e) => {
-                                          const tbKey = `tb-${entry.athlete_id}`;
-                                          setTbEditState(prev => ({ ...prev, [tbKey]: e.target.value }));
-                                        }}
-                                        onBlur={() => {
-                                          const tbKey = `tb-${entry.athlete_id}`;
-                                          const raw = tbEditState[tbKey];
-                                          if (raw !== undefined) {
-                                            const val = parseFloat(raw) || 0;
-                                            // Mark as manually set so auto-populate won't overwrite
-                                            if (val > 0) {
-                                              setManualTbAthletes(prev => new Set(prev).add(entry.athlete_id));
-                                            }
-                                            updateResultRow(selectedRound, discipline, gender, index, 'tie_break_score', val);
-                                            setTbEditState(prev => { const next = { ...prev }; delete next[tbKey]; return next; });
-                                          }
-                                        }}
-                                        placeholder="auto"
-                                        className={entry.tie_break_score > 0 ? 'border-primary/50' : ''}
+                                         value={tbEditState[`tb-${entry.athlete_id}`] ?? (entry.tie_break_score || '')}
+                                         onChange={(e) => {
+                                           const tbKey = `tb-${entry.athlete_id}`;
+                                           setTbEditState(prev => ({ ...prev, [tbKey]: e.target.value }));
+                                         }}
+                                         onBlur={() => {
+                                           const tbKey = `tb-${entry.athlete_id}`;
+                                           const raw = tbEditState[tbKey];
+                                           if (raw !== undefined) {
+                                             const trimmed = raw.trim();
+                                             if (trimmed) {
+                                               setManualTbAthletes(prev => new Set(prev).add(entry.athlete_id));
+                                             }
+                                             updateResultRow(selectedRound, discipline, gender, index, 'tie_break_score', trimmed);
+                                             setTbEditState(prev => { const next = { ...prev }; delete next[tbKey]; return next; });
+                                           }
+                                         }}
+                                         placeholder="auto"
+                                         className={entry.tie_break_score ? 'border-primary/50' : ''}
                                       />
                                     </div>
 
