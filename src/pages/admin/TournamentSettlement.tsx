@@ -303,16 +303,25 @@ export default function TournamentSettlement() {
       .filter(Boolean);
   };
 
-  const getFilteredAthletes = (discipline: Discipline, gender: 'male' | 'female') => {
+  const getFilteredAthletes = (discipline: Discipline, gender: 'male' | 'female', currentAthleteId?: string) => {
     if (!tournamentData?.tournament?.tournament_entries) return [];
     
     const searchKey = `${selectedRound}-${discipline}-${gender}`;
     const searchTerm = athleteSearch[searchKey]?.toLowerCase() || '';
+
+    // Collect athlete IDs already assigned in this round/discipline/gender
+    const roundResults = results[selectedRound]?.[discipline]?.[gender] || [];
+    const usedIds = new Set(
+      roundResults
+        .map(r => r.athlete_id)
+        .filter(id => id && id !== currentAthleteId)
+    );
     
     return tournamentData.tournament.tournament_entries
       .filter((entry: any) => 
         entry.discipline === discipline &&
         entry.athlete?.gender === gender &&
+        !usedIds.has(entry.athlete?.id) &&
         (!searchTerm || entry.athlete?.name?.toLowerCase().includes(searchTerm))
       )
       .map((entry: any) => entry.athlete)
@@ -1378,7 +1387,6 @@ export default function TournamentSettlement() {
                   {tournamentData?.tournament?.disciplines.map((discipline: Discipline) => (
                     <TabsContent key={discipline} value={discipline} className="space-y-6 mt-6">
                       {(['male', 'female'] as const).map((gender) => {
-                        const athletes = getFilteredAthletes(discipline, gender);
                         const searchKey = `${selectedRound}-${discipline}-${gender}`;
                         const roundResults = results[selectedRound][discipline][gender];
                         
@@ -1394,7 +1402,7 @@ export default function TournamentSettlement() {
                               </Button>
                             </div>
 
-                            {athletes.length === 0 && (
+                            {getFilteredAthletes(discipline, gender).length === 0 && (
                               <Alert>
                                 <AlertCircle className="h-4 w-4" />
                                 <AlertDescription>
@@ -1404,7 +1412,9 @@ export default function TournamentSettlement() {
                             )}
 
                             <div className="space-y-3">
-                              {roundResults?.map((entry, index) => (
+                              {roundResults?.map((entry, index) => {
+                                const athletes = getFilteredAthletes(discipline, gender, entry.athlete_id);
+                                return (
                                 <div key={index} className="border rounded-lg p-4 space-y-3">
                                   <div className="grid grid-cols-12 gap-3 items-end">
                                     <div className="col-span-4">
@@ -1551,7 +1561,8 @@ export default function TournamentSettlement() {
                                     )}
                                   </div>
                                 </div>
-                              ))}
+                              );
+                              })}
 
                               {roundResults?.length === 0 && (
                                 <p className="text-sm text-muted-foreground">No results entered for this round yet</p>
