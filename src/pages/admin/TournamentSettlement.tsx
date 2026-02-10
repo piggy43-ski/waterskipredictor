@@ -160,6 +160,8 @@ export default function TournamentSettlement() {
   
   // Local string state for TB inputs to allow decimal typing (e.g. "2." before "2.5")
   const [tbEditState, setTbEditState] = useState<Record<string, string>>({});
+  // Track athletes whose TB was manually set (prevents auto-populate from overwriting)
+  const [manualTbAthletes, setManualTbAthletes] = useState<Set<string>>(new Set());
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -318,24 +320,16 @@ export default function TournamentSettlement() {
   };
 
   // Calculate rankings based on score, with tie-break support
+  // IMPORTANT: This computes rank numbers but preserves the ORIGINAL array order
+  // so that index-based references (and the UI) stay stable while the user is editing.
   const calculateRankings = (entries: ResultEntry[], discipline: Discipline, isFinal: boolean, roundType?: RoundType): ResultEntry[] => {
+    // Build a ranking lookup: athlete_id -> { round_rank, final_overall_rank }
     const validEntries = entries.filter(e => e.athlete_id && e.raw_score > 0);
-    const zeroScoreEntries = entries.filter(e => e.athlete_id && e.raw_score === 0);
-    const emptyEntries = entries.filter(e => !e.athlete_id);
 
-    // Sort by raw_score (higher is better), then by tie_break_score as secondary
-    const sorted = [...validEntries].sort((a, b) => {
-      const scoreDiff = b.raw_score - a.raw_score;
-      if (scoreDiff !== 0) return scoreDiff;
-      // Tie-break: higher tie_break_score wins
-      return (b.tie_break_score || 0) - (a.tie_break_score || 0);
-    });
-
-    // Auto-populate tie-break from preliminary round when in finals
+    // Auto-populate tie-break from preliminary round when in finals (only if not manually set)
     if (isFinal && roundType === 'final') {
-      for (const entry of sorted) {
-        // Only auto-fill if tie_break_score is 0 (not manually set)
-        if (entry.tie_break_score === 0 && entry.athlete_id) {
+      for (const entry of validEntries) {
+        if (entry.tie_break_score === 0 && entry.athlete_id && !manualTbAthletes.has(entry.athlete_id)) {
           const qualResults = results.qual[discipline];
           const genderKey = Object.keys(qualResults).find(g => 
             qualResults[g].some(q => q.athlete_id === entry.athlete_id)
@@ -348,31 +342,37 @@ export default function TournamentSettlement() {
           }
         }
       }
-      // Re-sort after auto-populating tie-break scores
-      sorted.sort((a, b) => {
-        const scoreDiff = b.raw_score - a.raw_score;
-        if (scoreDiff !== 0) return scoreDiff;
-        return (b.tie_break_score || 0) - (a.tie_break_score || 0);
-      });
     }
 
-    const withRanks = sorted.map((entry, index) => ({
-      ...entry,
-      round_rank: index + 1,
-      final_overall_rank: isFinal ? index + 1 : undefined,
-      made_finals: isFinal,
-      no_score: false,
-    }));
+    // Sort a copy to determine rank order
+    const sorted = [...validEntries].sort((a, b) => {
+      const scoreDiff = b.raw_score - a.raw_score;
+      if (scoreDiff !== 0) return scoreDiff;
+      return (b.tie_break_score || 0) - (a.tie_break_score || 0);
+    });
 
-    // Mark zero score entries as no_score
-    const zeroWithFlags = zeroScoreEntries.map(entry => ({
-      ...entry,
-      no_score: true,
-      round_rank: undefined,
-      final_overall_rank: undefined,
-    }));
+    // Build rank map: athlete_id -> rank position
+    const rankMap = new Map<string, number>();
+    sorted.forEach((entry, index) => {
+      rankMap.set(entry.athlete_id, index + 1);
+    });
 
-    return [...withRanks, ...zeroWithFlags, ...emptyEntries];
+    // Apply ranks back to entries in their ORIGINAL order (no reordering)
+    return entries.map(entry => {
+      if (!entry.athlete_id) return entry; // empty row
+      if (entry.raw_score === 0 && entry.athlete_id) {
+        // Zero-score entry → no_score
+        return { ...entry, no_score: true, round_rank: undefined, final_overall_rank: undefined };
+      }
+      const rank = rankMap.get(entry.athlete_id);
+      return {
+        ...entry,
+        round_rank: rank,
+        final_overall_rank: isFinal ? rank : undefined,
+        made_finals: isFinal,
+        no_score: false,
+      };
+    });
   };
 
   // Count entries per round for visual indicators
@@ -1472,17 +1472,22 @@ export default function TournamentSettlement() {
                                         TB <span className="text-xs text-muted-foreground">(tie-break)</span>
                                       </Label>
                                       <Input
-                                        value={tbEditState[`${selectedRound}-${discipline}-${gender}-${index}`] ?? (entry.tie_break_score > 0 ? entry.tie_break_score.toString() : '')}
+                                        value={tbEditState[`tb-${entry.athlete_id}`] ?? (entry.tie_break_score > 0 ? entry.tie_break_score.toString() : '')}
                                         onChange={(e) => {
-                                          setTbEditState(prev => ({ ...prev, [`${selectedRound}-${discipline}-${gender}-${index}`]: e.target.value }));
+                                          const tbKey = `tb-${entry.athlete_id}`;
+                                          setTbEditState(prev => ({ ...prev, [tbKey]: e.target.value }));
                                         }}
                                         onBlur={() => {
-                                          const key = `${selectedRound}-${discipline}-${gender}-${index}`;
-                                          const raw = tbEditState[key];
+                                          const tbKey = `tb-${entry.athlete_id}`;
+                                          const raw = tbEditState[tbKey];
                                           if (raw !== undefined) {
                                             const val = parseFloat(raw) || 0;
+                                            // Mark as manually set so auto-populate won't overwrite
+                                            if (val > 0) {
+                                              setManualTbAthletes(prev => new Set(prev).add(entry.athlete_id));
+                                            }
                                             updateResultRow(selectedRound, discipline, gender, index, 'tie_break_score', val);
-                                            setTbEditState(prev => { const next = { ...prev }; delete next[key]; return next; });
+                                            setTbEditState(prev => { const next = { ...prev }; delete next[tbKey]; return next; });
                                           }
                                         }}
                                         placeholder="auto"
