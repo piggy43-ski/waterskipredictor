@@ -1,0 +1,1 @@
+ALTER TABLE tournament_results ADD COLUMN tie_break_score numeric DEFAULT NULL;
