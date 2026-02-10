@@ -1138,6 +1138,7 @@ export default function TournamentSettlement() {
   });
 
   // Helper to get actual results for a market (discipline/category)
+  // Uses score-derived positions instead of manual final_overall_rank
   const getActualResultsForMarket = (discipline: Discipline, category: Category): {
     position_1st?: string;
     position_2nd?: string;
@@ -1146,9 +1147,16 @@ export default function TournamentSettlement() {
     highest_score?: string;
   } => {
     const gender = category === 'open_men' ? 'male' : 'female';
-    const finalsResults = results.final[discipline][gender]
-      .filter(r => r.athlete_id && r.final_overall_rank)
-      .sort((a, b) => (a.final_overall_rank || 999) - (b.final_overall_rank || 999));
+    const rawResults = results.final[discipline][gender]
+      .filter(r => r.athlete_id && r.raw_score > 0);
+    
+    // Sort by score (discipline-aware) to derive positions
+    const sorted = [...rawResults].sort((a, b) => {
+      if (discipline === 'slalom') {
+        return compareScores(b.score, a.score, discipline);
+      }
+      return b.raw_score - a.raw_score;
+    });
     
     const getAthleteName = (athleteId: string) => {
       const entry = tournamentData?.tournament?.tournament_entries?.find(
@@ -1165,16 +1173,43 @@ export default function TournamentSettlement() {
       highest_score?: string;
     } = {};
 
-    if (finalsResults[0]) {
-      actualResults.position_1st = getAthleteName(finalsResults[0].athlete_id);
-      actualResults.highest_scorer = actualResults.position_1st;
-      actualResults.highest_score = finalsResults[0].score || finalsResults[0].raw_score?.toString();
+    if (sorted[0]) {
+      actualResults.position_1st = getAthleteName(sorted[0].athlete_id);
     }
-    if (finalsResults[1]) {
-      actualResults.position_2nd = getAthleteName(finalsResults[1].athlete_id);
+    if (sorted[1]) {
+      actualResults.position_2nd = getAthleteName(sorted[1].athlete_id);
     }
-    if (finalsResults[2]) {
-      actualResults.position_3rd = getAthleteName(finalsResults[2].athlete_id);
+    if (sorted[2]) {
+      actualResults.position_3rd = getAthleteName(sorted[2].athlete_id);
+    }
+
+    // Highest scorer: scan ALL rounds for the best score
+    let bestScore: { name: string; score: string } | null = null;
+    let bestRaw = -1;
+    let bestSlalom = -Infinity;
+
+    for (const roundType of ['qual', 'semi', 'final'] as RoundType[]) {
+      const roundResults = results[roundType][discipline]?.[gender] || [];
+      for (const entry of roundResults) {
+        if (!entry.athlete_id || entry.raw_score <= 0) continue;
+        
+        if (discipline === 'slalom') {
+          const cmp = compareScores(entry.score, bestScore?.score || '', discipline);
+          if (cmp > 0 || !bestScore) {
+            bestScore = { name: getAthleteName(entry.athlete_id), score: entry.score };
+          }
+        } else {
+          if (entry.raw_score > bestRaw) {
+            bestRaw = entry.raw_score;
+            bestScore = { name: getAthleteName(entry.athlete_id), score: entry.score || entry.raw_score.toString() };
+          }
+        }
+      }
+    }
+
+    if (bestScore) {
+      actualResults.highest_scorer = bestScore.name;
+      actualResults.highest_score = bestScore.score;
     }
 
     return actualResults;
