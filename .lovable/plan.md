@@ -1,95 +1,77 @@
 
 
-# Fix: Prevent Loss of Score Data on Page Refresh
+# Add Tie-Break Score Support for Tournament Results
 
 ## Problem
-When entering scores on the Tournament Settlement page, the page sometimes refreshes (due to code deployments or browser events), wiping all unsaved work. Scores are stored only in React state, so any full page reload loses everything.
+When two athletes have identical final scores (e.g., both scored `1,00/58/9.75` in slalom finals), the system assigns arbitrary sequential ranks instead of using a tie-break score. In waterski, ties are broken using the preliminary round score -- Nate Smith's tie-break of `2,50/58/10.25` beats Charlie Ross's `1,50/58/10.25`, making Nate 1st and Charlie 2nd.
+
+Currently the `calculateRankings` function just does `sort by raw_score` and assigns `index + 1` as rank, ignoring ties entirely.
 
 ## Solution
-**Auto-save in-progress results to browser sessionStorage** so they persist across page refreshes. This is lightweight and doesn't require database changes.
+Add a `tie_break_score` field and update the ranking logic to use it as a secondary sort key when athletes share the same `raw_score`.
 
 ## Implementation
 
-### File: `src/pages/admin/TournamentSettlement.tsx`
+### 1. Database Migration
+Add a `tie_break_score` column to `tournament_results`:
 
-**1. Add a debounced auto-save to sessionStorage whenever results change**
-
-Every time the `results` state updates, save it to `sessionStorage` under a key that includes the tournament ID. This happens automatically in the background.
-
-```typescript
-// Save results to sessionStorage whenever they change
-useEffect(() => {
-  if (selectedTournament && hasLoadedInitialData) {
-    const key = `settlement-draft-${selectedTournament}`;
-    sessionStorage.setItem(key, JSON.stringify(results));
-  }
-}, [results, selectedTournament, hasLoadedInitialData]);
+```sql
+ALTER TABLE tournament_results 
+ADD COLUMN tie_break_score numeric DEFAULT NULL;
 ```
 
-**2. Restore from sessionStorage on load (before database data)**
+No RLS changes needed -- same policies apply.
 
-When a tournament is selected, check sessionStorage first. If a draft exists and is newer than what's in the database, use it instead.
-
-```typescript
-// In the existing "load initial data" useEffect, add sessionStorage check:
-useEffect(() => {
-  if (!selectedTournament || hasLoadedInitialData) return;
-
-  const key = `settlement-draft-${selectedTournament}`;
-  const savedDraft = sessionStorage.getItem(key);
-
-  if (savedDraft) {
-    try {
-      const parsed = JSON.parse(savedDraft);
-      setResults(parsed);
-      setHasLoadedInitialData(true);
-      toast({ title: 'Restored unsaved draft', description: 'Your previous entries were recovered.' });
-      return; // Skip loading from DB
-    } catch {}
-  }
-
-  // Fall through to existing DB load logic...
-}, [tournamentData?.existingResults, hasLoadedInitialData, selectedTournament]);
-```
-
-**3. Clear the draft after successful save**
-
-When results are saved to the database successfully, remove the sessionStorage draft.
+### 2. Frontend: Update `ResultEntry` type
+Add `tie_break_score` to the type:
 
 ```typescript
-// In the save mutation onSuccess:
-sessionStorage.removeItem(`settlement-draft-${selectedTournament}`);
+type ResultEntry = {
+  // ... existing fields
+  tie_break_score: number; // Secondary score for breaking ties
+};
 ```
 
-**4. Also persist selectedTournament, selectedRound, and selectedDiscipline**
-
-So the user returns to exactly where they left off:
+### 3. Update `calculateRankings` function
+Change the sort to use `tie_break_score` as secondary:
 
 ```typescript
-useEffect(() => {
-  if (selectedTournament) {
-    sessionStorage.setItem('settlement-selected-tournament', selectedTournament);
-    sessionStorage.setItem('settlement-selected-round', selectedRound);
-    sessionStorage.setItem('settlement-selected-discipline', selectedDiscipline);
-  }
-}, [selectedTournament, selectedRound, selectedDiscipline]);
-
-// On mount, restore selections:
-const [selectedTournament, setSelectedTournament] = useState(
-  () => sessionStorage.getItem('settlement-selected-tournament') || ''
-);
-const [selectedRound, setSelectedRound] = useState<RoundType>(
-  () => (sessionStorage.getItem('settlement-selected-round') as RoundType) || 'final'
-);
-const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline>(
-  () => (sessionStorage.getItem('settlement-selected-discipline') as Discipline) || 'slalom'
-);
+const sorted = [...validEntries].sort((a, b) => {
+  const scoreDiff = b.raw_score - a.raw_score;
+  if (scoreDiff !== 0) return scoreDiff;
+  // Tie-break: higher tie_break_score wins
+  return (b.tie_break_score || 0) - (a.tie_break_score || 0);
+});
 ```
 
-## What This Achieves
-- Scores survive page refreshes, code deployments, and accidental navigation
-- A toast notification confirms when a draft is restored
-- Drafts are automatically cleared after a successful save
-- The selected tournament, round, and discipline tabs are also preserved
-- No database changes needed
+### 4. Auto-populate tie-break from preliminary round
+When in the finals tab and two athletes have equal scores, automatically look up their preliminary round scores and use those as tie-break values. This means the system will:
+- Check if `results.qual[discipline][gender]` has entries for the tied athletes
+- Use their preliminary `raw_score` as the `tie_break_score`
+- Fall back to manual entry if no preliminary data exists
 
+### 5. Add tie-break input field in the UI
+Add a small optional input next to the score field labeled "TB" (tie-break) that:
+- Appears for all entries but is optional
+- Auto-fills from preliminary scores when available
+- Can be manually overridden
+- Uses the same score parsing logic (slalom format or numeric)
+
+### 6. Update save mutation
+Include `tie_break_score` in the upsert payload sent to the database.
+
+### 7. Update `initializeRoundResults` and related helpers
+Add `tie_break_score: 0` to default entry creation.
+
+## Technical Details
+
+### Files modified:
+- `src/pages/admin/TournamentSettlement.tsx` -- ResultEntry type, calculateRankings, UI, save mutation, initializeRoundResults
+- Database migration -- add `tie_break_score` column
+
+### How it works end-to-end:
+1. Admin enters finals scores for Nate and Charlie -- both get `1,00/58/9.75` (same raw_score)
+2. System detects the tie and auto-pulls their preliminary scores as tie-break values
+3. Nate's prelim `3,00/58/10.25` > Charlie's `4,00/58/10.25` (wait -- actually in slalom, these get parsed to comparable values via `parseSlalomScore`)
+4. Rankings update: Nate = 1st, Charlie = 2nd
+5. Admin can manually override the tie-break score if the auto-pull is wrong
