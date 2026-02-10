@@ -158,6 +158,9 @@ export default function TournamentSettlement() {
   // Track if we've loaded initial data for this tournament
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
   
+  // Local string state for TB inputs to allow decimal typing (e.g. "2." before "2.5")
+  const [tbEditState, setTbEditState] = useState<Record<string, string>>({});
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -1469,10 +1472,18 @@ export default function TournamentSettlement() {
                                         TB <span className="text-xs text-muted-foreground">(tie-break)</span>
                                       </Label>
                                       <Input
-                                        value={entry.tie_break_score > 0 ? entry.tie_break_score.toString() : ''}
+                                        value={tbEditState[`${selectedRound}-${discipline}-${gender}-${index}`] ?? (entry.tie_break_score > 0 ? entry.tie_break_score.toString() : '')}
                                         onChange={(e) => {
-                                          const val = parseFloat(e.target.value) || 0;
-                                          updateResultRow(selectedRound, discipline, gender, index, 'tie_break_score', val);
+                                          setTbEditState(prev => ({ ...prev, [`${selectedRound}-${discipline}-${gender}-${index}`]: e.target.value }));
+                                        }}
+                                        onBlur={() => {
+                                          const key = `${selectedRound}-${discipline}-${gender}-${index}`;
+                                          const raw = tbEditState[key];
+                                          if (raw !== undefined) {
+                                            const val = parseFloat(raw) || 0;
+                                            updateResultRow(selectedRound, discipline, gender, index, 'tie_break_score', val);
+                                            setTbEditState(prev => { const next = { ...prev }; delete next[key]; return next; });
+                                          }
                                         }}
                                         placeholder="auto"
                                         className={entry.tie_break_score > 0 ? 'border-primary/50' : ''}
