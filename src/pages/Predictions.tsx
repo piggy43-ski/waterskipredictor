@@ -19,7 +19,8 @@ import { Label } from '@/components/ui/label';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 import { SettlementExplanation, type SettlementData } from '@/components/betting/SettlementExplanation';
 
-interface BetSlip {
+// Prediction entry - maps to bet_slips table in DB
+interface PredictionEntry {
   id: string;
   type: 'single' | 'parlay';
   tournament_id: string;
@@ -36,7 +37,7 @@ interface BetSlip {
   tournament_start_datetime?: string;
   tournament_end_datetime?: string;
   tournament_settled_at?: string | null;
-  legs?: Prediction[];
+  legs?: PredictionLeg[];
 }
 
 interface SettlementMetadata {
@@ -63,7 +64,7 @@ interface SettlementMetadata {
   };
 }
 
-interface Prediction {
+interface PredictionLeg {
   id: string;
   athlete_name: string;
   tournament_name: string;
@@ -84,12 +85,12 @@ const Predictions = () => {
   const location = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [activeBetSlips, setActiveBetSlips] = useState<BetSlip[]>([]);
-  const [completedBetSlips, setCompletedBetSlips] = useState<BetSlip[]>([]);
+  const [activeEntries, setActiveEntries] = useState<PredictionEntry[]>([]);
+  const [completedEntries, setCompletedEntries] = useState<PredictionEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleteSlip, setDeleteSlip] = useState<BetSlip | null>(null);
+  const [deleteEntry, setDeleteEntry] = useState<PredictionEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [editSlip, setEditSlip] = useState<BetSlip | null>(null);
+  const [editEntry, setEditEntry] = useState<PredictionEntry | null>(null);
   const [newStakeAmount, setNewStakeAmount] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -119,7 +120,7 @@ const Predictions = () => {
       return;
     }
     
-    fetchBetSlips();
+    fetchEntries();
     fetchWalletBalance();
   }, [user, navigate]);
 
@@ -141,12 +142,12 @@ const Predictions = () => {
     }
   };
 
-  const fetchBetSlips = async () => {
+  const fetchEntries = async () => {
     if (!user) return;
 
     try {
-      // Fetch all bet slips
-      const { data: slips, error: slipsError } = await supabase
+      // Fetch all prediction entries from bet_slips table
+      const { data: entries, error: entriesError } = await supabase
         .from('bet_slips')
         .select(`
           *,
@@ -155,12 +156,12 @@ const Predictions = () => {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (slipsError) throw slipsError;
+      if (entriesError) throw entriesError;
 
-      if (slips) {
-        // Fetch legs for each slip
-        const slipsWithLegs = await Promise.all(
-          slips.map(async (slip: any) => {
+      if (entries) {
+        // Fetch prediction legs for each entry
+        const entriesWithLegs = await Promise.all(
+          entries.map(async (entry: any) => {
             const { data: legs } = await supabase
               .from('predictions')
               .select(`
@@ -170,7 +171,7 @@ const Predictions = () => {
                   athletes (name)
                 )
               `)
-              .eq('bet_slip_id', slip.id)
+              .eq('bet_slip_id', entry.id)
               .order('created_at', { ascending: true });
 
             // Convert settlement_metadata to proper type
@@ -180,21 +181,21 @@ const Predictions = () => {
             }));
 
             return {
-              ...slip,
-              tournament_name: slip.tournaments?.name || 'Unknown Tournament',
-              tournament_start_datetime: slip.tournaments?.start_datetime,
-              tournament_end_datetime: slip.tournaments?.end_datetime,
-              tournament_settled_at: slip.tournaments?.settled_at,
+              ...entry,
+              tournament_name: entry.tournaments?.name || 'Unknown Tournament',
+              tournament_start_datetime: entry.tournaments?.start_datetime,
+              tournament_end_datetime: entry.tournaments?.end_datetime,
+              tournament_settled_at: entry.tournaments?.settled_at,
               legs: typedLegs
             };
           })
         );
 
-        const active = slipsWithLegs.filter(s => s.status === 'PENDING');
-        const completed = slipsWithLegs.filter(s => s.status !== 'PENDING');
+        const active = entriesWithLegs.filter(s => s.status === 'PENDING');
+        const completed = entriesWithLegs.filter(s => s.status !== 'PENDING');
         
-        setActiveBetSlips(active);
-        setCompletedBetSlips(completed);
+        setActiveEntries(active);
+        setCompletedEntries(completed);
       }
     } catch (error) {
       toast({
@@ -216,16 +217,16 @@ const Predictions = () => {
     });
   };
 
-  const handleDeleteBet = async () => {
-    if (!deleteSlip || !user) return;
+  const handleDeleteEntry = async () => {
+    if (!deleteEntry || !user) return;
     
     setIsDeleting(true);
     try {
-      // Check prediction window is still open (double-check before delete)
+      // Check prediction window is still open
       const predictionWindow = getPredictionWindowStatus(
-        deleteSlip.tournament_start_datetime,
-        deleteSlip.tournament_end_datetime,
-        deleteSlip.tournament_settled_at
+        deleteEntry.tournament_start_datetime,
+        deleteEntry.tournament_end_datetime,
+        deleteEntry.tournament_settled_at
       );
       
       if (!predictionWindow.canPredict) {
@@ -237,8 +238,8 @@ const Predictions = () => {
         return;
       }
 
-      // Get all prediction IDs for this bet slip
-      const predictionIds = deleteSlip.legs?.map(l => l.id) || [];
+      // Get all prediction IDs for this entry
+      const predictionIds = deleteEntry.legs?.map(l => l.id) || [];
       
       // 1. Delete podium_selections first (if any)
       if (predictionIds.length > 0) {
@@ -252,21 +253,21 @@ const Predictions = () => {
       await supabase
         .from('predictions')
         .delete()
-        .eq('bet_slip_id', deleteSlip.id);
+        .eq('bet_slip_id', deleteEntry.id);
       
-      // 3. Delete bet_slip
+      // 3. Delete entry
       const { error: deleteError } = await supabase
         .from('bet_slips')
         .delete()
-        .eq('id', deleteSlip.id);
+        .eq('id', deleteEntry.id);
       
       if (deleteError) throw deleteError;
       
-      // 4. Refund tokens to wallet atomically using database function (prevents race conditions)
+      // 4. Refund tokens to wallet atomically
       const { error: refundError } = await supabase
         .rpc('increment_earned_tokens', {
           user_id_param: user.id,
-          amount: deleteSlip.total_stake_tokens
+          amount: deleteEntry.total_stake_tokens
         });
       
       if (refundError) {
@@ -275,11 +276,10 @@ const Predictions = () => {
       
       toast({
         title: "Prediction cancelled",
-        description: `${deleteSlip.total_stake_tokens} tokens refunded to your wallet`
+        description: `${deleteEntry.total_stake_tokens} tokens refunded to your wallet`
       });
       
-      // Refresh bet list
-      fetchBetSlips();
+      fetchEntries();
     } catch (error) {
       toast({
         title: "Error cancelling prediction",
@@ -288,20 +288,20 @@ const Predictions = () => {
       });
     } finally {
       setIsDeleting(false);
-      setDeleteSlip(null);
+      setDeleteEntry(null);
     }
   };
 
-  const handleEditBet = async () => {
-    if (!editSlip || !user) return;
+  const handleEditEntry = async () => {
+    if (!editEntry || !user) return;
     
     setIsEditing(true);
     try {
       // 1. Check prediction window is still open
       const predictionWindow = getPredictionWindowStatus(
-        editSlip.tournament_start_datetime,
-        editSlip.tournament_end_datetime,
-        editSlip.tournament_settled_at
+        editEntry.tournament_start_datetime,
+        editEntry.tournament_end_datetime,
+        editEntry.tournament_settled_at
       );
       
       if (!predictionWindow.canPredict) {
@@ -313,7 +313,7 @@ const Predictions = () => {
         return;
       }
 
-      const oldStake = editSlip.total_stake_tokens;
+      const oldStake = editEntry.total_stake_tokens;
       const newStake = parseInt(newStakeAmount);
       const stakeDiff = newStake - oldStake;
       
@@ -337,27 +337,27 @@ const Predictions = () => {
         return;
       }
 
-      // 4. Calculate new potential payout
-      const newPotentialPayout = Math.floor(newStake * editSlip.total_odds_decimal);
+      // 4. Calculate new projected rewards
+      const newProjectedRewards = Math.floor(newStake * editEntry.total_odds_decimal);
 
-      // 5. Update bet_slip
+      // 5. Update entry
       await supabase
         .from('bet_slips')
         .update({
           total_stake_tokens: newStake,
-          potential_payout_tokens: newPotentialPayout
+          potential_payout_tokens: newProjectedRewards
         })
-        .eq('id', editSlip.id);
+        .eq('id', editEntry.id);
 
-      // 6. Update predictions (for single bets, update the leg too)
-      if ((editSlip.legs?.length || 0) === 1 && editSlip.legs?.[0]) {
+      // 6. Update prediction leg (for single entries)
+      if ((editEntry.legs?.length || 0) === 1 && editEntry.legs?.[0]) {
         await supabase
           .from('predictions')
           .update({
             staked_tokens: newStake,
-            potential_payout: newPotentialPayout
+            potential_payout: newProjectedRewards
           })
-          .eq('id', editSlip.legs[0].id);
+          .eq('id', editEntry.legs[0].id);
       }
 
       // 7. Update wallet (add/subtract difference)
@@ -383,7 +383,7 @@ const Predictions = () => {
           : `Refunded ${Math.abs(stakeDiff)} tokens to your wallet`
       });
       
-      fetchBetSlips();
+      fetchEntries();
       fetchWalletBalance();
     } catch (error) {
       toast({
@@ -393,14 +393,13 @@ const Predictions = () => {
       });
     } finally {
       setIsEditing(false);
-      setEditSlip(null);
+      setEditEntry(null);
     }
   };
 
-  const handlePredictAgain = async (slip: BetSlip) => {
+  const handlePredictAgain = async (entry: PredictionEntry) => {
     try {
-      // Get athlete names from the entry legs
-      const athleteNames = slip.legs?.map(leg => leg.athlete_name) || [];
+      const athleteNames = entry.legs?.map(leg => leg.athlete_name) || [];
       
       if (athleteNames.length === 0) {
         toast({
@@ -411,7 +410,6 @@ const Predictions = () => {
         return;
       }
 
-      // Find upcoming tournaments with open predictions
       const now = new Date().toISOString();
       const { data: upcomingTournaments, error: tournamentError } = await supabase
         .from('tournaments')
@@ -430,7 +428,6 @@ const Predictions = () => {
         return;
       }
 
-      // Find a tournament with open prediction window
       for (const tournament of upcomingTournaments) {
         const predictionWindow = getPredictionWindowStatus(
           tournament.start_datetime,
@@ -440,11 +437,10 @@ const Predictions = () => {
         
         if (!predictionWindow.canPredict) continue;
 
-        // Navigate to the tournament with athlete names in state
         navigate(`/tournaments/${tournament.id}`, {
           state: {
             predictAgainAthletes: athleteNames,
-            fromEntry: slip.id
+            fromEntry: entry.id
           }
         });
 
@@ -455,7 +451,6 @@ const Predictions = () => {
         return;
       }
 
-      // If no tournament with open prediction window found
       toast({
         title: "No open prediction windows",
         description: "All upcoming tournaments have closed predictions",
@@ -486,17 +481,16 @@ const Predictions = () => {
     }
   };
 
-  const EntrySlipCard = ({ slip, isActive }: { slip: BetSlip; isActive: boolean }) => {
-    // Use actual legs array length, not stale database field
-    const actualLegCount = slip.legs?.length || 0;
-    const isParlayDisplay = slip.type === 'parlay' || actualLegCount > 1;
-    const multiplierDisplay = `${slip.total_odds_decimal.toFixed(2)}×`;
+  const EntryCard = ({ entry, isActive }: { entry: PredictionEntry; isActive: boolean }) => {
+    const actualLegCount = entry.legs?.length || 0;
+    const isComboDisplay = entry.type === 'parlay' || actualLegCount > 1;
+    const multiplierDisplay = `${entry.total_odds_decimal.toFixed(2)}×`;
     
     // Check if prediction window is still open
     const predictionWindow = isActive ? getPredictionWindowStatus(
-      slip.tournament_start_datetime,
-      slip.tournament_end_datetime,
-      slip.tournament_settled_at
+      entry.tournament_start_datetime,
+      entry.tournament_end_datetime,
+      entry.tournament_settled_at
     ) : null;
     
     const canCancel = isActive && predictionWindow?.canPredict;
@@ -515,17 +509,16 @@ const Predictions = () => {
         <div className="space-y-3">
           <div className="flex justify-between items-start">
             <div className="flex-1">
-              {!isParlayDisplay && slip.legs?.[0] && (
+              {!isComboDisplay && entry.legs?.[0] && (
                 <div className="space-y-2">
-                  {/* Entry Type Badge */}
                   <Badge variant="secondary" className="text-xs mb-2">
-                    {getEntryTypeLabel(slip.legs[0].market_type)}
+                    {getEntryTypeLabel(entry.legs[0].market_type)}
                   </Badge>
                   
                   {/* For PODIUM: Show all 3 athletes with positions */}
-                  {slip.legs[0].market_type === 'PODIUM' && slip.legs[0].podium_selections && slip.legs[0].podium_selections.length > 0 && (
+                  {entry.legs[0].market_type === 'PODIUM' && entry.legs[0].podium_selections && entry.legs[0].podium_selections.length > 0 && (
                     <div className="space-y-1">
-                      {slip.legs[0].podium_selections
+                      {entry.legs[0].podium_selections
                         .sort((a, b) => a.position_predicted - b.position_predicted)
                         .map(ps => (
                           <div key={ps.position_predicted} className="flex items-center gap-2 text-sm">
@@ -541,44 +534,43 @@ const Predictions = () => {
                   )}
                   
                   {/* For non-podium: Show single athlete name */}
-                  {slip.legs[0].market_type !== 'PODIUM' && (
-                    <h3 className="font-semibold text-lg">{slip.legs[0].athlete_name}</h3>
+                  {entry.legs[0].market_type !== 'PODIUM' && (
+                    <h3 className="font-semibold text-lg">{entry.legs[0].athlete_name}</h3>
                   )}
                   
-                  {/* Tournament and discipline info */}
-                  <p className="text-sm text-muted-foreground">📍 {slip.tournament_name}</p>
+                  <p className="text-sm text-muted-foreground">📍 {entry.tournament_name}</p>
                   <p className="text-xs text-muted-foreground capitalize">
-                    🎿 {slip.legs[0].discipline} • {slip.legs[0].category.replace('_', ' ')}
+                    🎿 {entry.legs[0].discipline} • {entry.legs[0].category.replace('_', ' ')}
                   </p>
                 </div>
               )}
               
-              {/* Parlay display */}
-              {isParlayDisplay && (
+              {/* Combo display */}
+              {isComboDisplay && (
                 <>
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-lg">Parlay ({actualLegCount} legs)</h3>
-                    <Badge variant="secondary" className="text-xs">Parlay</Badge>
+                    <h3 className="font-semibold text-lg">Combo ({actualLegCount} picks)</h3>
+                    <Badge variant="secondary" className="text-xs">Combo</Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{slip.tournament_name}</p>
+                  <p className="text-sm text-muted-foreground">{entry.tournament_name}</p>
                 </>
               )}
             </div>
-            {getStatusBadge(slip.status)}
+            {getStatusBadge(entry.status)}
           </div>
 
-          {/* Show legs for parlays */}
-          {isParlayDisplay && slip.legs && slip.legs.length > 0 && (
+          {/* Show picks for combos */}
+          {isComboDisplay && entry.legs && entry.legs.length > 0 && (
             <Accordion type="single" collapsible className="border-t border-border pt-2">
               <AccordionItem value="legs" className="border-0">
                 <AccordionTrigger className="py-2 text-sm text-muted-foreground hover:no-underline">
                   <span className="flex items-center gap-1">
-                    View {actualLegCount} legs
+                    View {actualLegCount} picks
                     <ChevronDown className="w-4 h-4" />
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="space-y-2 pt-2">
-                  {slip.legs.map((leg, idx) => (
+                  {entry.legs.map((leg, idx) => (
                     <div key={leg.id} className="flex items-center justify-between p-2 bg-muted/30 rounded text-sm">
                       <div className="flex-1">
                         <div className="font-medium">{idx + 1}. {leg.athlete_name}</div>
@@ -604,7 +596,7 @@ const Predictions = () => {
               <p className="text-xs text-muted-foreground mb-1">Entry Amount</p>
               <p className="font-semibold flex items-center gap-1">
                 <Coins className="w-4 h-4 text-primary" />
-                {slip.total_stake_tokens.toLocaleString()}
+                {entry.total_stake_tokens.toLocaleString()}
               </p>
             </div>
             <div>
@@ -622,16 +614,16 @@ const Predictions = () => {
                 {isActive ? 'Projected Rewards' : 'Result'}
               </p>
               <p className={`font-bold ${
-                slip.status === 'WON' ? 'text-success' : 
-                slip.status === 'LOST' ? 'text-destructive' : 
+                entry.status === 'WON' ? 'text-success' : 
+                entry.status === 'LOST' ? 'text-destructive' : 
                 'text-primary'
               }`}>
                 {isActive ? (
-                  `${slip.potential_payout_tokens.toLocaleString()} tokens`
-                ) : slip.status === 'WON' ? (
-                  `+${slip.actual_payout_tokens?.toLocaleString() || 0} tokens`
-                ) : slip.status === 'LOST' ? (
-                  `-${slip.total_stake_tokens.toLocaleString()} tokens`
+                  `${entry.potential_payout_tokens.toLocaleString()} tokens`
+                ) : entry.status === 'WON' ? (
+                  `+${entry.actual_payout_tokens?.toLocaleString() || 0} tokens`
+                ) : entry.status === 'LOST' ? (
+                  `-${entry.total_stake_tokens.toLocaleString()} tokens`
                 ) : (
                   'Refunded'
                 )}
@@ -643,23 +635,23 @@ const Predictions = () => {
                 {isActive ? 'Placed' : 'Settled'}
               </p>
               <p className="text-sm">
-                {formatDate(isActive ? slip.created_at : (slip.settled_at || slip.created_at))}
+                {formatDate(isActive ? entry.created_at : (entry.settled_at || entry.created_at))}
               </p>
             </div>
           </div>
 
           {/* Settlement explanation for completed entries */}
-          {!isActive && slip.legs?.[0]?.settlement_metadata && (
+          {!isActive && entry.legs?.[0]?.settlement_metadata && (
             <SettlementExplanation 
               settlement={{
-                status: slip.legs[0].settlement_metadata.status as 'WON' | 'LOST' | 'VOID',
-                explanation: slip.legs[0].settlement_metadata.explanation,
-                actual_results: slip.legs[0].settlement_metadata.actual_results,
-                payout_details: slip.legs[0].settlement_metadata.payout_details,
+                status: entry.legs[0].settlement_metadata.status as 'WON' | 'LOST' | 'VOID',
+                explanation: entry.legs[0].settlement_metadata.explanation,
+                actual_results: entry.legs[0].settlement_metadata.actual_results,
+                payout_details: entry.legs[0].settlement_metadata.payout_details,
                 your_pick: {
-                  athlete_name: slip.legs[0].athlete_name,
-                  market_type: slip.legs[0].market_type,
-                  podium_picks: slip.legs[0].podium_selections?.map(ps => ({
+                  athlete_name: entry.legs[0].athlete_name,
+                  market_type: entry.legs[0].market_type,
+                  podium_picks: entry.legs[0].podium_selections?.map(ps => ({
                     position: ps.position_predicted,
                     athlete: ps.athletes.name
                   }))
@@ -669,7 +661,7 @@ const Predictions = () => {
             />
           )}
 
-          {/* Edit and Cancel buttons for active entries with open prediction window */}
+          {/* Edit and Cancel buttons for active entries */}
           {canCancel && (
             <div className="pt-3 border-t border-border space-y-2">
               <div className="flex gap-2">
@@ -678,8 +670,8 @@ const Predictions = () => {
                   size="sm" 
                   className="flex-1"
                   onClick={() => {
-                    setEditSlip(slip);
-                    setNewStakeAmount(slip.total_stake_tokens.toString());
+                    setEditEntry(entry);
+                    setNewStakeAmount(entry.total_stake_tokens.toString());
                   }}
                 >
                   <Pencil className="w-4 h-4 mr-2" />
@@ -689,7 +681,7 @@ const Predictions = () => {
                   variant="destructive" 
                   size="sm" 
                   className="flex-1"
-                  onClick={() => setDeleteSlip(slip)}
+                  onClick={() => setDeleteEntry(entry)}
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Cancel
@@ -708,7 +700,7 @@ const Predictions = () => {
                 variant="outline" 
                 size="sm" 
                 className="w-full"
-                onClick={() => handlePredictAgain(slip)}
+                onClick={() => handlePredictAgain(entry)}
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
                 Predict Again
@@ -734,15 +726,15 @@ const Predictions = () => {
 
   // Calculate prediction stats
   const predictionStats = (() => {
-    const allSettledEntries = completedBetSlips;
-    const totalEntered = allSettledEntries.reduce((sum, slip) => sum + slip.total_stake_tokens, 0);
+    const allSettledEntries = completedEntries;
+    const totalEntered = allSettledEntries.reduce((sum, entry) => sum + entry.total_stake_tokens, 0);
     const totalWon = allSettledEntries
-      .filter(slip => slip.status === 'WON')
-      .reduce((sum, slip) => sum + (slip.actual_payout_tokens || 0), 0);
+      .filter(entry => entry.status === 'WON')
+      .reduce((sum, entry) => sum + (entry.actual_payout_tokens || 0), 0);
     const netProfit = totalWon - totalEntered;
     const roi = totalEntered > 0 ? ((netProfit / totalEntered) * 100) : 0;
-    const winCount = allSettledEntries.filter(slip => slip.status === 'WON').length;
-    const lossCount = allSettledEntries.filter(slip => slip.status === 'LOST').length;
+    const winCount = allSettledEntries.filter(entry => entry.status === 'WON').length;
+    const lossCount = allSettledEntries.filter(entry => entry.status === 'LOST').length;
     
     return { totalEntered, totalWon, netProfit, roi, winCount, lossCount };
   })();
@@ -773,7 +765,7 @@ const Predictions = () => {
           </Card>
         )}
         {/* Stats Summary */}
-        {completedBetSlips.length > 0 && (
+        {completedEntries.length > 0 && (
           <Card className="p-4 mb-6 bg-muted/30">
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
@@ -837,15 +829,15 @@ const Predictions = () => {
         <Tabs defaultValue="active" className="w-full">
           <TabsList className="w-full grid grid-cols-2 mb-6">
             <TabsTrigger value="active">
-              Active ({activeBetSlips.length})
+              Active ({activeEntries.length})
             </TabsTrigger>
             <TabsTrigger value="history">
-              History ({completedBetSlips.length})
+              History ({completedEntries.length})
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="active" className="space-y-3">
-            {activeBetSlips.length === 0 ? (
+            {activeEntries.length === 0 ? (
               <Card className="p-8 text-center">
                 <p className="text-muted-foreground mb-4">No active predictions</p>
                 <p className="text-sm text-muted-foreground">
@@ -853,27 +845,27 @@ const Predictions = () => {
                 </p>
               </Card>
             ) : viewMode === 'tournament' ? (
-              <Accordion type="multiple" defaultValue={[...new Set(activeBetSlips.map(s => s.tournament_name || 'Unknown'))]}>
+              <Accordion type="multiple" defaultValue={[...new Set(activeEntries.map(s => s.tournament_name || 'Unknown'))]}>
                 {Object.entries(
-                  activeBetSlips.reduce((acc, slip) => {
-                    const key = slip.tournament_name || 'Unknown';
+                  activeEntries.reduce((acc, entry) => {
+                    const key = entry.tournament_name || 'Unknown';
                     if (!acc[key]) acc[key] = [];
-                    acc[key].push(slip);
+                    acc[key].push(entry);
                     return acc;
-                  }, {} as Record<string, BetSlip[]>)
-                ).map(([tournamentName, slips]) => {
-                  const totalStaked = slips.reduce((s, sl) => s + sl.total_stake_tokens, 0);
+                  }, {} as Record<string, PredictionEntry[]>)
+                ).map(([tournamentName, entries]) => {
+                  const totalStaked = entries.reduce((s, e) => s + e.total_stake_tokens, 0);
                   return (
                     <AccordionItem key={tournamentName} value={tournamentName}>
                       <AccordionTrigger className="hover:no-underline">
                         <div className="flex items-center justify-between w-full pr-2">
                           <span className="font-semibold">{tournamentName}</span>
-                          <span className="text-sm text-muted-foreground">{slips.length} picks • {totalStaked.toLocaleString()} tokens</span>
+                          <span className="text-sm text-muted-foreground">{entries.length} picks • {totalStaked.toLocaleString()} tokens</span>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="space-y-3 pt-2">
-                        {slips.map(slip => (
-                          <EntrySlipCard key={slip.id} slip={slip} isActive />
+                        {entries.map(entry => (
+                          <EntryCard key={entry.id} entry={entry} isActive />
                         ))}
                       </AccordionContent>
                     </AccordionItem>
@@ -881,14 +873,14 @@ const Predictions = () => {
                 })}
               </Accordion>
             ) : (
-              activeBetSlips.map((slip) => (
-                <EntrySlipCard key={slip.id} slip={slip} isActive />
+              activeEntries.map((entry) => (
+                <EntryCard key={entry.id} entry={entry} isActive />
               ))
             )}
           </TabsContent>
 
           <TabsContent value="history" className="space-y-3">
-            {completedBetSlips.length === 0 ? (
+            {completedEntries.length === 0 ? (
               <Card className="p-8 text-center">
                 <p className="text-muted-foreground mb-4">No completed predictions yet</p>
                 <p className="text-sm text-muted-foreground">
@@ -896,17 +888,17 @@ const Predictions = () => {
                 </p>
               </Card>
             ) : viewMode === 'tournament' ? (
-              <Accordion type="multiple" defaultValue={[...new Set(completedBetSlips.map(s => s.tournament_name || 'Unknown'))]}>
+              <Accordion type="multiple" defaultValue={[...new Set(completedEntries.map(s => s.tournament_name || 'Unknown'))]}>
                 {Object.entries(
-                  completedBetSlips.reduce((acc, slip) => {
-                    const key = slip.tournament_name || 'Unknown';
+                  completedEntries.reduce((acc, entry) => {
+                    const key = entry.tournament_name || 'Unknown';
                     if (!acc[key]) acc[key] = [];
-                    acc[key].push(slip);
+                    acc[key].push(entry);
                     return acc;
-                  }, {} as Record<string, BetSlip[]>)
-                ).map(([tournamentName, slips]) => {
-                  const totalStaked = slips.reduce((s, sl) => s + sl.total_stake_tokens, 0);
-                  const totalWon = slips.filter(s => s.status === 'WON').reduce((s, sl) => s + (sl.actual_payout_tokens || 0), 0);
+                  }, {} as Record<string, PredictionEntry[]>)
+                ).map(([tournamentName, entries]) => {
+                  const totalStaked = entries.reduce((s, e) => s + e.total_stake_tokens, 0);
+                  const totalWon = entries.filter(e => e.status === 'WON').reduce((s, e) => s + (e.actual_payout_tokens || 0), 0);
                   const net = totalWon - totalStaked;
                   return (
                     <AccordionItem key={tournamentName} value={tournamentName}>
@@ -919,8 +911,8 @@ const Predictions = () => {
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="space-y-3 pt-2">
-                        {slips.map(slip => (
-                          <EntrySlipCard key={slip.id} slip={slip} isActive={false} />
+                        {entries.map(entry => (
+                          <EntryCard key={entry.id} entry={entry} isActive={false} />
                         ))}
                       </AccordionContent>
                     </AccordionItem>
@@ -928,8 +920,8 @@ const Predictions = () => {
                 })}
               </Accordion>
             ) : (
-              completedBetSlips.map((slip) => (
-                <EntrySlipCard key={slip.id} slip={slip} isActive={false} />
+              completedEntries.map((entry) => (
+                <EntryCard key={entry.id} entry={entry} isActive={false} />
               ))
             )}
           </TabsContent>
@@ -939,18 +931,18 @@ const Predictions = () => {
       <BottomNav />
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={!!deleteSlip} onOpenChange={() => setDeleteSlip(null)}>
+      <AlertDialog open={!!deleteEntry} onOpenChange={() => setDeleteEntry(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel this prediction?</AlertDialogTitle>
             <AlertDialogDescription>
-              Your entry of <strong>{deleteSlip?.total_stake_tokens.toLocaleString()} tokens</strong> will be refunded to your wallet. This action cannot be undone.
+              Your entry of <strong>{deleteEntry?.total_stake_tokens.toLocaleString()} tokens</strong> will be refunded to your wallet. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Prediction</AlertDialogCancel>
             <AlertDialogAction 
-              onClick={handleDeleteBet}
+              onClick={handleDeleteEntry}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
@@ -961,7 +953,7 @@ const Predictions = () => {
       </AlertDialog>
 
       {/* Edit entry dialog */}
-      <Dialog open={!!editSlip} onOpenChange={() => setEditSlip(null)}>
+      <Dialog open={!!editEntry} onOpenChange={() => setEditEntry(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Entry Amount</DialogTitle>
@@ -971,19 +963,16 @@ const Predictions = () => {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {/* Current entry info */}
             <div className="bg-muted/50 rounded-lg p-3">
               <div className="text-sm text-muted-foreground">Current Entry</div>
-              <div className="font-semibold">{editSlip?.total_stake_tokens.toLocaleString()} tokens</div>
+              <div className="font-semibold">{editEntry?.total_stake_tokens.toLocaleString()} tokens</div>
             </div>
             
-            {/* Wallet balance */}
             <div className="flex justify-between text-sm">
               <span>Available Balance</span>
               <span className="font-semibold">{walletBalance.toLocaleString()} tokens</span>
             </div>
             
-            {/* New entry input */}
             <div className="space-y-2">
               <Label>New Entry Amount</Label>
               <Input
@@ -991,9 +980,8 @@ const Predictions = () => {
                 value={newStakeAmount}
                 onChange={(e) => setNewStakeAmount(e.target.value)}
                 min="1"
-                max={editSlip ? walletBalance + editSlip.total_stake_tokens : walletBalance}
+                max={editEntry ? walletBalance + editEntry.total_stake_tokens : walletBalance}
               />
-              {/* Quick amount buttons */}
               <div className="flex gap-2">
                 {[50, 100, 250, 500].map(amount => (
                   <Button 
@@ -1008,18 +996,17 @@ const Predictions = () => {
               </div>
             </div>
             
-            {/* New potential rewards preview */}
-            {editSlip && parseInt(newStakeAmount) > 0 && (
+            {editEntry && parseInt(newStakeAmount) > 0 && (
               <div className="bg-primary/10 rounded-lg p-3">
                 <div className="text-sm text-muted-foreground">New Projected Rewards</div>
                 <div className="font-bold text-lg">
-                  {Math.floor(parseInt(newStakeAmount) * editSlip.total_odds_decimal).toLocaleString()} tokens
+                  {Math.floor(parseInt(newStakeAmount) * editEntry.total_odds_decimal).toLocaleString()} tokens
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {parseInt(newStakeAmount) > editSlip.total_stake_tokens 
-                    ? `+${parseInt(newStakeAmount) - editSlip.total_stake_tokens} tokens from wallet`
-                    : parseInt(newStakeAmount) < editSlip.total_stake_tokens
-                      ? `${editSlip.total_stake_tokens - parseInt(newStakeAmount)} tokens refunded`
+                  {parseInt(newStakeAmount) > editEntry.total_stake_tokens 
+                    ? `+${parseInt(newStakeAmount) - editEntry.total_stake_tokens} tokens from wallet`
+                    : parseInt(newStakeAmount) < editEntry.total_stake_tokens
+                      ? `${editEntry.total_stake_tokens - parseInt(newStakeAmount)} tokens refunded`
                       : 'No change'}
                 </div>
               </div>
@@ -1027,9 +1014,9 @@ const Predictions = () => {
           </div>
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditSlip(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditEntry(null)}>Cancel</Button>
             <Button 
-              onClick={handleEditBet}
+              onClick={handleEditEntry}
               disabled={isEditing || !newStakeAmount || parseInt(newStakeAmount) <= 0}
             >
               {isEditing ? 'Saving...' : 'Save Changes'}
