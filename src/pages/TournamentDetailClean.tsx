@@ -205,17 +205,38 @@ const TournamentDetail = () => {
             setAthleteResults(resultsData);
           }
 
-          // Fetch user's predictions for this tournament
+          // Fetch user's predictions for this tournament (by tournament_id via bet_slips)
           if (user) {
-            const { data: predictionsData, error: predictionsError } = await supabase
-              .from('predictions')
-              .select('*')
+            const { data: slipsData } = await supabase
+              .from('bet_slips')
+              .select('id')
               .eq('user_id', user.id)
-              .eq('tournament_name', tournamentData.name)
-              .order('created_at', { ascending: false });
+              .eq('tournament_id', tournamentData.id);
+            
+            const slipIds = slipsData?.map(s => s.id) || [];
+            
+            if (slipIds.length > 0) {
+              const { data: predictionsData, error: predictionsError } = await supabase
+                .from('predictions')
+                .select('*')
+                .in('bet_slip_id', slipIds)
+                .order('created_at', { ascending: false });
 
-            if (!predictionsError && predictionsData) {
-              setUserPredictions(predictionsData);
+              if (!predictionsError && predictionsData) {
+                setUserPredictions(predictionsData);
+              }
+            } else {
+              // Fallback: query by tournament_name
+              const { data: predictionsData, error: predictionsError } = await supabase
+                .from('predictions')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('tournament_name', tournamentData.name)
+                .order('created_at', { ascending: false });
+
+              if (!predictionsError && predictionsData) {
+                setUserPredictions(predictionsData);
+              }
             }
           }
         }
@@ -608,6 +629,21 @@ const TournamentDetail = () => {
         description: `${stakeAmount} tokens entered on podium prediction`,
       });
 
+      // Navigate to predictions page with confirmation data
+      navigate('/predictions', {
+        state: {
+          confirmation: {
+            athleteName: `Podium: ${podiumState.assignedPositions.first.athlete.name}, ${podiumState.assignedPositions.second.athlete.name}, ${podiumState.assignedPositions.third.athlete.name}`,
+            tournamentName: tournament.name,
+            marketType: 'PODIUM',
+            discipline: currentPodiumContext.discipline,
+            stakeAmount,
+            potentialPayout,
+            odds: combinedOdds,
+          }
+        }
+      });
+
       // Send entry confirmation email (non-blocking)
       try {
         const { data: userData } = await supabase.auth.getUser();
@@ -803,6 +839,21 @@ const TournamentDetail = () => {
         description: `${stakeAmount} tokens entered on ${selectedSelection.athlete.name}`,
       });
 
+      // Navigate to predictions page with confirmation data
+      navigate('/predictions', {
+        state: {
+          confirmation: {
+            athleteName: selectedSelection.athlete.name,
+            tournamentName: tournament.name,
+            marketType: market.market_type,
+            discipline: market.discipline,
+            stakeAmount,
+            potentialPayout,
+            odds: finalOdds,
+          }
+        }
+      });
+
       // Send entry confirmation email (non-blocking)
       try {
         const { data: userData } = await supabase.auth.getUser();
@@ -912,6 +963,20 @@ const TournamentDetail = () => {
             )}
           </div>
         </div>
+
+        {/* My Picks Quick Link */}
+        {userPredictions.length > 0 && (
+          <div className="mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => navigate('/predictions')}
+            >
+              📋 My Picks ({userPredictions.length}) — View All
+            </Button>
+          </div>
+        )}
 
         {/* Parlay Builder Button */}
         {tournament.status !== 'finished' && predictionWindow?.canPredict && (

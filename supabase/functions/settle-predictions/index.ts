@@ -376,6 +376,12 @@ Deno.serve(async (req) => {
 
         // Process each prediction
         for (const prediction of predictions) {
+          // IDEMPOTENCY GUARD: Skip if already settled
+          if (prediction.status !== 'PENDING' || prediction.settled_at) {
+            console.log(`⏭️  Skipping prediction ${prediction.id} - already ${prediction.status} (settled_at: ${prediction.settled_at})`);
+            continue;
+          }
+          
           affectedUserIds.add(prediction.user_id);
           
           // Get the selection context for building explanations

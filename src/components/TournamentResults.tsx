@@ -8,6 +8,7 @@ interface AthleteResult {
   athlete_id: string;
   position: number | null;
   score_raw: number | null;
+  score_display?: string | null;
   discipline: string;
   gender: string;
   athlete?: {
@@ -49,15 +50,25 @@ export const TournamentResults = ({ results, disciplines }: TournamentResultsPro
     );
   };
 
-  const formatScore = (score: number | null, discipline: string) => {
-    if (score === null) return '-';
+  const formatScore = (result: AthleteResult) => {
+    const { score_raw, score_display, discipline } = result;
     
-    if (discipline === 'slalom') {
-      // Score is already normalized, display as is
-      return score.toString();
+    // Prefer score_display for slalom (shows notation like "3@41")
+    if (discipline === 'slalom' && score_display) {
+      return score_display;
     }
     
-    return score.toFixed(2);
+    if (score_raw === null) return '-';
+    
+    if (discipline === 'trick') {
+      return score_raw.toFixed(0);
+    }
+    
+    if (discipline === 'jump') {
+      return score_raw.toFixed(1) + 'm';
+    }
+    
+    return score_raw.toString();
   };
 
   if (results.length === 0) {
@@ -116,12 +127,12 @@ export const TournamentResults = ({ results, disciplines }: TournamentResultsPro
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold">
-                          {formatScore(result.score_raw, discipline)}
+                          {formatScore(result)}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {discipline === 'slalom' && 'buoys@rope'}
                           {discipline === 'trick' && 'points'}
-                          {discipline === 'jump' && 'meters'}
+                          {discipline === 'jump' && 'distance'}
                         </p>
                       </div>
                     </div>
@@ -153,12 +164,12 @@ export const TournamentResults = ({ results, disciplines }: TournamentResultsPro
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold">
-                          {formatScore(result.score_raw, discipline)}
+                          {formatScore(result)}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {discipline === 'slalom' && 'buoys@rope'}
                           {discipline === 'trick' && 'points'}
-                          {discipline === 'jump' && 'meters'}
+                          {discipline === 'jump' && 'distance'}
                         </p>
                       </div>
                     </div>
