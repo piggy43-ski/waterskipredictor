@@ -276,8 +276,17 @@ Deno.serve(async (req) => {
     console.log(`🎯 Starting settlement for ${selections.length} selections`);
     
     // Extract all selection IDs - ensure they're strings
-    const selectionIds = selections.map(s => String(s.selection_id));
-    console.log(`📋 Selection IDs to process:`, selectionIds.slice(0, 5), `... (showing first 5)`);
+    // Also include -podium suffixed variants so podium predictions are always found
+    const baseSelectionIds = selections.map(s => String(s.selection_id));
+    const selectionIds = [
+      ...baseSelectionIds,
+      ...baseSelectionIds
+        .filter(id => !id.endsWith('-podium'))
+        .map(id => `${id}-podium`),
+    ];
+    // Deduplicate
+    const uniqueSelectionIds = [...new Set(selectionIds)];
+    console.log(`📋 Selection IDs to process (${uniqueSelectionIds.length} incl. podium variants):`, uniqueSelectionIds.slice(0, 5), `...`);
 
     const result: SettlementResult = {
       success: true,
@@ -305,12 +314,12 @@ Deno.serve(async (req) => {
     }>();
 
     // BATCH FETCH: Get all pending predictions for all selections in ONE query
-    console.log(`🔍 Fetching all pending predictions for ${selectionIds.length} selections...`);
+    console.log(`🔍 Fetching all pending predictions for ${uniqueSelectionIds.length} selections (incl. podium variants)...`);
     
     const { data: allPredictions, error: batchError } = await supabaseClient
       .from('predictions')
       .select('*, bet_slip:bet_slips!bet_slip_id(*)')
-      .in('selection_id', selectionIds)
+      .in('selection_id', uniqueSelectionIds)
       .eq('status', 'PENDING');
 
     if (batchError) {
