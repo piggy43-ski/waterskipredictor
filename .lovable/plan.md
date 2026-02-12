@@ -1,52 +1,77 @@
 
 
-# Fix: BETA TESTING Tournament Predictions Stuck as PENDING
+# Fix: bet_slips Status Out of Sync with Predictions
 
 ## Problem
 
-All 22 pending predictions in the system are from the **"BETA TESTING" tournament** (ID: `d26feef0-7dee-4eba-aa8b-d36df42b30f7`). They remain PENDING because:
+The "My Predictions" page reads from `bet_slips.status` to determine what's Active vs History. All 90 bet slips for the BETA TESTING tournament are still `PENDING`, even though their child `predictions` rows are already settled (WON, LOST, or VOID). This is why the screenshot shows "Pending" cards.
 
-1. The tournament status is still **"upcoming"** -- it was never changed to "finished", so settlement was never triggered.
-2. All 22 predictions are **podium bets** with selection IDs ending in `-podium` (e.g., `9caa0027-...-podium`). The settlement function queries the `predictions` table using selection IDs provided by the admin UI, but if the admin UI only sends the base selection UUID (without `-podium`), the query won't match these rows.
+**Root cause**: The settlement process (and the earlier manual void migration) updated `predictions.status` but never updated the parent `bet_slips.status` or `bet_slips.settled_at`.
 
-## Fix
+## Fix (two parts)
 
-### Step 1: Admin action to void BETA TESTING predictions
+### Part 1: Immediate data fix (SQL migration)
 
-Since this was a test tournament with no real results, the cleanest approach is to **void all 22 predictions and refund stakes**. This requires:
+Run a one-time SQL to sync all BETA TESTING bet_slips with their predictions:
 
-- A database migration (or manual SQL via the settlement page) that:
-  - Updates all 22 predictions to `status = 'VOID'`, `settled_at = now()`
-  - Refunds `staked_tokens` back to each user's wallet via `increment_earned_tokens` RPC
-  - Updates the corresponding `bet_slips` to `status = 'VOID'`
-  - Updates the tournament status to `finished` and sets `settled_at`
+- For each bet_slip, derive the correct status from its predictions:
+  - If ALL predictions are VOID -> bet_slip status = 'VOID'
+  - If ANY prediction is WON -> bet_slip status = 'WON'  
+  - If all predictions are LOST (none WON, none VOID) -> bet_slip status = 'LOST'
+  - Mixed WON+LOST (parlay partial) -> bet_slip status = 'LOST' (parlay requires all legs)
+- Set `settled_at = now()` on all affected bet_slips
+- Also compute `actual_payout_tokens` from the predictions' payout data
 
-### Step 2: Add "Void All" button for test/beta tournaments
+### Part 2: Prevent future desync
 
-Add a simple admin action on the Tournament Settlement page specifically for voiding all predictions on a tournament (useful for test events):
+Update `supabase/functions/settle-predictions/index.ts` to always update the parent `bet_slips` row after settling its child predictions. After processing all predictions for a selection:
 
-- Button: "Void All Predictions" (with confirmation dialog)
-- Calls the `settle-predictions` edge function with all selection IDs set to `result: 'void'`
-- Must include the `-podium` suffixed IDs so the query matches
+- Query all bet_slip_ids that had predictions settled in this batch
+- For each bet_slip, re-derive status from its predictions (same logic as above)
+- Update `bet_slips.status`, `bet_slips.settled_at`, and `bet_slips.actual_payout_tokens`
 
-### Step 3: Fix settlement to handle podium selection IDs
+## Technical Details
 
-Update the `settle-predictions` edge function to also query for `-podium` suffixed variants:
+### SQL for Part 1
 
-- When building the `selectionIds` array, also include `${selectionId}-podium` for each ID
-- This ensures podium predictions are found and settled regardless of how the admin UI sends the IDs
+```sql
+-- Sync bet_slips status from settled predictions
+WITH slip_statuses AS (
+  SELECT 
+    bs.id,
+    CASE
+      WHEN COUNT(*) FILTER (WHERE p.status NOT IN ('VOID')) = 0 THEN 'VOID'
+      WHEN COUNT(*) FILTER (WHERE p.status = 'PENDING') > 0 THEN 'PENDING'
+      WHEN bs.type = 'parlay' AND COUNT(*) FILTER (WHERE p.status = 'LOST') > 0 THEN 'LOST'
+      WHEN COUNT(*) FILTER (WHERE p.status = 'WON') > 0 THEN 'WON'
+      ELSE 'LOST'
+    END as derived_status,
+    COALESCE(SUM(p.payout_tokens) FILTER (WHERE p.status = 'WON'), 0) as total_payout
+  FROM bet_slips bs
+  JOIN predictions p ON p.bet_slip_id = bs.id
+  WHERE bs.tournament_id = 'd26feef0-7dee-4eba-aa8b-d36df42b30f7'
+    AND bs.status = 'PENDING'
+  GROUP BY bs.id, bs.type
+)
+UPDATE bet_slips 
+SET status = ss.derived_status,
+    settled_at = now(),
+    actual_payout_tokens = ss.total_payout
+FROM slip_statuses ss
+WHERE bet_slips.id = ss.id;
+```
+
+### Edge function change (Part 2)
+
+In `settle-predictions/index.ts`, after the main settlement loop, add a section that:
+1. Collects all unique `bet_slip_id` values from the settled predictions
+2. For each, queries all its predictions to derive the aggregate status
+3. Updates the bet_slip row
 
 ## Files to modify
 
 | File | Change |
 |------|--------|
-| `supabase/functions/settle-predictions/index.ts` | Expand selection ID matching to include `-podium` variants |
-| `src/pages/admin/TournamentSettlement.tsx` | Add "Void All" button for admin to bulk-void a tournament's predictions |
-
-## Immediate data fix
-
-Run a one-time SQL to void the 22 stuck BETA TESTING predictions and refund users. This will be done via a database migration that:
-- Sets `status = 'VOID'`, `settled_at = now()` on all 22 predictions
-- Refunds staked tokens to user wallets
-- Marks the BETA TESTING tournament as finished
+| Database (migration) | One-time SQL to sync 90 BETA TESTING bet_slips |
+| `supabase/functions/settle-predictions/index.ts` | Add bet_slip status sync after settling predictions |
 
