@@ -1360,6 +1360,86 @@ export default function TournamentSettlement() {
     },
   });
 
+  // Void All Pending Predictions mutation
+  const voidAllMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedTournament) throw new Error('No tournament selected');
+
+      // Fetch all pending predictions for this tournament via bet_slips
+      const { data: pendingPredictions, error: fetchErr } = await supabase
+        .from('predictions')
+        .select('id, user_id, staked_tokens, bet_slip_id, bet_slips!bet_slip_id(tournament_id)')
+        .eq('status', 'PENDING')
+        .eq('bet_slips.tournament_id', selectedTournament);
+
+      if (fetchErr) throw fetchErr;
+
+      // Filter to only those matching the tournament (inner join filter)
+      const toVoid = (pendingPredictions || []).filter(
+        (p: any) => p.bet_slips && (Array.isArray(p.bet_slips) ? p.bet_slips.length > 0 : p.bet_slips.tournament_id === selectedTournament)
+      );
+
+      if (toVoid.length === 0) {
+        return { voided: 0, refunded: 0 };
+      }
+
+      // Void predictions
+      const predictionIds = toVoid.map((p: any) => p.id);
+      const { error: voidErr } = await supabase
+        .from('predictions')
+        .update({
+          status: 'VOID',
+          settled_at: new Date().toISOString(),
+          payout_tokens: 0,
+          settlement_metadata: {
+            status: 'VOID',
+            explanation: 'Voided by admin - all predictions cancelled',
+            void_reason: 'Admin bulk void',
+            settled_at: new Date().toISOString(),
+          },
+        })
+        .in('id', predictionIds);
+
+      if (voidErr) throw voidErr;
+
+      // Void corresponding bet_slips
+      const betSlipIds = [...new Set(toVoid.map((p: any) => p.bet_slip_id).filter(Boolean))];
+      if (betSlipIds.length > 0) {
+        await supabase
+          .from('bet_slips')
+          .update({ status: 'VOID', settled_at: new Date().toISOString() })
+          .in('id', betSlipIds)
+          .eq('status', 'pending');
+      }
+
+      // Refund stakes per user
+      const refundsByUser = new Map<string, number>();
+      for (const p of toVoid) {
+        refundsByUser.set(p.user_id, (refundsByUser.get(p.user_id) || 0) + (p.staked_tokens || 0));
+      }
+
+      let totalRefunded = 0;
+      for (const [userId, amount] of refundsByUser) {
+        if (amount > 0) {
+          await supabase.rpc('increment_earned_tokens', { user_id_param: userId, amount });
+          totalRefunded += amount;
+        }
+      }
+
+      return { voided: toVoid.length, refunded: totalRefunded };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['tournament-settlement-data'] });
+      toast({
+        title: 'Predictions Voided',
+        description: `Voided ${data.voided} predictions, refunded ${data.refunded} tokens`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Void failed', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const totalHouseProfit = settlementPreviews.reduce(
     (sum, p) => sum + (p.total_wagered - p.total_payout),
     0
@@ -1398,6 +1478,21 @@ export default function TournamentSettlement() {
                 ))}
               </SelectContent>
             </Select>
+            <div className="flex items-center gap-3 mt-4">
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={!selectedTournament || voidAllMutation.isPending}
+                onClick={() => {
+                  if (confirm('Are you sure you want to VOID all pending predictions for this tournament and refund all stakes? This cannot be undone.')) {
+                    voidAllMutation.mutate();
+                  }
+                }}
+              >
+                {voidAllMutation.isPending ? 'Voiding...' : 'Void All Pending Predictions'}
+              </Button>
+              <span className="text-xs text-muted-foreground">Voids all PENDING predictions and refunds stakes</span>
+            </div>
           </CardContent>
         </Card>
 
