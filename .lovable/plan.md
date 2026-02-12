@@ -1,37 +1,58 @@
 
 
-# Fix: Correct settlement_metadata for BETA TESTING Tournament
+# Comprehensive Cleanup: Rebrand from "Betting" to "Predicting" Everywhere
 
-## Problem
+## The Root Problem
 
-While the `predictions.status` column was correctly updated (Ross Charlie WINNER predictions flipped to LOST, Nate Smith predictions to WON), the `settlement_metadata` JSONB column was never updated. This means the UI still displays:
+The codebase was originally built as a betting platform and still carries that DNA everywhere -- variable names, comments, transaction types, edge function logic, and even the component folder is called `betting/`. This is why:
 
-- "Correct! Ross Charlie finished 1st in Open Men Slalom" (wrong -- should reference Nate Smith)
-- `position_1st: "Ross Charlie"` in actual results (should be `"Smith Nate"`)
-- Explanations for other athletes say "Winner was Ross Charlie" (should say "Winner was Smith Nate")
+1. The AI keeps getting confused and treats things as "bets"
+2. Settlement logic uses terms like `bet_slip`, `bet_won`, `bet_lost`, `bet_void`
+3. Comments throughout the code reference "bets" and "betting slips"
 
-**34 predictions** are affected.
+The database table is still called `bet_slips` (renaming live tables is risky), but **every code reference** should use prediction/entry terminology.
 
-## Fix: SQL Migration to Patch settlement_metadata
+## Files That Need Changes
 
-A single migration will update the `settlement_metadata` JSONB for all 34 affected predictions:
+### Frontend (10 files)
 
-1. **Swap position_1st**: `"Ross Charlie"` becomes `"Smith Nate"` and `position_2nd`: `"Smith Nate"` becomes `"Ross Charlie"`
-2. **Fix explanations** for Ross Charlie WINNER predictions (now LOST): Change from "Correct! Ross Charlie finished 1st..." to "Not correct. Ross Charlie did not finish 1st. Winner was Smith Nate."
-3. **Fix explanations** for other LOST WINNER predictions: Replace "Winner was Ross Charlie" with "Winner was Smith Nate"
-4. **Fix metadata status**: Change `settlement_metadata.status` from `"WON"` to `"LOST"` for the 9 Ross Charlie WINNER predictions
-5. **Fix payout_details**: Zero out the payout info in metadata for the flipped predictions
-6. **Keep highest_scorer as-is** for HIGHEST_SCORE market: Both scored 1@43, but Nate Smith predictions are already correctly WON there
+| File | What Changes |
+|------|-------------|
+| `src/pages/Predictions.tsx` | Comments still say "bet_slips table". Import path references `betting/` |
+| `src/pages/Index.tsx` | Comments say "bet_slips", variable names |
+| `src/pages/Profile.tsx` | Comments say "bet_slips" |
+| `src/pages/TournamentDetailClean.tsx` | Variables named `betSlip`, comments say "bet_slips" |
+| `src/pages/admin/TournamentSettlement.tsx` | Comments reference "bet_slips", "parlays query bet_slips" |
+| `src/pages/admin/RiskDashboard.tsx` | References to bet_slips in comments |
+| `src/pages/admin/AuditLogs.tsx` | Event types: `BETSLIP_SETTLED` -> `ENTRY_SETTLED`, entity type `betslip` -> `entry` |
+| `src/components/ParlayBuilder.tsx` | Comments say "Create bet slip", "bet_slip level", variable `betSlip` -> `entry` |
+| `src/components/admin/SettlementAuditTable.tsx` | Variables `betSlipIds`, `betSlipMap`, `betSlip`, comments |
+| `src/components/betting/SettlementExplanation.tsx` | **Rename folder** from `betting/` to `settlement/` |
 
-## Technical Details
+### Edge Functions (3 files)
 
-The migration uses `jsonb_set()` to surgically update nested JSON fields without replacing the entire object. Multiple passes handle the different explanation patterns.
+| File | What Changes |
+|------|-------------|
+| `supabase/functions/settle-predictions/index.ts` | Transaction types: `bet_won` -> `prediction_won`, `bet_lost` -> `prediction_lost`, `bet_void` -> `prediction_void`. Comments: "bet_slip settlement" -> "entry settlement". Variables: `betSlipsToSettle` -> `entriesToSettle` |
+| `supabase/functions/validate-bet/index.ts` | Rename function? At minimum, update all internal comments and variable names |
+| `supabase/functions/run-settlement-test/index.ts` | Comments say "Single bet placed", "Parlay bet placed". Variable `singleBetSlipId` -> `singleEntryId` |
 
-## Files
+### What We Are NOT Changing
+- The database table name `bet_slips` stays as-is (too risky to rename on a live app)
+- The column `bet_slip_id` in the `predictions` table stays
+- The Supabase auto-generated `types.ts` stays (it mirrors the DB)
+- We keep `from('bet_slips')` in queries since that's the actual table name -- but wrap them in clearly-named functions/comments
 
-| File | Change |
-|------|--------|
-| Database (migration) | Patch settlement_metadata JSON for 34 predictions |
+## Implementation Order
 
-No code file changes needed -- once the data is corrected, the UI will automatically display the right information.
+1. Rename `src/components/betting/` folder to `src/components/settlement/` and update all imports
+2. Update all frontend files (comments, variable names, user-facing strings)
+3. Update edge functions (transaction types, comments, variable names)
+4. Deploy edge functions
+
+## What This Prevents Going Forward
+
+- The AI will stop seeing "bet" language in the codebase and won't revert to gambling terminology
+- New features built on top of this code will naturally use "prediction/entry" language
+- Transaction types in the database will use `prediction_won` instead of `bet_won`, making audit logs clearer
 
