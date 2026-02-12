@@ -159,7 +159,54 @@ const RiskDashboard = () => {
 
   // Generate all odds mutation
   const [generatingAllProgress, setGeneratingAllProgress] = useState<{ current: number; total: number } | null>(null);
+  const [fixingMultipliers, setFixingMultipliers] = useState(false);
   
+  // Fix Multipliers - one-click repair for out-of-band markets
+  const fixMultipliers = useMutation({
+    mutationFn: async () => {
+      const outOfBand = marketsData?.filter(m => {
+        if (m.status !== 'OPEN' || m.locked_at) return false;
+        if (m.implied_sum === 0 || m.implied_sum > 2) return true; // No odds
+        const normalizedType = (m.market_type?.toUpperCase() || 'WINNER') as MarketType;
+        const band = HOUSE_EDGE_BANDS[normalizedType];
+        if (!band) return false;
+        return m.implied_sum < band.min || m.implied_sum > band.max;
+      }) || [];
+      
+      if (outOfBand.length === 0) throw new Error('No markets need fixing');
+      
+      setFixingMultipliers(true);
+      const results: { name: string; before: number; after: number; success: boolean }[] = [];
+      
+      for (const market of outOfBand) {
+        const beforeImplied = market.implied_sum;
+        const { data, error } = await supabase.functions.invoke('generate-market-odds', {
+          body: { market_id: market.id, force: true },
+        });
+        results.push({
+          name: market.name,
+          before: beforeImplied,
+          after: data?.finalImpliedSum || data?.implied_sum || 0,
+          success: !error,
+        });
+      }
+      
+      return results;
+    },
+    onSuccess: (results) => {
+      const fixed = results.filter(r => r.success).length;
+      toast.success(`Fixed ${fixed}/${results.length} markets`, {
+        description: results.map(r => `${r.name}: ${(r.before * 100).toFixed(1)}% → ${(r.after * 100).toFixed(1)}%`).join('\n'),
+      });
+      setFixingMultipliers(false);
+      queryClient.invalidateQueries({ queryKey: ['admin-risk-markets'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Fix failed: ${error.message}`);
+      setFixingMultipliers(false);
+    },
+  });
+
   const generateAllOdds = useMutation({
     mutationFn: async () => {
       const openMarkets = marketsData?.filter(m => 
@@ -890,6 +937,34 @@ const RiskDashboard = () => {
             <p className="text-muted-foreground">House safety, odds health, and exposure monitoring</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Fix Multipliers Button */}
+            {marketsData?.some(m => {
+              if (m.status !== 'OPEN' || m.locked_at) return false;
+              if (m.implied_sum === 0 || m.implied_sum > 2) return true;
+              const normalizedType = (m.market_type?.toUpperCase() || 'WINNER') as MarketType;
+              const band = HOUSE_EDGE_BANDS[normalizedType];
+              if (!band) return false;
+              return m.implied_sum < band.min || m.implied_sum > band.max;
+            }) && (
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={() => fixMultipliers.mutate()}
+                disabled={fixMultipliers.isPending}
+              >
+                {fixMultipliers.isPending ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Fixing...
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    Fix Multipliers
+                  </>
+                )}
+              </Button>
+            )}
             <Button 
               variant="default" 
               size="sm" 

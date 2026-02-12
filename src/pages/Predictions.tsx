@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info, RotateCcw, TrendingDown, Percent } from 'lucide-react';
+import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info, RotateCcw, TrendingDown, Percent, CheckCircle } from 'lucide-react';
 import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -81,6 +81,7 @@ interface Prediction {
 
 const Predictions = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeBetSlips, setActiveBetSlips] = useState<BetSlip[]>([]);
@@ -92,6 +93,25 @@ const Predictions = () => {
   const [newStakeAmount, setNewStakeAmount] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [viewMode, setViewMode] = useState<'flat' | 'tournament'>('flat');
+  
+  // Confirmation from just-placed prediction
+  const confirmation = location.state?.confirmation as {
+    athleteName: string;
+    tournamentName: string;
+    marketType: string;
+    discipline: string;
+    stakeAmount: number;
+    potentialPayout: number;
+    odds: number;
+  } | undefined;
+  
+  // Clear the location state after reading it
+  useEffect(() => {
+    if (confirmation) {
+      window.history.replaceState({}, document.title);
+    }
+  }, [confirmation]);
 
   useEffect(() => {
     if (!user) {
@@ -732,6 +752,26 @@ const Predictions = () => {
       <PageHeader title="My Predictions" />
       
       <div className="max-w-lg mx-auto px-4 py-6">
+        {/* Confirmation Banner */}
+        {confirmation && (
+          <Card className="p-4 mb-6 border-primary/50 bg-primary/10">
+            <div className="flex items-start gap-3">
+              <CheckCircle className="w-6 h-6 text-primary mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-bold text-lg text-primary mb-1">Prediction Saved! ✅</h3>
+                <p className="font-semibold">{confirmation.athleteName}</p>
+                <p className="text-sm text-muted-foreground capitalize">
+                  {confirmation.discipline} • {confirmation.marketType.replace('_', ' ')} • {confirmation.tournamentName}
+                </p>
+                <div className="flex gap-4 mt-2 text-sm">
+                  <span><strong>{confirmation.stakeAmount}</strong> tokens entered</span>
+                  <span><strong>{confirmation.odds.toFixed(2)}×</strong> multiplier</span>
+                  <span className="text-primary font-bold">{confirmation.potentialPayout.toLocaleString()} potential</span>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
         {/* Stats Summary */}
         {completedBetSlips.length > 0 && (
           <Card className="p-4 mb-6 bg-muted/30">
@@ -776,6 +816,24 @@ const Predictions = () => {
           </Card>
         )}
 
+        {/* View Mode Toggle */}
+        <div className="flex items-center justify-end mb-4">
+          <div className="flex bg-muted rounded-lg p-0.5">
+            <button
+              className={`px-3 py-1 text-xs rounded-md transition-colors ${viewMode === 'flat' ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground'}`}
+              onClick={() => setViewMode('flat')}
+            >
+              Flat
+            </button>
+            <button
+              className={`px-3 py-1 text-xs rounded-md transition-colors ${viewMode === 'tournament' ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground'}`}
+              onClick={() => setViewMode('tournament')}
+            >
+              By Tournament
+            </button>
+          </div>
+        </div>
+
         <Tabs defaultValue="active" className="w-full">
           <TabsList className="w-full grid grid-cols-2 mb-6">
             <TabsTrigger value="active">
@@ -794,6 +852,34 @@ const Predictions = () => {
                   You haven't made any predictions yet. Start with a contest you understand.
                 </p>
               </Card>
+            ) : viewMode === 'tournament' ? (
+              <Accordion type="multiple" defaultValue={[...new Set(activeBetSlips.map(s => s.tournament_name || 'Unknown'))]}>
+                {Object.entries(
+                  activeBetSlips.reduce((acc, slip) => {
+                    const key = slip.tournament_name || 'Unknown';
+                    if (!acc[key]) acc[key] = [];
+                    acc[key].push(slip);
+                    return acc;
+                  }, {} as Record<string, BetSlip[]>)
+                ).map(([tournamentName, slips]) => {
+                  const totalStaked = slips.reduce((s, sl) => s + sl.total_stake_tokens, 0);
+                  return (
+                    <AccordionItem key={tournamentName} value={tournamentName}>
+                      <AccordionTrigger className="hover:no-underline">
+                        <div className="flex items-center justify-between w-full pr-2">
+                          <span className="font-semibold">{tournamentName}</span>
+                          <span className="text-sm text-muted-foreground">{slips.length} picks • {totalStaked.toLocaleString()} tokens</span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-3 pt-2">
+                        {slips.map(slip => (
+                          <EntrySlipCard key={slip.id} slip={slip} isActive />
+                        ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
             ) : (
               activeBetSlips.map((slip) => (
                 <EntrySlipCard key={slip.id} slip={slip} isActive />
@@ -809,6 +895,38 @@ const Predictions = () => {
                   Your finalized predictions will appear here
                 </p>
               </Card>
+            ) : viewMode === 'tournament' ? (
+              <Accordion type="multiple" defaultValue={[...new Set(completedBetSlips.map(s => s.tournament_name || 'Unknown'))]}>
+                {Object.entries(
+                  completedBetSlips.reduce((acc, slip) => {
+                    const key = slip.tournament_name || 'Unknown';
+                    if (!acc[key]) acc[key] = [];
+                    acc[key].push(slip);
+                    return acc;
+                  }, {} as Record<string, BetSlip[]>)
+                ).map(([tournamentName, slips]) => {
+                  const totalStaked = slips.reduce((s, sl) => s + sl.total_stake_tokens, 0);
+                  const totalWon = slips.filter(s => s.status === 'WON').reduce((s, sl) => s + (sl.actual_payout_tokens || 0), 0);
+                  const net = totalWon - totalStaked;
+                  return (
+                    <AccordionItem key={tournamentName} value={tournamentName}>
+                      <AccordionTrigger className="hover:no-underline">
+                        <div className="flex items-center justify-between w-full pr-2">
+                          <span className="font-semibold">{tournamentName}</span>
+                          <span className={`text-sm font-medium ${net >= 0 ? 'text-success' : 'text-destructive'}`}>
+                            {net >= 0 ? '+' : ''}{net.toLocaleString()}
+                          </span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-3 pt-2">
+                        {slips.map(slip => (
+                          <EntrySlipCard key={slip.id} slip={slip} isActive={false} />
+                        ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
             ) : (
               completedBetSlips.map((slip) => (
                 <EntrySlipCard key={slip.id} slip={slip} isActive={false} />
