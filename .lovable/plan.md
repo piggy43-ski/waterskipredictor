@@ -1,77 +1,73 @@
 
 
-# Fix: bet_slips Status Out of Sync with Predictions
+# Fix: Correct BETA TESTING Settlement + Rebrand "Bet Slips" to "Predictions"
 
-## Problem
+## Part 1: Fix Incorrect Settlement Data
 
-The "My Predictions" page reads from `bet_slips.status` to determine what's Active vs History. All 90 bet slips for the BETA TESTING tournament are still `PENDING`, even though their child `predictions` rows are already settled (WON, LOST, or VOID). This is why the screenshot shows "Pending" cards.
+### Problem
+The **WINNER slalom open_men** market was incorrectly settled — **Ross Charlie** was marked as WON, but the actual winner was **Nate Smith** (won on tiebreak). Ross Charlie should be LOST for the WINNER market.
 
-**Root cause**: The settlement process (and the earlier manual void migration) updated `predictions.status` but never updated the parent `bet_slips.status` or `bet_slips.settled_at`.
+- 9 predictions on "Ross Charlie to win" are incorrectly WON
+- 8 of those have non-zero payouts totaling **1,413 tokens** that were incorrectly credited
+- 1 prediction (staked 200, payout 0) was marked WON but never paid -- likely a bug in payout calculation
 
-## Fix (two parts)
+The HIGHEST_SCORE slalom market is correct: Nate Smith is WON. Nobody predicted Ross Charlie for highest score, so no change needed there (even though they shared the score).
 
-### Part 1: Immediate data fix (SQL migration)
+### Additionally: 3 orphan bet_slips
+3 bet_slips exist with **no linked predictions** (orphans from early bugs). They need to be voided.
 
-Run a one-time SQL to sync all BETA TESTING bet_slips with their predictions:
-
-- For each bet_slip, derive the correct status from its predictions:
-  - If ALL predictions are VOID -> bet_slip status = 'VOID'
-  - If ANY prediction is WON -> bet_slip status = 'WON'  
-  - If all predictions are LOST (none WON, none VOID) -> bet_slip status = 'LOST'
-  - Mixed WON+LOST (parlay partial) -> bet_slip status = 'LOST' (parlay requires all legs)
-- Set `settled_at = now()` on all affected bet_slips
-- Also compute `actual_payout_tokens` from the predictions' payout data
-
-### Part 2: Prevent future desync
-
-Update `supabase/functions/settle-predictions/index.ts` to always update the parent `bet_slips` row after settling its child predictions. After processing all predictions for a selection:
-
-- Query all bet_slip_ids that had predictions settled in this batch
-- For each bet_slip, re-derive status from its predictions (same logic as above)
-- Update `bet_slips.status`, `bet_slips.settled_at`, and `bet_slips.actual_payout_tokens`
-
-## Technical Details
-
-### SQL for Part 1
+### SQL Migration
 
 ```sql
--- Sync bet_slips status from settled predictions
-WITH slip_statuses AS (
-  SELECT 
-    bs.id,
-    CASE
-      WHEN COUNT(*) FILTER (WHERE p.status NOT IN ('VOID')) = 0 THEN 'VOID'
-      WHEN COUNT(*) FILTER (WHERE p.status = 'PENDING') > 0 THEN 'PENDING'
-      WHEN bs.type = 'parlay' AND COUNT(*) FILTER (WHERE p.status = 'LOST') > 0 THEN 'LOST'
-      WHEN COUNT(*) FILTER (WHERE p.status = 'WON') > 0 THEN 'WON'
-      ELSE 'LOST'
-    END as derived_status,
-    COALESCE(SUM(p.payout_tokens) FILTER (WHERE p.status = 'WON'), 0) as total_payout
-  FROM bet_slips bs
-  JOIN predictions p ON p.bet_slip_id = bs.id
-  WHERE bs.tournament_id = 'd26feef0-7dee-4eba-aa8b-d36df42b30f7'
-    AND bs.status = 'PENDING'
-  GROUP BY bs.id, bs.type
-)
-UPDATE bet_slips 
-SET status = ss.derived_status,
-    settled_at = now(),
-    actual_payout_tokens = ss.total_payout
-FROM slip_statuses ss
-WHERE bet_slips.id = ss.id;
+-- 1. Flip Ross Charlie WINNER predictions from WON to LOST
+UPDATE predictions
+SET status = 'LOST', payout_tokens = 0, settled_at = now()
+WHERE selection_id = '0febde69-2dbe-4e41-8f0c-86963052e8cc'
+  AND status = 'WON';
+
+-- 2. Claw back incorrectly paid tokens from user wallets
+-- (One UPDATE per user with non-zero payouts)
+-- User 2e5f... : -300
+-- User 5b9f... : -90
+-- User b992... : -30
+-- User 5ba9... : -750
+-- User 1d55... : -150
+-- User 5f88... : -30
+-- User 4523... : -30
+-- User d731... : -33
+
+-- 3. Update parent bet_slips for Ross Charlie WINNER
+-- (derive new status from child predictions)
+
+-- 4. Void 3 orphan bet_slips with no predictions
+UPDATE bet_slips SET status = 'VOID', settled_at = now()
+WHERE id IN ('8605912b-...', '16f832f2-...', '417d46e9-...');
 ```
 
-### Edge function change (Part 2)
+The migration will:
+- Disable the immutability trigger temporarily
+- Flip 9 Ross Charlie WINNER predictions to LOST with payout_tokens = 0
+- Deduct incorrectly credited tokens from each affected user's wallet (total: 1,413 tokens)
+- Re-derive the parent bet_slip statuses
+- Void the 3 orphan bet_slips
+- Re-enable the trigger
 
-In `settle-predictions/index.ts`, after the main settlement loop, add a section that:
-1. Collects all unique `bet_slip_id` values from the settled predictions
-2. For each, queries all its predictions to derive the aggregate status
-3. Updates the bet_slip row
+## Part 2: Rebrand "Bet Slips" to "Predictions" in Code
 
-## Files to modify
+The `Predictions.tsx` page and related components still use `BetSlip` interface names and `betSlip` variable names internally. While the database table is still called `bet_slips` (renaming a table is risky on a live app), all **user-facing** references and **code-level** naming should use "prediction" / "entry" terminology.
+
+### Changes in `src/pages/Predictions.tsx`:
+- Rename `BetSlip` interface to `PredictionEntry`
+- Rename `activeBetSlips` / `completedBetSlips` state variables to `activeEntries` / `completedEntries`
+- Rename `fetchBetSlips()` to `fetchEntries()`
+- Rename `EntrySlipCard` to `EntryCard`
+- Update all internal comments from "bet slip" to "prediction entry"
+- Ensure no user-facing text says "bet" or "slip"
+
+### Files to modify
 
 | File | Change |
 |------|--------|
-| Database (migration) | One-time SQL to sync 90 BETA TESTING bet_slips |
-| `supabase/functions/settle-predictions/index.ts` | Add bet_slip status sync after settling predictions |
+| Database (migration) | Fix Ross Charlie settlement, claw back tokens, void orphans |
+| `src/pages/Predictions.tsx` | Rebrand BetSlip to PredictionEntry throughout |
 
