@@ -475,12 +475,12 @@ Deno.serve(async (req) => {
                 const profit = payoutAmount - prediction.staked_tokens;
                 await supabaseClient.from('token_transactions').insert({
                   user_id: prediction.user_id,
-                  type: 'bet_won',
+                  type: 'prediction_won',
                   amount: payoutAmount,
                   balance_after: walletData.purchased_tokens + walletData.earned_tokens,
                   reference_type: 'prediction',
                   reference_id: prediction.id,
-                  description: `Won bet on ${prediction.athlete_name} (${prediction.discipline}) - Staked ${prediction.staked_tokens}, won ${payoutAmount} (+${profit} profit)`,
+                  description: `Won prediction on ${prediction.athlete_name} (${prediction.discipline}) - Staked ${prediction.staked_tokens}, won ${payoutAmount} (+${profit} profit)`,
                   metadata: {
                     tournament_name: prediction.tournament_name,
                     athlete_name: prediction.athlete_name,
@@ -551,15 +551,15 @@ Deno.serve(async (req) => {
               .single();
             
             if (walletData && !isPartOfParlay) {
-              // Only log transaction for single bets, not parlay legs
+              // Only log transaction for single entries, not parlay legs
               await supabaseClient.from('token_transactions').insert({
                 user_id: prediction.user_id,
-                type: 'bet_lost',
-                amount: -prediction.staked_tokens, // Negative to show loss
+                type: 'prediction_lost',
+                amount: -prediction.staked_tokens,
                 balance_after: walletData.purchased_tokens + walletData.earned_tokens,
                 reference_type: 'prediction',
                 reference_id: prediction.id,
-                description: `Lost bet on ${prediction.athlete_name} (${prediction.discipline}) - Lost ${prediction.staked_tokens} tokens`,
+                description: `Lost prediction on ${prediction.athlete_name} (${prediction.discipline}) - Lost ${prediction.staked_tokens} tokens`,
                 metadata: {
                   tournament_name: prediction.tournament_name,
                   athlete_name: prediction.athlete_name,
@@ -651,12 +651,12 @@ Deno.serve(async (req) => {
               if (walletData) {
                 await supabaseClient.from('token_transactions').insert({
                   user_id: prediction.user_id,
-                  type: 'bet_void',
+                  type: 'prediction_void',
                   amount: prediction.staked_tokens,
                   balance_after: walletData.purchased_tokens + walletData.earned_tokens,
                   reference_type: 'prediction',
                   reference_id: prediction.id,
-                  description: `Voided bet on ${prediction.athlete_name} (${prediction.discipline}) - Refunded ${prediction.staked_tokens} tokens`,
+                  description: `Voided prediction on ${prediction.athlete_name} (${prediction.discipline}) - Refunded ${prediction.staked_tokens} tokens`,
                   metadata: {
                     tournament_name: prediction.tournament_name,
                     athlete_name: prediction.athlete_name,
@@ -679,8 +679,8 @@ Deno.serve(async (req) => {
 
     result.affected_users = affectedUserIds.size;
 
-    // BET SLIP SETTLEMENT: Process ALL bet_slips (both single and parlay)
-    console.log(`\n🎯 Starting bet_slip settlement...`);
+    // ENTRY SETTLEMENT: Process ALL entries (both single and parlay)
+    console.log(`\n🎯 Starting entry settlement...`);
     
     try {
       // Fetch all pending bet slips that might have been affected
@@ -742,14 +742,14 @@ Deno.serve(async (req) => {
                   const athleteNames = legs.map(l => l.athlete_name).join(', ');
                   await supabaseClient.from('token_transactions').insert({
                     user_id: slip.user_id,
-                    type: 'bet_lost',
+                    type: 'prediction_lost',
                     amount: -slip.total_stake_tokens,
                     balance_after: walletData.purchased_tokens + walletData.earned_tokens,
-                    reference_type: 'bet_slip',
+                    reference_type: 'entry',
                     reference_id: slip.id,
                     description: `Lost ${slip.leg_count}-leg parlay (${athleteNames}) - Lost ${slip.total_stake_tokens} tokens`,
                     metadata: {
-                      bet_type: 'parlay',
+                      entry_type: 'parlay',
                       leg_count: slip.leg_count,
                       staked: slip.total_stake_tokens,
                       athletes: legs.map(l => l.athlete_name)
@@ -832,14 +832,14 @@ Deno.serve(async (req) => {
                 const athleteNames = legs.map(l => l.athlete_name).join(', ');
                 await supabaseClient.from('token_transactions').insert({
                   user_id: slip.user_id,
-                  type: 'bet_won',
+                  type: 'prediction_won',
                   amount: actualPayout,
                   balance_after: walletData.purchased_tokens + walletData.earned_tokens,
-                  reference_type: 'bet_slip',
+                  reference_type: 'entry',
                   reference_id: slip.id,
                   description: `Won ${slip.leg_count}-leg parlay (${athleteNames}) - Staked ${slip.total_stake_tokens}, won ${actualPayout} (+${profit} profit)`,
                   metadata: {
-                    bet_type: 'parlay',
+                    entry_type: 'parlay',
                     leg_count: slip.leg_count,
                     staked: slip.total_stake_tokens,
                     odds: finalOdds,
@@ -875,7 +875,7 @@ Deno.serve(async (req) => {
 
               console.log(`✅ Parlay ${slip.id} WON → +${actualPayout} tokens (adjusted odds: ${finalOdds.toFixed(2)})`);
             } else {
-              // SINGLE BET LOGIC - Just sync bet_slip status with the prediction
+              // SINGLE ENTRY LOGIC - Just sync entry status with the prediction
               const prediction = legs[0];
               
               let slipStatus = prediction.status;
@@ -897,20 +897,20 @@ Deno.serve(async (req) => {
                 .eq('id', slip.id);
 
               result.debug_info!.single_bets_settled++;
-              console.log(`✅ Single bet slip ${slip.id} → ${slipStatus} (payout: ${actualPayout})`);
+              console.log(`✅ Single entry ${slip.id} → ${slipStatus} (payout: ${actualPayout})`);
             }
           } catch (error) {
-            console.error(`❌ Error processing bet slip ${slip.id}:`, error);
+            console.error(`❌ Error processing entry ${slip.id}:`, error);
           }
         }
 
         result.affected_users = affectedUserIds.size;
-        console.log(`🎉 Bet slip settlement complete`);
+        console.log(`🎉 Entry settlement complete`);
       } else {
         console.log(`📋 No pending bet slips to process`);
       }
     } catch (error) {
-      console.error('❌ Error in bet slip settlement:', error);
+      console.error('❌ Error in entry settlement:', error);
     }
 
     // Mark tournament as settled and update athlete stats

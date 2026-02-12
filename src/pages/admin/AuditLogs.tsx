@@ -28,7 +28,7 @@ const ACTION_TYPES = [
   'ENTRY_REFUNDED',
   'PREDICTION_SETTLED',
   'PARLAY_SETTLED',
-  'BETSLIP_SETTLED',
+  'ENTRY_SETTLED',
   'REWARDS_CALCULATED',
   'REWARDS_ISSUED',
   'REWARD_REDEEMED',
@@ -45,7 +45,7 @@ const ACTION_TYPES = [
 const ENTITY_TYPES = [
   'market',
   'prediction',
-  'betslip',
+  'entry',
   'reward',
   'fantasy_pot',
   'fantasy_entry',

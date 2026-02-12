@@ -46,7 +46,7 @@ const TournamentDetail = () => {
   const { isAdmin } = useIsAdmin();
   
   // Get highlighted athletes from "Predict Again" navigation
-  const betAgainAthletes: string[] = location.state?.betAgainAthletes || [];
+  const predictAgainAthletes: string[] = location.state?.predictAgainAthletes || location.state?.betAgainAthletes || [];
   const [selectedSelection, setSelectedSelection] = useState<Selection | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -91,13 +91,13 @@ const TournamentDetail = () => {
 
   // Show toast if user came from "Predict Again"
   useEffect(() => {
-    if (betAgainAthletes.length > 0 && !loading) {
+    if (predictAgainAthletes.length > 0 && !loading) {
       toast({
         title: "Previous picks highlighted",
-        description: `${betAgainAthletes.length} athlete(s) from your previous prediction are highlighted below`
+      description: `${predictAgainAthletes.length} athlete(s) from your previous prediction are highlighted below`
       });
     }
-  }, [betAgainAthletes.length, loading]);
+  }, [predictAgainAthletes.length, loading]);
 
   useEffect(() => {
     if (!tournament) return;
@@ -205,7 +205,7 @@ const TournamentDetail = () => {
             setAthleteResults(resultsData);
           }
 
-          // Fetch user's predictions for this tournament (by tournament_id via bet_slips)
+          // Fetch user's predictions for this tournament
           if (user) {
             const { data: slipsData } = await supabase
               .from('bet_slips')
@@ -1076,7 +1076,7 @@ const TournamentDetail = () => {
                                   selection={selection}
                                   onSelect={handleSelectSelection}
                                   discipline={discipline}
-                                  highlighted={betAgainAthletes.includes(selection.athlete.name)}
+                                  highlighted={predictAgainAthletes.includes(selection.athlete.name)}
                                 />
                               </div>
                             ))}
@@ -1138,7 +1138,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={handleSelectSelection}
                                 discipline={discipline}
-                                highlighted={betAgainAthletes.includes(selection.athlete.name)}
+                                highlighted={predictAgainAthletes.includes(selection.athlete.name)}
                               />
                             </div>
                           ))}
@@ -1176,7 +1176,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={handleSelectSelection}
                                 discipline={discipline}
-                                highlighted={betAgainAthletes.includes(selection.athlete.name)}
+                                highlighted={predictAgainAthletes.includes(selection.athlete.name)}
                               />
                             </div>
                           ))}
@@ -1237,7 +1237,7 @@ const TournamentDetail = () => {
                                 selection={selection}
                                 onSelect={handleSelectSelection}
                                 discipline={discipline}
-                                highlighted={betAgainAthletes.includes(selection.athlete.name)}
+                                highlighted={predictAgainAthletes.includes(selection.athlete.name)}
                               />
                             </div>
                           ))}

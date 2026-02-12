@@ -547,7 +547,7 @@ const RiskDashboard = () => {
           'IMPLIED_SUM_NORMALIZED',
           'PREDICTION_SETTLED',
           'PARLAY_SETTLED',
-          'BETSLIP_SETTLED',
+          'ENTRY_SETTLED',
           'SAFE_MODE_ADJUSTMENT',
           'MARKET_LOCKED',
         ])

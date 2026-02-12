@@ -258,17 +258,17 @@ serve(async (req) => {
     if (rosterError) throw new Error(`Fantasy roster failed: ${rosterError.message}`);
     console.log('Added athletes to roster');
 
-    // Step 7: Create predictions (bets)
-    // Get current wallet balance for bet slip
+    // Step 7: Create predictions (entries)
+    // Get current wallet balance for entry
     const { data: currentWallet } = await supabase
       .from('token_wallets')
       .select('earned_tokens')
       .eq('user_id', user_id)
       .single();
 
-    const betBalance = currentWallet?.earned_tokens || 0;
+    const entryBalance = currentWallet?.earned_tokens || 0;
     
-    // Create a single bet
+    // Create a single entry
     const singleSelection = selections[0];
     const singleStake = 50;
     const singlePayout = Math.floor(singleStake * singleSelection.decimal_odds);
@@ -276,15 +276,15 @@ serve(async (req) => {
     // Deduct stake
     await supabase
       .from('token_wallets')
-      .update({ earned_tokens: betBalance - singleStake })
+      .update({ earned_tokens: entryBalance - singleStake })
       .eq('user_id', user_id);
 
-    // Create bet slip for single
-    const singleBetSlipId = crypto.randomUUID();
+    // Create entry record for single
+    const singleEntryId = crypto.randomUUID();
     await supabase
       .from('bet_slips')
       .insert({
-        id: singleBetSlipId,
+        id: singleEntryId,
         user_id,
         tournament_id: tournamentId,
         type: 'single',
@@ -304,7 +304,7 @@ serve(async (req) => {
       .insert({
         user_id,
         selection_id: singleSelection.id,
-        bet_slip_id: singleBetSlipId,
+        bet_slip_id: singleEntryId,
         staked_tokens: singleStake,
         decimal_odds: singleSelection.decimal_odds,
         potential_payout: singlePayout,
@@ -320,18 +320,18 @@ serve(async (req) => {
       .from('token_transactions')
       .insert({
         user_id,
-        type: 'bet',
+        type: 'entry_placed',
         amount: -singleStake,
-        balance_after: betBalance - singleStake,
-        description: 'Single bet placed (auto test)',
-        reference_id: singleBetSlipId,
-        reference_type: 'bet_slip'
+        balance_after: entryBalance - singleStake,
+        description: 'Single entry placed (auto test)',
+        reference_id: singleEntryId,
+        reference_type: 'entry'
       });
 
-    console.log('Created single bet');
-    results.single_bet_created = true;
+    console.log('Created single entry');
+    results.single_entry_created = true;
 
-    // Create a parlay bet (2 legs)
+    // Create a parlay entry (2 legs)
     const parlaySelections = [selections[1], selections[3]];
     const parlayStake = 25;
     const parlayOdds = parlaySelections.reduce((acc, s) => acc * s.decimal_odds, 1);
@@ -350,11 +350,11 @@ serve(async (req) => {
       .update({ earned_tokens: parlayBalance - parlayStake })
       .eq('user_id', user_id);
 
-    const parlayBetSlipId = crypto.randomUUID();
+    const parlayEntryId = crypto.randomUUID();
     await supabase
       .from('bet_slips')
       .insert({
-        id: parlayBetSlipId,
+        id: parlayEntryId,
         user_id,
         tournament_id: tournamentId,
         type: 'parlay',
@@ -373,7 +373,7 @@ serve(async (req) => {
         .insert({
           user_id,
           selection_id: sel.id,
-          bet_slip_id: parlayBetSlipId,
+          bet_slip_id: parlayEntryId,
           staked_tokens: parlayStake,
           decimal_odds: sel.decimal_odds,
           potential_payout: parlayPayout,
@@ -390,16 +390,16 @@ serve(async (req) => {
       .from('token_transactions')
       .insert({
         user_id,
-        type: 'bet',
+        type: 'entry_placed',
         amount: -parlayStake,
         balance_after: parlayBalance - parlayStake,
-        description: 'Parlay bet placed (auto test)',
-        reference_id: parlayBetSlipId,
-        reference_type: 'bet_slip'
+        description: 'Parlay entry placed (auto test)',
+        reference_id: parlayEntryId,
+        reference_type: 'entry'
       });
 
-    console.log('Created parlay bet');
-    results.parlay_bet_created = true;
+    console.log('Created parlay entry');
+    results.parlay_entry_created = true;
 
     // Step 8: Create athlete results
     const athleteResults = [];

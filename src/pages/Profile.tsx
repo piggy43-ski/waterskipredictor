@@ -98,7 +98,7 @@ const Profile = () => {
   const fetchLifetimeStats = async () => {
     if (!user) return;
 
-    // Use bet_slips for accurate stats (avoids double-counting parlay legs)
+    // Use entries table for accurate stats (avoids double-counting parlay legs)
     const { data, error } = await supabase
       .from('bet_slips')
       .select('status, total_stake_tokens, actual_payout_tokens')

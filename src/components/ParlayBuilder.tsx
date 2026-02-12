@@ -214,8 +214,8 @@ export function ParlayBuilder({
     try {
       const potentialPayout = stakeAmount * multiplier;
 
-      // Create bet slip
-      const { data: betSlip, error: slipError } = await supabase
+      // Create entry record (stored in bet_slips table)
+      const { data: entryRecord, error: slipError } = await supabase
         .from('bet_slips')
         .insert({
           user_id: userId,
@@ -234,21 +234,21 @@ export function ParlayBuilder({
       if (slipError) throw slipError;
 
       // Create predictions for each selection in each leg
-      // IMPORTANT: For parlays, individual predictions should store their individual odds,
-      // NOT the combined parlay multiplier. Payouts are handled at the bet_slip level.
+      // IMPORTANT: For parlays, individual predictions store their individual odds.
+      // Payouts are handled at the entry level, not individual predictions.
       const predictions = [];
       const selectionsPerLeg = 5; // winner + 3 podium + highest score
       const totalSelections = completeLegs.length * selectionsPerLeg;
       
       for (const leg of completeLegs) {
         // Each prediction in a parlay stores its own odds but payout is 0
-        // (parlay payout happens at bet_slip level, not individual predictions)
+        // (parlay payout happens at entry level, not individual predictions)
         const perLegStake = Math.floor(stakeAmount / completeLegs.length);
         
         if (leg.winner) {
           predictions.push({
             user_id: userId,
-            bet_slip_id: betSlip.id,
+            bet_slip_id: entryRecord.id,
             selection_id: leg.winner.id,
             athlete_name: leg.winner.athlete.name,
             tournament_name: tournament.name,
@@ -267,7 +267,7 @@ export function ParlayBuilder({
           [leg.podium.first, leg.podium.second, leg.podium.third].forEach((sel, idx) => {
             predictions.push({
               user_id: userId,
-              bet_slip_id: betSlip.id,
+              bet_slip_id: entryRecord.id,
               selection_id: sel.id,
               athlete_name: sel.athlete.name,
               tournament_name: tournament.name,
@@ -286,7 +286,7 @@ export function ParlayBuilder({
         if (leg.highestScore) {
           predictions.push({
             user_id: userId,
-            bet_slip_id: betSlip.id,
+            bet_slip_id: entryRecord.id,
             selection_id: leg.highestScore.id,
             athlete_name: leg.highestScore.athlete.name,
             tournament_name: tournament.name,
@@ -340,11 +340,11 @@ export function ParlayBuilder({
       // Log transaction for audit trail
       await supabase.from('token_transactions').insert({
         user_id: userId,
-        type: 'bet_placed',
+        type: 'entry_placed',
         amount: -stakeAmount,
         balance_after: newBalance,
-        reference_type: 'bet_slip',
-        reference_id: betSlip.id,
+        reference_type: 'entry',
+        reference_id: entryRecord.id,
         description: `Parlay entry (${completeLegs.length} legs) - ${tournament.name}`,
         metadata: {
           tournament_name: tournament.name,
@@ -359,7 +359,7 @@ export function ParlayBuilder({
         }
       });
 
-      // Send bet confirmation email (non-blocking)
+      // Send entry confirmation email (non-blocking)
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (userData?.user?.email) {
@@ -386,7 +386,7 @@ export function ParlayBuilder({
           });
         }
       } catch (emailError) {
-        console.error('Parlay bet confirmation email failed:', emailError);
+        console.error('Parlay entry confirmation email failed:', emailError);
         // Don't block parlay placement
       }
 
