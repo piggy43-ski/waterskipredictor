@@ -1,73 +1,37 @@
 
 
-# Fix: Correct BETA TESTING Settlement + Rebrand "Bet Slips" to "Predictions"
+# Fix: Correct settlement_metadata for BETA TESTING Tournament
 
-## Part 1: Fix Incorrect Settlement Data
+## Problem
 
-### Problem
-The **WINNER slalom open_men** market was incorrectly settled — **Ross Charlie** was marked as WON, but the actual winner was **Nate Smith** (won on tiebreak). Ross Charlie should be LOST for the WINNER market.
+While the `predictions.status` column was correctly updated (Ross Charlie WINNER predictions flipped to LOST, Nate Smith predictions to WON), the `settlement_metadata` JSONB column was never updated. This means the UI still displays:
 
-- 9 predictions on "Ross Charlie to win" are incorrectly WON
-- 8 of those have non-zero payouts totaling **1,413 tokens** that were incorrectly credited
-- 1 prediction (staked 200, payout 0) was marked WON but never paid -- likely a bug in payout calculation
+- "Correct! Ross Charlie finished 1st in Open Men Slalom" (wrong -- should reference Nate Smith)
+- `position_1st: "Ross Charlie"` in actual results (should be `"Smith Nate"`)
+- Explanations for other athletes say "Winner was Ross Charlie" (should say "Winner was Smith Nate")
 
-The HIGHEST_SCORE slalom market is correct: Nate Smith is WON. Nobody predicted Ross Charlie for highest score, so no change needed there (even though they shared the score).
+**34 predictions** are affected.
 
-### Additionally: 3 orphan bet_slips
-3 bet_slips exist with **no linked predictions** (orphans from early bugs). They need to be voided.
+## Fix: SQL Migration to Patch settlement_metadata
 
-### SQL Migration
+A single migration will update the `settlement_metadata` JSONB for all 34 affected predictions:
 
-```sql
--- 1. Flip Ross Charlie WINNER predictions from WON to LOST
-UPDATE predictions
-SET status = 'LOST', payout_tokens = 0, settled_at = now()
-WHERE selection_id = '0febde69-2dbe-4e41-8f0c-86963052e8cc'
-  AND status = 'WON';
+1. **Swap position_1st**: `"Ross Charlie"` becomes `"Smith Nate"` and `position_2nd`: `"Smith Nate"` becomes `"Ross Charlie"`
+2. **Fix explanations** for Ross Charlie WINNER predictions (now LOST): Change from "Correct! Ross Charlie finished 1st..." to "Not correct. Ross Charlie did not finish 1st. Winner was Smith Nate."
+3. **Fix explanations** for other LOST WINNER predictions: Replace "Winner was Ross Charlie" with "Winner was Smith Nate"
+4. **Fix metadata status**: Change `settlement_metadata.status` from `"WON"` to `"LOST"` for the 9 Ross Charlie WINNER predictions
+5. **Fix payout_details**: Zero out the payout info in metadata for the flipped predictions
+6. **Keep highest_scorer as-is** for HIGHEST_SCORE market: Both scored 1@43, but Nate Smith predictions are already correctly WON there
 
--- 2. Claw back incorrectly paid tokens from user wallets
--- (One UPDATE per user with non-zero payouts)
--- User 2e5f... : -300
--- User 5b9f... : -90
--- User b992... : -30
--- User 5ba9... : -750
--- User 1d55... : -150
--- User 5f88... : -30
--- User 4523... : -30
--- User d731... : -33
+## Technical Details
 
--- 3. Update parent bet_slips for Ross Charlie WINNER
--- (derive new status from child predictions)
+The migration uses `jsonb_set()` to surgically update nested JSON fields without replacing the entire object. Multiple passes handle the different explanation patterns.
 
--- 4. Void 3 orphan bet_slips with no predictions
-UPDATE bet_slips SET status = 'VOID', settled_at = now()
-WHERE id IN ('8605912b-...', '16f832f2-...', '417d46e9-...');
-```
-
-The migration will:
-- Disable the immutability trigger temporarily
-- Flip 9 Ross Charlie WINNER predictions to LOST with payout_tokens = 0
-- Deduct incorrectly credited tokens from each affected user's wallet (total: 1,413 tokens)
-- Re-derive the parent bet_slip statuses
-- Void the 3 orphan bet_slips
-- Re-enable the trigger
-
-## Part 2: Rebrand "Bet Slips" to "Predictions" in Code
-
-The `Predictions.tsx` page and related components still use `BetSlip` interface names and `betSlip` variable names internally. While the database table is still called `bet_slips` (renaming a table is risky on a live app), all **user-facing** references and **code-level** naming should use "prediction" / "entry" terminology.
-
-### Changes in `src/pages/Predictions.tsx`:
-- Rename `BetSlip` interface to `PredictionEntry`
-- Rename `activeBetSlips` / `completedBetSlips` state variables to `activeEntries` / `completedEntries`
-- Rename `fetchBetSlips()` to `fetchEntries()`
-- Rename `EntrySlipCard` to `EntryCard`
-- Update all internal comments from "bet slip" to "prediction entry"
-- Ensure no user-facing text says "bet" or "slip"
-
-### Files to modify
+## Files
 
 | File | Change |
 |------|--------|
-| Database (migration) | Fix Ross Charlie settlement, claw back tokens, void orphans |
-| `src/pages/Predictions.tsx` | Rebrand BetSlip to PredictionEntry throughout |
+| Database (migration) | Patch settlement_metadata JSON for 34 predictions |
+
+No code file changes needed -- once the data is corrected, the UI will automatically display the right information.
 
