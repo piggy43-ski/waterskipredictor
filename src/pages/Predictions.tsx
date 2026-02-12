@@ -17,9 +17,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
-import { SettlementExplanation, type SettlementData } from '@/components/betting/SettlementExplanation';
+import { SettlementExplanation, type SettlementData } from '@/components/settlement/SettlementExplanation';
 
-// Prediction entry - maps to bet_slips table in DB
+// Prediction entry — stored in the `bet_slips` DB table (legacy name, treated as "entries" in code)
 interface PredictionEntry {
   id: string;
   type: 'single' | 'parlay';
@@ -146,7 +146,7 @@ const Predictions = () => {
     if (!user) return;
 
     try {
-      // Fetch all prediction entries from bet_slips table
+      // Fetch all prediction entries (stored in bet_slips table)
       const { data: entries, error: entriesError } = await supabase
         .from('bet_slips')
         .select(`

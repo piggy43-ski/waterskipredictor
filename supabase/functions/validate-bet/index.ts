@@ -33,7 +33,7 @@ async function writeAuditLog(supabase: any, entry: {
   }
 }
 
-interface ValidateBetRequest {
+interface ValidateEntryRequest {
   userId: string;
   tournamentId: string;
   marketId: string;
@@ -71,7 +71,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const body: ValidateBetRequest = await req.json();
+    const body: ValidateEntryRequest = await req.json();
     const { userId, tournamentId, marketId, athleteId, stakeAmount, currentOdds, marketType } = body;
 
     const result: ValidationResult = {
@@ -79,7 +79,7 @@ serve(async (req) => {
       warnings: [],
     };
 
-    console.log(`[VALIDATE] Global Solvency Model - Stake: ${stakeAmount}, Odds: ${currentOdds}`);
+    console.log(`[VALIDATE] Global Solvency Model - Entry: ${stakeAmount}, Multiplier: ${currentOdds}`);
 
     // === VALIDATION 1: Stake Cap ===
     if (stakeAmount > DEFAULT_CONFIG.max_stake_tokens) {
@@ -101,7 +101,7 @@ serve(async (req) => {
     }
 
     // === VALIDATION 3: Duplicate Athlete Check (same user, same market) ===
-    const { data: existingBets } = await supabase
+    const { data: existingEntries } = await supabase
       .from('bet_slips')
       .select('id')
       .eq('user_id', userId)
@@ -109,7 +109,7 @@ serve(async (req) => {
       .eq('athlete_id', athleteId)
       .eq('status', 'PENDING');
 
-    if (existingBets && existingBets.length > 0) {
+    if (existingEntries && existingEntries.length > 0) {
       return new Response(JSON.stringify({
         allowed: false,
         reason: 'You already have an active entry on this athlete in this market',

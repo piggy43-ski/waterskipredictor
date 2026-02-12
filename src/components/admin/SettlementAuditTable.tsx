@@ -32,11 +32,11 @@ interface SettlementAuditTableProps {
   tournamentName?: string;
 }
 
-interface BetDetail {
+interface EntryDetail {
   id: string;
   username: string;
   email: string;
-  bet_type: 'single' | 'parlay';
+  entry_type: 'single' | 'parlay';
   market_type: string;
   discipline: string;
   category: string;
@@ -61,9 +61,9 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
   const [resultFilter, setResultFilter] = useState<string>('all');
   const [expanded, setExpanded] = useState(false);
 
-  // Fetch detailed bet data for this tournament
-  const { data: bets, isLoading } = useQuery({
-    queryKey: ['settlement-audit-bets', tournamentId],
+  // Fetch detailed entry data for this tournament
+  const { data: entries, isLoading } = useQuery({
+    queryKey: ['settlement-audit-entries', tournamentId],
     queryFn: async () => {
       // Get predictions for this tournament
       const { data: predictions, error } = await supabase
@@ -101,20 +101,20 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
 
       const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
 
-      // Get bet_slips for parlay info
-      const betSlipIds = [...new Set(predictions?.filter(p => p.bet_slip_id).map(p => p.bet_slip_id) || [])];
-      const { data: betSlips } = await supabase
+      // Get entries for parlay info
+      const entryIds = [...new Set(predictions?.filter(p => p.bet_slip_id).map(p => p.bet_slip_id) || [])];
+      const { data: entrySlips } = await supabase
         .from('bet_slips')
         .select('id, type, leg_count')
-        .in('id', betSlipIds);
+        .in('id', entryIds);
 
-      const betSlipMap = new Map(betSlips?.map(s => [s.id, s]) || []);
+      const entryMap = new Map(entrySlips?.map(s => [s.id, s]) || []);
 
-      // Transform to BetDetail format
-      const betsData: BetDetail[] = (predictions || []).map(p => {
+      // Transform to EntryDetail format
+      const entriesData: EntryDetail[] = (predictions || []).map(p => {
         const profile = profileMap.get(p.user_id);
-        const betSlip = p.bet_slip_id ? betSlipMap.get(p.bet_slip_id) : null;
-        const isParlay = betSlip?.type === 'parlay';
+        const entry = p.bet_slip_id ? entryMap.get(p.bet_slip_id) : null;
+        const isParlay = entry?.type === 'parlay';
         
         // Format odds display
         const decimalOdds = Number(p.decimal_odds);
@@ -136,7 +136,7 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
           id: p.id,
           username: profile?.username || 'Unknown',
           email: profile?.email || '',
-          bet_type: isParlay ? 'parlay' : 'single',
+          entry_type: isParlay ? 'parlay' : 'single',
           market_type: p.market_type,
           discipline: p.discipline,
           category: p.category,
@@ -145,7 +145,7 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
           stake: p.staked_tokens,
           odds: decimalOdds,
           odds_display: oddsDisplay,
-          result: p.status as BetDetail['result'],
+          result: p.status as EntryDetail['result'],
           payout,
           profit,
           created_at: p.created_at,
@@ -155,33 +155,33 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
         };
       });
 
-      return betsData;
+      return entriesData;
     },
     enabled: !!tournamentId && !!tournamentName,
   });
 
-  // Filter the bets
-  const filteredBets = useMemo(() => {
-    if (!bets) return [];
+  // Filter the entries
+  const filteredEntries = useMemo(() => {
+    if (!entries) return [];
     
-    return bets.filter(bet => {
-      if (disciplineFilter !== 'all' && bet.discipline !== disciplineFilter) return false;
-      if (categoryFilter !== 'all' && bet.category !== categoryFilter) return false;
-      if (marketTypeFilter !== 'all' && bet.market_type !== marketTypeFilter) return false;
-      if (resultFilter !== 'all' && bet.result !== resultFilter) return false;
+    return entries.filter(entry => {
+      if (disciplineFilter !== 'all' && entry.discipline !== disciplineFilter) return false;
+      if (categoryFilter !== 'all' && entry.category !== categoryFilter) return false;
+      if (marketTypeFilter !== 'all' && entry.market_type !== marketTypeFilter) return false;
+      if (resultFilter !== 'all' && entry.result !== resultFilter) return false;
       return true;
     });
-  }, [bets, disciplineFilter, categoryFilter, marketTypeFilter, resultFilter]);
+  }, [entries, disciplineFilter, categoryFilter, marketTypeFilter, resultFilter]);
 
   // Calculate summary stats
   const summary = useMemo(() => {
-    const total = filteredBets.reduce(
-      (acc, bet) => {
-        acc.wagered += bet.stake;
-        if (bet.result === 'WON') {
-          acc.paidOut += bet.payout;
+    const total = filteredEntries.reduce(
+      (acc, entry) => {
+        acc.wagered += entry.stake;
+        if (entry.result === 'WON') {
+          acc.paidOut += entry.payout;
           acc.wins++;
-        } else if (bet.result === 'LOST') {
+        } else if (entry.result === 'LOST') {
           acc.losses++;
         }
         acc.count++;
@@ -194,18 +194,18 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
       ...total,
       houseProfit: total.wagered - total.paidOut,
     };
-  }, [filteredBets]);
+  }, [filteredEntries]);
 
   // Get unique filter options
   const filterOptions = useMemo(() => {
-    if (!bets) return { disciplines: [], categories: [], marketTypes: [] };
+    if (!entries) return { disciplines: [], categories: [], marketTypes: [] };
     
     return {
-      disciplines: [...new Set(bets.map(b => b.discipline))],
-      categories: [...new Set(bets.map(b => b.category))],
-      marketTypes: [...new Set(bets.map(b => b.market_type))],
+      disciplines: [...new Set(entries.map(b => b.discipline))],
+      categories: [...new Set(entries.map(b => b.category))],
+      marketTypes: [...new Set(entries.map(b => b.market_type))],
     };
-  }, [bets]);
+  }, [entries]);
 
   const getResultBadge = (result: string) => {
     switch (result) {
@@ -224,7 +224,7 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Bet Details</CardTitle>
+          <CardTitle>Entry Details</CardTitle>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-64" />
@@ -239,8 +239,8 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Users className="w-5 h-5" />
-            Detailed Bet Breakdown
-            <Badge variant="outline">{filteredBets.length} bets</Badge>
+            Detailed Entry Breakdown
+            <Badge variant="outline">{filteredEntries.length} entries</Badge>
           </CardTitle>
           <Button
             variant="ghost"
@@ -265,7 +265,7 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
         {/* Summary Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="text-center p-3 rounded-lg bg-muted/50">
-            <p className="text-xs text-muted-foreground">Total Bets</p>
+            <p className="text-xs text-muted-foreground">Total Entries</p>
             <p className="font-bold text-lg">{summary.count}</p>
           </div>
           <div className="text-center p-3 rounded-lg bg-muted/50">
@@ -365,64 +365,64 @@ export function SettlementAuditTable({ tournamentId, tournamentName }: Settlemen
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredBets.length === 0 ? (
+                  {filteredEntries.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                        No bets found matching filters
+                        No entries found matching filters
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredBets.map(bet => (
-                      <TableRow key={bet.id}>
+                    filteredEntries.map(entry => (
+                      <TableRow key={entry.id}>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{bet.username}</p>
-                            <p className="text-xs text-muted-foreground">{bet.email}</p>
+                            <p className="font-medium">{entry.username}</p>
+                            <p className="text-xs text-muted-foreground">{entry.email}</p>
                           </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="capitalize">
-                            {bet.bet_type}
+                            {entry.entry_type}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <Badge variant="secondary" className="w-fit text-xs">
-                              {bet.market_type.replace('_', ' ')}
+                              {entry.market_type.replace('_', ' ')}
                             </Badge>
                             <span className="text-xs text-muted-foreground capitalize">
-                              {bet.discipline} • {bet.category.replace('_', ' ')}
+                              {entry.discipline} • {entry.category.replace('_', ' ')}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="font-medium">{bet.picks}</TableCell>
-                        <TableCell className="text-right">{bet.stake.toLocaleString()}</TableCell>
+                        <TableCell className="font-medium">{entry.picks}</TableCell>
+                        <TableCell className="text-right">{entry.stake.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono">
-                          {bet.odds_display}
+                          {entry.odds_display}
                         </TableCell>
                         <TableCell className="text-center">
-                          {getResultBadge(bet.result)}
+                          {getResultBadge(entry.result)}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={bet.settlement_explanation}>
-                          {bet.settlement_explanation || (bet.result === 'PENDING' ? 'Awaiting results' : '—')}
+                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={entry.settlement_explanation}>
+                          {entry.settlement_explanation || (entry.result === 'PENDING' ? 'Awaiting results' : '—')}
                         </TableCell>
                         <TableCell className="text-right">
-                          {bet.result === 'WON' ? (
+                          {entry.result === 'WON' ? (
                             <span className="text-success font-medium">
-                              {bet.payout.toLocaleString()}
+                              {entry.payout.toLocaleString()}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          {bet.result === 'WON' ? (
+                          {entry.result === 'WON' ? (
                             <span className="text-success font-medium">
-                              +{bet.profit.toLocaleString()}
+                              +{entry.profit.toLocaleString()}
                             </span>
-                          ) : bet.result === 'LOST' ? (
+                          ) : entry.result === 'LOST' ? (
                             <span className="text-destructive">
-                              -{bet.stake.toLocaleString()}
+                              -{entry.stake.toLocaleString()}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">-</span>
