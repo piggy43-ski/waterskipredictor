@@ -248,19 +248,18 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
   useEffect(() => {
     if (marketGroups.length > 0 && Object.keys(localProbs).length === 0) {
       const initial: Record<string, Record<string, number>> = {};
+      const allKeys = new Set<string>();
       marketGroups.forEach(group => {
         const key = `${group.discipline}-${group.category}`;
         initial[key] = {};
+        allKeys.add(key);
         group.athletes.forEach(a => {
           initial[key][a.athlete_id] = a.p_winner;
         });
       });
       setLocalProbs(initial);
-      // Open first group by default
-      if (marketGroups.length > 0) {
-        const firstKey = `${marketGroups[0].discipline}-${marketGroups[0].category}`;
-        setOpenGroups(new Set([firstKey]));
-      }
+      // Open ALL groups by default so nothing is hidden
+      setOpenGroups(allKeys);
     }
   }, [marketGroups, localProbs]);
 
