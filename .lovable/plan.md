@@ -1,58 +1,35 @@
 
 
-# Comprehensive Cleanup: Rebrand from "Betting" to "Predicting" Everywhere
+# Airdrop 100 Tokens + Email All Users for Beta Testing 2
 
-## The Root Problem
+## What Will Happen
 
-The codebase was originally built as a betting platform and still carries that DNA everywhere -- variable names, comments, transaction types, edge function logic, and even the component folder is called `betting/`. This is why:
+1. Every user gets **100 bonus tokens** added to their wallet
+2. Every user receives an **email** announcing the airdrop and that Beta Testing 2 is open and settles on Monday
 
-1. The AI keeps getting confused and treats things as "bets"
-2. Settlement logic uses terms like `bet_slip`, `bet_won`, `bet_lost`, `bet_void`
-3. Comments throughout the code reference "bets" and "betting slips"
+## How
 
-The database table is still called `bet_slips` (renaming live tables is risky), but **every code reference** should use prediction/entry terminology.
+The project already has a `send-beta-launch` edge function that does almost exactly this. We'll update it with the new messaging and then invoke it.
 
-## Files That Need Changes
+### Changes to `supabase/functions/send-beta-launch/index.ts`
 
-### Frontend (10 files)
+- Update the email subject to reference **Beta Testing 2**
+- Update the email body:
+  - "We've airdropped you 100 tokens for Beta Testing 2"
+  - "Beta Testing 2 is now open -- predictions close soon"
+  - "Results will be settled on **Monday**"
+- Keep the existing token logic (adds 100 earned tokens, records a `bonus` transaction)
+- Keep the 600ms rate-limiting delay between emails
 
-| File | What Changes |
-|------|-------------|
-| `src/pages/Predictions.tsx` | Comments still say "bet_slips table". Import path references `betting/` |
-| `src/pages/Index.tsx` | Comments say "bet_slips", variable names |
-| `src/pages/Profile.tsx` | Comments say "bet_slips" |
-| `src/pages/TournamentDetailClean.tsx` | Variables named `betSlip`, comments say "bet_slips" |
-| `src/pages/admin/TournamentSettlement.tsx` | Comments reference "bet_slips", "parlays query bet_slips" |
-| `src/pages/admin/RiskDashboard.tsx` | References to bet_slips in comments |
-| `src/pages/admin/AuditLogs.tsx` | Event types: `BETSLIP_SETTLED` -> `ENTRY_SETTLED`, entity type `betslip` -> `entry` |
-| `src/components/ParlayBuilder.tsx` | Comments say "Create bet slip", "bet_slip level", variable `betSlip` -> `entry` |
-| `src/components/admin/SettlementAuditTable.tsx` | Variables `betSlipIds`, `betSlipMap`, `betSlip`, comments |
-| `src/components/betting/SettlementExplanation.tsx` | **Rename folder** from `betting/` to `settlement/` |
+### Execution
 
-### Edge Functions (3 files)
+After deploying the updated function, we'll invoke it once. It will:
+1. Loop through all users in the `profiles` table
+2. Add 100 to each user's `earned_tokens` in `token_wallets`
+3. Record a `bonus` transaction in `token_transactions`
+4. Send each user the updated email via Resend
 
-| File | What Changes |
-|------|-------------|
-| `supabase/functions/settle-predictions/index.ts` | Transaction types: `bet_won` -> `prediction_won`, `bet_lost` -> `prediction_lost`, `bet_void` -> `prediction_void`. Comments: "bet_slip settlement" -> "entry settlement". Variables: `betSlipsToSettle` -> `entriesToSettle` |
-| `supabase/functions/validate-bet/index.ts` | Rename function? At minimum, update all internal comments and variable names |
-| `supabase/functions/run-settlement-test/index.ts` | Comments say "Single bet placed", "Parlay bet placed". Variable `singleBetSlipId` -> `singleEntryId` |
+### No Database Changes Needed
 
-### What We Are NOT Changing
-- The database table name `bet_slips` stays as-is (too risky to rename on a live app)
-- The column `bet_slip_id` in the `predictions` table stays
-- The Supabase auto-generated `types.ts` stays (it mirrors the DB)
-- We keep `from('bet_slips')` in queries since that's the actual table name -- but wrap them in clearly-named functions/comments
-
-## Implementation Order
-
-1. Rename `src/components/betting/` folder to `src/components/settlement/` and update all imports
-2. Update all frontend files (comments, variable names, user-facing strings)
-3. Update edge functions (transaction types, comments, variable names)
-4. Deploy edge functions
-
-## What This Prevents Going Forward
-
-- The AI will stop seeing "bet" language in the codebase and won't revert to gambling terminology
-- New features built on top of this code will naturally use "prediction/entry" language
-- Transaction types in the database will use `prediction_won` instead of `bet_won`, making audit logs clearer
+The existing `token_wallets`, `token_transactions`, and `email_logs` tables handle everything.
 
