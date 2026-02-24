@@ -9,7 +9,6 @@ const corsHeaders = {
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
-// Helper to add delay between requests (rate limit: 2/sec)
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const generateEmailHtml = (username: string, appUrl: string) => `
@@ -24,18 +23,15 @@ const generateEmailHtml = (username: string, appUrl: string) => `
     <tr>
       <td align="center">
         <table width="100%" max-width="600" cellpadding="0" cellspacing="0" style="max-width: 600px;">
-          <!-- Header -->
           <tr>
             <td align="center" style="padding-bottom: 32px;">
               <span style="font-size: 48px;">🎿</span>
             </td>
           </tr>
-          
-          <!-- Main Content -->
           <tr>
             <td style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 40px; border: 1px solid #2a2a4a;">
               <h1 style="color: #ffffff; font-size: 28px; font-weight: 700; margin: 0 0 16px 0; text-align: center;">
-                Your Beta Tokens Are Here! 🎉
+                Beta Testing 2 is LIVE! 🎉
               </h1>
               
               <p style="color: #a0a0a0; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0; text-align: center;">
@@ -43,10 +39,9 @@ const generateEmailHtml = (username: string, appUrl: string) => `
               </p>
               
               <p style="color: #e0e0e0; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
-                Thanks for signing up early for the WaterSki Predictor beta! As a thank you, we've added <strong style="color: #3b82f6;">100 free tokens</strong> to your account.
+                We've airdropped you <strong style="color: #3b82f6;">100 free tokens</strong> for Beta Testing 2! Get in there and make your predictions before it's too late.
               </p>
               
-              <!-- Token Badge -->
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
                 <tr>
                   <td align="center">
@@ -59,28 +54,25 @@ const generateEmailHtml = (username: string, appUrl: string) => `
               </table>
               
               <p style="color: #e0e0e0; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
-                <strong style="color: #3b82f6;">🗓️ Tournament Date:</strong> February 8th, 2026
+                <strong style="color: #3b82f6;">🎯 Beta Testing 2:</strong> Predictions are open now!
               </p>
               
               <p style="color: #e0e0e0; font-size: 16px; line-height: 1.6; margin: 0 0 32px 0;">
-                <strong style="color: #3b82f6;">🎯 Predictions Open:</strong> Tomorrow! Get ready to make your picks.
+                <strong style="color: #3b82f6;">🗓️ Settlement:</strong> Results will be settled on <strong>Monday</strong>.
               </p>
               
-              <!-- CTA Button -->
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
                     <a href="${appUrl}" 
                        style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; padding: 16px 48px; border-radius: 8px;">
-                      Explore Tournaments →
+                      Make Your Predictions →
                     </a>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
-          
-          <!-- Footer -->
           <tr>
             <td style="padding-top: 32px; text-align: center;">
               <p style="color: #666666; font-size: 14px; margin: 0;">
@@ -106,16 +98,14 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const emailsOnly = body.emailsOnly === true; // Flag to only send emails (tokens already given)
+    const emailsOnly = body.emailsOnly === true;
 
-    // Create admin client with service role
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // Fetch all users
     const { data: users, error: usersError } = await supabaseAdmin
       .from("profiles")
       .select("id, email, username");
@@ -131,14 +121,12 @@ serve(async (req) => {
       failures: [] as string[],
     };
 
-    // Hardcode the from email to a valid format
     const fromEmail = "noreply@waterskipredictor.com";
     const appUrl = Deno.env.get("APP_URL") || "https://waterskipredictor.lovable.app";
 
     for (const user of users || []) {
       try {
         if (!emailsOnly) {
-          // 1. Get current wallet balance
           const { data: wallet } = await supabaseAdmin
             .from("token_wallets")
             .select("earned_tokens, purchased_tokens")
@@ -149,7 +137,6 @@ serve(async (req) => {
           const currentPurchased = wallet?.purchased_tokens || 0;
           const newBalance = currentEarned + currentPurchased + 100;
 
-          // 2. Update wallet - add 100 earned tokens
           const { error: walletError } = await supabaseAdmin
             .from("token_wallets")
             .update({ 
@@ -164,7 +151,6 @@ serve(async (req) => {
             continue;
           }
 
-          // 3. Record the transaction
           const { error: txError } = await supabaseAdmin
             .from("token_transactions")
             .insert({
@@ -172,7 +158,7 @@ serve(async (req) => {
               type: "bonus",
               amount: 100,
               balance_after: newBalance,
-              description: "Beta launch bonus - early signup reward",
+              description: "Beta Testing 2 airdrop - 100 bonus tokens",
             });
 
           if (txError) {
@@ -182,14 +168,13 @@ serve(async (req) => {
           results.tokensAwarded++;
         }
 
-        // 4. Send email with rate limiting (wait 600ms between emails to stay under 2/sec)
         if (user.email) {
-          await delay(600); // Rate limit: max 2 emails per second
+          await delay(600);
           
           const { error: emailError } = await resend.emails.send({
             from: `WaterSki Predictor <${fromEmail}>`,
             to: [user.email],
-            subject: "🎿 Your Beta Tokens Are Here - Tournament Opens Tomorrow!",
+            subject: "🎿 Beta Testing 2 is LIVE - 100 Tokens Airdropped!",
             html: generateEmailHtml(user.username || user.email.split("@")[0], appUrl),
           });
 
@@ -207,7 +192,7 @@ serve(async (req) => {
       }
     }
 
-    console.log("Beta launch complete:", results);
+    console.log("Beta Testing 2 launch complete:", results);
 
     return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
