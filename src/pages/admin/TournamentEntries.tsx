@@ -690,6 +690,10 @@ export default function TournamentEntries() {
       queryClient.invalidateQueries({ queryKey: ['selections'] });
       queryClient.invalidateQueries({ queryKey: ['athletes-for-tournament'] });
       queryClient.invalidateQueries({ queryKey: ['all-athletes-for-matching'] });
+      queryClient.invalidateQueries({ queryKey: ['tournament-markets-prob'] });
+      queryClient.invalidateQueries({ queryKey: ['all-market-odds-prob'] });
+      queryClient.invalidateQueries({ queryKey: ['all-selections-prob'] });
+      queryClient.invalidateQueries({ queryKey: ['all-prob-overrides'] });
       toast.success(`Added ${count} entries, created markets & generated odds`);
       setShowPreviewDialog(false);
       setAiFiles([]);
@@ -877,7 +881,10 @@ export default function TournamentEntries() {
 
           const { error: selectionsError } = await supabase
             .from('selections')
-            .insert(selections);
+            .upsert(selections, {
+              onConflict: 'market_id,athlete_id',
+              ignoreDuplicates: false
+            });
 
           if (selectionsError) throw selectionsError;
         }
@@ -974,6 +981,10 @@ export default function TournamentEntries() {
       queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
       queryClient.invalidateQueries({ queryKey: ['markets'] });
       queryClient.invalidateQueries({ queryKey: ['selections'] });
+      queryClient.invalidateQueries({ queryKey: ['tournament-markets-prob'] });
+      queryClient.invalidateQueries({ queryKey: ['all-market-odds-prob'] });
+      queryClient.invalidateQueries({ queryKey: ['all-selections-prob'] });
+      queryClient.invalidateQueries({ queryKey: ['all-prob-overrides'] });
       toast.success('Athletes added, markets created & odds generated');
       setSelectedAthletes(new Set());
       setCustomOdds({});
