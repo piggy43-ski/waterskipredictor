@@ -212,7 +212,7 @@ export function ParlayBuilder({
     setIsSubmitting(true);
 
     try {
-      const potentialPayout = stakeAmount * multiplier;
+      const potentialPayout = Math.floor(stakeAmount * multiplier);
 
       // Create entry record (stored in bet_slips table)
       const { data: entryRecord, error: slipError } = await supabase
@@ -892,7 +892,7 @@ export function ParlayBuilder({
     const completeLegs = legs.filter(l => l.isComplete);
     const multiplierDetails = getParlayMultiplierDetails(legs);
     const stakeAmount = parseInt(stake) || 0;
-    const potentialPayout = stakeAmount * multiplierDetails.finalMultiplier;
+    const potentialPayout = Math.floor(stakeAmount * multiplierDetails.finalMultiplier);
 
     return (
       <div className="space-y-6">
