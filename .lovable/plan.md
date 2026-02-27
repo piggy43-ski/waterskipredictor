@@ -1,26 +1,40 @@
 
 
-# Fix: Parlay "invalid input syntax for type integer" Bug
+# Plan: Update Beta Testing 2 Dates + End-to-End Testing
 
-## Problem
-When a user confirms a parlay, the potential payout is calculated as `stakeAmount * multiplier` which can produce a decimal (e.g., 50 × 9.75 = 487.5). The `potential_payout_tokens` column in `bet_slips` is an integer type, so inserting 487.5 causes a Postgres error.
+## Current State
+- **Tournament**: BETA TESTING 2 (id: `8a248880-...`)
+- **Current start**: Feb 28 11:38 UTC (tomorrow) — predictions lock here
+- **Current end**: March 5 18:00 UTC
+- **Activity**: 48 bets from 15 users, 59 entries across 51 athletes
+- **Markets**: 18 markets exist but all show `is_published = false` (likely were published earlier and toggled)
 
-## Fix
+## Database Update
 
-### 1. Round payout to integer in ParlayBuilder.tsx
-In `handleSubmit` (line 215), wrap the calculation with `Math.floor`:
-```typescript
-const potentialPayout = Math.floor(stakeAmount * multiplier);
+Update the tournament so predictions close in 5 days (March 4, Monday) and settlement happens on Monday:
+
+```sql
+UPDATE tournaments
+SET 
+  start_datetime = '2026-03-04 08:00:00+00',
+  end_datetime   = '2026-03-04 18:00:00+00',
+  start_date     = '2026-03-04',
+  end_date       = '2026-03-04'
+WHERE id = '8a248880-9b02-42a2-99f9-ff4682be0b2e';
 ```
 
-### 2. Round payout display in renderStakeStep
-In `renderStakeStep` (line 895), also floor the display value:
-```typescript
-const potentialPayout = Math.floor(stakeAmount * multiplierDetails.finalMultiplier);
-```
+This means:
+- Predictions stay **open** until Monday March 4 at 8:00 AM UTC
+- Tournament "ends" Monday evening — settlement can happen after that
 
-### 3. Audit TournamentDetailClean.tsx for the same issue
-Check all `potential_payout` and `potential_payout_tokens` calculations and apply `Math.floor` where needed (lines ~519, ~761, and related single-prediction flows).
+## End-to-End Browser Testing
 
-Two files changed, no database migration needed.
+After the date update, test the full flow in the preview:
+
+1. **Tournaments page** — verify Beta Testing 2 shows "Locks in 5d" status
+2. **Tournament detail** — open Beta Testing 2, verify markets/athletes load
+3. **Single prediction** — pick an athlete, set stake, confirm submission succeeds
+4. **Parlay/combo prediction** — pick Winner + Podium + High Score, stake 50 tokens, confirm no decimal error
+5. **Predictions page** — verify the new entries appear with correct payout (integer, no decimals)
+6. **Wallet** — verify balance deducted correctly
 
