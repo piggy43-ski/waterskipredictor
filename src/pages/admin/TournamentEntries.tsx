@@ -427,7 +427,7 @@ export default function TournamentEntries() {
     }
     if (p.matchedAthlete && uploadDiscipline) {
       p.selectedDisciplines = [uploadDiscipline];
-      p.selected = p.confidence >= 0.7;
+      p.selected = false; // Don't auto-select on undo either
     }
     setMatchedParticipants(updated);
   };
