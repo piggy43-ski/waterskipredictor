@@ -1,34 +1,38 @@
 
 
-## Plan: Referral Admin Enhancements + BALLER Assignment + Transaction Labels
+## Plan: Backfill BALLER Rewards + "Pay Now" Button for Creator Credits
 
-### 1. Assign BALLER code owner (data operation)
-Update `referral_codes` table to set `owner_user_id = '5ba913f1-8fb8-4932-a9b4-4a41f4d6d82a'` for the BALLER code.
+### 1. Data Operations (via insert tool)
 
-### 2. Add Owner User ID field to create/edit dialog (`Referrals.tsx`)
-- Add a `formOwnerUserId` state field
-- Add an input in the dialog form labeled "Owner User ID" where admin can paste a UUID
-- Include it in `handleSubmit` so it gets saved as `owner_user_id` on create and update
-- Pre-populate when editing an existing code
-- Show the owner username/email next to codes in the table (already partially done via the `owner` join)
+**Assign BALLER owner:**
+```sql
+UPDATE referral_codes SET owner_user_id = '5ba913f1-8fb8-4932-a9b4-4a41f4d6d82a' WHERE code = 'BALLER';
+```
 
-### 3. Add Delete button to referral codes table (`Referrals.tsx`)
-- Add a `deleteCodeMutation` that calls `supabase.from('referral_codes').delete().eq('id', id)`
-- Add a Trash icon button in each table row next to the Edit button
-- Wrap in a confirmation dialog (AlertDialog) to prevent accidental deletion
+**Backfill BALLER redemption records** — recalculate `referrer_reward_value` to correct token amounts (20% of `purchase_amount_tokens`) and set `referrer_user_id` to BallOfSpray's ID.
 
-### 4. Improve transaction labels for referral bonuses (`Transactions.tsx`)
-- Add `reference_type` to the Transaction interface (it exists in the DB but isn't selected)
-- Update the `fetchTransactions` query to include `reference_type`
-- In `getTypeBadge`, detect when `type === 'bonus'` AND `reference_type === 'referral'` → show "Referral Bonus" badge
-- When `reference_type === 'referral_reward'` → show "Referral Commission" badge
-- Add corresponding icons and filter options
+**Credit BallOfSpray's wallet** — add the total owed tokens to `earned_tokens` in `token_wallets`, create `token_transactions` entries with `reference_type = 'referral_reward'`, and mark the redemptions as paid (`referrer_paid_at`).
 
-### 5. Stripe webhook already fixed
-The formula fix from the previous message is deployed. The `description` field in `token_transactions` already includes the referral code name (e.g., "Referral bonus (BALLER) - +75% on Pro pack"), so existing descriptions are clear. The badge enhancement makes it even more visible.
+### 2. Enhance "Mark Paid" → "Credit & Pay" (Referrals.tsx)
+
+The current "Mark Paid" button only timestamps `referrer_paid_at` — it does NOT actually credit tokens to the creator's wallet. This needs to change:
+
+**Replace `markPaidMutation`** with a new mutation that:
+1. Looks up the redemption's `referrer_user_id` and `referrer_reward_value`
+2. Calls `supabase.rpc('increment_earned_tokens', { user_id_param, amount })` to credit the wallet
+3. Inserts a `token_transactions` record (type: `bonus`, reference_type: `referral_reward`)
+4. Updates `referrer_paid_at` on the redemption
+
+**Add visual status indicators** to the redemptions table:
+- Green "Credited" badge when `referrer_paid_at` is set
+- Red "Unpaid" badge when null
+- Show this in both the Activity tab and Payouts tab
+
+### 3. Fix display of reward values
+
+Currently showing `referrer_reward_value.toFixed(2)` — since values are now token integers (e.g., 1500, 3500), change display to whole numbers without decimals for token type.
 
 ### Files to modify
-- `src/pages/admin/Referrals.tsx` — add owner_user_id field, delete button with confirmation
-- `src/pages/Transactions.tsx` — add referral-specific badge labels, select `reference_type`
-- Data update: set BALLER `owner_user_id`
+- `src/pages/admin/Referrals.tsx` — update Mark Paid to actually credit tokens, add status badges, fix number formatting
+- Data operations — assign BALLER owner, backfill rewards, credit wallet
 
