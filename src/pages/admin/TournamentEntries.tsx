@@ -394,7 +394,7 @@ export default function TournamentEntries() {
         p.selected = true;
       }
     } else if (field === 'alsoAddRejected') {
-      p.alsoAddRejectedAthlete = value;
+      p.alsoAddRejectedAthlete = value === true;
     }
     setMatchedParticipants(updated);
   };
@@ -403,11 +403,13 @@ export default function TournamentEntries() {
   const handleRejectMatch = (participantIdx: number) => {
     const updated = [...matchedParticipants];
     const p = updated[participantIdx];
-    // Store original match for undo
+    // Store original match for undo, then CLEAR active match
     p.originalMatchedAthlete = p.matchedAthlete;
+    p.matchedAthlete = undefined;
     p.matchRejected = true;
     p.selected = false;
     p.selectedDisciplines = [];
+    p.alsoAddRejectedAthlete = false;
     setMatchedParticipants(updated);
   };
 
@@ -416,9 +418,13 @@ export default function TournamentEntries() {
     const updated = [...matchedParticipants];
     const p = updated[participantIdx];
     p.matchRejected = false;
-    // Clear create new athlete if it was set
     p.createNewAthlete = false;
-    // Restore selection with upload discipline
+    p.alsoAddRejectedAthlete = false;
+    // Restore matchedAthlete from original
+    if (p.originalMatchedAthlete) {
+      p.matchedAthlete = p.originalMatchedAthlete;
+      p.originalMatchedAthlete = undefined;
+    }
     if (p.matchedAthlete && uploadDiscipline) {
       p.selectedDisciplines = [uploadDiscipline];
       p.selected = p.confidence >= 0.7;
@@ -1736,9 +1742,11 @@ function ParticipantMatchRow({
   const isRejected = participant.matchRejected;
   const isMatched = !isRejected && participant.confidence >= 0.7 && participant.matchedAthlete;
   const isUncertain = !isRejected && participant.confidence > 0 && participant.confidence < 0.7 && participant.matchedAthlete;
-  const notFound = !participant.matchedAthlete;
+  const notFound = !participant.matchedAthlete && !isRejected;
   const showCreateSection = notFound || isRejected;
 
+  // For rejected rows, use originalMatchedAthlete for display
+  const displayAthlete = isRejected ? participant.originalMatchedAthlete : participant.matchedAthlete;
   const athleteDisciplines = participant.matchedAthlete?.disciplines || [];
   const rankings = participant.matchedAthlete?.rankings || {};
   const ratings = participant.matchedAthlete?.ratings || {};
@@ -1761,9 +1769,9 @@ function ParticipantMatchRow({
             {participant.createNewAthlete && <UserPlus className="h-4 w-4 text-blue-500 flex-shrink-0" />}
             <span className="font-medium truncate">"{participant.name}"</span>
             <span className="text-muted-foreground">→</span>
-            {isRejected && participant.matchedAthlete ? (
+            {isRejected && displayAthlete ? (
               <span className="text-muted-foreground line-through truncate">
-                {participant.matchedAthlete.name} ({participant.matchedAthlete.country})
+                {displayAthlete.name} ({displayAthlete.country})
               </span>
             ) : participant.matchedAthlete && !isRejected ? (
               <span className="text-primary truncate">
@@ -1791,7 +1799,7 @@ function ParticipantMatchRow({
             )}
             
             {/* Undo reject button */}
-            {isRejected && participant.matchedAthlete && (
+            {isRejected && participant.originalMatchedAthlete && (
               <Button
                 variant="ghost"
                 size="sm"
