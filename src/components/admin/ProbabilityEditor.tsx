@@ -102,6 +102,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
           normalized_probability,
           blended_probability,
           athlete_rank,
+          final_decimal_odds,
           athletes!inner(id, name, current_rank_slalom, current_rank_trick, current_rank_jump)
         `)
         .in('market_id', marketIds)
@@ -195,7 +196,8 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
           const p_auto = o.blended_probability || o.normalized_probability || 0;
           const p_manual = winnerOverrides.get(o.athlete_id);
           const p_winner = p_manual ?? p_auto;
-          const multiplier = selectionsMap.get(o.athlete_id) || calculateMultiplier(p_winner);
+          const calibratedOdds = o.final_decimal_odds;
+          const multiplier = calibratedOdds || selectionsMap.get(o.athlete_id) || calculateMultiplier(p_winner);
           
           const rankField = `current_rank_${discipline}` as keyof typeof athlete;
           
@@ -215,10 +217,9 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
           };
         });
 
-        // Calculate implied sum
+        // Calculate implied sum using actual calibrated multipliers
         const impliedSum = athletes.reduce((sum, a) => {
-          const mult = calculateMultiplier(a.p_winner);
-          return sum + (1 / mult);
+          return sum + (1 / a.multiplier);
         }, 0);
 
         let status: 'OK' | 'WARNING' | 'BLOCKED' = 'OK';
@@ -290,11 +291,9 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
 
   // Calculate local implied sum for a group
   const getLocalImpliedSum = (groupKey: string, group: MarketGroup) => {
-    const probs = localProbs[groupKey] || {};
     let sum = 0;
     group.athletes.forEach(a => {
-      const p = probs[a.athlete_id] ?? a.p_winner;
-      sum += 1 / calculateMultiplier(p);
+      sum += 1 / a.multiplier;
     });
     return sum;
   };
@@ -538,11 +537,12 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
                   <div className="divide-y max-h-80 overflow-y-auto">
                     {group.athletes.map(athlete => {
                       const localP = probs[athlete.athlete_id] ?? athlete.p_winner;
-                      const localMult = calculateMultiplier(localP);
-                      const localPodium = calculatePodiumProb(localP);
-                      const localHighest = calculateHighestProb(localP);
+                      const formulaMult = calculateMultiplier(localP);
+                      // Use calibrated multiplier from pricing engine, fall back to formula
+                      const actualMult = athlete.multiplier;
                       const isDirty = probs[athlete.athlete_id] !== undefined && 
                                       probs[athlete.athlete_id] !== athlete.p_winner;
+                      const showDiff = Math.abs(actualMult - formulaMult) / actualMult > 0.10;
 
                       return (
                         <div 
@@ -569,14 +569,29 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
                               className={`h-7 text-xs w-16 text-center ${isDirty ? 'border-primary' : ''}`}
                             />
                           </div>
-                          <div className="text-center font-mono text-muted-foreground">
-                            {localMult.toFixed(2)}x
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="text-center font-mono">
+                                  <span className="font-bold">{actualMult.toFixed(2)}x</span>
+                                  {showDiff && (
+                                    <span className="block text-[10px] text-muted-foreground line-through">
+                                      {formulaMult.toFixed(2)}x
+                                    </span>
+                                  )}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">Calibrated: {actualMult.toFixed(2)}x (what users see)</p>
+                                <p className="text-xs text-muted-foreground">Formula: {formulaMult.toFixed(2)}x (1/p×0.91)</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <div className="text-center text-muted-foreground">
+                            {(calculatePodiumProb(localP) * 100).toFixed(1)}%
                           </div>
                           <div className="text-center text-muted-foreground">
-                            {(localPodium * 100).toFixed(1)}%
-                          </div>
-                          <div className="text-center text-muted-foreground">
-                            {(localHighest * 100).toFixed(1)}%
+                            {(calculateHighestProb(localP) * 100).toFixed(1)}%
                           </div>
                         </div>
                       );
