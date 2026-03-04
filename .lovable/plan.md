@@ -1,38 +1,42 @@
 
+Goal: Fix the AI Match Preview dialog so you can always scroll to the bottom and confirm/add athletes.
 
-# Fix: Admin Tournaments Page Not Showing Dynamic Status
+What I found
+- The preview uses:
+  - `DialogContent` with `max-h-[90vh] flex flex-col overflow-hidden`
+  - `ScrollArea` with `flex-1 min-h-0`
+- In this setup, the scroll container can fail when parent height is only `max-h` (not a fixed height), especially with large header/toolbars above it.
+- There is also a Radix warning in console: missing dialog description (`DialogContent` accessibility warning).
 
-## Problem
-The admin `/admin/tournaments` page displays the raw `status` column from the database instead of computing it dynamically. The `tournamentStatus.ts` utility (which checks `settled_at` first) is only used in the user-facing Tournaments page, not the admin page.
+Implementation plan (single file: `src/pages/admin/TournamentEntries.tsx`)
+1. Make dialog height deterministic
+- Change preview `DialogContent` from `max-h-[90vh]` to a fixed viewport height like `h-[90vh] max-h-[90vh]`.
+- Keep `flex flex-col overflow-hidden` so internal regions can scroll instead of the modal growing.
 
-"Beta Testing" works because its DB status was manually set to `finished`. "Beta Testing 2" still has `status = 'upcoming'` in the DB even though `settled_at` is set.
+2. Make list area explicitly scrollable
+- Update the preview `ScrollArea` to ensure it has real height in the flex column:
+  - Keep `flex-1 min-h-0`
+  - Add `h-full` (and optional `pr-2`) so viewport gets a concrete height.
+- Ensure participant wrapper does not reintroduce overflow locks.
 
-## Fix
+3. Keep footer always reachable
+- Keep `DialogFooter` outside the scrolling region (already correct).
+- Ensure only the participants region scrolls; header/stats/buttons remain fixed.
 
-**File: `src/pages/admin/Tournaments.tsx`**
+4. Add required dialog description (quick accessibility fix)
+- Add a `DialogDescription` under title (e.g., “Review matches and select entries to add”).
+- This removes the runtime warning and improves modal semantics.
 
-Import `applyDynamicStatus` and apply it when mapping query results:
+5. Verify no regression to your workflow
+- Keep current behavior intact:
+  - No auto-add
+  - You confirm selections manually
+  - Create & Add remains available
+  - Duplicate-protection logic remains unchanged
 
-```typescript
-import { applyDynamicStatus } from '@/utils/tournamentStatus';
-```
-
-In the query function (~line 115-123), apply dynamic status:
-
-```typescript
-queryFn: async () => {
-  const { data, error } = await supabase
-    .from('tournaments')
-    .select('*')
-    .order('start_date', { ascending: false });
-  
-  if (error) throw error;
-  return (data || []).map(t => ({
-    ...t,
-    status: applyDynamicStatus(t).status
-  })) as Tournament[];
-},
-```
-
-This is a 2-line change (1 import + status mapping). Beta Testing 2 will immediately show as "finished" + "Settled" since it has `settled_at` set.
-
+Validation checklist
+- Open AI parse preview with long men/women lists.
+- Confirm mouse wheel/trackpad scroll reaches final rows.
+- Confirm footer buttons remain visible and usable.
+- Confirm “Create & Add” rows at bottom are reachable.
+- Confirm console no longer shows missing Dialog Description warning.
