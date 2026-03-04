@@ -1626,7 +1626,7 @@ export default function TournamentEntries() {
             );
           })()}
 
-          <ScrollArea className="flex-1 min-h-0">
+          <ScrollArea className="flex-1 min-h-0 h-0">
             <div className="space-y-6">
               {maleParticipants.length > 0 && (
                 <div>
