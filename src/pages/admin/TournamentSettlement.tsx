@@ -180,7 +180,7 @@ export default function TournamentSettlement() {
         .order('start_datetime', { ascending: false, nullsFirst: false });
       
       if (error) throw error;
-      return data.map(applyDynamicStatus).filter(t => t.status === 'finished' || t.status === 'live');
+      return data.map(applyDynamicStatus);
     },
   });
 
