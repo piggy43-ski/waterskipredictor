@@ -252,18 +252,55 @@ const Referrals = () => {
     }
   });
 
-  // Mark payout as paid mutation
-  const markPaidMutation = useMutation({
-    mutationFn: async (redemptionIds: string[]) => {
-      const { error } = await supabase
+  // Credit & Pay mutation — actually credits tokens to creator wallet
+  const creditAndPayMutation = useMutation({
+    mutationFn: async (redemption: ReferralRedemption) => {
+      if (!redemption.referrer_user_id) {
+        throw new Error('No referrer user ID set on this redemption. Link a creator first.');
+      }
+      const amount = Math.round(Number(redemption.referrer_reward_value));
+      if (amount <= 0) throw new Error('Reward value must be > 0');
+
+      // 1. Credit the creator's wallet
+      const { error: rpcError } = await supabase.rpc('increment_earned_tokens', {
+        user_id_param: redemption.referrer_user_id,
+        amount,
+      });
+      if (rpcError) throw rpcError;
+
+      // 2. Get updated balance for transaction record
+      const { data: walletData } = await supabase
+        .from('token_wallets')
+        .select('earned_tokens, purchased_tokens')
+        .eq('user_id', redemption.referrer_user_id)
+        .single();
+      const balanceAfter = (walletData?.earned_tokens ?? 0) + (walletData?.purchased_tokens ?? 0);
+
+      // 3. Insert token_transactions record
+      const { error: txError } = await supabase.from('token_transactions').insert({
+        user_id: redemption.referrer_user_id,
+        type: 'bonus',
+        amount,
+        balance_after: balanceAfter,
+        description: `Referral commission (${redemption.referral_code?.code || 'Unknown'}) - ${redemption.pack_name || 'purchase'}`,
+        reference_type: 'referral_reward',
+        reference_id: redemption.id,
+      });
+      if (txError) throw txError;
+
+      // 4. Mark as paid
+      const { error: updateError } = await supabase
         .from('referral_redemptions')
         .update({ referrer_paid_at: new Date().toISOString() })
-        .in('id', redemptionIds);
-      if (error) throw error;
+        .eq('id', redemption.id);
+      if (updateError) throw updateError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-referral-redemptions'] });
-      toast({ title: 'Payouts marked as paid' });
+      toast({ title: 'Creator credited & marked as paid' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Credit failed', description: error.message, variant: 'destructive' });
     }
   });
 
@@ -819,14 +856,17 @@ const Referrals = () => {
                           <TableCell>
                             {r.purchase_amount_tokens} tokens (${Number(r.purchase_amount_usd).toFixed(2)})
                           </TableCell>
-                          <TableCell className="text-green-600">+{r.bonus_tokens_awarded}</TableCell>
+                          <TableCell className="text-green-600">+{r.bonus_tokens_awarded.toLocaleString()}</TableCell>
                           <TableCell>
-                            {r.referrer_reward_type === 'cash' ? '$' : ''}
-                            {Number(r.referrer_reward_value).toFixed(2)}
-                            {r.referrer_reward_type === 'tokens' ? ' tokens' : ''}
-                            {r.referrer_paid_at && (
-                              <Badge variant="outline" className="ml-2">Paid</Badge>
-                            )}
+                            {r.referrer_reward_type === 'cash' 
+                              ? `$${Number(r.referrer_reward_value).toFixed(2)}`
+                              : `${Math.round(Number(r.referrer_reward_value)).toLocaleString()} tokens`
+                            }
+                            {r.referrer_paid_at ? (
+                              <Badge className="ml-2 bg-green-600 text-white">Credited</Badge>
+                            ) : r.referrer_reward_value > 0 ? (
+                              <Badge variant="destructive" className="ml-2">Unpaid</Badge>
+                            ) : null}
                           </TableCell>
                         </TableRow>
                       ))
@@ -882,17 +922,19 @@ const Referrals = () => {
                               </Badge>
                             </TableCell>
                             <TableCell className="font-semibold">
-                              {r.referrer_reward_type === 'cash' ? '$' : ''}
-                              {Number(r.referrer_reward_value).toFixed(2)}
-                              {r.referrer_reward_type === 'tokens' ? ' tokens' : ''}
+                              {r.referrer_reward_type === 'cash' 
+                                ? `$${Number(r.referrer_reward_value).toFixed(2)}`
+                                : `${Math.round(Number(r.referrer_reward_value)).toLocaleString()} tokens`
+                              }
                             </TableCell>
                             <TableCell>
                               <Button 
                                 size="sm" 
                                 variant="outline"
-                                onClick={() => markPaidMutation.mutate([r.id])}
+                                onClick={() => creditAndPayMutation.mutate(r)}
+                                disabled={creditAndPayMutation.isPending}
                               >
-                                Mark Paid
+                                {creditAndPayMutation.isPending ? 'Crediting...' : 'Credit & Pay'}
                               </Button>
                             </TableCell>
                           </TableRow>
