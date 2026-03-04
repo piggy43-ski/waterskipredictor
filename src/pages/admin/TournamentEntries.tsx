@@ -463,7 +463,7 @@ export default function TournamentEntries() {
           gender: newAthlete.gender,
           disciplines: newAthlete.disciplines || [],
           rankings: {},
-          ratings: { [uploadDiscipline]: 55 }
+          ratings: { [uploadDiscipline]: p.newAthleteRating ?? 55 }
         };
         p.selectedDisciplines = [uploadDiscipline];
         p.selected = true;
