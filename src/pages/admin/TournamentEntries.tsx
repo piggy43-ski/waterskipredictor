@@ -1769,9 +1769,9 @@ function ParticipantMatchRow({
             {participant.createNewAthlete && <UserPlus className="h-4 w-4 text-blue-500 flex-shrink-0" />}
             <span className="font-medium truncate">"{participant.name}"</span>
             <span className="text-muted-foreground">→</span>
-            {isRejected && participant.matchedAthlete ? (
+            {isRejected && displayAthlete ? (
               <span className="text-muted-foreground line-through truncate">
-                {participant.matchedAthlete.name} ({participant.matchedAthlete.country})
+                {displayAthlete.name} ({displayAthlete.country})
               </span>
             ) : participant.matchedAthlete && !isRejected ? (
               <span className="text-primary truncate">
@@ -1799,7 +1799,7 @@ function ParticipantMatchRow({
             )}
             
             {/* Undo reject button */}
-            {isRejected && participant.matchedAthlete && (
+            {isRejected && participant.originalMatchedAthlete && (
               <Button
                 variant="ghost"
                 size="sm"
