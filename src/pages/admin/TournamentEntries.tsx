@@ -1742,9 +1742,11 @@ function ParticipantMatchRow({
   const isRejected = participant.matchRejected;
   const isMatched = !isRejected && participant.confidence >= 0.7 && participant.matchedAthlete;
   const isUncertain = !isRejected && participant.confidence > 0 && participant.confidence < 0.7 && participant.matchedAthlete;
-  const notFound = !participant.matchedAthlete;
+  const notFound = !participant.matchedAthlete && !isRejected;
   const showCreateSection = notFound || isRejected;
 
+  // For rejected rows, use originalMatchedAthlete for display
+  const displayAthlete = isRejected ? participant.originalMatchedAthlete : participant.matchedAthlete;
   const athleteDisciplines = participant.matchedAthlete?.disciplines || [];
   const rankings = participant.matchedAthlete?.rankings || {};
   const ratings = participant.matchedAthlete?.ratings || {};
