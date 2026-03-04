@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, Trash2, Users } from 'lucide-react';
 import { format } from 'date-fns';
+import { applyDynamicStatus } from '@/utils/tournamentStatus';
 
 // Helper to format database datetime to datetime-local input format
 const formatDatetimeForInput = (datetime: string | undefined | null): string => {
@@ -118,7 +119,10 @@ export default function AdminTournaments() {
         .order('start_date', { ascending: false });
       
       if (error) throw error;
-      return data as Tournament[];
+      return (data || []).map(t => ({
+        ...t,
+        status: applyDynamicStatus(t).status
+      })) as Tournament[];
     },
   });
 
