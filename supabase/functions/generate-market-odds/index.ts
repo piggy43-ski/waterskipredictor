@@ -170,12 +170,15 @@ function getWinnerWeight(fieldRank: number): number {
 }
 
 function calculateWinnerBaseProbabilities(athletes: Athlete[]): { probs: number[], fieldRanks: Map<string, number>, strengths: number[] } {
-  // Sort by world rank (lower = better), then by rating (higher = better)
+  // Sort by rating first (higher = better), then world rank as tiebreaker
   const sorted = [...athletes].sort((a, b) => {
+    // Primary sort: rating (higher = better)
+    const ratingDiff = (b.rating ?? 70) - (a.rating ?? 70);
+    if (Math.abs(ratingDiff) >= 0.5) return ratingDiff;
+    // Tiebreaker: world rank (lower = better)
     const aRank = a.worldRank ?? Infinity;
     const bRank = b.worldRank ?? Infinity;
-    if (aRank !== bRank) return aRank - bRank;
-    return (b.rating ?? 0) - (a.rating ?? 0);
+    return aRank - bRank;
   });
   
   // Calculate strength scores (rating-based z-scores + small rank influence)
