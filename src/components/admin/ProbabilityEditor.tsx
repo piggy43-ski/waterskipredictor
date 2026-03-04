@@ -353,6 +353,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
   const saveGroupMutation = useMutation({
     mutationFn: async ({ group, groupKey }: { group: MarketGroup; groupKey: string }) => {
       const probs = localProbs[groupKey] || {};
+      const mults = localMultipliers[groupKey] || {};
       
       // First normalize probabilities
       const total = Object.values(probs).reduce((s, v) => s + v, 0);
@@ -361,7 +362,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
         normalized[id] = total > 0 ? p / total : p;
       });
       
-      // Save to WINNER market
+      // Save probability overrides to WINNER market
       for (const [athleteId, prob] of Object.entries(normalized)) {
         await supabase.functions.invoke('manage-probability-overrides', {
           body: {
@@ -372,6 +373,22 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
             reason: 'Edited in Probability Editor'
           }
         });
+      }
+
+      // Save multiplier overrides for manually edited multipliers
+      for (const athleteId of Object.keys(mults)) {
+        const overrideKey = `${groupKey}:${athleteId}`;
+        if (manualMultOverrides.has(overrideKey)) {
+          await supabase
+            .from('market_multiplier_overrides')
+            .upsert({
+              market_id: group.winner_market_id,
+              athlete_id: athleteId,
+              manual_multiplier: mults[athleteId],
+              is_enabled: true,
+              reason: 'Manual edit in Probability Editor',
+            }, { onConflict: 'market_id,athlete_id' });
+        }
       }
       
       // Cascade to PODIUM and HIGHEST_SCORE
@@ -407,7 +424,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
       queryClient.invalidateQueries({ queryKey: ['all-market-odds-prob', tournamentId] });
       queryClient.invalidateQueries({ queryKey: ['all-prob-overrides', tournamentId] });
       queryClient.invalidateQueries({ queryKey: ['all-selections-prob', tournamentId] });
-      toast.success('Probabilities saved and cascaded to all markets');
+      toast.success('Probabilities & multipliers saved and cascaded');
     },
     onError: (error: Error) => {
       toast.error(`Failed to save: ${error.message}`);
