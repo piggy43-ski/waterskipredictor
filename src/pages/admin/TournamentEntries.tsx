@@ -366,13 +366,15 @@ export default function TournamentEntries() {
   };
 
   // Handle updating new athlete fields for unmatched participants
-  const handleUpdateNewAthlete = (participantIdx: number, field: 'country' | 'gender' | 'create' | 'alsoAddRejected', value: any) => {
+  const handleUpdateNewAthlete = (participantIdx: number, field: 'country' | 'gender' | 'create' | 'alsoAddRejected' | 'rating', value: any) => {
     const updated = [...matchedParticipants];
     const p = updated[participantIdx];
     if (field === 'country') {
       p.newAthleteCountry = value;
     } else if (field === 'gender') {
       p.newAthleteGender = value;
+    } else if (field === 'rating') {
+      p.newAthleteRating = Number(value) || 55;
     } else if (field === 'create') {
       p.createNewAthlete = value;
       // Auto-select if creating
