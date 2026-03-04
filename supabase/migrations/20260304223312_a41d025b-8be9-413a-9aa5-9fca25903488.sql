@@ -1,0 +1,3 @@
+ALTER TABLE public.token_transactions DROP CONSTRAINT IF EXISTS token_transactions_type_check;
+
+ALTER TABLE public.token_transactions ADD CONSTRAINT token_transactions_type_check CHECK (type IN ('deposit', 'bet_placed', 'entry_placed', 'bet_won', 'bet_lost', 'bet_void', 'prediction_won', 'prediction_lost', 'prediction_void', 'bonus', 'redemption', 'adjustment', 'burn', 'bet', 'win', 'refund', 'transfer', 'reward_redemption', 'fantasy_entry', 'fantasy_payout'));
