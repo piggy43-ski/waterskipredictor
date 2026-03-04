@@ -539,11 +539,12 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
                   <div className="divide-y max-h-80 overflow-y-auto">
                     {group.athletes.map(athlete => {
                       const localP = probs[athlete.athlete_id] ?? athlete.p_winner;
-                      const localMult = calculateMultiplier(localP);
-                      const localPodium = calculatePodiumProb(localP);
-                      const localHighest = calculateHighestProb(localP);
+                      const formulaMult = calculateMultiplier(localP);
+                      // Use calibrated multiplier from pricing engine, fall back to formula
+                      const actualMult = athlete.multiplier;
                       const isDirty = probs[athlete.athlete_id] !== undefined && 
                                       probs[athlete.athlete_id] !== athlete.p_winner;
+                      const showDiff = Math.abs(actualMult - formulaMult) / actualMult > 0.10;
 
                       return (
                         <div 
@@ -570,9 +571,24 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
                               className={`h-7 text-xs w-16 text-center ${isDirty ? 'border-primary' : ''}`}
                             />
                           </div>
-                          <div className="text-center font-mono text-muted-foreground">
-                            {localMult.toFixed(2)}x
-                          </div>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="text-center font-mono">
+                                  <span className="font-bold">{actualMult.toFixed(2)}x</span>
+                                  {showDiff && (
+                                    <span className="block text-[10px] text-muted-foreground line-through">
+                                      {formulaMult.toFixed(2)}x
+                                    </span>
+                                  )}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">Calibrated: {actualMult.toFixed(2)}x (what users see)</p>
+                                <p className="text-xs text-muted-foreground">Formula: {formulaMult.toFixed(2)}x (1/p×0.91)</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <div className="text-center text-muted-foreground">
                             {(localPodium * 100).toFixed(1)}%
                           </div>
