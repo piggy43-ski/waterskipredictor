@@ -1550,6 +1550,55 @@ export default function TournamentEntries() {
             </div>
           </div>
 
+          {/* Bulk selection buttons */}
+          <div className="flex gap-2 mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const updated = matchedParticipants.map(p => ({
+                  ...p,
+                  selected: p.confidence >= 0.7 && !!p.matchedAthlete && !p.matchRejected ? true : p.selected,
+                }));
+                setMatchedParticipants(updated);
+              }}
+            >
+              <Check className="mr-1 h-3 w-3" />
+              Select All Matched
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const updated = matchedParticipants.map(p => ({
+                  ...p,
+                  selected: false,
+                }));
+                setMatchedParticipants(updated);
+              }}
+            >
+              Deselect All
+            </Button>
+          </div>
+
+          {/* Pre-submission summary warning for "also add rejected" */}
+          {(() => {
+            const alsoAddList = matchedParticipants.filter(
+              m => m.matchRejected && m.alsoAddRejectedAthlete && m.originalMatchedAthlete
+            );
+            if (alsoAddList.length === 0) return null;
+            return (
+              <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-300 mb-4">
+                <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <span className="font-medium">Also adding {alsoAddList.length} rejected athlete{alsoAddList.length > 1 ? 's' : ''}:</span>
+                  <span className="ml-1">{alsoAddList.map(m => m.originalMatchedAthlete!.name).join(', ')}</span>
+                  <p className="text-xs mt-1 opacity-70">These athletes were rejected as matches but will be added separately. Uncheck "Also add..." if this is not intended.</p>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Info about discipline selection */}
           <div className="flex items-center gap-2 p-3 rounded-md bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-300 mb-4">
             <AlertTriangle className="h-5 w-5 flex-shrink-0" />
