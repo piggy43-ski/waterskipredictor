@@ -291,11 +291,9 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
 
   // Calculate local implied sum for a group
   const getLocalImpliedSum = (groupKey: string, group: MarketGroup) => {
-    const probs = localProbs[groupKey] || {};
     let sum = 0;
     group.athletes.forEach(a => {
-      const p = probs[a.athlete_id] ?? a.p_winner;
-      sum += 1 / calculateMultiplier(p);
+      sum += 1 / a.multiplier;
     });
     return sum;
   };
