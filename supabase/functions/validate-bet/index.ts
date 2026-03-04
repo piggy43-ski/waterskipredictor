@@ -56,6 +56,7 @@ interface ValidationResult {
 
 // Risk config defaults - Global Solvency Model
 const DEFAULT_CONFIG = {
+  min_stake_tokens: 100,
   max_stake_tokens: 10000,
   max_payout_tokens: 150000,
   token_value_usd: 0.01,
@@ -80,6 +81,15 @@ serve(async (req) => {
     };
 
     console.log(`[VALIDATE] Global Solvency Model - Entry: ${stakeAmount}, Multiplier: ${currentOdds}`);
+
+    // === VALIDATION 0: Minimum Stake ===
+    if (stakeAmount < DEFAULT_CONFIG.min_stake_tokens) {
+      return new Response(JSON.stringify({
+        allowed: false,
+        reason: `Minimum stake is ${DEFAULT_CONFIG.min_stake_tokens} tokens`,
+        warnings: [],
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     // === VALIDATION 1: Stake Cap ===
     if (stakeAmount > DEFAULT_CONFIG.max_stake_tokens) {

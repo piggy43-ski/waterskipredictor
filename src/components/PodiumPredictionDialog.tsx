@@ -134,7 +134,7 @@ export const PodiumPredictionDialog = ({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={!stakeAmount || Number(stakeAmount) <= 0 || Number(stakeAmount) > walletBalance}
+            disabled={!stakeAmount || Number(stakeAmount) < 100 || Number(stakeAmount) > walletBalance}
             className="flex-1"
           >
             Place Entry
