@@ -60,6 +60,7 @@ interface MatchedParticipant extends ParsedParticipant {
   matchRejected?: boolean;
   originalMatchedAthlete?: MatchedParticipant['matchedAthlete']; // Store original for undo
   alsoAddRejectedAthlete?: boolean; // Also add the rejected athlete to tournament
+  newAthleteRating?: number; // Custom overall rating for new athlete (default 55)
 }
 
 export default function TournamentEntries() {
