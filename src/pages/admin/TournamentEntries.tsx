@@ -624,7 +624,7 @@ export default function TournamentEntries() {
 
       const { error: entriesError } = await supabase
         .from('tournament_entries')
-        .insert(entriesToAdd);
+        .insert(uniqueEntries);
       
       if (entriesError) throw entriesError;
 
