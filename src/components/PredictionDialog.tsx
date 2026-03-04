@@ -63,9 +63,10 @@ export const PredictionDialog = ({
   const potentialProfit = projectedRewards - stake;
   
   // Validation
+  const belowMinStake = stake < 100;
   const exceedsMaxStake = stake > PARLAY_CONFIG.MAX_STAKE;
   const exceedsMaxPayout = isPayoutOverMax(stake, combinedMultiplier);
-  const isValidStake = stake > 0 && stake <= walletBalance && !exceedsMaxStake && !exceedsMaxPayout;
+  const isValidStake = stake >= 100 && stake <= walletBalance && !exceedsMaxStake && !exceedsMaxPayout;
 
   const handleConfirm = () => {
     if (isValidStake) {
@@ -210,6 +211,14 @@ export const PredictionDialog = ({
             <p className="text-xs text-muted-foreground">
               Entry amount × multiplier = projected rewards (if correct)
             </p>
+            {belowMinStake && stake > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Minimum entry is 100 tokens.
+                </AlertDescription>
+              </Alert>
+            )}
             {exceedsMaxStake && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
