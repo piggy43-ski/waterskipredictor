@@ -1647,7 +1647,7 @@ function ParticipantMatchRow({
   onToggle: () => void;
   onToggleDiscipline: (discipline: string) => void;
   onOverrideRatingChange: (discipline: string, value: string) => void;
-  onUpdateNewAthlete: (field: 'country' | 'gender' | 'create' | 'alsoAddRejected', value: any) => void;
+  onUpdateNewAthlete: (field: 'country' | 'gender' | 'create' | 'alsoAddRejected' | 'rating', value: any) => void;
   onSelectAlternative: (id: string) => void;
   onRejectMatch: () => void;
   onUndoRejectMatch: () => void;
