@@ -918,6 +918,12 @@ export default function TournamentSettlement() {
       }
 
       // Fetch predictions with podium_selections for exact-order podium bets
+      // Include synthetic podium IDs (e.g. `${market.id}-podium`) so exact-order entries are found
+      const selectionIdsToQuery = [...(market.selections?.map(s => s.id) || [])];
+      if (market.market_type === 'PODIUM') {
+        selectionIdsToQuery.push(`${market.id}-podium`);
+      }
+
       const { data: predictions } = await supabase
         .from('predictions')
         .select(`
@@ -928,7 +934,7 @@ export default function TournamentSettlement() {
           )
         `)
         .eq('status', 'PENDING')
-        .in('selection_id', market.selections?.map(s => s.id) || []);
+        .in('selection_id', selectionIdsToQuery);
 
       let winningPredictionIds: string[] = [];
       let losingPredictionIds: string[] = [];
@@ -1275,11 +1281,22 @@ export default function TournamentSettlement() {
           .filter(m => m.id === preview.market_id)
           .flatMap(m => m.selections || []) || [];
         
-        return allMarketSelections.map(selection => ({
+        const mapped = allMarketSelections.map(selection => ({
           selection_id: selection.id,
           result: preview.winning_selection_ids.includes(selection.id) ? 'won' as const : 'lost' as const,
           actual_results: actualResults,
         }));
+
+        // For PODIUM markets, also include synthetic selection context so backend can settle exact-order entries
+        if (preview.market_type === 'PODIUM') {
+          mapped.push({
+            selection_id: `${preview.market_id}-podium`,
+            result: 'lost' as const, // default; overrides handle individual won/lost
+            actual_results: actualResults,
+          });
+        }
+
+        return mapped;
       });
 
       const response = await supabase.functions.invoke('settle-predictions', {
