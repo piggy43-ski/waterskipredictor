@@ -1,44 +1,45 @@
 
 
-# Fix: Settlement Summary Not Showing Correct Prediction Counts & Payouts
+# Fix: Settlement Summary Mixing Up Entries and Prediction Legs
 
-## Problems Found
+## Problem
 
-After auditing the `calculateSettlementPreview` function in `TournamentSettlement.tsx`, I found **three bugs** causing incorrect settlement summaries:
+The settlement summary currently counts **prediction legs** as "Won" and "Lost" instead of **entries (bet slips)**. A user who placed one 3-leg combo entry shows as "3 Won" or "3 Lost" instead of "1 Won" or "1 Lost". This is the same confusion from the last beta.
 
-### Bug 1: Case Mismatch on Bet Slip Status (Critical)
-Lines 986 and 1017 query `bet_slips` with `.eq('status', 'pending')` (lowercase), but the actual database values are `'PENDING'` (uppercase). This means **parlay payouts are never found**, so payout amounts are wrong.
+The root issue: `won_count` and `lost_count` are derived from `winningPredictionIds.length` and `losingPredictionIds.length` — these are prediction-level, not entry-level.
 
-### Bug 2: Parlay `leg_count` Filter Excludes Most Parlays
-Line 987 uses `.gt('leg_count', 1)` to find parlays. However, most parlay bet_slips in the database have `leg_count: 1` (each prediction leg gets its own bet_slip record). Only the rare multi-leg slips (e.g., 3-leg combos) are found. The correct filter should use `.eq('type', 'parlay')` instead.
+## Fix
 
-### Bug 3: Individual Parlay Legs Inflate Prediction Counts
-Each parlay leg is stored as a separate prediction, so a single 5-leg parlay shows as **5 predictions** in the "Won" or "Lost" columns. The summary should group parlays by their bet_slip and count each parlay as one entry.
+### In `calculateSettlementPreview` (~lines 930-1045)
 
-## Data Evidence
-- `bet_slips.status` = `'PENDING'` (uppercase) in the database
-- Most parlay bet_slips have `leg_count: 1` with `type: 'parlay'`
-- Parlay prediction rows have `potential_payout: 0` (payout lives on the bet_slip)
+After determining `winningPredictionIds` and `losingPredictionIds`, group them by `bet_slip_id` to derive **entry-level** won/lost counts:
 
-## Changes
+- **Entries Won**: Count unique `bet_slip_id` values where ALL legs of that slip are in `winningPredictionIds`
+- **Entries Lost**: Count unique `bet_slip_id` values where ANY leg is in `losingPredictionIds`
+- Keep the existing prediction-level counts as `won_legs` / `lost_legs` for the "Legs" detail
 
-### File: `src/pages/admin/TournamentSettlement.tsx`
+### In the `SettlementPreview` type (line 55-69)
 
-1. **Fix case mismatch** (lines 986, 1017): Change `'pending'` → `'PENDING'`
+Add `won_entries` and `lost_entries` fields. Keep `won_count`/`lost_count` for internal leg-level tracking but rename them in the UI.
 
-2. **Fix parlay filter** (line 987): Change `.gt('leg_count', 1)` → `.eq('type', 'parlay')` to catch all parlay slips
+### In the UI (lines 2023-2059)
 
-3. **Add entry-level summary** alongside prediction-level counts: Show both "X predictions" and "Y entries" so the admin sees meaningful numbers. Add a summary row that groups predictions by `bet_slip_id` to count unique entries.
+Update the grid to show:
+- **Entries**: total unique bet slips (already exists)
+- **Won**: entry-level won count (new `won_entries`)
+- **Lost**: entry-level lost count (new `lost_entries`)
+- **Payout**: total payout (already correct)
 
-4. **Update the settlement preview UI** (lines 2018-2047): Add an "Entries" column showing unique bet_slip count, and label the existing column as "Legs" for clarity when parlays are involved.
+Remove the "Legs" column — it's confusing for the admin. The entry-level view is what matters.
 
-## Technical Detail
+### Technical Detail
 
-The `calculateSettlementPreview` function (line 714) will be updated to:
-- Query bet_slips with correct uppercase `'PENDING'` status
-- Use `type = 'parlay'` filter instead of `leg_count > 1`
-- Count unique `bet_slip_id` values from matched predictions to derive entry count
-- Include entry count in the `SettlementPreview` type
+Group predictions by `bet_slip_id` from the fetched predictions data:
+```
+const predictionsBySlip = Map<bet_slip_id, prediction[]>
+- won_entries = slips where every prediction.id is in winningPredictionIds
+- lost_entries = slips where at least one prediction.id is in losingPredictionIds
+```
 
-The preview UI grid will go from 4 columns (Predictions / Won / Lost / Payout) to 5 columns (Entries / Predictions / Won / Lost / Payout), giving the admin a clearer picture of how many real bets are affected.
+This ensures a parlay with 3 winning legs = 1 Won entry, and a parlay with 2 winning + 1 losing leg = 1 Lost entry.
 
