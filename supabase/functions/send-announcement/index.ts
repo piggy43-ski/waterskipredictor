@@ -93,9 +93,11 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const batchSize = body.batchSize ?? 90;
+    const batchSize = body.batchSize ?? 25;
     const offset = body.offset ?? 0;
     const tournamentPath = body.tournamentPath ?? "/tournaments/6b2ee218-5957-41ec-be67-1d1d5af281ae";
+    const sendToAll = body.sendToAll === true;
+    const campaignId = body.campaignId ?? "moomba-masters-2026";
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -114,19 +116,30 @@ serve(async (req) => {
 
     if (usersError) throw usersError;
 
-    // Filter: include if marketing is true OR no preference row exists (default opt-in)
+    // Fetch already-sent emails to deduplicate
+    const { data: alreadySent } = await supabaseAdmin
+      .from("email_logs")
+      .select("recipient")
+      .eq("email_type", "announcement")
+      .eq("status", "sent")
+      .like("subject", "%Moomba Masters%");
+    
+    const alreadySentSet = new Set((alreadySent || []).map((r: any) => r.recipient));
+
+    // Filter users based on sendToAll flag and dedup
     const eligibleUsers = (users || []).filter((u: any) => {
       if (!u.email) return false;
+      if (alreadySentSet.has(u.email)) return false;
+      if (sendToAll) return true;
       const prefs = u.email_preferences;
-      // If no preferences row, default to opted-in
       if (!prefs || (Array.isArray(prefs) && prefs.length === 0)) return true;
       const pref = Array.isArray(prefs) ? prefs[0] : prefs;
       return pref.marketing !== false;
     });
 
-    // Apply offset and batch size
-    const batch = eligibleUsers.slice(offset, offset + batchSize);
-    const remaining = eligibleUsers.length - (offset + batch.length);
+    // Apply batch size (no offset needed with dedup)
+    const batch = eligibleUsers.slice(0, batchSize);
+    const remaining = eligibleUsers.length - batch.length;
 
     console.log(`Announcement: ${eligibleUsers.length} eligible, sending batch of ${batch.length} (offset: ${offset})`);
 
@@ -139,7 +152,7 @@ serve(async (req) => {
 
     for (const user of batch) {
       try {
-        await delay(600);
+        await delay(1200);
 
         const html = generateAnnouncementHtml(
           user.username || user.email.split("@")[0],
