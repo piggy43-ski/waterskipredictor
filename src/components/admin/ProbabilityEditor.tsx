@@ -247,20 +247,24 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
     return groups;
   }, [markets, allOdds, allSelections, allOverrides]);
 
-  // Initialize local probs from groups
+  // Initialize local probs and multipliers from groups
   useEffect(() => {
     if (marketGroups.length > 0 && Object.keys(localProbs).length === 0) {
       const initial: Record<string, Record<string, number>> = {};
+      const initialMults: Record<string, Record<string, number>> = {};
       const allKeys = new Set<string>();
       marketGroups.forEach(group => {
         const key = `${group.discipline}-${group.category}`;
         initial[key] = {};
+        initialMults[key] = {};
         allKeys.add(key);
         group.athletes.forEach(a => {
           initial[key][a.athlete_id] = a.p_winner;
+          initialMults[key][a.athlete_id] = a.multiplier;
         });
       });
       setLocalProbs(initial);
+      setLocalMultipliers(initialMults);
       // Open ALL groups by default so nothing is hidden
       setOpenGroups(allKeys);
     }
