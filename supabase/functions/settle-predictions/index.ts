@@ -1242,6 +1242,11 @@ Deno.serve(async (req) => {
             const winPred = userPredictions.find(p => p.status === 'WON');
             const predToEmail = winPred || userPredictions[0];
             
+            // Include market type for clarity (e.g. "Winner", "Podium")
+            const marketTypeLabel = predToEmail.market_type 
+              ? predToEmail.market_type.charAt(0) + predToEmail.market_type.slice(1).toLowerCase()
+              : undefined;
+            
             try {
               const emailResponse = await fetch(
                 `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`,
@@ -1262,6 +1267,7 @@ Deno.serve(async (req) => {
                       result: predToEmail.status.toLowerCase(),
                       stakedTokens: predToEmail.staked_tokens,
                       payoutTokens: predToEmail.payout_tokens || 0,
+                      marketType: marketTypeLabel,
                     }
                   }),
                 }

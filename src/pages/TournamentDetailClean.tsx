@@ -1022,7 +1022,7 @@ const TournamentDetail = () => {
             </Button>
           </Card>
         ) : (
-          <Tabs defaultValue="slalom" className="w-full">
+          <Tabs defaultValue={initialDiscipline} className="w-full">
             <TabsList className="w-full grid grid-cols-3 mb-6">
               {tournament.disciplines.map((disc) => (
                 <TabsTrigger key={disc} value={disc} className="capitalize">
