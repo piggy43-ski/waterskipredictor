@@ -1996,20 +1996,6 @@ function ParticipantMatchRow({
           )}
         </div>
         
-        {participant.alternatives && participant.alternatives.length > 0 && (
-          <Select onValueChange={onSelectAlternative}>
-            <SelectTrigger className="w-36 flex-shrink-0">
-              <SelectValue placeholder="Alternatives" />
-            </SelectTrigger>
-            <SelectContent>
-              {participant.alternatives.map(alt => (
-                <SelectItem key={alt.id} value={alt.id}>
-                  {alt.name} ({alt.country})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
       </div>
     </div>
   );
