@@ -1594,24 +1594,15 @@ export default function TournamentEntries() {
             );
             if (alsoAddList.length === 0) return null;
             return (
-              <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-300 mb-4">
-                <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <span className="font-medium">Also adding {alsoAddList.length} rejected athlete{alsoAddList.length > 1 ? 's' : ''}:</span>
+              <div className="flex items-start gap-2 p-2 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-300">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-medium">Also adding {alsoAddList.length} rejected:</span>
                   <span className="ml-1">{alsoAddList.map(m => m.originalMatchedAthlete!.name).join(', ')}</span>
-                  <p className="text-xs mt-1 opacity-70">These athletes were rejected as matches but will be added separately. Uncheck "Also add..." if this is not intended.</p>
                 </div>
               </div>
             );
           })()}
-
-          {/* Info about discipline selection */}
-          <div className="flex items-center gap-2 p-3 rounded-md bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-300 mb-4">
-            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-            <div className="text-sm">
-              <span className="font-medium">Single discipline import:</span> All athletes will be added for <strong>{uploadDiscipline}</strong> only. Unmatched athletes can be created as new profiles with low ratings.
-            </div>
-          </div>
 
           <ScrollArea className="h-[50vh]">
             <div className="space-y-6">
