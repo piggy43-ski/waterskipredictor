@@ -1558,7 +1558,8 @@ export default function TournamentEntries() {
                 <Badge className="bg-primary">{uploadDiscipline.toUpperCase()}</Badge>
               )}
             </DialogTitle>
-          </DialogHeader>
+           </DialogHeader>
+           <DialogDescription>Review matched athletes and select entries to add</DialogDescription>
           
           <div className="flex flex-wrap gap-4 text-sm mb-4">
             <div className="flex items-center gap-1">
