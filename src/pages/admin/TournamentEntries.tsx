@@ -362,25 +362,11 @@ export default function TournamentEntries() {
         }
       }
 
-      // Auto-add high-confidence matches directly, skip preview dialog
-      const autoSelected = deduplicated
-        .filter(p => p.matchedAthlete && p.confidence >= 0.7)
-        .map(p => ({ ...p, selected: true, selectedDisciplines: [uploadDiscipline] }));
-      
-      const unmatchedNames = deduplicated
-        .filter(p => !p.matchedAthlete || p.confidence < 0.7)
-        .map(p => p.name);
-
-      if (autoSelected.length > 0) {
-        addAIEntriesMutation.mutate(autoSelected);
-        toast.success(`Auto-added ${autoSelected.length} matched athletes`);
-      } else {
-        toast.warning('No high-confidence matches found');
-      }
-
-      if (unmatchedNames.length > 0) {
-        toast.warning(`Skipped ${unmatchedNames.length} unmatched: ${unmatchedNames.join(', ')}`);
-      }
+      // Show preview dialog for manual review — nothing is added until admin confirms
+      setMatchedParticipants(deduplicated);
+      setShowPreviewDialog(true);
+      const matchedCount = deduplicated.filter(p => p.matchedAthlete && p.confidence >= 0.7).length;
+      toast.success(`Parsed ${data.participants.length} participants, ${matchedCount} matched`);
 
     } catch (error) {
       console.error('Parse error:', error);
