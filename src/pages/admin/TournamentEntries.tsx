@@ -529,10 +529,16 @@ export default function TournamentEntries() {
       const getDisciplineData = (athlete: any, discipline: string) => {
         const rankField = `current_rank_${discipline}` as keyof typeof athlete;
         const ratingField = `current_rating_${discipline}` as keyof typeof athlete;
-        return {
-          rank: athlete?.[rankField] as number | null ?? null,
-          rating: athlete?.[ratingField] as number | null ?? 70,
-        };
+        const rank = athlete?.[rankField] as number | null ?? null;
+        let rating = athlete?.[ratingField] as number | null ?? 70;
+        
+        // Sanity: if rank is > 10 but rating is >= 95, cap rating to prevent pricing anomalies
+        if (rank && rank > 10 && rating !== null && rating >= 95) {
+          console.warn(`[ENTRY] Rating sanity: ${athlete?.name} rank=${rank} but rating=${rating}, capping`);
+          rating = Math.max(70, 90 - (rank - 10));
+        }
+        
+        return { rank, rating };
       };
 
       // Handle "also add rejected athletes" - add original matched athletes that were rejected
