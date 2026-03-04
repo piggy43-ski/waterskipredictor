@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+// Tooltip removed - multipliers are now editable inputs
 import { toast } from 'sonner';
 import { 
   ChevronDown, ChevronUp, RefreshCw, Check, AlertTriangle, 
@@ -65,6 +65,8 @@ function calculateMultiplier(prob: number, edgeFactor: number = 0.91): number {
 export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditorProps) {
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [localProbs, setLocalProbs] = useState<Record<string, Record<string, number>>>({});
+  const [localMultipliers, setLocalMultipliers] = useState<Record<string, Record<string, number>>>({});
+  const [manualMultOverrides, setManualMultOverrides] = useState<Set<string>>(new Set()); // tracks which athletes have manual mult edits
   const [lockedPodium, setLockedPodium] = useState<Set<string>>(new Set());
   const [lockedHighest, setLockedHighest] = useState<Set<string>>(new Set());
   const [savingMarket, setSavingMarket] = useState<string | null>(null);
@@ -245,20 +247,24 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
     return groups;
   }, [markets, allOdds, allSelections, allOverrides]);
 
-  // Initialize local probs from groups
+  // Initialize local probs and multipliers from groups
   useEffect(() => {
     if (marketGroups.length > 0 && Object.keys(localProbs).length === 0) {
       const initial: Record<string, Record<string, number>> = {};
+      const initialMults: Record<string, Record<string, number>> = {};
       const allKeys = new Set<string>();
       marketGroups.forEach(group => {
         const key = `${group.discipline}-${group.category}`;
         initial[key] = {};
+        initialMults[key] = {};
         allKeys.add(key);
         group.athletes.forEach(a => {
           initial[key][a.athlete_id] = a.p_winner;
+          initialMults[key][a.athlete_id] = a.multiplier;
         });
       });
       setLocalProbs(initial);
+      setLocalMultipliers(initialMults);
       // Open ALL groups by default so nothing is hidden
       setOpenGroups(allKeys);
     }
@@ -287,13 +293,48 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
         [athleteId]: numValue,
       },
     }));
+
+    // Auto-update multiplier unless manually overridden
+    const overrideKey = `${groupKey}:${athleteId}`;
+    if (!manualMultOverrides.has(overrideKey)) {
+      setLocalMultipliers(prev => ({
+        ...prev,
+        [groupKey]: {
+          ...prev[groupKey],
+          [athleteId]: calculateMultiplier(numValue),
+        },
+      }));
+    }
+  };
+
+  const handleMultChange = (groupKey: string, athleteId: string, value: string) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return;
+    const clamped = Math.min(25, Math.max(1.10, numValue));
+    
+    setLocalMultipliers(prev => ({
+      ...prev,
+      [groupKey]: {
+        ...prev[groupKey],
+        [athleteId]: clamped,
+      },
+    }));
+
+    // Mark as manually overridden
+    setManualMultOverrides(prev => {
+      const next = new Set(prev);
+      next.add(`${groupKey}:${athleteId}`);
+      return next;
+    });
   };
 
   // Calculate local implied sum for a group
   const getLocalImpliedSum = (groupKey: string, group: MarketGroup) => {
+    const mults = localMultipliers[groupKey];
     let sum = 0;
     group.athletes.forEach(a => {
-      sum += 1 / a.multiplier;
+      const mult = mults?.[a.athlete_id] ?? a.multiplier;
+      sum += 1 / mult;
     });
     return sum;
   };
@@ -312,6 +353,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
   const saveGroupMutation = useMutation({
     mutationFn: async ({ group, groupKey }: { group: MarketGroup; groupKey: string }) => {
       const probs = localProbs[groupKey] || {};
+      const mults = localMultipliers[groupKey] || {};
       
       // First normalize probabilities
       const total = Object.values(probs).reduce((s, v) => s + v, 0);
@@ -320,7 +362,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
         normalized[id] = total > 0 ? p / total : p;
       });
       
-      // Save to WINNER market
+      // Save probability overrides to WINNER market
       for (const [athleteId, prob] of Object.entries(normalized)) {
         await supabase.functions.invoke('manage-probability-overrides', {
           body: {
@@ -331,6 +373,22 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
             reason: 'Edited in Probability Editor'
           }
         });
+      }
+
+      // Save multiplier overrides for manually edited multipliers
+      for (const athleteId of Object.keys(mults)) {
+        const overrideKey = `${groupKey}:${athleteId}`;
+        if (manualMultOverrides.has(overrideKey)) {
+          await supabase
+            .from('market_multiplier_overrides')
+            .upsert({
+              market_id: group.winner_market_id,
+              athlete_id: athleteId,
+              manual_multiplier: mults[athleteId],
+              is_enabled: true,
+              reason: 'Manual edit in Probability Editor',
+            }, { onConflict: 'market_id,athlete_id' });
+        }
       }
       
       // Cascade to PODIUM and HIGHEST_SCORE
@@ -366,7 +424,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
       queryClient.invalidateQueries({ queryKey: ['all-market-odds-prob', tournamentId] });
       queryClient.invalidateQueries({ queryKey: ['all-prob-overrides', tournamentId] });
       queryClient.invalidateQueries({ queryKey: ['all-selections-prob', tournamentId] });
-      toast.success('Probabilities saved and cascaded to all markets');
+      toast.success('Probabilities & multipliers saved and cascaded');
     },
     onError: (error: Error) => {
       toast.error(`Failed to save: ${error.message}`);
@@ -394,13 +452,19 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
   // Reset to auto-calculated
   const resetGroup = (groupKey: string, group: MarketGroup) => {
     const autoProbs: Record<string, number> = {};
+    const autoMults: Record<string, number> = {};
     group.athletes.forEach(a => {
       autoProbs[a.athlete_id] = a.p_winner_auto;
+      autoMults[a.athlete_id] = a.multiplier;
     });
-    setLocalProbs(prev => ({
-      ...prev,
-      [groupKey]: autoProbs,
-    }));
+    setLocalProbs(prev => ({ ...prev, [groupKey]: autoProbs }));
+    setLocalMultipliers(prev => ({ ...prev, [groupKey]: autoMults }));
+    // Clear manual overrides for this group
+    setManualMultOverrides(prev => {
+      const next = new Set(prev);
+      group.athletes.forEach(a => next.delete(`${groupKey}:${a.athlete_id}`));
+      return next;
+    });
     toast.success('Reset to auto-calculated probabilities');
   };
 
@@ -489,6 +553,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
           const localSum = getLocalImpliedSum(groupKey, group);
           const localStatus = getLocalStatus(localSum);
           const probs = localProbs[groupKey] || {};
+          const mults = localMultipliers[groupKey] || {};
 
           return (
             <Collapsible 
@@ -524,7 +589,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
               <CollapsibleContent>
                 <div className="mt-2 border rounded-lg">
                   {/* Header */}
-                  <div className="grid grid-cols-[1fr,60px,100px,80px,80px,80px] gap-2 p-3 bg-muted text-xs font-medium border-b">
+                  <div className="grid grid-cols-[1fr,60px,100px,100px,80px,80px] gap-2 p-3 bg-muted text-xs font-medium border-b">
                     <div>Athlete</div>
                     <div className="text-center">Rank</div>
                     <div className="text-center">WINNER %</div>
@@ -537,17 +602,16 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
                   <div className="divide-y max-h-80 overflow-y-auto">
                     {group.athletes.map(athlete => {
                       const localP = probs[athlete.athlete_id] ?? athlete.p_winner;
-                      const formulaMult = calculateMultiplier(localP);
-                      // Use calibrated multiplier from pricing engine, fall back to formula
-                      const actualMult = athlete.multiplier;
+                      const localMult = mults[athlete.athlete_id] ?? athlete.multiplier;
+                      const isMultManual = manualMultOverrides.has(`${groupKey}:${athlete.athlete_id}`);
                       const isDirty = probs[athlete.athlete_id] !== undefined && 
                                       probs[athlete.athlete_id] !== athlete.p_winner;
-                      const showDiff = Math.abs(actualMult - formulaMult) / actualMult > 0.10;
+                      const isMultInvalid = localMult < 1.10 || localMult > 25;
 
                       return (
                         <div 
                           key={athlete.athlete_id}
-                          className="grid grid-cols-[1fr,60px,100px,80px,80px,80px] gap-2 p-3 items-center text-sm"
+                          className="grid grid-cols-[1fr,60px,100px,100px,80px,80px] gap-2 p-3 items-center text-sm"
                         >
                           <div className="flex items-center gap-2">
                             <span className="font-medium truncate">{athlete.athlete_name}</span>
@@ -569,24 +633,25 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
                               className={`h-7 text-xs w-16 text-center ${isDirty ? 'border-primary' : ''}`}
                             />
                           </div>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="text-center font-mono">
-                                  <span className="font-bold">{actualMult.toFixed(2)}x</span>
-                                  {showDiff && (
-                                    <span className="block text-[10px] text-muted-foreground line-through">
-                                      {formulaMult.toFixed(2)}x
-                                    </span>
-                                  )}
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs">Calibrated: {actualMult.toFixed(2)}x (what users see)</p>
-                                <p className="text-xs text-muted-foreground">Formula: {formulaMult.toFixed(2)}x (1/p×0.91)</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <div className="flex items-center justify-center gap-1">
+                            <Input
+                              type="number"
+                              step="0.05"
+                              min="1.10"
+                              max="25"
+                              value={localMult.toFixed(2)}
+                              onChange={(e) => handleMultChange(groupKey, athlete.athlete_id, e.target.value)}
+                              className={`h-7 text-xs w-16 text-center font-mono ${
+                                isMultInvalid ? 'border-destructive' : isMultManual ? 'border-primary' : ''
+                              }`}
+                            />
+                            <Badge 
+                              variant={isMultManual ? 'default' : 'outline'} 
+                              className="text-[9px] py-0 px-1 h-4"
+                            >
+                              {isMultManual ? 'M' : 'A'}
+                            </Badge>
+                          </div>
                           <div className="text-center text-muted-foreground">
                             {(calculatePodiumProb(localP) * 100).toFixed(1)}%
                           </div>
