@@ -313,27 +313,39 @@ Deno.serve(async (req) => {
       allSettled: boolean;
     }>();
 
-    // BATCH FETCH: Get all pending predictions for all selections in ONE query
-    console.log(`🔍 Fetching all pending predictions for ${uniqueSelectionIds.length} selections (incl. podium variants)...`);
+    // BATCH FETCH: Get all pending predictions in batches to avoid URL length limits
+    const BATCH_SIZE = 50;
+    console.log(`🔍 Fetching all pending predictions for ${uniqueSelectionIds.length} selections in batches of ${BATCH_SIZE}...`);
     
-    const { data: allPredictions, error: batchError } = await supabaseClient
-      .from('predictions')
-      .select('*, bet_slip:bet_slips!bet_slip_id(*)')
-      .in('selection_id', uniqueSelectionIds)
-      .eq('status', 'PENDING');
+    const allPredictions: any[] = [];
+    for (let i = 0; i < uniqueSelectionIds.length; i += BATCH_SIZE) {
+      const batch = uniqueSelectionIds.slice(i, i + BATCH_SIZE);
+      console.log(`  📦 Batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(uniqueSelectionIds.length / BATCH_SIZE)} (${batch.length} IDs)`);
+      
+      const { data: batchData, error: batchError } = await supabaseClient
+        .from('predictions')
+        .select('*, bet_slip:bet_slips!bet_slip_id(*)')
+        .in('selection_id', batch)
+        .eq('status', 'PENDING');
 
-    if (batchError) {
-      console.error('❌ Error fetching predictions batch:', batchError);
-      return new Response(
-        JSON.stringify({ 
-          error: `Failed to fetch predictions: ${batchError.message}`,
-          debug_info: {
-            selection_ids: selectionIds.slice(0, 10),
-            error_details: batchError,
-          }
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (batchError) {
+        console.error(`❌ Error fetching predictions batch ${Math.floor(i / BATCH_SIZE) + 1}:`, batchError);
+        return new Response(
+          JSON.stringify({ 
+            error: `Failed to fetch predictions: ${batchError.message}`,
+            debug_info: {
+              batch_index: Math.floor(i / BATCH_SIZE),
+              batch_size: batch.length,
+              error_details: batchError,
+            }
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (batchData) {
+        allPredictions.push(...batchData);
+      }
     }
 
     console.log(`✅ Found ${allPredictions?.length || 0} pending predictions total`);
