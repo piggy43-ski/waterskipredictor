@@ -1,38 +1,47 @@
 
+Goal: prevent rejected suggested athlete (e.g., Kolman) from being added unless “Also add …” is explicitly checked.
 
-# Fix: Admin Tournaments Page Not Showing Dynamic Status
+What’s actually broken:
+- In `src/pages/admin/TournamentEntries.tsx`, `handleRejectMatch` marks a participant as rejected but keeps `matchedAthlete` populated.
+- When “Create & Add” is checked, `handleUpdateNewAthlete('create')` sets `selected = true`.
+- In `addAIEntriesMutation`:
+  - new-athlete creation only runs for `p.createNewAthlete && !p.matchedAthlete`.
+  - because `matchedAthlete` is still the rejected athlete, no new profile is created.
+  - the participant is still included in `toAdd` and inserts the rejected athlete.
+- This bypasses the intended “Also add rejected athlete” checkbox logic.
 
-## Problem
-The admin `/admin/tournaments` page displays the raw `status` column from the database instead of computing it dynamically. The `tournamentStatus.ts` utility (which checks `settled_at` first) is only used in the user-facing Tournaments page, not the admin page.
+Implementation plan:
+1. Fix rejected-state data model
+- On reject, move current match into `originalMatchedAthlete` and clear active `matchedAthlete`.
+- Also reset `alsoAddRejectedAthlete` to `false` during reject/undo so no stale opt-in survives.
 
-"Beta Testing" works because its DB status was manually set to `finished`. "Beta Testing 2" still has `status = 'upcoming'` in the DB even though `settled_at` is set.
+2. Fix row rendering for rejected rows
+- In `ParticipantMatchRow`, show the struck-through name from `originalMatchedAthlete` (not `matchedAthlete`) when rejected.
+- Keep the current UX wording unchanged.
 
-## Fix
+3. Fix create-new-athlete mutation path
+- Ensure rejected+create flow always creates a new athlete record.
+- Keep `alsoAddRejectedAthlete` as the only path that re-adds the original rejected athlete.
+- Harden boolean handling for checkbox events (`boolean | "indeterminate"`), coercing to strict booleans.
 
-**File: `src/pages/admin/Tournaments.tsx`**
+4. Guard insertion path
+- In `toAdd`/entry construction, skip using rejected original athlete unless `alsoAddRejectedAthlete === true`.
+- Add explicit branch logic:
+  - primary add = selected matched athlete (non-rejected) OR created new athlete
+  - optional second add = original rejected athlete only when opted in.
 
-Import `applyDynamicStatus` and apply it when mapping query results:
+5. Verify and prevent regressions
+- Add temporary logs around rejected rows showing:
+  - `matchRejected`, `createNewAthlete`, `matchedAthlete?.id`, `originalMatchedAthlete?.id`, `alsoAddRejectedAthlete`.
+- Manual scenario checks:
+  - Reject + Create & Add + also-add unchecked => only new profile added.
+  - Reject + Create & Add + also-add checked => both added.
+  - Reject + choose alternative => only alternative added.
+  - Undo reject => original behavior restored.
 
-```typescript
-import { applyDynamicStatus } from '@/utils/tournamentStatus';
-```
+Files to update:
+- `src/pages/admin/TournamentEntries.tsx` (reject/undo handlers, participant row rendering, checkbox coercion, add mutation filtering/branching)
 
-In the query function (~line 115-123), apply dynamic status:
-
-```typescript
-queryFn: async () => {
-  const { data, error } = await supabase
-    .from('tournaments')
-    .select('*')
-    .order('start_date', { ascending: false });
-  
-  if (error) throw error;
-  return (data || []).map(t => ({
-    ...t,
-    status: applyDynamicStatus(t).status
-  })) as Tournament[];
-},
-```
-
-This is a 2-line change (1 import + status mapping). Beta Testing 2 will immediately show as "finished" + "Settled" since it has `settled_at` set.
-
+Expected outcome:
+- If you do not check “Also add Kolman…”, Kolman will not be inserted.
+- “Create & Add” will correctly create/add only the new athlete profile in rejected-match flows.
