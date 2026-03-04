@@ -1,28 +1,30 @@
 
 
-# Fix: Beta Testing 2 Not Appearing in Tournament Dropdown
+# Fix: 13 Pending Podium Predictions Not Being Settled
 
 ## Problem
-Line 183 of `TournamentSettlement.tsx` filters the tournament list:
-```
-return data.map(applyDynamicStatus).filter(t => t.status === 'finished' || t.status === 'live');
-```
-Beta Testing 2 starts at 8:00 AM UTC March 4 (still in the future), so `applyDynamicStatus` assigns it `upcoming` status and it gets excluded from the dropdown.
+
+All 13 unsettled predictions are **PODIUM** bets from "BETA TESTING 2". Their `selection_id` values have a `-podium` suffix (e.g., `b677f42e-...-podium`), which is a virtual/synthetic ID used to distinguish podium bets from winner bets on the same athlete.
+
+The settlement function correctly fetches these predictions (lines 281-286 add `-podium` variants to the query). However, when it processes each selection (line 388), it looks up predictions using the **base** selection ID from the input — which doesn't have the `-podium` suffix. The predictions are stored in the map under their actual `-podium` key, so the lookup returns empty and they're silently skipped.
 
 ## Fix
 
-**File: `src/pages/admin/TournamentSettlement.tsx` (line 183)**
+**File: `supabase/functions/settle-predictions/index.ts` (~line 382-393)**
 
-Remove the status filter entirely. Admins should be able to select any tournament for score entry and settlement -- there is no reason to restrict this. The dropdown will show all tournaments sorted by date (newest first), which is already the case.
+When processing each selection, also check for predictions stored under the `-podium` variant of the selection ID. Merge both sets of predictions before processing:
 
-Change:
-```ts
-return data.map(applyDynamicStatus).filter(t => t.status === 'finished' || t.status === 'live');
+```typescript
+// Line 388 area - change the lookup to also grab podium variants
+const predictions = [
+  ...(predictionsBySelection.get(selIdString) || []),
+  ...(selIdString.endsWith('-podium') 
+    ? [] 
+    : (predictionsBySelection.get(`${selIdString}-podium`) || [])),
+];
 ```
-To:
-```ts
-return data.map(applyDynamicStatus);
-```
 
-This is a one-line change. Beta Testing 2 will immediately appear in the dropdown.
+This one-line change ensures that when the settlement function processes selection `b677f42e-...`, it also picks up predictions stored under `b677f42e-...-podium`, so all podium bets get settled.
+
+After deploying this fix, re-running settlement for "BETA TESTING 2" will clear all 13 pending predictions.
 
