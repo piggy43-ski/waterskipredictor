@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+// Tooltip removed - multipliers are now editable inputs
 import { toast } from 'sonner';
 import { 
   ChevronDown, ChevronUp, RefreshCw, Check, AlertTriangle, 
