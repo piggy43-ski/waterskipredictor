@@ -74,7 +74,15 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
 
       <div className="flex gap-2 mt-3">
         {tournament.disciplines.map((disc) => (
-          <Badge key={disc} variant="outline" className="text-xs capitalize">
+          <Badge 
+            key={disc} 
+            variant="outline" 
+            className="text-xs capitalize cursor-pointer hover:bg-primary/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/tournaments/${tournament.id}?discipline=${disc}`);
+            }}
+          >
             {disc}
           </Badge>
         ))}
