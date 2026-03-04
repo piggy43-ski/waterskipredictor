@@ -305,6 +305,7 @@ Deno.serve(async (req) => {
     };
 
     const affectedUserIds = new Set<string>();
+    const settledPredictionIds = new Set<string>();
     
     // Track which bet_slips need to be settled after predictions are processed
     const betSlipsToSettle = new Map<string, { 
