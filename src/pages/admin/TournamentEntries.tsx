@@ -324,6 +324,11 @@ export default function TournamentEntries() {
         };
       });
 
+      // Build set of existing tournament entries to mark "already added"
+      const existingEntryKeys = new Set(
+        entries?.map(e => `${e.athlete_id}-${e.discipline}`) || []
+      );
+
       // Deduplicate athletes - merge disciplines from duplicate entries
       const athleteMap = new Map<string, MatchedParticipant>();
       const unmatched: MatchedParticipant[] = [];
@@ -331,6 +336,14 @@ export default function TournamentEntries() {
       for (const m of matched) {
         if (m.matchedAthlete) {
           const key = m.matchedAthlete.id;
+          // Check if already in tournament for this discipline
+          const alreadyInTournament = m.selectedDisciplines.every(
+            d => existingEntryKeys.has(`${m.matchedAthlete!.id}-${d}`)
+          );
+          if (alreadyInTournament) {
+            // Skip — already added
+            continue;
+          }
           if (athleteMap.has(key)) {
             // Merge disciplines from duplicate entries
             const existing = athleteMap.get(key)!;
