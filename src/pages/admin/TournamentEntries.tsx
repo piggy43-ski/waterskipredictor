@@ -394,7 +394,7 @@ export default function TournamentEntries() {
         p.selected = true;
       }
     } else if (field === 'alsoAddRejected') {
-      p.alsoAddRejectedAthlete = value;
+      p.alsoAddRejectedAthlete = value === true;
     }
     setMatchedParticipants(updated);
   };
