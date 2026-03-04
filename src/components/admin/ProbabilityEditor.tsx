@@ -217,10 +217,9 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
           };
         });
 
-        // Calculate implied sum
+        // Calculate implied sum using actual calibrated multipliers
         const impliedSum = athletes.reduce((sum, a) => {
-          const mult = calculateMultiplier(a.p_winner);
-          return sum + (1 / mult);
+          return sum + (1 / a.multiplier);
         }, 0);
 
         let status: 'OK' | 'WARNING' | 'BLOCKED' = 'OK';
