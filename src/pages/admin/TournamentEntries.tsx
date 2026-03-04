@@ -324,6 +324,11 @@ export default function TournamentEntries() {
         };
       });
 
+      // Build set of existing tournament entries to mark "already added"
+      const existingEntryKeys = new Set(
+        entries?.map(e => `${e.athlete_id}-${e.discipline}`) || []
+      );
+
       // Deduplicate athletes - merge disciplines from duplicate entries
       const athleteMap = new Map<string, MatchedParticipant>();
       const unmatched: MatchedParticipant[] = [];
@@ -331,6 +336,14 @@ export default function TournamentEntries() {
       for (const m of matched) {
         if (m.matchedAthlete) {
           const key = m.matchedAthlete.id;
+          // Check if already in tournament for this discipline
+          const alreadyInTournament = m.selectedDisciplines.every(
+            d => existingEntryKeys.has(`${m.matchedAthlete!.id}-${d}`)
+          );
+          if (alreadyInTournament) {
+            // Skip — already added
+            continue;
+          }
           if (athleteMap.has(key)) {
             // Merge disciplines from duplicate entries
             const existing = athleteMap.get(key)!;
@@ -596,19 +609,28 @@ export default function TournamentEntries() {
         }
       }
 
-      if (entriesToAdd.length === 0) {
+      // Deduplicate entries by athlete_id + discipline within this batch
+      const seenKeys = new Set<string>();
+      const uniqueEntries = entriesToAdd.filter(e => {
+        const key = `${e.athlete_id}-${e.discipline}`;
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
+        return true;
+      });
+
+      if (uniqueEntries.length === 0) {
         throw new Error('All selected athletes are already entered for their disciplines');
       }
 
       const { error: entriesError } = await supabase
         .from('tournament_entries')
-        .insert(entriesToAdd);
+        .insert(uniqueEntries);
       
       if (entriesError) throw entriesError;
 
       // Group entries by discipline and gender to create markets
-      const disciplineGenderGroups = new Map<string, typeof entriesToAdd>();
-      for (const entry of entriesToAdd) {
+      const disciplineGenderGroups = new Map<string, typeof uniqueEntries>();
+      for (const entry of uniqueEntries) {
         const athlete = refreshedAthletes?.find(a => a.id === entry.athlete_id);
         const key = `${entry.discipline}-${athlete?.gender}`;
         if (!disciplineGenderGroups.has(key)) {
@@ -708,7 +730,7 @@ export default function TournamentEntries() {
         }
       }
 
-      return entriesToAdd.length;
+      return uniqueEntries.length;
     },
     onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
@@ -1527,7 +1549,7 @@ export default function TournamentEntries() {
 
       {/* AI Match Preview Dialog */}
       <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
-        <DialogContent className="max-w-4xl max-h-[85vh]">
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               AI Matched Participants
@@ -1594,26 +1616,17 @@ export default function TournamentEntries() {
             );
             if (alsoAddList.length === 0) return null;
             return (
-              <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-300 mb-4">
-                <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <span className="font-medium">Also adding {alsoAddList.length} rejected athlete{alsoAddList.length > 1 ? 's' : ''}:</span>
+              <div className="flex items-start gap-2 p-2 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-300">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-medium">Also adding {alsoAddList.length} rejected:</span>
                   <span className="ml-1">{alsoAddList.map(m => m.originalMatchedAthlete!.name).join(', ')}</span>
-                  <p className="text-xs mt-1 opacity-70">These athletes were rejected as matches but will be added separately. Uncheck "Also add..." if this is not intended.</p>
                 </div>
               </div>
             );
           })()}
 
-          {/* Info about discipline selection */}
-          <div className="flex items-center gap-2 p-3 rounded-md bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-300 mb-4">
-            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-            <div className="text-sm">
-              <span className="font-medium">Single discipline import:</span> All athletes will be added for <strong>{uploadDiscipline}</strong> only. Unmatched athletes can be created as new profiles with low ratings.
-            </div>
-          </div>
-
-          <ScrollArea className="h-[50vh]">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="space-y-6">
               {maleParticipants.length > 0 && (
                 <div>
@@ -1840,7 +1853,7 @@ function ParticipantMatchRow({
               <span className="text-destructive">No match found</span>
             )}
             
-            {/* Reject match button */}
+            {/* Reject match button - simplified */}
             {participant.matchedAthlete && !isRejected && (
               <Button
                 variant="ghost"
@@ -1849,7 +1862,7 @@ function ParticipantMatchRow({
                 onClick={onRejectMatch}
               >
                 <X className="h-3 w-3 mr-1" />
-                Not this person
+                Wrong
               </Button>
             )}
             
@@ -1861,7 +1874,7 @@ function ParticipantMatchRow({
                 className="h-6 px-2 text-xs text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
                 onClick={onUndoRejectMatch}
               >
-                Undo reject
+                Undo
               </Button>
             )}
           </div>
@@ -2005,20 +2018,6 @@ function ParticipantMatchRow({
           )}
         </div>
         
-        {participant.alternatives && participant.alternatives.length > 0 && (
-          <Select onValueChange={onSelectAlternative}>
-            <SelectTrigger className="w-36 flex-shrink-0">
-              <SelectValue placeholder="Alternatives" />
-            </SelectTrigger>
-            <SelectContent>
-              {participant.alternatives.map(alt => (
-                <SelectItem key={alt.id} value={alt.id}>
-                  {alt.name} ({alt.country})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
       </div>
     </div>
   );

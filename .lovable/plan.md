@@ -1,32 +1,38 @@
 
 
-# Fix AI Match Preview Dialog: Scroll, Suggestions, and Duplicates
+# Fix: Admin Tournaments Page Not Showing Dynamic Status
 
-## Issues
-1. **Can't scroll down in dialog** — The `DialogContent` has `max-h-[85vh]` but the content above the `ScrollArea` (stats bar, bulk buttons, warnings, info banner) takes significant space, leaving the `ScrollArea` with `h-[50vh]` unable to show all participants.
-2. **System suggests alternatives** — The `ParticipantMatchRow` component shows alternative suggestions and "Not this person" buttons, adding complexity. The user wants just the matched names displayed simply.
-3. **Duplicates when uploading multiple files** — The mutation checks `existingSet` from DB but doesn't prevent adding the same athlete twice within the same batch if they appear in multiple uploads.
+## Problem
+The admin `/admin/tournaments` page displays the raw `status` column from the database instead of computing it dynamically. The `tournamentStatus.ts` utility (which checks `settled_at` first) is only used in the user-facing Tournaments page, not the admin page.
 
-## Plan
+"Beta Testing" works because its DB status was manually set to `finished`. "Beta Testing 2" still has `status = 'upcoming'` in the DB even though `settled_at` is set.
 
-### File: `src/pages/admin/TournamentEntries.tsx`
+## Fix
 
-**1. Fix scroll (line 1530, 1616)**
-- Change `DialogContent` from `max-h-[85vh]` to `max-h-[90vh]` and add `flex flex-col`
-- Change `ScrollArea` from `h-[50vh]` to `flex-1 min-h-0` so it fills remaining space
-- Reduce/remove some of the info banners above the scroll area to give more room
+**File: `src/pages/admin/Tournaments.tsx`**
 
-**2. Simplify participant rows — remove alternative suggestions display**
-- In `ParticipantMatchRow`, remove the alternatives dropdown section entirely
-- Remove the "Not this person" button and reject/undo flow from the display
-- Keep it simple: show parsed name → matched name (or "No match") with a checkbox
-- Keep the "Create & Add" option for unmatched athletes
+Import `applyDynamicStatus` and apply it when mapping query results:
 
-**3. Prevent duplicates across uploads**
-- In `addAIEntriesMutation`, deduplicate `entriesToAdd` array by `athlete_id + discipline` key before inserting
-- Use `upsert` with `onConflict: 'tournament_id,athlete_id,discipline'` (already partially done but ensure it's used consistently)
-- Also deduplicate within the matching phase: if an athlete is already in `entries` (current tournament entries), mark them as "already added" and don't allow re-selection
+```typescript
+import { applyDynamicStatus } from '@/utils/tournamentStatus';
+```
 
-### Files Changed
-- `src/pages/admin/TournamentEntries.tsx`
+In the query function (~line 115-123), apply dynamic status:
+
+```typescript
+queryFn: async () => {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('*')
+    .order('start_date', { ascending: false });
+  
+  if (error) throw error;
+  return (data || []).map(t => ({
+    ...t,
+    status: applyDynamicStatus(t).status
+  })) as Tournament[];
+},
+```
+
+This is a 2-line change (1 import + status mapping). Beta Testing 2 will immediately show as "finished" + "Settled" since it has `settled_at` set.
 
