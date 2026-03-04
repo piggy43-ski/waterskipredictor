@@ -1,38 +1,47 @@
 
 
-# Fix: Admin Tournaments Page Not Showing Dynamic Status
+# Fix: Field Rank Should Reflect Actual Strength, Not Just World Rank
 
 ## Problem
-The admin `/admin/tournaments` page displays the raw `status` column from the database instead of computing it dynamically. The `tournamentStatus.ts` utility (which checks `settled_at` first) is only used in the user-facing Tournaments page, not the admin page.
+The screenshot shows Browne Samuel as `#1` with 12.6% winner probability, but Winter Frederick at `#2` has 15.5% — a higher probability. The "Rank" column doesn't match the probability ordering.
 
-"Beta Testing" works because its DB status was manually set to `finished`. "Beta Testing 2" still has `status = 'upcoming'` in the DB even though `settled_at` is set.
+**Root cause**: In `supabase/functions/generate-market-odds/index.ts` line 174, `calculateWinnerBaseProbabilities()` sorts athletes by `worldRank` first, then by `rating` as a tiebreaker. This sorting determines both:
+1. The `fieldRank` (displayed as "#1", "#2", etc.)
+2. The weight ladder assignment (which base probability weight each athlete gets)
+
+But the final probability also incorporates a strength score based on ratings (line 196-198). When an athlete has a better world rank but lower rating, they get a better field rank position but can end up with a lower final probability — creating the inconsistency you see.
 
 ## Fix
 
-**File: `src/pages/admin/Tournaments.tsx`**
+Change the sorting in `calculateWinnerBaseProbabilities()` to sort by **rating first** (higher = better), then world rank as tiebreaker. This ensures:
+- The athlete with the highest rating gets field rank #1 and the highest base weight
+- World rank only matters when ratings are equal
+- The displayed rank will always align with the probability ordering
 
-Import `applyDynamicStatus` and apply it when mapping query results:
+**File**: `supabase/functions/generate-market-odds/index.ts` (lines 173-179)
 
+**Before**:
 ```typescript
-import { applyDynamicStatus } from '@/utils/tournamentStatus';
+const sorted = [...athletes].sort((a, b) => {
+  const aRank = a.worldRank ?? Infinity;
+  const bRank = b.worldRank ?? Infinity;
+  if (aRank !== bRank) return aRank - bRank;
+  return (b.rating ?? 0) - (a.rating ?? 0);
+});
 ```
 
-In the query function (~line 115-123), apply dynamic status:
-
+**After**:
 ```typescript
-queryFn: async () => {
-  const { data, error } = await supabase
-    .from('tournaments')
-    .select('*')
-    .order('start_date', { ascending: false });
-  
-  if (error) throw error;
-  return (data || []).map(t => ({
-    ...t,
-    status: applyDynamicStatus(t).status
-  })) as Tournament[];
-},
+const sorted = [...athletes].sort((a, b) => {
+  // Primary sort: rating (higher = better)
+  const ratingDiff = (b.rating ?? 70) - (a.rating ?? 70);
+  if (Math.abs(ratingDiff) >= 0.5) return ratingDiff;
+  // Tiebreaker: world rank (lower = better)
+  const aRank = a.worldRank ?? Infinity;
+  const bRank = b.worldRank ?? Infinity;
+  return aRank - bRank;
+});
 ```
 
-This is a 2-line change (1 import + status mapping). Beta Testing 2 will immediately show as "finished" + "Settled" since it has `settled_at` set.
+This single change ensures field rank #1 always goes to the strongest athlete by rating, and the weight ladder aligns with the probability output. After deploying, you'll need to regenerate odds for affected markets.
 
