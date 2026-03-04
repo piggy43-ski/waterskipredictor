@@ -60,6 +60,7 @@ interface MatchedParticipant extends ParsedParticipant {
   matchRejected?: boolean;
   originalMatchedAthlete?: MatchedParticipant['matchedAthlete']; // Store original for undo
   alsoAddRejectedAthlete?: boolean; // Also add the rejected athlete to tournament
+  newAthleteRating?: number; // Custom overall rating for new athlete (default 55)
 }
 
 export default function TournamentEntries() {
@@ -350,6 +351,17 @@ export default function TournamentEntries() {
       }
 
       const deduplicated = [...athleteMap.values(), ...unmatched];
+
+      // Post-processing: remove alternatives that are already primary matches
+      const claimedAthleteIds = new Set(
+        deduplicated.filter(m => m.matchedAthlete && m.confidence >= 0.7).map(m => m.matchedAthlete!.id)
+      );
+      for (const m of deduplicated) {
+        if (m.alternatives) {
+          m.alternatives = m.alternatives.filter(alt => !claimedAthleteIds.has(alt.id));
+        }
+      }
+
       setMatchedParticipants(deduplicated);
       setShowPreviewDialog(true);
       
@@ -365,13 +377,15 @@ export default function TournamentEntries() {
   };
 
   // Handle updating new athlete fields for unmatched participants
-  const handleUpdateNewAthlete = (participantIdx: number, field: 'country' | 'gender' | 'create' | 'alsoAddRejected', value: any) => {
+  const handleUpdateNewAthlete = (participantIdx: number, field: 'country' | 'gender' | 'create' | 'alsoAddRejected' | 'rating', value: any) => {
     const updated = [...matchedParticipants];
     const p = updated[participantIdx];
     if (field === 'country') {
       p.newAthleteCountry = value;
     } else if (field === 'gender') {
       p.newAthleteGender = value;
+    } else if (field === 'rating') {
+      p.newAthleteRating = Number(value) || 55;
     } else if (field === 'create') {
       p.createNewAthlete = value;
       // Auto-select if creating
@@ -438,10 +452,10 @@ export default function TournamentEntries() {
             federation: 'Unknown',
             year_of_birth: 2000, // Default
             disciplines: [uploadDiscipline],
-            // LOW ratings for unranked athletes
-            current_rating_slalom: uploadDiscipline === 'slalom' ? 55 : null,
-            current_rating_trick: uploadDiscipline === 'trick' ? 55 : null,
-            current_rating_jump: uploadDiscipline === 'jump' ? 55 : null,
+            // Use custom rating or default to 55 for unranked athletes
+            current_rating_slalom: uploadDiscipline === 'slalom' ? (p.newAthleteRating ?? 55) : null,
+            current_rating_trick: uploadDiscipline === 'trick' ? (p.newAthleteRating ?? 55) : null,
+            current_rating_jump: uploadDiscipline === 'jump' ? (p.newAthleteRating ?? 55) : null,
             // No ranking (null = unranked)
             current_rank_slalom: null,
             current_rank_trick: null,
@@ -460,7 +474,7 @@ export default function TournamentEntries() {
           gender: newAthlete.gender,
           disciplines: newAthlete.disciplines || [],
           rankings: {},
-          ratings: { [uploadDiscipline]: 55 }
+          ratings: { [uploadDiscipline]: p.newAthleteRating ?? 55 }
         };
         p.selectedDisciplines = [uploadDiscipline];
         p.selected = true;
@@ -1644,7 +1658,7 @@ function ParticipantMatchRow({
   onToggle: () => void;
   onToggleDiscipline: (discipline: string) => void;
   onOverrideRatingChange: (discipline: string, value: string) => void;
-  onUpdateNewAthlete: (field: 'country' | 'gender' | 'create' | 'alsoAddRejected', value: any) => void;
+  onUpdateNewAthlete: (field: 'country' | 'gender' | 'create' | 'alsoAddRejected' | 'rating', value: any) => void;
   onSelectAlternative: (id: string) => void;
   onRejectMatch: () => void;
   onUndoRejectMatch: () => void;
@@ -1807,6 +1821,18 @@ function ParticipantMatchRow({
                     <SelectItem value="female">Female</SelectItem>
                   </SelectContent>
                 </Select>
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs">Overall</Label>
+                  <Input
+                    type="number"
+                    min={30}
+                    max={100}
+                    placeholder="55"
+                    value={participant.newAthleteRating ?? ''}
+                    onChange={(e) => onUpdateNewAthlete('rating', e.target.value)}
+                    className="h-7 w-16 text-xs"
+                  />
+                </div>
                 <div className="flex items-center gap-1">
                   <Checkbox
                     id={`create-${participant.name}`}
