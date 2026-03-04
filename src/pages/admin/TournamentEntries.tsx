@@ -441,10 +441,10 @@ export default function TournamentEntries() {
             federation: 'Unknown',
             year_of_birth: 2000, // Default
             disciplines: [uploadDiscipline],
-            // LOW ratings for unranked athletes
-            current_rating_slalom: uploadDiscipline === 'slalom' ? 55 : null,
-            current_rating_trick: uploadDiscipline === 'trick' ? 55 : null,
-            current_rating_jump: uploadDiscipline === 'jump' ? 55 : null,
+            // Use custom rating or default to 55 for unranked athletes
+            current_rating_slalom: uploadDiscipline === 'slalom' ? (p.newAthleteRating ?? 55) : null,
+            current_rating_trick: uploadDiscipline === 'trick' ? (p.newAthleteRating ?? 55) : null,
+            current_rating_jump: uploadDiscipline === 'jump' ? (p.newAthleteRating ?? 55) : null,
             // No ranking (null = unranked)
             current_rank_slalom: null,
             current_rank_trick: null,
