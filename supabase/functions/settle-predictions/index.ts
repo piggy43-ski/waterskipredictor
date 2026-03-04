@@ -513,6 +513,7 @@ Deno.serve(async (req) => {
             }
 
             result.settled_predictions += 1;
+            settledPredictionIds.add(prediction.id);
 
             // Only credit wallet for SINGLE bets, not parlay legs
             if (!isPartOfParlay && payoutAmount > 0) {
