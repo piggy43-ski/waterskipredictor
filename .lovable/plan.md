@@ -1,36 +1,38 @@
 
 
-# Skip AI Preview Dialog — Auto-Add Matched Athletes on Parse
+# Fix: Admin Tournaments Page Not Showing Dynamic Status
 
 ## Problem
-Every time the user hits "Parse", it opens a review dialog with suggestions, match alternatives, and manual selection. The user wants to skip this and directly add all successfully matched athletes.
+The admin `/admin/tournaments` page displays the raw `status` column from the database instead of computing it dynamically. The `tournamentStatus.ts` utility (which checks `settled_at` first) is only used in the user-facing Tournaments page, not the admin page.
 
-## Plan
+"Beta Testing" works because its DB status was manually set to `finished`. "Beta Testing 2" still has `status = 'upcoming'` in the DB even though `settled_at` is set.
 
-### File: `src/pages/admin/TournamentEntries.tsx`
+## Fix
 
-Modify `handleParseFiles` (line 253) so that after matching participants to athletes, instead of opening the preview dialog, it:
+**File: `src/pages/admin/Tournaments.tsx`**
 
-1. Takes all participants with a high-confidence match (`confidence >= 0.7` and `matchedAthlete` exists)
-2. Auto-sets `selected = true` and `selectedDisciplines = [uploadDiscipline]` on each
-3. Calls `addAIEntriesMutation.mutate(...)` directly with these auto-selected participants
-4. Shows a toast summarizing results: "Added X athletes, Y unmatched (skipped)"
-5. Skips opening `showPreviewDialog` entirely
+Import `applyDynamicStatus` and apply it when mapping query results:
 
-Unmatched participants (no match or low confidence) are simply skipped with a warning toast listing their names so the admin knows who wasn't added.
-
-### Changes (lines ~365-369)
-Replace:
 ```typescript
-setMatchedParticipants(deduplicated);
-setShowPreviewDialog(true);
-toast.success(`Found ${data.participants.length} participants, matched ${matchedCount}`);
+import { applyDynamicStatus } from '@/utils/tournamentStatus';
 ```
 
-With logic that:
-- Filters deduplicated to those with `matchedAthlete && confidence >= 0.7`
-- Sets `selected = true` and `selectedDisciplines = [uploadDiscipline]` on each
-- Calls `addAIEntriesMutation.mutate(autoSelected)`
-- If there are unmatched names, shows a warning toast listing them
-- Does NOT open the preview dialog
+In the query function (~line 115-123), apply dynamic status:
+
+```typescript
+queryFn: async () => {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('*')
+    .order('start_date', { ascending: false });
+  
+  if (error) throw error;
+  return (data || []).map(t => ({
+    ...t,
+    status: applyDynamicStatus(t).status
+  })) as Tournament[];
+},
+```
+
+This is a 2-line change (1 import + status mapping). Beta Testing 2 will immediately show as "finished" + "Settled" since it has `settled_at` set.
 

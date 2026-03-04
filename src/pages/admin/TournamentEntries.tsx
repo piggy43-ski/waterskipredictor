@@ -362,11 +362,25 @@ export default function TournamentEntries() {
         }
       }
 
-      setMatchedParticipants(deduplicated);
-      setShowPreviewDialog(true);
+      // Auto-add high-confidence matches directly, skip preview dialog
+      const autoSelected = deduplicated
+        .filter(p => p.matchedAthlete && p.confidence >= 0.7)
+        .map(p => ({ ...p, selected: true, selectedDisciplines: [uploadDiscipline] }));
       
-      const matchedCount = deduplicated.filter(m => m.matchedAthlete).length;
-      toast.success(`Found ${data.participants.length} participants, matched ${matchedCount} to existing athletes`);
+      const unmatchedNames = deduplicated
+        .filter(p => !p.matchedAthlete || p.confidence < 0.7)
+        .map(p => p.name);
+
+      if (autoSelected.length > 0) {
+        addAIEntriesMutation.mutate(autoSelected);
+        toast.success(`Auto-added ${autoSelected.length} matched athletes`);
+      } else {
+        toast.warning('No high-confidence matches found');
+      }
+
+      if (unmatchedNames.length > 0) {
+        toast.warning(`Skipped ${unmatchedNames.length} unmatched: ${unmatchedNames.join(', ')}`);
+      }
 
     } catch (error) {
       console.error('Parse error:', error);
