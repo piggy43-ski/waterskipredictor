@@ -1,50 +1,71 @@
 
 
-# John Horton (BallOfSpray) — Wallet Audit
+## Bug Analysis: Creator Reward Calculation
 
-## Current State
-- **Wallet**: earned_tokens = 1,398, purchased_tokens = 0, **total = 1,398**
-- **Purchase history**: 1x Starter pack ($25, 2,500 tokens)
+### Root Cause
 
-## Full Ledger Trace
+The `stripe-webhook` edge function calculates creator rewards **on USD spent**, then converts back to tokens — instead of directly computing **% of purchased tokens**.
 
-| # | Event | Amount | Running Balance |
-|---|-------|--------|-----------------|
-| 1 | Stripe purchase (Starter) | +2,500 | 2,500 |
-| 2 | Beta launch bonus | +100 | 2,600 |
-| 3-9 | BT1 bets placed (7 entries) | -2,510 | 90 |
-| 10 | Won Smith Nate (slalom highest) | +500 | 590 |
-| 11 | Won Ross Charlie (slalom winner) | +750 | 1,340 |
-| 12 | Won Poland Joel (jump winner) | +1,100 | 2,440 |
-| 13 | BT2 airdrop bonus | +100 | 2,540 |
-| 14-20 | BT2 single bets placed (7 entries) | -2,000 | 540 |
-| 21 | BT2 parlay placed (5 legs) | -1,000 | -460 |
+**Current flow (broken):**
+```text
+Line 140: referrerRewardValue = purchaseAmountUsd × referrer_reward_pct
+           $55 × 0.20 = $11.00   (USD, not tokens!)
 
-Wait — that gives **-460**, which is impossible. But the wallet shows 1,398.
+Line 215: referrerTokens = floor($11.00 × 100) = 1,100 tokens
+```
 
-The issue: the `balance_after` in token_transactions tells the real story. The podium bet (BT1, -10 stake) was voided and refunded (+10). And looking at balance_after progression, the transactions are consistent up to 2,398 after the last recorded BT2 bet. Then the wallet dropped to 1,398 from the **unrecorded** parlay deduction (-1,000).
+But the intent of "20% tokens" is:
+```text
+7,500 tokens × 0.20 = 1,500 tokens
+17,500 tokens × 0.20 = 3,500 tokens
+```
 
-Let me reconcile using the actual `balance_after` trail from transactions:
+The existing redemption records show `referrer_reward_value: 11` and `23` — these are USD values, not token counts. The creator was credited 1,100 and 2,300 tokens instead of the correct 1,500 and 3,500.
 
-| Last recorded balance_after | 2,398 |
-|---|---|
-| Unrecorded BT2 parlay deduction | -1,000 |
-| **Expected wallet** | **1,398** |
-| **Actual wallet** | **1,398** ✓ |
+### Second Bug: `owner_user_id` is NULL
 
-## Verdict: Wallet Balance is Correct
+All three referral codes (`BALLER`, `HANNAH`, `KENNA`) have `owner_user_id = NULL`. This causes "Creator: Unknown" in the admin UI and means the auto-credit logic on line 213 (`if referralCode.owner_user_id`) is **skipped** — so no tokens were actually credited to anyone anyway. The redemption records exist but the wallet credits never happened.
 
-The current balance of **1,398 tokens is mathematically correct**. All BT2 bets legitimately lost — no payouts are owed.
+Found matching users:
+- `HANNAH` → `hannahstopnicki` (id: `5b9f6c93...`)
+- `KENNA` → `Kenna` (id: `ba5f8c47...`)
+- `BALLER` → needs manual identification
 
-## Issues Found (Non-Balance)
+### Fix Plan
 
-1. **Critchley Jack bet_slip is still PENDING** (id: `53348094...`, 100 token stake on jump open_men WINNER). All other BT2 bets on this same market were settled as LOST. This bet was missed by the settlement process. It should be settled as LOST. No balance change needed since the stake was already deducted.
+#### 1. Fix the formula in `stripe-webhook/index.ts`
 
-2. **Missing token_transaction for BT2 parlay** (-1,000 deduction). The wallet was correctly debited but no `token_transactions` record exists. This creates an audit gap — the ledger page won't show this entry.
+Replace the USD-based calculation with a direct token percentage:
 
-## Proposed Fixes
+```typescript
+// OLD (broken):
+const referrerRewardValue = purchaseAmountUsd * referralCode.referrer_reward_pct;
+// ...
+const referrerTokens = Math.floor(referrerRewardValue * 100);
 
-1. **Settle the Critchley Jack bet_slip** to LOST (status update + settled_at timestamp)
-2. **Insert the missing parlay transaction** into `token_transactions` to restore ledger completeness
-3. No wallet balance change needed — 1,398 is correct
+// NEW (correct):
+const referrerTokens = Math.round(baseTokens * referralCode.referrer_reward_pct);
+const referrerRewardValue = referrerTokens; // store as tokens directly
+```
+
+Also add a `pctToDecimal` safety helper to handle if someone stores 20 instead of 0.20.
+
+#### 2. Update `owner_user_id` on referral codes
+
+Set the correct owner for HANNAH and KENNA. BALLER needs you to tell me which user owns it.
+
+#### 3. Backfill existing redemption records
+
+- Recalculate `referrer_reward_value` as `round(purchase_amount_tokens × commission_rate)` for each existing redemption
+- Credit the correct token difference to each creator's wallet (if owner is set)
+- Log corrective `token_transactions`
+
+#### 4. Update the redemption record schema
+
+Change the `referrer_reward_value` column semantics to store token count (not USD). Update the admin Referrals page display accordingly.
+
+### Questions Before Implementing
+
+I need to know:
+- **Who owns the BALLER code?** (Which user should receive the creator rewards?)
 
