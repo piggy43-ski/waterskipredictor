@@ -212,6 +212,28 @@ export function ParlayBuilder({
     setIsSubmitting(true);
 
     try {
+      // Validate via backend before placing
+      const firstLeg = completeLegs[0];
+      const firstAthleteId = firstLeg.winner?.athlete_id || firstLeg.podium.first?.athlete_id || '';
+      const firstMarketId = firstLeg.winner?.market_id || firstLeg.podium.first?.market_id || '';
+      
+      const { data: validation, error: valError } = await supabase.functions.invoke('validate-bet', {
+        body: {
+          userId,
+          tournamentId: tournament.id,
+          marketId: firstMarketId,
+          athleteId: firstAthleteId,
+          stakeAmount,
+          currentOdds: multiplier,
+          marketType: 'WINNER'
+        }
+      });
+
+      if (valError || !validation?.allowed) {
+        toast.error(validation?.reason || 'Entry validation failed. Please try again.');
+        setIsSubmitting(false);
+        return;
+      }
       const potentialPayout = Math.floor(stakeAmount * multiplier);
 
       // Create entry record (stored in bet_slips table)
