@@ -293,6 +293,39 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
         [athleteId]: numValue,
       },
     }));
+
+    // Auto-update multiplier unless manually overridden
+    const overrideKey = `${groupKey}:${athleteId}`;
+    if (!manualMultOverrides.has(overrideKey)) {
+      setLocalMultipliers(prev => ({
+        ...prev,
+        [groupKey]: {
+          ...prev[groupKey],
+          [athleteId]: calculateMultiplier(numValue),
+        },
+      }));
+    }
+  };
+
+  const handleMultChange = (groupKey: string, athleteId: string, value: string) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return;
+    const clamped = Math.min(25, Math.max(1.10, numValue));
+    
+    setLocalMultipliers(prev => ({
+      ...prev,
+      [groupKey]: {
+        ...prev[groupKey],
+        [athleteId]: clamped,
+      },
+    }));
+
+    // Mark as manually overridden
+    setManualMultOverrides(prev => {
+      const next = new Set(prev);
+      next.add(`${groupKey}:${athleteId}`);
+      return next;
+    });
   };
 
   // Calculate local implied sum for a group
