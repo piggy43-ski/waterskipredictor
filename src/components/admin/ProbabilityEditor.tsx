@@ -102,6 +102,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
           normalized_probability,
           blended_probability,
           athlete_rank,
+          final_decimal_odds,
           athletes!inner(id, name, current_rank_slalom, current_rank_trick, current_rank_jump)
         `)
         .in('market_id', marketIds)
