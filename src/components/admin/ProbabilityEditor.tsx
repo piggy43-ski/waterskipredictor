@@ -588,10 +588,10 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
                             </Tooltip>
                           </TooltipProvider>
                           <div className="text-center text-muted-foreground">
-                            {(localPodium * 100).toFixed(1)}%
+                            {(calculatePodiumProb(localP) * 100).toFixed(1)}%
                           </div>
                           <div className="text-center text-muted-foreground">
-                            {(localHighest * 100).toFixed(1)}%
+                            {(calculateHighestProb(localP) * 100).toFixed(1)}%
                           </div>
                         </div>
                       );
