@@ -385,7 +385,14 @@ Deno.serve(async (req) => {
       
       try {
         // Get predictions for this selection from our pre-fetched batch
-        const predictions = predictionsBySelection.get(selIdString) || [];
+        // Also check for podium variants: if processing selection "abc-123",
+        // also grab predictions stored under "abc-123-podium"
+        const predictions = [
+          ...(predictionsBySelection.get(selIdString) || []),
+          ...(selIdString.endsWith('-podium') 
+            ? [] 
+            : (predictionsBySelection.get(`${selIdString}-podium`) || [])),
+        ];
         if (predictions.length === 0) {
           console.log(`⚠️  No pending predictions for selection ${selection_id}`);
           result.debug_info!.selection_ids_without_predictions.push(selIdString);
