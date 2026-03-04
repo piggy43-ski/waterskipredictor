@@ -629,8 +629,8 @@ export default function TournamentEntries() {
       if (entriesError) throw entriesError;
 
       // Group entries by discipline and gender to create markets
-      const disciplineGenderGroups = new Map<string, typeof entriesToAdd>();
-      for (const entry of entriesToAdd) {
+      const disciplineGenderGroups = new Map<string, typeof uniqueEntries>();
+      for (const entry of uniqueEntries) {
         const athlete = refreshedAthletes?.find(a => a.id === entry.athlete_id);
         const key = `${entry.discipline}-${athlete?.gender}`;
         if (!disciplineGenderGroups.has(key)) {
