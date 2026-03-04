@@ -553,6 +553,7 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
           const localSum = getLocalImpliedSum(groupKey, group);
           const localStatus = getLocalStatus(localSum);
           const probs = localProbs[groupKey] || {};
+          const mults = localMultipliers[groupKey] || {};
 
           return (
             <Collapsible 
