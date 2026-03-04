@@ -316,7 +316,7 @@ export default function TournamentEntries() {
           overrideRatings: {}, // Start with no overrides
           confidence,
           alternatives,
-          selected: confidence >= 0.7 && !!match,
+          selected: false, // Never auto-select — require explicit opt-in
           // Initialize new athlete fields for unmatched
           createNewAthlete: false,
           newAthleteCountry: p.country || '',
