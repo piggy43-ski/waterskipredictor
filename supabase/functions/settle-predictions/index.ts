@@ -348,6 +348,47 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Fallback fetch: exact prediction overrides may reference legacy/synthetic selection_ids
+    // that are not present in current market selections. Fetch them explicitly by prediction_id.
+    if (prediction_overrides && prediction_overrides.length > 0) {
+      const overridePredictionIds = [...new Set(prediction_overrides.map(po => String(po.prediction_id)))];
+      console.log(`🔍 Fetching ${overridePredictionIds.length} override predictions by ID (fallback)...`);
+
+      for (let i = 0; i < overridePredictionIds.length; i += BATCH_SIZE) {
+        const batch = overridePredictionIds.slice(i, i + BATCH_SIZE);
+
+        const { data: overrideBatchData, error: overrideBatchError } = await supabaseClient
+          .from('predictions')
+          .select('*, bet_slip:bet_slips!bet_slip_id(*)')
+          .in('id', batch)
+          .eq('status', 'PENDING');
+
+        if (overrideBatchError) {
+          console.error(`❌ Error fetching override predictions batch ${Math.floor(i / BATCH_SIZE) + 1}:`, overrideBatchError);
+          return new Response(
+            JSON.stringify({
+              error: `Failed to fetch override predictions: ${overrideBatchError.message}`,
+              debug_info: {
+                batch_index: Math.floor(i / BATCH_SIZE),
+                batch_size: batch.length,
+                error_details: overrideBatchError,
+              }
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (overrideBatchData && overrideBatchData.length > 0) {
+          const existingIds = new Set(allPredictions.map(p => String(p.id)));
+          overrideBatchData.forEach(pred => {
+            if (!existingIds.has(String(pred.id))) {
+              allPredictions.push(pred);
+            }
+          });
+        }
+      }
+    }
+
     console.log(`✅ Found ${allPredictions?.length || 0} pending predictions total`);
     result.debug_info!.predictions_found = allPredictions?.length || 0;
 
@@ -379,8 +420,22 @@ Deno.serve(async (req) => {
       console.log(`📋 Tracking ${betSlipsToSettle.size} bet_slips for settlement`);
     }
 
-    // Process each selection
-    for (const { selection_id, result: selectionResult } of selections) {
+    // Process each selection. Include fallback synthetic selections discovered via override fetch.
+    const providedSelectionIds = new Set(selections.map(s => String(s.selection_id)));
+    const syntheticSelections: SelectionWithContext[] = [];
+    for (const selId of predictionsBySelection.keys()) {
+      if (!providedSelectionIds.has(selId)) {
+        syntheticSelections.push({ selection_id: selId, result: 'lost' });
+      }
+    }
+
+    if (syntheticSelections.length > 0) {
+      console.log(`🧩 Added ${syntheticSelections.length} synthetic selection contexts for legacy/override predictions`);
+    }
+
+    const selectionsToProcess = [...selections, ...syntheticSelections];
+
+    for (const { selection_id, result: selectionResult } of selectionsToProcess) {
       const selIdString = String(selection_id);
       
       try {
