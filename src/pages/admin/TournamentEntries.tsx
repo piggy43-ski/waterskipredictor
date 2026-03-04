@@ -418,9 +418,13 @@ export default function TournamentEntries() {
     const updated = [...matchedParticipants];
     const p = updated[participantIdx];
     p.matchRejected = false;
-    // Clear create new athlete if it was set
     p.createNewAthlete = false;
-    // Restore selection with upload discipline
+    p.alsoAddRejectedAthlete = false;
+    // Restore matchedAthlete from original
+    if (p.originalMatchedAthlete) {
+      p.matchedAthlete = p.originalMatchedAthlete;
+      p.originalMatchedAthlete = undefined;
+    }
     if (p.matchedAthlete && uploadDiscipline) {
       p.selectedDisciplines = [uploadDiscipline];
       p.selected = p.confidence >= 0.7;
