@@ -65,6 +65,7 @@ type SettlementPreview = {
   affected_predictions: number;
   won_count: number;
   lost_count: number;
+  unique_entries: number;
 };
 
 type ParsedAthlete = {
@@ -983,8 +984,8 @@ export default function TournamentSettlement() {
           .from('bet_slips')
           .select('id, total_stake_tokens, total_odds_decimal, potential_payout_tokens, leg_count, status')
           .eq('tournament_id', selectedTournament)
-          .eq('status', 'pending')
-          .gt('leg_count', 1);
+          .eq('status', 'PENDING')
+          .eq('type', 'parlay');
         
         if (parlaySlips && parlaySlips.length > 0) {
           for (const slip of parlaySlips) {
@@ -1014,13 +1015,16 @@ export default function TournamentSettlement() {
             .select('id, potential_payout_tokens, leg_count')
             .in('id', zeroPayoutWinners.map(p => p.bet_slip_id).filter(Boolean) as string[])
             .eq('leg_count', 1)
-            .eq('status', 'pending');
+            .eq('status', 'PENDING');
           
           if (singleSlips) {
             totalPayout += singleSlips.reduce((sum, s) => sum + s.potential_payout_tokens, 0);
           }
         }
       }
+
+      // Count unique entries (bet_slips) from predictions
+      const uniqueEntryIds = new Set(predictions?.map(p => p.bet_slip_id).filter(Boolean) || []);
 
       previews.push({
         market_id: market.id,
@@ -1037,6 +1041,7 @@ export default function TournamentSettlement() {
         affected_predictions: predictions?.length || 0,
         won_count: winningPredictionIds.length,
         lost_count: losingPredictionIds.length,
+        unique_entries: uniqueEntryIds.size,
       });
     }
 
@@ -2015,11 +2020,18 @@ export default function TournamentSettlement() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-4 gap-3 pt-3 border-t">
+                    <div className="grid grid-cols-5 gap-3 pt-3 border-t">
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                           <Users className="w-4 h-4" />
-                          <span className="text-xs">Predictions</span>
+                          <span className="text-xs">Entries</span>
+                        </div>
+                        <p className="text-lg font-bold">{preview.unique_entries}</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                          <Users className="w-4 h-4" />
+                          <span className="text-xs">Legs</span>
                         </div>
                         <p className="text-lg font-bold">{preview.affected_predictions}</p>
                       </div>
