@@ -1010,15 +1010,84 @@ export default function TournamentEntries() {
 
   const deleteEntryMutation = useMutation({
     mutationFn: async (entryId: string) => {
+      // 1. Look up entry details before deleting
+      const { data: entry, error: lookupError } = await supabase
+        .from('tournament_entries')
+        .select('athlete_id, discipline, tournament_id, athletes(gender)')
+        .eq('id', entryId)
+        .single();
+      if (lookupError || !entry) throw new Error('Entry not found');
+
+      const athleteId = entry.athlete_id;
+      const discipline = entry.discipline;
+      const tournamentId = entry.tournament_id;
+      const gender = (entry.athletes as any)?.gender;
+      const category = gender === 'male' ? 'open_men' : 'open_women';
+
+      // 2. Find all markets for this tournament + discipline + category
+      const { data: markets } = await supabase
+        .from('markets')
+        .select('id')
+        .eq('tournament_id', tournamentId)
+        .eq('discipline', discipline)
+        .eq('category', category);
+
+      const marketIds = (markets || []).map(m => m.id);
+
+      // 3. Cascade delete from selections, market_odds, overrides for this athlete in those markets
+      if (marketIds.length > 0) {
+        await supabase
+          .from('market_probability_overrides')
+          .delete()
+          .in('market_id', marketIds)
+          .eq('athlete_id', athleteId);
+
+        await supabase
+          .from('market_multiplier_overrides')
+          .delete()
+          .in('market_id', marketIds)
+          .eq('athlete_id', athleteId);
+
+        await supabase
+          .from('market_odds')
+          .delete()
+          .in('market_id', marketIds)
+          .eq('athlete_id', athleteId);
+
+        await supabase
+          .from('selections')
+          .delete()
+          .in('market_id', marketIds)
+          .eq('athlete_id', athleteId);
+      }
+
+      // 4. Delete the tournament entry itself
       const { error } = await supabase
         .from('tournament_entries')
         .delete()
         .eq('id', entryId);
       if (error) throw error;
+
+      // 5. Regenerate odds for affected markets
+      for (const marketId of marketIds) {
+        try {
+          await supabase.functions.invoke('generate-market-odds', {
+            body: { market_id: marketId },
+          });
+        } catch (err) {
+          console.warn(`Odds regen failed for market ${marketId}:`, err);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
-      toast.success('Entry removed');
+      queryClient.invalidateQueries({ queryKey: ['markets'] });
+      queryClient.invalidateQueries({ queryKey: ['selections'] });
+      queryClient.invalidateQueries({ queryKey: ['tournament-markets-prob'] });
+      queryClient.invalidateQueries({ queryKey: ['all-market-odds-prob'] });
+      queryClient.invalidateQueries({ queryKey: ['all-selections-prob'] });
+      queryClient.invalidateQueries({ queryKey: ['all-prob-overrides'] });
+      toast.success('Entry removed & markets updated');
     },
     onError: (error: Error) => {
       toast.error(`Failed to remove entry: ${error.message}`);

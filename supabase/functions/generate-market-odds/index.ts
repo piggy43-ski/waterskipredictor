@@ -571,6 +571,26 @@ function deriveMultipliersCalibrated(
     if (bestResult.status === 'NEEDS_REVIEW') {
       bestResult.status = 'WARNING';
     }
+    
+    // Final monotonic enforcement - after ALL calibration and scaling
+    // Ensures rank 1 always has highest probability (lowest multiplier)
+    const sorted = athleteIds
+      .map((id, i) => ({ id, idx: i, fieldRank: fieldRanks.get(id) || 99, mult: bestResult!.multipliers[i] }))
+      .sort((a, b) => a.fieldRank - b.fieldRank);
+    
+    let monotonicFixed = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].mult < sorted[i - 1].mult) {
+        sorted[i - 1].mult = sorted[i].mult; // Pull higher-rank down to match
+        monotonicFixed++;
+      }
+    }
+    if (monotonicFixed > 0) {
+      sorted.forEach(s => { bestResult!.multipliers[s.idx] = s.mult; });
+      bestResult.impliedSum = bestResult.multipliers.reduce((s, m) => s + (1 / m), 0);
+      console.log(`[CALIBRATION] Monotonic enforcement fixed ${monotonicFixed} inversions, new implied_sum=${bestResult.impliedSum.toFixed(4)}`);
+    }
+    
     console.log(`[CALIBRATION] Final: implied_sum=${bestResult.impliedSum.toFixed(4)}, Target: ${target.min.toFixed(2)}-${target.max.toFixed(2)}, Status: ${bestResult.status}`);
   }
   
