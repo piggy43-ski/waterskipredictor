@@ -10,11 +10,12 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Download, Search, Users, DollarSign, Gift, TrendingUp, Copy, Check, Pencil, Info } from 'lucide-react';
+import { Plus, Download, Search, Users, DollarSign, Gift, TrendingUp, Copy, Check, Pencil, Info, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -101,6 +102,7 @@ const Referrals = () => {
   const [formRewardType, setFormRewardType] = useState<'tokens' | 'cash'>('tokens');
   const [formMaxUses, setFormMaxUses] = useState('');
   const [formNotes, setFormNotes] = useState('');
+  const [formOwnerUserId, setFormOwnerUserId] = useState('');
   
   // Per-package bonus form state
   const [formStarterBonus, setFormStarterBonus] = useState('15');
@@ -235,6 +237,21 @@ const Referrals = () => {
     }
   });
 
+  // Delete code mutation
+  const deleteCodeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('referral_codes').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-referral-codes'] });
+      toast({ title: 'Referral code deleted' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error deleting code', description: error.message, variant: 'destructive' });
+    }
+  });
+
   // Mark payout as paid mutation
   const markPaidMutation = useMutation({
     mutationFn: async (redemptionIds: string[]) => {
@@ -257,6 +274,7 @@ const Referrals = () => {
     setFormRewardType('tokens');
     setFormMaxUses('');
     setFormNotes('');
+    setFormOwnerUserId('');
     setFormStarterBonus('15');
     setFormStandardBonus('50');
     setFormProBonus('75');
@@ -272,6 +290,7 @@ const Referrals = () => {
     setFormRewardType(code.reward_type);
     setFormMaxUses(code.max_uses_total ? String(code.max_uses_total) : '');
     setFormNotes(code.notes || '');
+    setFormOwnerUserId(code.owner_user_id || '');
     // Per-package bonuses (convert decimal to percentage)
     setFormStarterBonus(String((code.starter_bonus_pct || 0.15) * 100));
     setFormStandardBonus(String((code.standard_bonus_pct || 0.50) * 100));
@@ -289,7 +308,7 @@ const Referrals = () => {
   };
 
   const handleSubmit = () => {
-    const data = {
+    const data: any = {
       code: formCode.toUpperCase().trim(),
       type: formType,
       referrer_reward_pct: parseFloat(formRewardPct),
@@ -297,6 +316,7 @@ const Referrals = () => {
       max_uses_total: formMaxUses ? parseInt(formMaxUses) : null,
       notes: formNotes || null,
       created_by_admin: true,
+      owner_user_id: formOwnerUserId.trim() || null,
       // Convert percentage to decimal
       starter_bonus_pct: parseFloat(formStarterBonus) / 100,
       standard_bonus_pct: parseFloat(formStandardBonus) / 100,
@@ -520,6 +540,16 @@ const Referrals = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <Label>Owner User ID (optional)</Label>
+                  <Input 
+                    value={formOwnerUserId} 
+                    onChange={e => setFormOwnerUserId(e.target.value)}
+                    placeholder="Paste user UUID to link creator account"
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">Links this code to a user for automatic commission payouts</p>
+                </div>
+                <div className="space-y-2">
                   <Label>Notes (optional)</Label>
                   <Textarea 
                     value={formNotes} 
@@ -709,13 +739,39 @@ const Referrals = () => {
                               />
                             </TableCell>
                             <TableCell>
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => openEditDialog(code)}
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => openEditDialog(code)}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete referral code "{code.code}"?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will permanently remove this code. Existing redemptions will be preserved but the code will no longer be usable.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => deleteCodeMutation.mutate(code.id)}
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      >
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );

@@ -24,6 +24,7 @@ interface Transaction {
   balance_after: number;
   description: string;
   metadata?: any;
+  reference_type?: string | null;
   created_at: string;
 }
 
@@ -60,7 +61,7 @@ const Transactions = () => {
 
     const { data, error } = await supabase
       .from('token_transactions')
-      .select('*')
+      .select('id, type, amount, balance_after, description, metadata, reference_type, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(500);
@@ -120,7 +121,9 @@ const Transactions = () => {
 
   const hasActiveFilters = typeFilter !== 'all' || startDate || endDate || minAmount !== '' || maxAmount !== '';
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type: string, referenceType?: string | null) => {
+    if (type === 'bonus' && referenceType === 'referral') return <Gift className="w-5 h-5" />;
+    if (type === 'bonus' && referenceType === 'referral_reward') return <TrendingUp className="w-5 h-5" />;
     switch (type) {
       case 'bet_placed':
         return <Coins className="w-5 h-5" />;
@@ -147,7 +150,23 @@ const Transactions = () => {
     }
   };
 
-  const getTypeBadge = (type: string) => {
+  const getTypeBadge = (type: string, referenceType?: string | null) => {
+    // Referral-specific badges
+    if (type === 'bonus' && referenceType === 'referral') {
+      return (
+        <Badge variant="default" className="text-xs bg-purple-600 text-white">
+          Referral Bonus
+        </Badge>
+      );
+    }
+    if (type === 'bonus' && referenceType === 'referral_reward') {
+      return (
+        <Badge variant="default" className="text-xs bg-purple-600 text-white">
+          Referral Commission
+        </Badge>
+      );
+    }
+
     const config: Record<string, { variant: any; label: string; className?: string }> = {
       bet_placed: { variant: 'secondary', label: 'Entry Placed' },
       bet_won: { variant: 'default', label: 'Correct', className: 'bg-success text-success-foreground' },
@@ -362,11 +381,11 @@ const Transactions = () => {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 flex-1">
                     <div className="mt-1 text-muted-foreground">
-                      {getTypeIcon(transaction.type)}
+                      {getTypeIcon(transaction.type, transaction.reference_type)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        {getTypeBadge(transaction.type)}
+                        {getTypeBadge(transaction.type, transaction.reference_type)}
                       </div>
                       <p className="text-sm font-medium text-foreground mb-1">
                         {transaction.description}
