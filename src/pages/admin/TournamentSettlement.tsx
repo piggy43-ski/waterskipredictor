@@ -66,6 +66,8 @@ type SettlementPreview = {
   won_count: number;
   lost_count: number;
   unique_entries: number;
+  won_entries: number;
+  lost_entries: number;
 };
 
 type ParsedAthlete = {
@@ -1026,6 +1028,29 @@ export default function TournamentSettlement() {
       // Count unique entries (bet_slips) from predictions
       const uniqueEntryIds = new Set(predictions?.map(p => p.bet_slip_id).filter(Boolean) || []);
 
+      // Group predictions by bet_slip_id for entry-level won/lost
+      const predictionsBySlip = new Map<string, string[]>();
+      for (const p of predictions || []) {
+        if (p.bet_slip_id) {
+          if (!predictionsBySlip.has(p.bet_slip_id)) {
+            predictionsBySlip.set(p.bet_slip_id, []);
+          }
+          predictionsBySlip.get(p.bet_slip_id)!.push(p.id);
+        }
+      }
+
+      const winningSet = new Set(winningPredictionIds);
+      const losingSet = new Set(losingPredictionIds);
+      let wonEntries = 0;
+      let lostEntries = 0;
+      for (const [, pIds] of predictionsBySlip) {
+        if (pIds.some(id => losingSet.has(id))) {
+          lostEntries++;
+        } else if (pIds.every(id => winningSet.has(id))) {
+          wonEntries++;
+        }
+      }
+
       previews.push({
         market_id: market.id,
         market_name: market.name,
@@ -1042,6 +1067,8 @@ export default function TournamentSettlement() {
         won_count: winningPredictionIds.length,
         lost_count: losingPredictionIds.length,
         unique_entries: uniqueEntryIds.size,
+        won_entries: wonEntries,
+        lost_entries: lostEntries,
       });
     }
 
@@ -2020,7 +2047,7 @@ export default function TournamentSettlement() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-5 gap-3 pt-3 border-t">
+                    <div className="grid grid-cols-4 gap-3 pt-3 border-t">
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                           <Users className="w-4 h-4" />
@@ -2029,25 +2056,18 @@ export default function TournamentSettlement() {
                         <p className="text-lg font-bold">{preview.unique_entries}</p>
                       </div>
                       <div className="text-center">
-                        <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
-                          <Users className="w-4 h-4" />
-                          <span className="text-xs">Legs</span>
-                        </div>
-                        <p className="text-lg font-bold">{preview.affected_predictions}</p>
-                      </div>
-                      <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-success mb-1">
                           <CheckCircle className="w-4 h-4" />
                           <span className="text-xs">Won</span>
                         </div>
-                        <p className="text-lg font-bold text-success">{preview.won_count}</p>
+                        <p className="text-lg font-bold text-success">{preview.won_entries}</p>
                       </div>
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-destructive mb-1">
                           <X className="w-4 h-4" />
                           <span className="text-xs">Lost</span>
                         </div>
-                        <p className="text-lg font-bold text-destructive">{preview.lost_count}</p>
+                        <p className="text-lg font-bold text-destructive">{preview.lost_entries}</p>
                       </div>
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
