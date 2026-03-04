@@ -10,8 +10,12 @@ export const calculateTournamentStatus = (
   startDatetime?: string,
   endDatetime?: string,
   fallbackStartDate?: string,
-  fallbackEndDate?: string
+  fallbackEndDate?: string,
+  settledAt?: string | null
 ): Tournament['status'] => {
+  // If already settled, it's finished regardless of dates
+  if (settledAt) return 'finished';
+
   // Use UTC time for consistent timezone handling
   const now = new Date().getTime();
   
@@ -43,7 +47,8 @@ export const applyDynamicStatus = (tournament: any): Tournament => {
       tournament.start_datetime, 
       tournament.end_datetime,
       tournament.start_date,
-      tournament.end_date
+      tournament.end_date,
+      tournament.settled_at
     )
   };
 };
