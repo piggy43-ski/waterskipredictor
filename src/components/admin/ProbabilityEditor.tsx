@@ -65,6 +65,8 @@ function calculateMultiplier(prob: number, edgeFactor: number = 0.91): number {
 export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditorProps) {
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [localProbs, setLocalProbs] = useState<Record<string, Record<string, number>>>({});
+  const [localMultipliers, setLocalMultipliers] = useState<Record<string, Record<string, number>>>({});
+  const [manualMultOverrides, setManualMultOverrides] = useState<Set<string>>(new Set()); // tracks which athletes have manual mult edits
   const [lockedPodium, setLockedPodium] = useState<Set<string>>(new Set());
   const [lockedHighest, setLockedHighest] = useState<Set<string>>(new Set());
   const [savingMarket, setSavingMarket] = useState<string | null>(null);
