@@ -351,6 +351,17 @@ export default function TournamentEntries() {
       }
 
       const deduplicated = [...athleteMap.values(), ...unmatched];
+
+      // Post-processing: remove alternatives that are already primary matches
+      const claimedAthleteIds = new Set(
+        deduplicated.filter(m => m.matchedAthlete && m.confidence >= 0.7).map(m => m.matchedAthlete!.id)
+      );
+      for (const m of deduplicated) {
+        if (m.alternatives) {
+          m.alternatives = m.alternatives.filter(alt => !claimedAthleteIds.has(alt.id));
+        }
+      }
+
       setMatchedParticipants(deduplicated);
       setShowPreviewDialog(true);
       
