@@ -196,7 +196,8 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
           const p_auto = o.blended_probability || o.normalized_probability || 0;
           const p_manual = winnerOverrides.get(o.athlete_id);
           const p_winner = p_manual ?? p_auto;
-          const multiplier = selectionsMap.get(o.athlete_id) || calculateMultiplier(p_winner);
+          const calibratedOdds = o.final_decimal_odds;
+          const multiplier = calibratedOdds || selectionsMap.get(o.athlete_id) || calculateMultiplier(p_winner);
           
           const rankField = `current_rank_${discipline}` as keyof typeof athlete;
           
