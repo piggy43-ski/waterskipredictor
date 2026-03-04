@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { Plus, Trash2, Search, Upload, Check, AlertTriangle, X, Loader2, UserPlus, HelpCircle } from 'lucide-react';
@@ -1549,7 +1549,7 @@ export default function TournamentEntries() {
 
       {/* AI Match Preview Dialog */}
       <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogContent className="max-w-4xl h-[90vh] max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               AI Matched Participants
@@ -1558,7 +1558,8 @@ export default function TournamentEntries() {
                 <Badge className="bg-primary">{uploadDiscipline.toUpperCase()}</Badge>
               )}
             </DialogTitle>
-          </DialogHeader>
+           </DialogHeader>
+           <DialogDescription>Review matched athletes and select entries to add</DialogDescription>
           
           <div className="flex flex-wrap gap-4 text-sm mb-4">
             <div className="flex items-center gap-1">
@@ -1626,7 +1627,7 @@ export default function TournamentEntries() {
             );
           })()}
 
-          <ScrollArea className="flex-1 min-h-0">
+          <ScrollArea className="flex-1 min-h-0 h-0">
             <div className="space-y-6">
               {maleParticipants.length > 0 && (
                 <div>
