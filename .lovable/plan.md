@@ -1,61 +1,48 @@
 
-Goal: fix why settlement still leaves exactly 13 pending predictions for “BETA TESTING 2”.
 
-What I found
-- The 13 pending records are all exact-order PODIUM predictions.
-- Their `selection_id` is not a real selection UUID; it is synthetic: `<market_id>-podium`.
-- Current admin preview code fetches pending predictions only with:
-  - `.in('selection_id', market.selections.map(s => s.id))`
-  - so it never fetches `<market_id>-podium` predictions.
-- Because those predictions are excluded from preview, their IDs are missing from `prediction_overrides`, so settlement never receives explicit won/lost outcomes for them.
-- Edge logs confirm this pattern: settlement runs, settles many entries, but repeatedly skips slips whose legs are still pending (those 13).
+# Fix: Settled Tournament Showing as "Upcoming"
 
-Implementation plan
+## Problem
+"BETA TESTING 2" has `settled_at` set (already settled) but its `start_datetime` is today at 08:00 UTC and `end_datetime` is 18:00 UTC. The dynamic status calculator ignores `settled_at` entirely, so depending on the current time it shows as "upcoming" or "live" instead of "finished".
 
-1) Fix admin preview query to include synthetic podium IDs
-- File: `src/pages/admin/TournamentSettlement.tsx`
-- In `calculateSettlementPreview`, when fetching pending predictions for each market:
-  - build `selectionIds = market.selections.map(id)`
-  - if `market.market_type === 'PODIUM'`, add `${market.id}-podium`
-  - query `.in('selection_id', expandedIds)`
-- Result: exact-order podium predictions appear in `winning_prediction_ids` / `losing_prediction_ids`.
+## Root Cause
+`calculateTournamentStatus()` in `src/utils/tournamentStatus.ts` only looks at start/end datetimes. It never checks `settled_at`. A settled tournament should always be "finished".
 
-2) Ensure settlement payload includes podium synthetic selection contexts
-- File: `src/pages/admin/TournamentSettlement.tsx`
-- In `settleMutation` when building `selectionsWithResults`:
-  - keep existing real selections
-  - for PODIUM markets, also append `{ selection_id: `${preview.market_id}-podium`, result: 'lost', actual_results }`
-- This ensures backend can associate actual results context with synthetic IDs.
+## Fix
 
-3) Harden backend selection expansion for legacy/synthetic IDs
-- File: `supabase/functions/settle-predictions/index.ts`
-- Before batch fetch:
-  - map provided real selection IDs -> `market_id` from `selections` table
-  - add `${market_id}-podium` to fetch list
-- This makes backend resilient even if frontend misses some synthetic IDs again.
+**File: `src/utils/tournamentStatus.ts`**
 
-4) Prevent accidental wrong settlement for synthetic predictions without overrides
-- File: `supabase/functions/settle-predictions/index.ts`
-- Current synthetic fallback defaults unmatched IDs to `result: 'lost'`.
-- Change behavior:
-  - if synthetic `-podium` predictions have no explicit override IDs, skip them and return warning/debug details (don’t auto-lose them).
-- This avoids silent incorrect losses in future edge cases.
+Add `settled_at` as a parameter to `calculateTournamentStatus`. If it's set, immediately return `'finished'` before any date comparison:
 
-5) Add clearer debug return payload for admin visibility
-- Return counts/IDs for:
-  - `synthetic_predictions_found`
-  - `synthetic_predictions_settled`
-  - `synthetic_predictions_skipped_no_override`
-- So admin can immediately see why anything remains pending.
+```typescript
+export const calculateTournamentStatus = (
+  startDatetime?: string,
+  endDatetime?: string,
+  fallbackStartDate?: string,
+  fallbackEndDate?: string,
+  settledAt?: string | null
+): Tournament['status'] => {
+  // If already settled, it's finished regardless of dates
+  if (settledAt) return 'finished';
+  
+  // ... rest unchanged
+};
+```
 
-Validation plan (after implementation)
-1. Run Tournament Settlement for “BETA TESTING 2”.
-2. Verify response includes settled synthetic podium predictions.
-3. Run:
-   - `select count(*) from predictions where tournament_name='BETA TESTING 2' and status='PENDING';`
-   - expected result: `0`.
-4. Spot-check 2–3 previously pending bet slips now move out of `PENDING`.
+Update `applyDynamicStatus` to pass `settled_at`:
 
-Technical note
-- No database schema or RLS migration is needed for this fix.
-- This is a query/payload/edge-function logic alignment issue between market-selection IDs and synthetic exact-order podium IDs.
+```typescript
+export const applyDynamicStatus = (tournament: any): Tournament => ({
+  ...tournament,
+  status: calculateTournamentStatus(
+    tournament.start_datetime,
+    tournament.end_datetime,
+    tournament.start_date,
+    tournament.end_date,
+    tournament.settled_at
+  )
+});
+```
+
+This is a one-file, two-line change. The tournament will immediately show as "Finished" since it has `settled_at` set.
+
