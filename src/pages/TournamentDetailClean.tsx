@@ -41,9 +41,13 @@ const TournamentDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast } = useToast();
   const { isAdmin } = useIsAdmin();
+  
+  // Determine initial discipline from URL query param
+  const initialDiscipline = searchParams.get('discipline') || 'slalom';
   
   // Get highlighted athletes from "Predict Again" navigation
   const predictAgainAthletes: string[] = location.state?.predictAgainAthletes || location.state?.betAgainAthletes || [];
