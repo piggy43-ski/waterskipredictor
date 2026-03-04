@@ -1177,22 +1177,35 @@ Deno.serve(async (req) => {
     let emailsFailed = 0;
 
     try {
-      // Get all settled predictions with user data
-      const { data: settledPredictions, error: settledError } = await supabaseClient
-        .from('predictions')
-        .select(`
-          id,
-          user_id,
-          athlete_name,
-          tournament_name,
-          discipline,
-          staked_tokens,
-          payout_tokens,
-          status
-        `)
-        .in('user_id', Array.from(affectedUserIds))
-        .in('status', ['WON', 'LOST', 'VOID'])
-        .order('settled_at', { ascending: false });
+      // Get only predictions settled in THIS batch (not all historical ones)
+      const settledIdArray = Array.from(settledPredictionIds);
+      const settledPredictions: any[] = [];
+      
+      for (let i = 0; i < settledIdArray.length; i += 50) {
+        const batch = settledIdArray.slice(i, i + 50);
+        const { data: batchData, error: batchErr } = await supabaseClient
+          .from('predictions')
+          .select(`
+            id,
+            user_id,
+            athlete_name,
+            tournament_name,
+            discipline,
+            market_type,
+            staked_tokens,
+            payout_tokens,
+            status
+          `)
+          .in('id', batch);
+        
+        if (batchErr) {
+          console.error('❌ Error fetching settled predictions for emails:', batchErr);
+        } else if (batchData) {
+          settledPredictions.push(...batchData);
+        }
+      }
+      
+      const settledError = null;
 
       if (settledError) {
         console.error('❌ Error fetching settled predictions for emails:', settledError);
