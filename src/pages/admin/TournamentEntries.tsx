@@ -1811,6 +1811,18 @@ function ParticipantMatchRow({
                   </SelectContent>
                 </Select>
                 <div className="flex items-center gap-1">
+                  <Label className="text-xs">Overall</Label>
+                  <Input
+                    type="number"
+                    min={30}
+                    max={100}
+                    placeholder="55"
+                    value={participant.newAthleteRating ?? ''}
+                    onChange={(e) => onUpdateNewAthlete('rating', e.target.value)}
+                    className="h-7 w-16 text-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-1">
                   <Checkbox
                     id={`create-${participant.name}`}
                     checked={participant.createNewAthlete || false}
