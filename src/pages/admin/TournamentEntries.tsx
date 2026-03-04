@@ -1831,7 +1831,7 @@ function ParticipantMatchRow({
               <span className="text-destructive">No match found</span>
             )}
             
-            {/* Reject match button */}
+            {/* Reject match button - simplified */}
             {participant.matchedAthlete && !isRejected && (
               <Button
                 variant="ghost"
@@ -1840,7 +1840,7 @@ function ParticipantMatchRow({
                 onClick={onRejectMatch}
               >
                 <X className="h-3 w-3 mr-1" />
-                Not this person
+                Wrong
               </Button>
             )}
             
@@ -1852,7 +1852,7 @@ function ParticipantMatchRow({
                 className="h-6 px-2 text-xs text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
                 onClick={onUndoRejectMatch}
               >
-                Undo reject
+                Undo
               </Button>
             )}
           </div>
