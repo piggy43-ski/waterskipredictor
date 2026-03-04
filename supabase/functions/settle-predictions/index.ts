@@ -549,7 +549,7 @@ Deno.serve(async (req) => {
               
               if (walletData) {
                 const profit = payoutAmount - prediction.staked_tokens;
-                await supabaseClient.from('token_transactions').insert({
+                const { error: txError } = await supabaseClient.from('token_transactions').insert({
                   user_id: prediction.user_id,
                   type: 'prediction_won',
                   amount: payoutAmount,
@@ -568,6 +568,10 @@ Deno.serve(async (req) => {
                     profit: profit
                   }
                 });
+                if (txError) {
+                  console.error(`❌ Failed to log WON transaction for prediction ${prediction.id}:`, txError);
+                  result.errors?.push(`Transaction log failed for prediction ${prediction.id}: ${txError.message}`);
+                }
               }
 
               // Update lifetime winnings in profile for single bets
@@ -628,7 +632,7 @@ Deno.serve(async (req) => {
             
             if (walletData && !isPartOfParlay) {
               // Only log transaction for single entries, not parlay legs
-              await supabaseClient.from('token_transactions').insert({
+              const { error: txError } = await supabaseClient.from('token_transactions').insert({
                 user_id: prediction.user_id,
                 type: 'prediction_lost',
                 amount: -prediction.staked_tokens,
@@ -646,6 +650,10 @@ Deno.serve(async (req) => {
                   lost: prediction.staked_tokens
                 }
               });
+              if (txError) {
+                console.error(`❌ Failed to log LOST transaction for prediction ${prediction.id}:`, txError);
+                result.errors?.push(`Transaction log failed for prediction ${prediction.id}: ${txError.message}`);
+              }
 
               // Update lifetime losses in profile
               const { data: profileData } = await supabaseClient
@@ -725,7 +733,7 @@ Deno.serve(async (req) => {
                 .single();
               
               if (walletData) {
-                await supabaseClient.from('token_transactions').insert({
+                const { error: txError } = await supabaseClient.from('token_transactions').insert({
                   user_id: prediction.user_id,
                   type: 'prediction_void',
                   amount: prediction.staked_tokens,
@@ -740,6 +748,10 @@ Deno.serve(async (req) => {
                     refunded: prediction.staked_tokens
                   }
                 });
+                if (txError) {
+                  console.error(`❌ Failed to log VOID transaction for prediction ${prediction.id}:`, txError);
+                  result.errors?.push(`Transaction log failed for prediction ${prediction.id}: ${txError.message}`);
+                }
               }
             }
 
@@ -816,7 +828,7 @@ Deno.serve(async (req) => {
                 
                 if (walletData) {
                   const athleteNames = legs.map(l => l.athlete_name).join(', ');
-                  await supabaseClient.from('token_transactions').insert({
+                  const { error: txError } = await supabaseClient.from('token_transactions').insert({
                     user_id: slip.user_id,
                     type: 'prediction_lost',
                     amount: -slip.total_stake_tokens,
@@ -831,6 +843,10 @@ Deno.serve(async (req) => {
                       athletes: legs.map(l => l.athlete_name)
                     }
                   });
+                  if (txError) {
+                    console.error(`❌ Failed to log parlay LOST transaction for slip ${slip.id}:`, txError);
+                    result.errors?.push(`Parlay transaction log failed for slip ${slip.id}: ${txError.message}`);
+                  }
                 }
 
                 // Update lifetime losses
@@ -906,7 +922,7 @@ Deno.serve(async (req) => {
               if (walletData) {
                 const profit = actualPayout - slip.total_stake_tokens;
                 const athleteNames = legs.map(l => l.athlete_name).join(', ');
-                await supabaseClient.from('token_transactions').insert({
+                const { error: txError } = await supabaseClient.from('token_transactions').insert({
                   user_id: slip.user_id,
                   type: 'prediction_won',
                   amount: actualPayout,
@@ -924,6 +940,10 @@ Deno.serve(async (req) => {
                     athletes: legs.map(l => l.athlete_name)
                   }
                 });
+                if (txError) {
+                  console.error(`❌ Failed to log parlay WON transaction for slip ${slip.id}:`, txError);
+                  result.errors?.push(`Parlay transaction log failed for slip ${slip.id}: ${txError.message}`);
+                }
               }
 
               // Update lifetime winnings

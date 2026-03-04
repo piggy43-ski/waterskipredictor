@@ -43,6 +43,10 @@ const TRANSACTION_TYPES = [
   'reward_redemption',
   'fantasy_entry',
   'fantasy_payout',
+  'prediction_won',
+  'prediction_lost',
+  'prediction_void',
+  'entry_placed',
 ];
 
 export default function AllTransactions() {
