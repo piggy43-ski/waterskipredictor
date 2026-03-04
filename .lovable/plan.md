@@ -1,30 +1,38 @@
 
 
-# Restore Preview Dialog with Explicit Opt-In
+# Fix: Admin Tournaments Page Not Showing Dynamic Status
 
 ## Problem
-The current flow auto-adds all high-confidence matches without review. The user can't verify the AI did a good job — e.g., men's jump had 20 athletes on the start list but only 12 matched. The 8 missing ones were silently skipped with no way to create them.
+The admin `/admin/tournaments` page displays the raw `status` column from the database instead of computing it dynamically. The `tournamentStatus.ts` utility (which checks `settled_at` first) is only used in the user-facing Tournaments page, not the admin page.
 
-## Plan
+"Beta Testing" works because its DB status was manually set to `finished`. "Beta Testing 2" still has `status = 'upcoming'` in the DB even though `settled_at` is set.
 
-### File: `src/pages/admin/TournamentEntries.tsx`
+## Fix
 
-**Revert `handleParseFiles` (lines 365-383) to show the preview dialog instead of auto-adding.**
+**File: `src/pages/admin/Tournaments.tsx`**
 
-Replace the auto-add block with:
+Import `applyDynamicStatus` and apply it when mapping query results:
+
 ```typescript
-setMatchedParticipants(deduplicated);
-setShowPreviewDialog(true);
-toast.success(`Parsed ${data.participants.length} participants, ${deduplicated.filter(p => p.matchedAthlete && p.confidence >= 0.7).length} matched`);
+import { applyDynamicStatus } from '@/utils/tournamentStatus';
 ```
 
-Key points:
-- `selected: false` is already set on line 319 — no participant is pre-selected
-- The existing preview dialog UI (which still exists in the JSX further down) shows all participants with match status
-- Matched athletes show with a checkmark the admin must manually tick to include
-- Unmatched athletes show with "Create & Add" option to create a new athlete profile
-- The "Add Selected" button in the dialog footer commits only explicitly selected athletes
-- Nothing is added to the database until the admin clicks "Add Selected"
+In the query function (~line 115-123), apply dynamic status:
 
-This is essentially a 5-line change: remove the auto-add logic (lines 365-383) and replace with the 3 lines that populate state and open the dialog.
+```typescript
+queryFn: async () => {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('*')
+    .order('start_date', { ascending: false });
+  
+  if (error) throw error;
+  return (data || []).map(t => ({
+    ...t,
+    status: applyDynamicStatus(t).status
+  })) as Tournament[];
+},
+```
+
+This is a 2-line change (1 import + status mapping). Beta Testing 2 will immediately show as "finished" + "Settled" since it has `settled_at` set.
 
