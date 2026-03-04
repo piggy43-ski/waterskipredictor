@@ -730,7 +730,7 @@ export default function TournamentEntries() {
         }
       }
 
-      return entriesToAdd.length;
+      return uniqueEntries.length;
     },
     onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ['tournament-entries'] });
