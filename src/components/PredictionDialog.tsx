@@ -75,7 +75,7 @@ export const PredictionDialog = ({
     }
   };
 
-  const quickAmounts = [50, 100, 250, 500];
+  const quickAmounts = [100, 250, 500, 1000];
 
   if (!selection && !isParlay) return null;
 
