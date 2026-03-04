@@ -452,13 +452,19 @@ export function ProbabilityEditor({ tournamentId, onPublish }: ProbabilityEditor
   // Reset to auto-calculated
   const resetGroup = (groupKey: string, group: MarketGroup) => {
     const autoProbs: Record<string, number> = {};
+    const autoMults: Record<string, number> = {};
     group.athletes.forEach(a => {
       autoProbs[a.athlete_id] = a.p_winner_auto;
+      autoMults[a.athlete_id] = a.multiplier;
     });
-    setLocalProbs(prev => ({
-      ...prev,
-      [groupKey]: autoProbs,
-    }));
+    setLocalProbs(prev => ({ ...prev, [groupKey]: autoProbs }));
+    setLocalMultipliers(prev => ({ ...prev, [groupKey]: autoMults }));
+    // Clear manual overrides for this group
+    setManualMultOverrides(prev => {
+      const next = new Set(prev);
+      group.athletes.forEach(a => next.delete(`${groupKey}:${a.athlete_id}`));
+      return next;
+    });
     toast.success('Reset to auto-calculated probabilities');
   };
 
