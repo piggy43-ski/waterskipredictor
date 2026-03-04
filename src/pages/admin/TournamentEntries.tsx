@@ -609,7 +609,16 @@ export default function TournamentEntries() {
         }
       }
 
-      if (entriesToAdd.length === 0) {
+      // Deduplicate entries by athlete_id + discipline within this batch
+      const seenKeys = new Set<string>();
+      const uniqueEntries = entriesToAdd.filter(e => {
+        const key = `${e.athlete_id}-${e.discipline}`;
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
+        return true;
+      });
+
+      if (uniqueEntries.length === 0) {
         throw new Error('All selected athletes are already entered for their disciplines');
       }
 
