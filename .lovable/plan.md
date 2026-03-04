@@ -1,71 +1,34 @@
 
 
-## Bug Analysis: Creator Reward Calculation
+## Plan: Referral Admin Enhancements + BALLER Assignment + Transaction Labels
 
-### Root Cause
+### 1. Assign BALLER code owner (data operation)
+Update `referral_codes` table to set `owner_user_id = '5ba913f1-8fb8-4932-a9b4-4a41f4d6d82a'` for the BALLER code.
 
-The `stripe-webhook` edge function calculates creator rewards **on USD spent**, then converts back to tokens — instead of directly computing **% of purchased tokens**.
+### 2. Add Owner User ID field to create/edit dialog (`Referrals.tsx`)
+- Add a `formOwnerUserId` state field
+- Add an input in the dialog form labeled "Owner User ID" where admin can paste a UUID
+- Include it in `handleSubmit` so it gets saved as `owner_user_id` on create and update
+- Pre-populate when editing an existing code
+- Show the owner username/email next to codes in the table (already partially done via the `owner` join)
 
-**Current flow (broken):**
-```text
-Line 140: referrerRewardValue = purchaseAmountUsd × referrer_reward_pct
-           $55 × 0.20 = $11.00   (USD, not tokens!)
+### 3. Add Delete button to referral codes table (`Referrals.tsx`)
+- Add a `deleteCodeMutation` that calls `supabase.from('referral_codes').delete().eq('id', id)`
+- Add a Trash icon button in each table row next to the Edit button
+- Wrap in a confirmation dialog (AlertDialog) to prevent accidental deletion
 
-Line 215: referrerTokens = floor($11.00 × 100) = 1,100 tokens
-```
+### 4. Improve transaction labels for referral bonuses (`Transactions.tsx`)
+- Add `reference_type` to the Transaction interface (it exists in the DB but isn't selected)
+- Update the `fetchTransactions` query to include `reference_type`
+- In `getTypeBadge`, detect when `type === 'bonus'` AND `reference_type === 'referral'` → show "Referral Bonus" badge
+- When `reference_type === 'referral_reward'` → show "Referral Commission" badge
+- Add corresponding icons and filter options
 
-But the intent of "20% tokens" is:
-```text
-7,500 tokens × 0.20 = 1,500 tokens
-17,500 tokens × 0.20 = 3,500 tokens
-```
+### 5. Stripe webhook already fixed
+The formula fix from the previous message is deployed. The `description` field in `token_transactions` already includes the referral code name (e.g., "Referral bonus (BALLER) - +75% on Pro pack"), so existing descriptions are clear. The badge enhancement makes it even more visible.
 
-The existing redemption records show `referrer_reward_value: 11` and `23` — these are USD values, not token counts. The creator was credited 1,100 and 2,300 tokens instead of the correct 1,500 and 3,500.
-
-### Second Bug: `owner_user_id` is NULL
-
-All three referral codes (`BALLER`, `HANNAH`, `KENNA`) have `owner_user_id = NULL`. This causes "Creator: Unknown" in the admin UI and means the auto-credit logic on line 213 (`if referralCode.owner_user_id`) is **skipped** — so no tokens were actually credited to anyone anyway. The redemption records exist but the wallet credits never happened.
-
-Found matching users:
-- `HANNAH` → `hannahstopnicki` (id: `5b9f6c93...`)
-- `KENNA` → `Kenna` (id: `ba5f8c47...`)
-- `BALLER` → needs manual identification
-
-### Fix Plan
-
-#### 1. Fix the formula in `stripe-webhook/index.ts`
-
-Replace the USD-based calculation with a direct token percentage:
-
-```typescript
-// OLD (broken):
-const referrerRewardValue = purchaseAmountUsd * referralCode.referrer_reward_pct;
-// ...
-const referrerTokens = Math.floor(referrerRewardValue * 100);
-
-// NEW (correct):
-const referrerTokens = Math.round(baseTokens * referralCode.referrer_reward_pct);
-const referrerRewardValue = referrerTokens; // store as tokens directly
-```
-
-Also add a `pctToDecimal` safety helper to handle if someone stores 20 instead of 0.20.
-
-#### 2. Update `owner_user_id` on referral codes
-
-Set the correct owner for HANNAH and KENNA. BALLER needs you to tell me which user owns it.
-
-#### 3. Backfill existing redemption records
-
-- Recalculate `referrer_reward_value` as `round(purchase_amount_tokens × commission_rate)` for each existing redemption
-- Credit the correct token difference to each creator's wallet (if owner is set)
-- Log corrective `token_transactions`
-
-#### 4. Update the redemption record schema
-
-Change the `referrer_reward_value` column semantics to store token count (not USD). Update the admin Referrals page display accordingly.
-
-### Questions Before Implementing
-
-I need to know:
-- **Who owns the BALLER code?** (Which user should receive the creator rewards?)
+### Files to modify
+- `src/pages/admin/Referrals.tsx` — add owner_user_id field, delete button with confirmation
+- `src/pages/Transactions.tsx` — add referral-specific badge labels, select `reference_type`
+- Data update: set BALLER `owner_user_id`
 
