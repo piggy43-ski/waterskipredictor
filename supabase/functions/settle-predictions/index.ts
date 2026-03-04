@@ -305,6 +305,7 @@ Deno.serve(async (req) => {
     };
 
     const affectedUserIds = new Set<string>();
+    const settledPredictionIds = new Set<string>();
     
     // Track which bet_slips need to be settled after predictions are processed
     const betSlipsToSettle = new Map<string, { 
@@ -512,6 +513,7 @@ Deno.serve(async (req) => {
             }
 
             result.settled_predictions += 1;
+            settledPredictionIds.add(prediction.id);
 
             // Only credit wallet for SINGLE bets, not parlay legs
             if (!isPartOfParlay && payoutAmount > 0) {
@@ -1175,22 +1177,35 @@ Deno.serve(async (req) => {
     let emailsFailed = 0;
 
     try {
-      // Get all settled predictions with user data
-      const { data: settledPredictions, error: settledError } = await supabaseClient
-        .from('predictions')
-        .select(`
-          id,
-          user_id,
-          athlete_name,
-          tournament_name,
-          discipline,
-          staked_tokens,
-          payout_tokens,
-          status
-        `)
-        .in('user_id', Array.from(affectedUserIds))
-        .in('status', ['WON', 'LOST', 'VOID'])
-        .order('settled_at', { ascending: false });
+      // Get only predictions settled in THIS batch (not all historical ones)
+      const settledIdArray = Array.from(settledPredictionIds);
+      const settledPredictions: any[] = [];
+      
+      for (let i = 0; i < settledIdArray.length; i += 50) {
+        const batch = settledIdArray.slice(i, i + 50);
+        const { data: batchData, error: batchErr } = await supabaseClient
+          .from('predictions')
+          .select(`
+            id,
+            user_id,
+            athlete_name,
+            tournament_name,
+            discipline,
+            market_type,
+            staked_tokens,
+            payout_tokens,
+            status
+          `)
+          .in('id', batch);
+        
+        if (batchErr) {
+          console.error('❌ Error fetching settled predictions for emails:', batchErr);
+        } else if (batchData) {
+          settledPredictions.push(...batchData);
+        }
+      }
+      
+      const settledError = null;
 
       if (settledError) {
         console.error('❌ Error fetching settled predictions for emails:', settledError);
@@ -1227,6 +1242,11 @@ Deno.serve(async (req) => {
             const winPred = userPredictions.find(p => p.status === 'WON');
             const predToEmail = winPred || userPredictions[0];
             
+            // Include market type for clarity (e.g. "Winner", "Podium")
+            const marketTypeLabel = predToEmail.market_type 
+              ? predToEmail.market_type.charAt(0) + predToEmail.market_type.slice(1).toLowerCase()
+              : undefined;
+            
             try {
               const emailResponse = await fetch(
                 `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`,
@@ -1247,6 +1267,7 @@ Deno.serve(async (req) => {
                       result: predToEmail.status.toLowerCase(),
                       stakedTokens: predToEmail.staked_tokens,
                       payoutTokens: predToEmail.payout_tokens || 0,
+                      marketType: marketTypeLabel,
                     }
                   }),
                 }

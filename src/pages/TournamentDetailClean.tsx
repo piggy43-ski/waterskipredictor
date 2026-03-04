@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate, useLocation, Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { SelectionCard } from '@/components/SelectionCard';
@@ -41,9 +41,13 @@ const TournamentDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast } = useToast();
   const { isAdmin } = useIsAdmin();
+  
+  // Determine initial discipline from URL query param
+  const initialDiscipline = searchParams.get('discipline') || 'slalom';
   
   // Get highlighted athletes from "Predict Again" navigation
   const predictAgainAthletes: string[] = location.state?.predictAgainAthletes || location.state?.betAgainAthletes || [];
@@ -1022,7 +1026,7 @@ const TournamentDetail = () => {
             </Button>
           </Card>
         ) : (
-          <Tabs defaultValue="slalom" className="w-full">
+          <Tabs defaultValue={initialDiscipline} className="w-full">
             <TabsList className="w-full grid grid-cols-3 mb-6">
               {tournament.disciplines.map((disc) => (
                 <TabsTrigger key={disc} value={disc} className="capitalize">

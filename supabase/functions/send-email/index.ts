@@ -324,6 +324,7 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
     case "bet_result": {
       const resultEmoji = data.result === "won" ? "🎉" : data.result === "void" ? "↩️" : "";
       const subjectPrefix = data.result === "won" ? "You Won!" : data.result === "void" ? "Prediction Voided" : "Prediction Result";
+      const marketSuffix = data.marketType ? ` (${data.marketType})` : "";
       return {
         html: generateBetResultEmail({
           username: data.username || "Champion",
@@ -334,7 +335,7 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
           payoutTokens: data.payoutTokens,
           appUrl,
         }),
-        subject: `${resultEmoji} ${subjectPrefix}: ${data.athleteName || 'Your Pick'}`,
+        subject: `${resultEmoji} ${subjectPrefix}: ${data.athleteName || 'Your Pick'}${marketSuffix}`,
       };
     }
     
