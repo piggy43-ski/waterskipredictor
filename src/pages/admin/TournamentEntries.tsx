@@ -403,11 +403,13 @@ export default function TournamentEntries() {
   const handleRejectMatch = (participantIdx: number) => {
     const updated = [...matchedParticipants];
     const p = updated[participantIdx];
-    // Store original match for undo
+    // Store original match for undo, then CLEAR active match
     p.originalMatchedAthlete = p.matchedAthlete;
+    p.matchedAthlete = undefined;
     p.matchRejected = true;
     p.selected = false;
     p.selectedDisciplines = [];
+    p.alsoAddRejectedAthlete = false;
     setMatchedParticipants(updated);
   };
 
