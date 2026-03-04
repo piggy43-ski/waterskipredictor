@@ -1,45 +1,28 @@
 
 
-# Fix: Settlement Summary Mixing Up Entries and Prediction Legs
+# Fix: Beta Testing 2 Not Appearing in Tournament Dropdown
 
 ## Problem
-
-The settlement summary currently counts **prediction legs** as "Won" and "Lost" instead of **entries (bet slips)**. A user who placed one 3-leg combo entry shows as "3 Won" or "3 Lost" instead of "1 Won" or "1 Lost". This is the same confusion from the last beta.
-
-The root issue: `won_count` and `lost_count` are derived from `winningPredictionIds.length` and `losingPredictionIds.length` — these are prediction-level, not entry-level.
+Line 183 of `TournamentSettlement.tsx` filters the tournament list:
+```
+return data.map(applyDynamicStatus).filter(t => t.status === 'finished' || t.status === 'live');
+```
+Beta Testing 2 starts at 8:00 AM UTC March 4 (still in the future), so `applyDynamicStatus` assigns it `upcoming` status and it gets excluded from the dropdown.
 
 ## Fix
 
-### In `calculateSettlementPreview` (~lines 930-1045)
+**File: `src/pages/admin/TournamentSettlement.tsx` (line 183)**
 
-After determining `winningPredictionIds` and `losingPredictionIds`, group them by `bet_slip_id` to derive **entry-level** won/lost counts:
+Remove the status filter entirely. Admins should be able to select any tournament for score entry and settlement -- there is no reason to restrict this. The dropdown will show all tournaments sorted by date (newest first), which is already the case.
 
-- **Entries Won**: Count unique `bet_slip_id` values where ALL legs of that slip are in `winningPredictionIds`
-- **Entries Lost**: Count unique `bet_slip_id` values where ANY leg is in `losingPredictionIds`
-- Keep the existing prediction-level counts as `won_legs` / `lost_legs` for the "Legs" detail
-
-### In the `SettlementPreview` type (line 55-69)
-
-Add `won_entries` and `lost_entries` fields. Keep `won_count`/`lost_count` for internal leg-level tracking but rename them in the UI.
-
-### In the UI (lines 2023-2059)
-
-Update the grid to show:
-- **Entries**: total unique bet slips (already exists)
-- **Won**: entry-level won count (new `won_entries`)
-- **Lost**: entry-level lost count (new `lost_entries`)
-- **Payout**: total payout (already correct)
-
-Remove the "Legs" column — it's confusing for the admin. The entry-level view is what matters.
-
-### Technical Detail
-
-Group predictions by `bet_slip_id` from the fetched predictions data:
+Change:
+```ts
+return data.map(applyDynamicStatus).filter(t => t.status === 'finished' || t.status === 'live');
 ```
-const predictionsBySlip = Map<bet_slip_id, prediction[]>
-- won_entries = slips where every prediction.id is in winningPredictionIds
-- lost_entries = slips where at least one prediction.id is in losingPredictionIds
+To:
+```ts
+return data.map(applyDynamicStatus);
 ```
 
-This ensures a parlay with 3 winning legs = 1 Won entry, and a parlay with 2 winning + 1 losing leg = 1 Lost entry.
+This is a one-line change. Beta Testing 2 will immediately appear in the dropdown.
 
