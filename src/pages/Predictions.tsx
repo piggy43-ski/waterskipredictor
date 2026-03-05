@@ -192,7 +192,7 @@ const Predictions = () => {
         );
 
         const active = entriesWithLegs.filter(s => s.status === 'PENDING');
-        const completed = entriesWithLegs.filter(s => s.status !== 'PENDING');
+        const completed = entriesWithLegs.filter(s => s.status !== 'PENDING' && s.status !== 'CANCELLED');
         
         setActiveEntries(active);
         setCompletedEntries(completed);
@@ -238,32 +238,27 @@ const Predictions = () => {
         return;
       }
 
-      // Get all prediction IDs for this entry
-      const predictionIds = deleteEntry.legs?.map(l => l.id) || [];
+      // 1. Update bet_slip status to CANCELLED (RLS allows this for own PENDING slips)
+      const { data: cancelledData, error: cancelError } = await supabase
+        .from('bet_slips')
+        .update({ status: 'CANCELLED' })
+        .eq('id', deleteEntry.id)
+        .eq('user_id', user.id)
+        .select();
       
-      // 1. Delete podium_selections first (if any)
-      if (predictionIds.length > 0) {
-        await supabase
-          .from('podium_selections')
-          .delete()
-          .in('prediction_id', predictionIds);
+      if (cancelError) throw cancelError;
+      
+      // Verify the update actually affected a row
+      if (!cancelledData || cancelledData.length === 0) {
+        toast({
+          title: "Cannot cancel prediction",
+          description: "This prediction may have already been cancelled or settled",
+          variant: "destructive"
+        });
+        return;
       }
       
-      // 2. Delete predictions
-      await supabase
-        .from('predictions')
-        .delete()
-        .eq('bet_slip_id', deleteEntry.id);
-      
-      // 3. Delete entry
-      const { error: deleteError } = await supabase
-        .from('bet_slips')
-        .delete()
-        .eq('id', deleteEntry.id);
-      
-      if (deleteError) throw deleteError;
-      
-      // 4. Refund tokens to wallet atomically
+      // 2. Only refund tokens AFTER confirmed cancellation
       const { error: refundError } = await supabase
         .rpc('increment_earned_tokens', {
           user_id_param: user.id,
@@ -272,7 +267,29 @@ const Predictions = () => {
       
       if (refundError) {
         console.error('Error refunding tokens:', refundError);
+        toast({
+          title: "Prediction cancelled but refund failed",
+          description: "Please contact support for your refund",
+          variant: "destructive"
+        });
+        fetchEntries();
+        return;
       }
+
+      // 3. Record audit transaction
+      await supabase
+        .from('token_transactions')
+        .insert({
+          user_id: user.id,
+          type: 'prediction_void',
+          amount: deleteEntry.total_stake_tokens,
+          balance_after: 0, // Will be approximate
+          reference_type: 'prediction',
+          reference_id: deleteEntry.id,
+          description: `Cancelled prediction - Refunded ${deleteEntry.total_stake_tokens} tokens`,
+          tournament_id: deleteEntry.tournament_id,
+          transaction_status: 'completed',
+        });
       
       toast({
         title: "Prediction cancelled",
@@ -280,6 +297,7 @@ const Predictions = () => {
       });
       
       fetchEntries();
+      fetchWalletBalance();
     } catch (error) {
       toast({
         title: "Error cancelling prediction",
