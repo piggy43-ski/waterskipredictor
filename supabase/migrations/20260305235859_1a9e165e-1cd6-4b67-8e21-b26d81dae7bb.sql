@@ -1,0 +1,2 @@
+ALTER TABLE public.bet_slips DROP CONSTRAINT bet_slips_status_check;
+ALTER TABLE public.bet_slips ADD CONSTRAINT bet_slips_status_check CHECK (status = ANY (ARRAY['PENDING'::text, 'WON'::text, 'LOST'::text, 'VOID'::text, 'CANCELLED'::text]));
