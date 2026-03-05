@@ -1,30 +1,38 @@
 
 
-## Fix: Cancel Prediction RLS Policy
+## Plan: Backfill BALLER Rewards + "Pay Now" Button for Creator Credits
 
-**Root Cause**: Both UPDATE policies on `bet_slips` are RESTRICTIVE. Restrictive policies require ALL to pass. A non-admin user fails the admin policy, blocking the cancellation even though the user-specific cancel policy passes.
+### 1. Data Operations (via insert tool)
 
-**Policies currently on `bet_slips` for UPDATE:**
-1. "Admins can update all bet slips" — RESTRICTIVE — `USING: has_role(auth.uid(), 'admin')` 
-2. "Users can cancel their own pending bet slips" — RESTRICTIVE — `USING: auth.uid() = user_id AND status = 'PENDING'`, `WITH CHECK: auth.uid() = user_id AND status = 'CANCELLED'`
-
-Both are restrictive, so a regular user must pass BOTH. They fail #1 → blocked.
-
-**Fix**: Drop both UPDATE policies and recreate them as PERMISSIVE (so ANY one passing is sufficient):
-
+**Assign BALLER owner:**
 ```sql
-DROP POLICY "Admins can update all bet slips" ON public.bet_slips;
-DROP POLICY "Users can cancel their own pending bet slips" ON public.bet_slips;
-
-CREATE POLICY "Admins can update all bet slips"
-ON public.bet_slips FOR UPDATE TO authenticated
-USING (has_role(auth.uid(), 'admin'::app_role));
-
-CREATE POLICY "Users can cancel their own pending bet slips"
-ON public.bet_slips FOR UPDATE TO authenticated
-USING (auth.uid() = user_id AND status = 'PENDING'::text)
-WITH CHECK (auth.uid() = user_id AND status = 'CANCELLED'::text);
+UPDATE referral_codes SET owner_user_id = '5ba913f1-8fb8-4932-a9b4-4a41f4d6d82a' WHERE code = 'BALLER';
 ```
 
-No code changes needed — the `Predictions.tsx` fix from the previous change is correct. Only the database policies need updating.
+**Backfill BALLER redemption records** — recalculate `referrer_reward_value` to correct token amounts (20% of `purchase_amount_tokens`) and set `referrer_user_id` to BallOfSpray's ID.
+
+**Credit BallOfSpray's wallet** — add the total owed tokens to `earned_tokens` in `token_wallets`, create `token_transactions` entries with `reference_type = 'referral_reward'`, and mark the redemptions as paid (`referrer_paid_at`).
+
+### 2. Enhance "Mark Paid" → "Credit & Pay" (Referrals.tsx)
+
+The current "Mark Paid" button only timestamps `referrer_paid_at` — it does NOT actually credit tokens to the creator's wallet. This needs to change:
+
+**Replace `markPaidMutation`** with a new mutation that:
+1. Looks up the redemption's `referrer_user_id` and `referrer_reward_value`
+2. Calls `supabase.rpc('increment_earned_tokens', { user_id_param, amount })` to credit the wallet
+3. Inserts a `token_transactions` record (type: `bonus`, reference_type: `referral_reward`)
+4. Updates `referrer_paid_at` on the redemption
+
+**Add visual status indicators** to the redemptions table:
+- Green "Credited" badge when `referrer_paid_at` is set
+- Red "Unpaid" badge when null
+- Show this in both the Activity tab and Payouts tab
+
+### 3. Fix display of reward values
+
+Currently showing `referrer_reward_value.toFixed(2)` — since values are now token integers (e.g., 1500, 3500), change display to whole numbers without decimals for token type.
+
+### Files to modify
+- `src/pages/admin/Referrals.tsx` — update Mark Paid to actually credit tokens, add status badges, fix number formatting
+- Data operations — assign BALLER owner, backfill rewards, credit wallet
 
