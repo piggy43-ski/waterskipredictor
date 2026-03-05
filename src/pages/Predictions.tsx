@@ -192,7 +192,7 @@ const Predictions = () => {
         );
 
         const active = entriesWithLegs.filter(s => s.status === 'PENDING');
-        const completed = entriesWithLegs.filter(s => s.status !== 'PENDING');
+        const completed = entriesWithLegs.filter(s => s.status !== 'PENDING' && s.status !== 'CANCELLED');
         
         setActiveEntries(active);
         setCompletedEntries(completed);
