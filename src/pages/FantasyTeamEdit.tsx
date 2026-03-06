@@ -116,12 +116,19 @@ const FantasyTeamEdit = () => {
       const disciplines = potData.discipline_scope || ['slalom', 'trick', 'jump'];
       
       let athleteIds: string[] = [];
+      let tournamentEntryDisciplines: Map<string, Set<string>> = new Map();
       if (potData.tournament_id) {
         const { data: entriesData } = await supabase
           .from('tournament_entries')
-          .select('athlete_id')
+          .select('athlete_id, discipline')
           .eq('tournament_id', potData.tournament_id);
-        athleteIds = [...new Set((entriesData || []).map(e => e.athlete_id))];
+        for (const e of (entriesData || [])) {
+          if (!tournamentEntryDisciplines.has(e.athlete_id)) {
+            tournamentEntryDisciplines.set(e.athlete_id, new Set());
+          }
+          tournamentEntryDisciplines.get(e.athlete_id)!.add(e.discipline);
+        }
+        athleteIds = [...tournamentEntryDisciplines.keys()];
       }
       
       let athleteQuery = supabase.from('athletes').select('*').order('name');
@@ -130,7 +137,11 @@ const FantasyTeamEdit = () => {
       }
       
       const { data: athletesData } = await athleteQuery;
-      setAthletes((athletesData || []).filter(a => a.disciplines.some((d: string) => disciplines.includes(d))));
+      setAthletes((athletesData || []).filter(a => {
+        const entryDiscs = tournamentEntryDisciplines.get(a.id);
+        const discs = entryDiscs ? [...entryDiscs] : a.disciplines;
+        return discs.some((d: string) => disciplines.includes(d));
+      }));
 
     } catch (error) {
       console.error('Error:', error);
