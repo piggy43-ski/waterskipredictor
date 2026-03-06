@@ -143,15 +143,23 @@ const FantasyPotDetail = () => {
       const disciplines = potData.discipline_scope || ['slalom', 'trick', 'jump'];
       
       let athleteIds: string[] = [];
+      let tournamentEntryDisciplines: Map<string, Set<string>> = new Map();
       
       // If pot is linked to a tournament, only show athletes entered in that tournament
       if (potData.tournament_id) {
         const { data: entriesData } = await supabase
           .from('tournament_entries')
-          .select('athlete_id')
+          .select('athlete_id, discipline')
           .eq('tournament_id', potData.tournament_id);
         
-        athleteIds = [...new Set((entriesData || []).map(e => e.athlete_id))];
+        for (const e of (entriesData || [])) {
+          if (!tournamentEntryDisciplines.has(e.athlete_id)) {
+            tournamentEntryDisciplines.set(e.athlete_id, new Set());
+          }
+          tournamentEntryDisciplines.get(e.athlete_id)!.add(e.discipline);
+        }
+        
+        athleteIds = [...tournamentEntryDisciplines.keys()];
         
         if (athleteIds.length === 0) {
           setAthletes([]);
@@ -174,10 +182,12 @@ const FantasyPotDetail = () => {
 
       if (athletesError) throw athletesError;
 
-      // Filter athletes who compete in at least one of the pot's disciplines
-      const filteredAthletes = (athletesData || []).filter(athlete => 
-        athlete.disciplines.some(d => disciplines.includes(d))
-      );
+      // Filter athletes by disciplines - use tournament entry disciplines if available, else athlete.disciplines
+      const filteredAthletes = (athletesData || []).filter(athlete => {
+        const entryDiscs = tournamentEntryDisciplines.get(athlete.id);
+        const athleteDiscs = entryDiscs ? [...entryDiscs] : athlete.disciplines;
+        return athleteDiscs.some(d => disciplines.includes(d));
+      });
 
       setAthletes(filteredAthletes);
 
