@@ -1,38 +1,25 @@
 
 
-## Plan: Backfill BALLER Rewards + "Pay Now" Button for Creator Credits
+## Add Martin Labra to Database and Moomba Tournament
 
-### 1. Data Operations (via insert tool)
+### Step 1: Insert Athlete Record
+Insert Martin Labra into the `athletes` table with:
+- **Name**: Martin Labra
+- **Gender**: male
+- **Country**: Chile (CHI)
+- **Federation**: IWWF
+- **Disciplines**: `{slalom, trick, jump}`
+- **Year of birth**: TBD (will use a reasonable default like 2000)
+- **Ratings**: slalom=70, trick=92, jump=86
+- **Injury flag**: false (recovered, competed last tournament)
+- **Career stats**: Set trick-specific stats reflecting his elite level (base_strength_trick=92, base_strength_slalom=70, base_strength_jump=86)
+- **Fantasy prices**: Calculated from ratings (trick=10000, slalom=5500, jump=8500)
+- **Strength tiers**: trick=tier2, slalom=unranked, jump=tier2
+- **Notes**: "Elite tricker, missed most of last season due to injury. Scored 12,750 pts in last tournament."
 
-**Assign BALLER owner:**
-```sql
-UPDATE referral_codes SET owner_user_id = '5ba913f1-8fb8-4932-a9b4-4a41f4d6d82a' WHERE code = 'BALLER';
-```
+### Step 2: Add Tournament Entries
+Insert 3 rows into `tournament_entries` for Moomba Masters (`6b2ee218-5957-41ec-be67-1d1d5af281ae`) — one for each discipline (slalom, trick, jump) using the new athlete's ID.
 
-**Backfill BALLER redemption records** — recalculate `referrer_reward_value` to correct token amounts (20% of `purchase_amount_tokens`) and set `referrer_user_id` to BallOfSpray's ID.
-
-**Credit BallOfSpray's wallet** — add the total owed tokens to `earned_tokens` in `token_wallets`, create `token_transactions` entries with `reference_type = 'referral_reward'`, and mark the redemptions as paid (`referrer_paid_at`).
-
-### 2. Enhance "Mark Paid" → "Credit & Pay" (Referrals.tsx)
-
-The current "Mark Paid" button only timestamps `referrer_paid_at` — it does NOT actually credit tokens to the creator's wallet. This needs to change:
-
-**Replace `markPaidMutation`** with a new mutation that:
-1. Looks up the redemption's `referrer_user_id` and `referrer_reward_value`
-2. Calls `supabase.rpc('increment_earned_tokens', { user_id_param, amount })` to credit the wallet
-3. Inserts a `token_transactions` record (type: `bonus`, reference_type: `referral_reward`)
-4. Updates `referrer_paid_at` on the redemption
-
-**Add visual status indicators** to the redemptions table:
-- Green "Credited" badge when `referrer_paid_at` is set
-- Red "Unpaid" badge when null
-- Show this in both the Activity tab and Payouts tab
-
-### 3. Fix display of reward values
-
-Currently showing `referrer_reward_value.toFixed(2)` — since values are now token integers (e.g., 1500, 3500), change display to whole numbers without decimals for token type.
-
-### Files to modify
-- `src/pages/admin/Referrals.tsx` — update Mark Paid to actually credit tokens, add status badges, fix number formatting
-- Data operations — assign BALLER owner, backfill rewards, credit wallet
+### Step 3: No Code Changes Needed
+The Fantasy team builder already pulls athletes from `tournament_entries`, so Martin Labra will appear automatically once the data is inserted.
 
