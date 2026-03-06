@@ -260,7 +260,7 @@ export function RealtimeActivityFeed() {
                         {Number(activity.decimal_odds).toFixed(2)}x
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {activity.total_stake_tokens.toLocaleString()} tokens
+                        {(activity.total_stake_tokens ?? activity.staked_tokens ?? 0).toLocaleString()} tokens
                       </div>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                         <Clock className="w-3 h-3" />
