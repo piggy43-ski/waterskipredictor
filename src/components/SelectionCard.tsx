@@ -87,6 +87,11 @@ export const SelectionCard = ({
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="font-semibold text-lg">{selection.athlete.name}</h3>
+            {selection.athlete.injury_flag && (
+              <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-700 text-xs">
+                🏥 Injured
+              </Badge>
+            )}
             {rank && (
               <Badge variant={getRankVariant()} className="flex items-center gap-1">
                 {rank <= 3 && <Medal className="w-3 h-3" />}
