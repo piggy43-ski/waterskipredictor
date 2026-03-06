@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Activity, TrendingUp, Clock, User } from 'lucide-react';
+import { Activity, TrendingUp, Clock, User, Layers } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface ActivityItem {
@@ -15,9 +15,12 @@ interface ActivityItem {
   market_type: string;
   discipline: string;
   staked_tokens: number;
+  total_stake_tokens: number;
   decimal_odds: number;
   status: string;
   created_at: string;
+  bet_type: string;
+  leg_count: number;
   isNew?: boolean;
 }
 
@@ -30,7 +33,7 @@ export function RealtimeActivityFeed() {
     const fetchInitialActivities = async () => {
       const { data: predictions, error: predError } = await supabase
         .from('predictions' as any)
-        .select('id, user_id, athlete_name, tournament_name, market_type, discipline, staked_tokens, decimal_odds, status, created_at')
+        .select('id, user_id, athlete_name, tournament_name, market_type, discipline, staked_tokens, decimal_odds, status, created_at, bet_slip_id')
         .order('created_at', { ascending: false })
         .limit(20) as { data: any[] | null; error: any };
 
@@ -54,12 +57,33 @@ export function RealtimeActivityFeed() {
 
       const profileMap = new Map(profiles?.map(p => [p.id, p.username]) || []);
 
-      const activitiesWithUsernames: ActivityItem[] = predictions.map(p => ({
-        ...p,
-        username: profileMap.get(p.user_id) || null,
-      }));
+      // Fetch bet_slips for total stake and type
+      const betSlipIds = [...new Set(predictions.map(p => p.bet_slip_id).filter(Boolean))];
+      let slipMap = new Map<string, { total_stake_tokens: number; type: string; leg_count: number }>();
+      
+      if (betSlipIds.length > 0) {
+        const { data: slips } = await supabase
+          .from('bet_slips')
+          .select('id, total_stake_tokens, type, leg_count')
+          .in('id', betSlipIds);
 
-      setActivities(activitiesWithUsernames);
+        if (slips) {
+          slipMap = new Map(slips.map(s => [s.id, { total_stake_tokens: s.total_stake_tokens, type: s.type, leg_count: s.leg_count }]));
+        }
+      }
+
+      const activitiesWithContext: ActivityItem[] = predictions.map(p => {
+        const slip = p.bet_slip_id ? slipMap.get(p.bet_slip_id) : null;
+        return {
+          ...p,
+          username: profileMap.get(p.user_id) || null,
+          total_stake_tokens: slip?.total_stake_tokens ?? p.staked_tokens,
+          bet_type: slip?.type ?? 'single',
+          leg_count: slip?.leg_count ?? 1,
+        };
+      });
+
+      setActivities(activitiesWithContext);
       setIsLoading(false);
     };
 
@@ -80,12 +104,22 @@ export function RealtimeActivityFeed() {
         async (payload) => {
           const newPrediction = payload.new as any;
           
-          // Fetch username for new prediction
-          const { data: profile } = await supabase
+          // Fetch username and bet slip info in parallel
+          const profilePromise = supabase
             .from('profiles')
             .select('username')
             .eq('id', newPrediction.user_id)
             .single();
+
+          const slipPromise = newPrediction.bet_slip_id
+            ? supabase
+                .from('bet_slips')
+                .select('total_stake_tokens, type, leg_count')
+                .eq('id', newPrediction.bet_slip_id)
+                .single()
+            : Promise.resolve({ data: null });
+
+          const [{ data: profile }, { data: slip }] = await Promise.all([profilePromise, slipPromise]);
 
           const newActivity: ActivityItem = {
             id: newPrediction.id,
@@ -96,15 +130,17 @@ export function RealtimeActivityFeed() {
             market_type: newPrediction.market_type,
             discipline: newPrediction.discipline,
             staked_tokens: newPrediction.staked_tokens,
+            total_stake_tokens: (slip as any)?.total_stake_tokens ?? newPrediction.staked_tokens,
             decimal_odds: newPrediction.decimal_odds,
             status: newPrediction.status,
             created_at: newPrediction.created_at,
+            bet_type: (slip as any)?.type ?? 'single',
+            leg_count: (slip as any)?.leg_count ?? 1,
             isNew: true,
           };
 
           setActivities(prev => [newActivity, ...prev.slice(0, 19)]);
 
-          // Remove the "new" highlight after 3 seconds
           setTimeout(() => {
             setActivities(prev => 
               prev.map(a => a.id === newActivity.id ? { ...a, isNew: false } : a)
@@ -130,7 +166,6 @@ export function RealtimeActivityFeed() {
             )
           );
 
-          // Remove highlight after 3 seconds
           setTimeout(() => {
             setActivities(prev => 
               prev.map(a => a.id === updatedPrediction.id ? { ...a, isNew: false } : a)
@@ -202,6 +237,12 @@ export function RealtimeActivityFeed() {
                         <Badge variant={getStatusBadgeVariant(activity.status)} className="text-xs">
                           {activity.status}
                         </Badge>
+                        {activity.bet_type === 'parlay' && (
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <Layers className="w-3 h-3" />
+                            Parlay ({activity.leg_count})
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-foreground">
                         Picked <span className="font-medium">{activity.athlete_name}</span> for{' '}
@@ -219,7 +260,7 @@ export function RealtimeActivityFeed() {
                         {Number(activity.decimal_odds).toFixed(2)}x
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {activity.staked_tokens.toLocaleString()} tokens
+                        {activity.total_stake_tokens.toLocaleString()} tokens
                       </div>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                         <Clock className="w-3 h-3" />

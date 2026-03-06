@@ -1,31 +1,38 @@
 
 
-## Investigation Results
+## Plan: Backfill BALLER Rewards + "Pay Now" Button for Creator Credits
 
-The 100-token minimum **is being enforced correctly**. Here is what happened:
+### 1. Data Operations (via insert tool)
 
-Domino placed two **parlays** of 100 tokens each. Each parlay has 5 legs, and the system divides the stake evenly across legs: 100 / 5 = **20 tokens per prediction row**. The Live Activity Feed reads from the `predictions` table (individual legs), so it displays "20 tokens" per entry — but the actual bet slip is 100 tokens total.
+**Assign BALLER owner:**
+```sql
+UPDATE referral_codes SET owner_user_id = '5ba913f1-8fb8-4932-a9b4-4a41f4d6d82a' WHERE code = 'BALLER';
+```
 
-This is **not a bug in the minimum stake enforcement**. It is a **display issue** in the Activity Feed.
+**Backfill BALLER redemption records** — recalculate `referrer_reward_value` to correct token amounts (20% of `purchase_amount_tokens`) and set `referrer_user_id` to BallOfSpray's ID.
 
-## Plan: Fix Activity Feed to Show Bet Slip Totals for Parlays
+**Credit BallOfSpray's wallet** — add the total owed tokens to `earned_tokens` in `token_wallets`, create `token_transactions` entries with `reference_type = 'referral_reward'`, and mark the redemptions as paid (`referrer_paid_at`).
 
-### Changes
+### 2. Enhance "Mark Paid" → "Credit & Pay" (Referrals.tsx)
 
-1. **Update `RealtimeActivityFeed.tsx`** to join predictions with `bet_slips` and display the bet slip's `total_stake_tokens` instead of the individual prediction's `staked_tokens`. For parlays, show the total stake with a "Parlay (5 legs)" badge. For singles, show the stake as-is.
+The current "Mark Paid" button only timestamps `referrer_paid_at` — it does NOT actually credit tokens to the creator's wallet. This needs to change:
 
-   - Modify the initial fetch query to join `bet_slips` via `bet_slip_id` and pull `total_stake_tokens` and `type` from the slip
-   - In the display, show `total_stake_tokens` from the bet slip and add a "Parlay" indicator when `type === 'parlay'`
-   - Group parlay legs under a single feed entry (or show them individually but with the parlay context and total stake)
+**Replace `markPaidMutation`** with a new mutation that:
+1. Looks up the redemption's `referrer_user_id` and `referrer_reward_value`
+2. Calls `supabase.rpc('increment_earned_tokens', { user_id_param, amount })` to credit the wallet
+3. Inserts a `token_transactions` record (type: `bonus`, reference_type: `referral_reward`)
+4. Updates `referrer_paid_at` on the redemption
 
-2. **Also fix `rebuild_market_liability`** — change `'pending'` to `'PENDING'` (case mismatch identified earlier).
+**Add visual status indicators** to the redemptions table:
+- Green "Credited" badge when `referrer_paid_at` is set
+- Red "Unpaid" badge when null
+- Show this in both the Activity tab and Payouts tab
 
-### Technical Detail
+### 3. Fix display of reward values
 
-The `predictions` table stores per-leg data (`staked_tokens = total / leg_count`), while `bet_slips` stores the actual total. The feed should reference `bet_slips.total_stake_tokens` for accurate display. Two approaches:
+Currently showing `referrer_reward_value.toFixed(2)` — since values are now token integers (e.g., 1500, 3500), change display to whole numbers without decimals for token type.
 
-- **Option A**: Group by bet_slip_id, show one feed entry per parlay with total stake and leg count
-- **Option B**: Keep individual leg entries but show "100 tokens (parlay)" instead of "20 tokens"
-
-Option B is simpler and preserves the granular athlete-level detail that makes the feed useful.
+### Files to modify
+- `src/pages/admin/Referrals.tsx` — update Mark Paid to actually credit tokens, add status badges, fix number formatting
+- Data operations — assign BALLER owner, backfill rewards, credit wallet
 
