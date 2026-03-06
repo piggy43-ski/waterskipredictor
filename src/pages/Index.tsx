@@ -95,12 +95,13 @@ const Index = () => {
 
       if (user) {
 
-        // Fetch user's active predictions
+        // Fetch user's active predictions (only from non-cancelled bet slips)
         const { data: predictionsData } = await supabase
           .from('predictions')
-          .select('*')
+          .select('*, bet_slips!inner(status)')
           .eq('user_id', user.id)
           .eq('status', 'PENDING')
+          .eq('bet_slips.status', 'PENDING')
           .order('created_at', { ascending: false })
           .limit(5);
 

@@ -407,12 +407,6 @@ const Rewards = () => {
     <div className="min-h-screen bg-background pb-20">
       <PageHeader 
         title="Rewards Store" 
-        action={
-          <div className="flex items-center gap-2 bg-card px-3 py-2 rounded-lg border border-border">
-            <Coins className="w-4 h-4 text-primary" />
-            <span className="font-bold">{walletBalance.toLocaleString()}</span>
-          </div>
-        }
       />
       
       <div className="max-w-lg mx-auto px-4 py-6">

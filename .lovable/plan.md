@@ -1,40 +1,38 @@
 
 
-## Full App Test Results for Moomba Masters Launch
+## Plan: Backfill BALLER Rewards + "Pay Now" Button for Creator Credits
 
-### What Works Well
+### 1. Data Operations (via insert tool)
 
-- **Tournament detail page**: All tabs (Slalom/Trick/Jump, Men/Women, Winner/Podium/Highest) load correctly with athletes and multipliers
-- **Prediction placement**: Dialog shows correctly with contest type, multiplier, balance, quick-select amounts, and projected rewards. Tokens deducted on confirm.
-- **Cancel prediction (fixed)**: Status updates to CANCELLED, tokens refund correctly, prediction removed from active list on Predictions page
-- **Events page**: All tournaments display with correct status badges and lock timers
-- **Fantasy page**: Moomba Masters 2026 league shows as Open with correct entry fee and lock timer
-- **Wallet page**: Balance, purchased/earned breakdown, and token packages all display correctly
-- **Mobile layout**: Responsive design works well on iPhone viewport
+**Assign BALLER owner:**
+```sql
+UPDATE referral_codes SET owner_user_id = '5ba913f1-8fb8-4932-a9b4-4a41f4d6d82a' WHERE code = 'BALLER';
+```
 
-### Bugs Found
+**Backfill BALLER redemption records** — recalculate `referrer_reward_value` to correct token amounts (20% of `purchase_amount_tokens`) and set `referrer_user_id` to BallOfSpray's ID.
 
-#### 1. Homepage shows cancelled predictions as active (Critical)
-**File**: `src/pages/Index.tsx` (lines 99-105)
+**Credit BallOfSpray's wallet** — add the total owed tokens to `earned_tokens` in `token_wallets`, create `token_transactions` entries with `reference_type = 'referral_reward'`, and mark the redemptions as paid (`referrer_paid_at`).
 
-The homepage queries the `predictions` table directly with `status = 'PENDING'`, but when a bet_slip is cancelled, only the `bet_slips.status` changes to `CANCELLED` — the child `predictions` rows remain `PENDING`. This causes cancelled predictions to still appear as active entries on the homepage (showing "Active: 2" and duplicate Ross Charlie cards when there should be 0).
+### 2. Enhance "Mark Paid" → "Credit & Pay" (Referrals.tsx)
 
-**Fix**: Change the homepage query to join through `bet_slips` and filter by `bet_slips.status = 'PENDING'`, or alternatively update the cancel handler in `Predictions.tsx` to also set child `predictions` rows to `CANCELLED` status when the parent bet_slip is cancelled.
+The current "Mark Paid" button only timestamps `referrer_paid_at` — it does NOT actually credit tokens to the creator's wallet. This needs to change:
 
-#### 2. Rewards page shows duplicate balance badge (Minor UI)
-**File**: `src/pages/Rewards.tsx` (lines 408-416)
+**Replace `markPaidMutation`** with a new mutation that:
+1. Looks up the redemption's `referrer_user_id` and `referrer_reward_value`
+2. Calls `supabase.rpc('increment_earned_tokens', { user_id_param, amount })` to credit the wallet
+3. Inserts a `token_transactions` record (type: `bonus`, reference_type: `referral_reward`)
+4. Updates `referrer_paid_at` on the redemption
 
-The Rewards page passes a custom balance badge via the `action` prop to `PageHeader`, but `PageHeader` already renders its own balance badge by default. This creates two "674" badges side by side in the header.
+**Add visual status indicators** to the redemptions table:
+- Green "Credited" badge when `referrer_paid_at` is set
+- Red "Unpaid" badge when null
+- Show this in both the Activity tab and Payouts tab
 
-**Fix**: Either pass `showBalance={false}` to `PageHeader` on the Rewards page, or remove the custom `action` prop since `PageHeader` already handles balance display.
+### 3. Fix display of reward values
 
-#### 3. Liability cleanup trigger case mismatch (Data Integrity)
-The `cleanup_liability_on_settlement` database trigger checks for lowercase `'pending'` in the condition `IF OLD.status = 'pending'`, but the application uses uppercase `'PENDING'`. This means the trigger never fires for cancelled bet slips, leaving stale entries in `market_liability`.
+Currently showing `referrer_reward_value.toFixed(2)` — since values are now token integers (e.g., 1500, 3500), change display to whole numbers without decimals for token type.
 
-**Fix**: Database migration to update the trigger to use uppercase `'PENDING'` and add `'CANCELLED'` to the list of settlement statuses that trigger cleanup.
-
-### Implementation Order
-1. Fix homepage cancelled predictions query (critical for launch)
-2. Update liability cleanup trigger to handle case + CANCELLED status
-3. Fix Rewards page duplicate balance badge
+### Files to modify
+- `src/pages/admin/Referrals.tsx` — update Mark Paid to actually credit tokens, add status badges, fix number formatting
+- Data operations — assign BALLER owner, backfill rewards, credit wallet
 
