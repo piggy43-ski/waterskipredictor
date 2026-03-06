@@ -113,6 +113,11 @@ export const PodiumSelectionCard = ({
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <div className="font-semibold">{athlete.athlete.name}</div>
+                      {athlete.athlete.injury_flag && (
+                        <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-700 text-xs">
+                          🏥 Injured
+                        </Badge>
+                      )}
                       {rank && (
                         <Badge variant={getRankVariant(rank)} className="flex items-center gap-1 text-xs">
                           {rank <= 3 && <Medal className="w-3 h-3" />}
