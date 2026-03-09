@@ -2117,6 +2117,27 @@ export default function TournamentSettlement() {
             </DialogDescription>
           </DialogHeader>
           
+          <div className="flex items-center gap-4 py-2 px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Target Round:</span>
+              <Select value={selectedRound} onValueChange={(v) => setSelectedRound(v as RoundType)}>
+                <SelectTrigger className="w-[160px] h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="qual">Qualifying</SelectItem>
+                  <SelectItem value="semi">Semi-Finals</SelectItem>
+                  <SelectItem value="final">Finals</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {allParsedResults.some(r => r.round_type) && (
+              <Badge variant="secondary" className="text-xs">
+                AI detected: {roundLabels[allParsedResults.find(r => r.round_type)?.round_type as RoundType] || 'unknown'}
+              </Badge>
+            )}
+          </div>
+          
           <ScrollArea className="max-h-[50vh]">
             {allParsedResults.length > 0 && (
               <div className="space-y-6">
