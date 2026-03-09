@@ -593,15 +593,8 @@ export default function TournamentSettlement() {
   const applyAIResults = () => {
     if (allParsedResults.length === 0) return;
 
-    // Auto-detect round type from AI results (majority vote)
-    const roundVotes = allParsedResults
-      .map(r => r.round_type)
-      .filter(Boolean) as RoundType[];
-    const detectedRound = roundVotes.length > 0
-      ? roundVotes.sort((a, b) =>
-          roundVotes.filter(v => v === b).length - roundVotes.filter(v => v === a).length
-        )[0]
-      : selectedRound;
+    // Always use the user's selected round — never override from AI detection
+    const targetRound = selectedRound;
 
     // Auto-detect discipline from AI results
     const disciplineVotes = allParsedResults
@@ -613,10 +606,7 @@ export default function TournamentSettlement() {
         )[0]
       : selectedDiscipline;
 
-    // Auto-switch round and discipline
-    const targetRound = detectedRound;
     const targetDiscipline = detectedDiscipline;
-    setSelectedRound(targetRound);
     setSelectedDiscipline(targetDiscipline);
 
     const allAthletes = allParsedResults.flatMap(r => r.athletes);
@@ -2126,6 +2116,27 @@ export default function TournamentSettlement() {
               Review extracted results. Yellow = needs manual matching.
             </DialogDescription>
           </DialogHeader>
+          
+          <div className="flex items-center gap-4 py-2 px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Target Round:</span>
+              <Select value={selectedRound} onValueChange={(v) => setSelectedRound(v as RoundType)}>
+                <SelectTrigger className="w-[160px] h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="qual">Qualifying</SelectItem>
+                  <SelectItem value="semi">Semi-Finals</SelectItem>
+                  <SelectItem value="final">Finals</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {allParsedResults.some(r => r.round_type) && (
+              <Badge variant="secondary" className="text-xs">
+                AI detected: {roundLabels[allParsedResults.find(r => r.round_type)?.round_type as RoundType] || 'unknown'}
+              </Badge>
+            )}
+          </div>
           
           <ScrollArea className="max-h-[50vh]">
             {allParsedResults.length > 0 && (
