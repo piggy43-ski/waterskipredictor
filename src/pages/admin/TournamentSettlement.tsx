@@ -593,15 +593,8 @@ export default function TournamentSettlement() {
   const applyAIResults = () => {
     if (allParsedResults.length === 0) return;
 
-    // Auto-detect round type from AI results (majority vote)
-    const roundVotes = allParsedResults
-      .map(r => r.round_type)
-      .filter(Boolean) as RoundType[];
-    const detectedRound = roundVotes.length > 0
-      ? roundVotes.sort((a, b) =>
-          roundVotes.filter(v => v === b).length - roundVotes.filter(v => v === a).length
-        )[0]
-      : selectedRound;
+    // Always use the user's selected round — never override from AI detection
+    const targetRound = selectedRound;
 
     // Auto-detect discipline from AI results
     const disciplineVotes = allParsedResults
@@ -613,10 +606,7 @@ export default function TournamentSettlement() {
         )[0]
       : selectedDiscipline;
 
-    // Auto-switch round and discipline
-    const targetRound = detectedRound;
     const targetDiscipline = detectedDiscipline;
-    setSelectedRound(targetRound);
     setSelectedDiscipline(targetDiscipline);
 
     const allAthletes = allParsedResults.flatMap(r => r.athletes);
