@@ -51,6 +51,7 @@ import AdminRewardLiabilityDashboard from "./pages/admin/RewardLiabilityDashboar
 import AdminRiskDashboard from "./pages/admin/RiskDashboard";
 import AdminProbabilityOverrides from "./pages/admin/ProbabilityOverrides";
 import AdminReferrals from "./pages/admin/Referrals";
+import AdminTournamentRecap from "./pages/admin/TournamentRecap";
 import AdminAllTransactions from "./pages/admin/AllTransactions";
 import AdminAllPredictions from "./pages/admin/AllPredictions";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -116,6 +117,8 @@ const App = () => (
               <Route path="/admin/selections" element={<ProtectedRoute><AdminSelections /></ProtectedRoute>} />
               <Route path="/admin/rewards" element={<ProtectedRoute><AdminRewards /></ProtectedRoute>} />
               <Route path="/admin/tournament-settlement" element={<ProtectedRoute><AdminTournamentSettlement /></ProtectedRoute>} />
+              <Route path="/admin/tournament-recap" element={<ProtectedRoute><AdminTournamentRecap /></ProtectedRoute>} />
+              <Route path="/admin/tournament-recap/:id" element={<ProtectedRoute><AdminTournamentRecap /></ProtectedRoute>} />
               <Route path="/admin/tournament-entries" element={<ProtectedRoute><AdminTournamentEntries /></ProtectedRoute>} />
               <Route path="/admin/data-integrity" element={<ProtectedRoute><AdminDataIntegrity /></ProtectedRoute>} />
               <Route path="/admin/house-ledger" element={<ProtectedRoute><AdminHouseLedger /></ProtectedRoute>} />
