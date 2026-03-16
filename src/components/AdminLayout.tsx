@@ -24,6 +24,7 @@ const navItems = [
   { path: '/admin/rankings-sync', label: 'Rankings Auto-Sync', icon: TrendingUp },
   { path: '/admin/rankings-import', label: 'Manual Import', icon: TrendingUp },
   { path: '/admin/tournament-settlement', label: 'Results Processing', icon: FileCheck },
+  { path: '/admin/tournament-recap', label: 'Tournament Recap', icon: FileText },
   { path: '/admin/tournaments', label: 'Tournaments', icon: Trophy },
   { path: '/admin/fantasy-pots', label: 'Fantasy Leagues', icon: Crown },
   { path: '/admin/markets', label: 'Contests', icon: TrendingUp },

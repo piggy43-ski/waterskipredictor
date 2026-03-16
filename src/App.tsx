@@ -51,6 +51,7 @@ import AdminRewardLiabilityDashboard from "./pages/admin/RewardLiabilityDashboar
 import AdminRiskDashboard from "./pages/admin/RiskDashboard";
 import AdminProbabilityOverrides from "./pages/admin/ProbabilityOverrides";
 import AdminReferrals from "./pages/admin/Referrals";
+import AdminTournamentRecap from "./pages/admin/TournamentRecap";
 import AdminAllTransactions from "./pages/admin/AllTransactions";
 import AdminAllPredictions from "./pages/admin/AllPredictions";
 import PaymentSuccess from "./pages/PaymentSuccess";
