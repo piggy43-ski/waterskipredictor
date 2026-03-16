@@ -45,7 +45,7 @@ export const TutorialBubble: React.FC = () => {
 
     let attempts = 0;
     const maxAttempts = 10;
-    let retryTimeout: NodeJS.Timeout;
+    let retryTimeout: ReturnType<typeof setTimeout>;
 
     const updatePosition = () => {
       const element = document.querySelector(currentStepData.target!);
