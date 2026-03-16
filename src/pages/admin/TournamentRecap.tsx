@@ -373,7 +373,7 @@ const TournamentRecap = () => {
                               {(w.bestBet?.athletes as any)?.name || '—'}
                             </TableCell>
                             <TableCell className="text-right">
-                              <Badge variant="outline" className="text-green-500 border-green-500/30">
+                              <Badge variant="outline" className="text-emerald-400 border-emerald-400/30">
                                 +{w.netProfit.toLocaleString()}
                               </Badge>
                             </TableCell>

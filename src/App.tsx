@@ -117,6 +117,8 @@ const App = () => (
               <Route path="/admin/selections" element={<ProtectedRoute><AdminSelections /></ProtectedRoute>} />
               <Route path="/admin/rewards" element={<ProtectedRoute><AdminRewards /></ProtectedRoute>} />
               <Route path="/admin/tournament-settlement" element={<ProtectedRoute><AdminTournamentSettlement /></ProtectedRoute>} />
+              <Route path="/admin/tournament-recap" element={<ProtectedRoute><AdminTournamentRecap /></ProtectedRoute>} />
+              <Route path="/admin/tournament-recap/:id" element={<ProtectedRoute><AdminTournamentRecap /></ProtectedRoute>} />
               <Route path="/admin/tournament-entries" element={<ProtectedRoute><AdminTournamentEntries /></ProtectedRoute>} />
               <Route path="/admin/data-integrity" element={<ProtectedRoute><AdminDataIntegrity /></ProtectedRoute>} />
               <Route path="/admin/house-ledger" element={<ProtectedRoute><AdminHouseLedger /></ProtectedRoute>} />
