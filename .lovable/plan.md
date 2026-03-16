@@ -1,38 +1,48 @@
 
 
-## Plan: Backfill BALLER Rewards + "Pay Now" Button for Creator Credits
+## Tournament Recap Page -- Plan
 
-### 1. Data Operations (via insert tool)
+### Overview
+Create a new admin page at `/admin/tournament-recap/:id` that auto-generates a comprehensive post-settlement recap for any settled tournament. This pulls data from `bet_slips`, `predictions`, `profiles`, `athletes`, `fantasy_entries`, `fantasy_entry_athletes`, and `fantasy_pots` to display the same stats we've been calculating manually in chat.
 
-**Assign BALLER owner:**
-```sql
-UPDATE referral_codes SET owner_user_id = '5ba913f1-8fb8-4932-a9b4-4a41f4d6d82a' WHERE code = 'BALLER';
-```
+### What Gets Built
 
-**Backfill BALLER redemption records** — recalculate `referrer_reward_value` to correct token amounts (20% of `purchase_amount_tokens`) and set `referrer_user_id` to BallOfSpray's ID.
+**1. New page: `src/pages/admin/TournamentRecap.tsx`**
 
-**Credit BallOfSpray's wallet** — add the total owed tokens to `earned_tokens` in `token_wallets`, create `token_transactions` entries with `reference_type = 'referral_reward'`, and mark the redemptions as paid (`referrer_paid_at`).
+An admin-only page with a tournament selector (defaulting to most recently settled) that displays:
 
-### 2. Enhance "Mark Paid" → "Credit & Pay" (Referrals.tsx)
+- **Header**: Tournament name, dates, settlement timestamp
+- **Volume Stats Card**: Total entries, unique users, total wagered, total paid out, house P/L, win rate
+- **Top Winners Table**: Top 5 users by net profit (username, athlete picked, stake, payout, net profit, odds)
+- **Biggest Misses Card**: Largest potential payouts that lost (user, stake, odds, potential payout)
+- **Trap Picks Card**: Most-backed athletes with 0 wins (athlete name, total staked, entry count)
+- **Top Performing Athletes Card**: Athletes with highest win rates among backed entries
+- **Discipline Breakdown**: Wagered/win-rate per discipline+category combo
+- **Parlay Stats**: Total parlays placed, hit rate
+- **Fantasy Results Card** (if fantasy pot exists for tournament): Winner, runner-up, points, MVP athletes, biggest bust
+- **Copy-to-Clipboard Button**: Generates a formatted text recap (like the forum post) for easy social media sharing
 
-The current "Mark Paid" button only timestamps `referrer_paid_at` — it does NOT actually credit tokens to the creator's wallet. This needs to change:
+**2. Route + Nav**
+- Add route `/admin/tournament-recap/:id` and a fallback `/admin/tournament-recap` (shows selector)
+- Add nav item in `AdminLayout.tsx`
 
-**Replace `markPaidMutation`** with a new mutation that:
-1. Looks up the redemption's `referrer_user_id` and `referrer_reward_value`
-2. Calls `supabase.rpc('increment_earned_tokens', { user_id_param, amount })` to credit the wallet
-3. Inserts a `token_transactions` record (type: `bonus`, reference_type: `referral_reward`)
-4. Updates `referrer_paid_at` on the redemption
+**3. Data Fetching Approach**
+All queries use the existing `supabase` client with admin RLS policies already in place:
+- `bet_slips` joined with `profiles` and `athletes` for entry-level stats
+- `fantasy_pots` + `fantasy_entries` + `fantasy_entry_athletes` for fantasy data
+- `tournaments` filtered to `settled_at IS NOT NULL` for the selector
+- Group-by aggregations done client-side with `useMemo` (dataset is small per tournament)
 
-**Add visual status indicators** to the redemptions table:
-- Green "Credited" badge when `referrer_paid_at` is set
-- Red "Unpaid" badge when null
-- Show this in both the Activity tab and Payouts tab
+### Files Changed
+| File | Change |
+|------|--------|
+| `src/pages/admin/TournamentRecap.tsx` | New file -- full recap page |
+| `src/App.tsx` | Add import + route |
+| `src/components/AdminLayout.tsx` | Add nav item |
 
-### 3. Fix display of reward values
-
-Currently showing `referrer_reward_value.toFixed(2)` — since values are now token integers (e.g., 1500, 3500), change display to whole numbers without decimals for token type.
-
-### Files to modify
-- `src/pages/admin/Referrals.tsx` — update Mark Paid to actually credit tokens, add status badges, fix number formatting
-- Data operations — assign BALLER owner, backfill rewards, credit wallet
+### Technical Notes
+- Follows existing admin page patterns (AdminLayout wrapper, useQuery, Card components)
+- No database migrations needed -- all data already exists
+- Copy-to-clipboard generates plain text formatted for forum/social posting
+- Tournament selector dropdown filters to settled tournaments only
 
