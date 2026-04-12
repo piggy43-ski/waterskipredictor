@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SEO } from '@/components/SEO';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { TournamentCard } from '@/components/TournamentCard';
@@ -62,6 +63,7 @@ const Tournaments = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="Tournaments" path="/tournaments" description="Browse upcoming, live & finished IWWF waterski pro tour events. Make your predictions before each tournament." />
       <PageHeader title="Tournaments" />
       
       <div className="max-w-lg mx-auto px-4 py-6">
