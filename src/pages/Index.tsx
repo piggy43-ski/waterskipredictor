@@ -164,6 +164,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="Home" path="/" description="Pick winners for IWWF pro tour waterski events — slalom, trick & jump. Free fantasy predictions game for the waterski community." />
       <PageHeader title={<>WaterSki <span className="text-primary">Predictor</span></>} />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
