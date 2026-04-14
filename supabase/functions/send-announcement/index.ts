@@ -30,7 +30,7 @@ const generateAnnouncementHtml = (username: string, appUrl: string, tournamentPa
           <tr>
             <td style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 40px; border: 1px solid #2a2a4a;">
               <h1 style="color: #ffffff; font-size: 28px; font-weight: 700; margin: 0 0 16px 0; text-align: center;">
-                Moomba Masters is Open! 🏆
+                Swiss Pro Tricks is Open! 🏆
               </h1>
               
               <p style="color: #a0a0a0; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0; text-align: center;">
@@ -38,7 +38,7 @@ const generateAnnouncementHtml = (username: string, appUrl: string, tournamentPa
               </p>
               
               <p style="color: #e0e0e0; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
-                Predictions are now open for the <strong style="color: #3b82f6;">Moomba Masters</strong>! Get in early and lock in your picks before the action starts.
+                Predictions are now open for <strong style="color: #3b82f6;">Swiss Pro Tricks</strong>! Get in early and lock in your picks before the action starts.
               </p>
               
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
@@ -52,7 +52,7 @@ const generateAnnouncementHtml = (username: string, appUrl: string, tournamentPa
               </table>
               
               <p style="color: #e0e0e0; font-size: 16px; line-height: 1.6; margin: 0 0 32px 0;">
-                Pick your winners across Slalom, Trick, and Jump — and see how your predictions stack up when results come in.
+                Pick your winners in Trick — and see how your predictions stack up when results come in.
               </p>
               
               <table width="100%" cellpadding="0" cellspacing="0">
@@ -93,11 +93,10 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const batchSize = body.batchSize ?? 25;
-    const offset = body.offset ?? 0;
-    const tournamentPath = body.tournamentPath ?? "/tournaments/6b2ee218-5957-41ec-be67-1d1d5af281ae";
+    const batchSize = body.batchSize ?? 100;
+    const tournamentPath = body.tournamentPath ?? "/tournaments/7bf0f645-54f5-497a-9b95-208c01fb9609";
     const sendToAll = body.sendToAll === true;
-    const campaignId = body.campaignId ?? "moomba-masters-2026";
+    const campaignId = body.campaignId ?? "swiss-pro-tricks-2026";
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -122,7 +121,7 @@ serve(async (req) => {
       .select("recipient")
       .eq("email_type", "announcement")
       .eq("status", "sent")
-      .like("subject", "%Moomba Masters%");
+      .like("subject", "%Swiss Pro Tricks%");
     
     const alreadySentSet = new Set((alreadySent || []).map((r: any) => r.recipient));
 
@@ -137,15 +136,15 @@ serve(async (req) => {
       return pref.marketing !== false;
     });
 
-    // Apply batch size (no offset needed with dedup)
+    // Apply batch size (dedup handles resumption)
     const batch = eligibleUsers.slice(0, batchSize);
     const remaining = eligibleUsers.length - batch.length;
 
-    console.log(`Announcement: ${eligibleUsers.length} eligible, sending batch of ${batch.length} (offset: ${offset})`);
+    console.log(`Announcement: ${eligibleUsers.length} eligible, sending batch of ${batch.length}`);
 
     const fromEmail = "noreply@waterskipredictor.com";
     const appUrl = Deno.env.get("APP_URL") || "https://waterskipredictor.lovable.app";
-    const subject = "🎿 Moomba Masters is Open for Predictions!";
+    const subject = "🎿 Swiss Pro Tricks is Open for Predictions!";
 
     let sent = 0;
     const failures: string[] = [];
@@ -171,7 +170,6 @@ serve(async (req) => {
           console.error(`Email failed for ${user.email}:`, emailError);
           failures.push(user.email);
 
-          // Log failure
           await supabaseAdmin.from("email_logs").insert({
             user_id: user.id,
             recipient: user.email,
@@ -184,7 +182,6 @@ serve(async (req) => {
           sent++;
           console.log(`Sent to ${user.email}`);
 
-          // Log success
           await supabaseAdmin.from("email_logs").insert({
             user_id: user.id,
             recipient: user.email,
@@ -205,8 +202,8 @@ serve(async (req) => {
       failures: failures.length,
       failedEmails: failures,
       remaining: Math.max(0, remaining),
-      nextOffset: remaining > 0 ? offset + batch.length : null,
       totalEligible: eligibleUsers.length,
+      campaignId,
     };
 
     console.log("Announcement batch complete:", result);
