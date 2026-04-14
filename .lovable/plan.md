@@ -1,33 +1,25 @@
 
 
-## Add Swiss Pro Tricks Athletes
+## Fix: Extend Odds Ladder in generate-market-odds Edge Function
 
-### Summary
-Create 3 missing athletes in the database and ensure all 21 participants are linked to the Swiss Pro Tricks tournament markets. No code changes needed -- this is purely database work.
+### Root Cause
+The `ODDS_LADDER` array in `generate-market-odds/index.ts` (line 73-81) stops at **8.00**. The `roundToLadder()` function clamps every value to this max, so all longshot athletes (ranks 6-12) get 8.00x regardless of their true probability (~3-5%). This makes the implied sum balloon to 3.45 instead of the target 0.91.
 
-### Step 1: Create 3 new athletes via database migration
+### Fix
+1. **Extend `ODDS_LADDER`** in the edge function to match the ladder in `multiplierUtils.ts` -- add values from 8.50 through 20.00
+2. **Re-run odds generation** for both Swiss Pro Trick markets after deploying
 
-Insert these athletes into the `athletes` table:
-
-| Name | Gender | Country | Disciplines |
-|------|--------|---------|-------------|
-| Gay Ella | female | USA | trick |
-| Krueger Ridge | male | USA | trick |
-| Elias Adrian | male | SVK | trick |
-
-Note: Names follow the existing "LastName FirstName" convention used in the database (matching IWWF format).
-
-### Step 2: Add market entries for the Swiss Pro Tricks tournament
-
-Query the existing markets for tournament `7bf0f645-54f5-497a-9b95-208c01fb9609` and create `market_entries` linking all 21 athletes to the appropriate trick markets (open_men and open_women categories).
-
-If markets don't exist yet for this tournament, they'll need to be created first (trick/open_men and trick/open_women).
+### What This Fixes
+- Longshots (ranks 6-12) will get proper multipliers like 12x, 15x, 20x instead of all being 8x
+- Implied sum will converge to the 0.90-0.92 target band
+- House edge will be properly maintained at ~9%
 
 ### Files Changed
-No source code changes. All work is database inserts via migration + insert tools.
+| File | Change |
+|------|--------|
+| `supabase/functions/generate-market-odds/index.ts` | Extend ODDS_LADDER array to include values up to 20.00 |
 
-### What won't change
-- No UI changes
-- No edge function changes
-- Existing athletes' data untouched
+### After Deploy
+- Re-invoke `generate-market-odds` for both Swiss Pro men's and women's trick markets
+- Verify implied sums land in 0.90-0.92 band
 
