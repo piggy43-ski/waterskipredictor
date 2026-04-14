@@ -27,28 +27,14 @@ const MULTIPLIER_CAPS = {
   HIGHEST_SCORE: { min: 1.50, max: 7.0 },
 };
 
-// RANK-SPECIFIC CAPS - Favorites are capped VERY tight
+// RANK-SPECIFIC CAPS - Disabled to allow calibration convergence.
+// Previously these forced favorites to very low multipliers (e.g. 1.5x for rank 1)
+// which made the implied sum exceed the target by 2-3x. The calibration loop
+// naturally assigns appropriate multipliers based on probabilities.
 const RANK_CAPS: Record<string, Record<number, number>> = {
-  WINNER: {
-    1: 1.50,  // Rank 1 (best athlete) capped at 1.5x
-    2: 2.25,
-    3: 3.00,
-    4: 4.00,
-    5: 5.00,
-    // Rank 6+ use global max (8.0)
-  },
-  PODIUM: {
-    1: 1.25,
-    2: 1.75,
-    3: 2.25,
-    // Rank 4+ use global max (6.0)
-  },
-  HIGHEST_SCORE: {
-    1: 1.80,
-    2: 2.50,
-    3: 3.50,
-    // Rank 4+ use global max (7.0)
-  },
+  WINNER: {},
+  PODIUM: {},
+  HIGHEST_SCORE: {},
 };
 
 // Softmax temperature per market type (lower = sharper favorites)
