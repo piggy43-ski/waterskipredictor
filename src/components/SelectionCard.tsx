@@ -87,6 +87,11 @@ export const SelectionCard = ({
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="font-semibold text-lg">{selection.athlete.name}</h3>
+            {discipline && selection.athlete.defending_champion_disciplines?.includes(discipline) && (
+              <Badge variant="outline" className="text-yellow-600 border-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-700 text-xs">
+                🏆 Defending Champ
+              </Badge>
+            )}
             {selection.athlete.injury_flag && (
               <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-700 text-xs">
                 🏥 Injured
