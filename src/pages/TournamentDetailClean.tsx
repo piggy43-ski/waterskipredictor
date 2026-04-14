@@ -47,7 +47,8 @@ const TournamentDetail = () => {
   const { isAdmin } = useIsAdmin();
   
   // Determine initial discipline from URL query param
-  const initialDiscipline = searchParams.get('discipline') || 'slalom';
+  const initialDiscipline = searchParams.get('discipline') || '';
+  const [activeDiscipline, setActiveDiscipline] = useState(initialDiscipline);
   
   // Get highlighted athletes from "Predict Again" navigation
   const predictAgainAthletes: string[] = location.state?.predictAgainAthletes || location.state?.betAgainAthletes || [];
@@ -1026,8 +1027,11 @@ const TournamentDetail = () => {
             </Button>
           </Card>
         ) : (
-          <Tabs defaultValue={initialDiscipline} className="w-full">
-            <TabsList className="w-full grid grid-cols-3 mb-6">
+          <Tabs value={activeDiscipline} onValueChange={setActiveDiscipline} className="w-full">
+            <TabsList className={cn(
+              "mb-6",
+              tournament.disciplines.length === 1 ? "flex justify-center max-w-[200px] mx-auto" : `w-full grid grid-cols-${tournament.disciplines.length}`
+            )}>
               {tournament.disciplines.map((disc) => (
                 <TabsTrigger key={disc} value={disc} className="capitalize">
                   {disc}
