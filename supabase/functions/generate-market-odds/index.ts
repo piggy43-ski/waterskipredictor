@@ -27,12 +27,13 @@ const MULTIPLIER_CAPS = {
   HIGHEST_SCORE: { min: 1.50, max: 12.0 },
 };
 
-// RANK-SPECIFIC CAPS - Soft caps to prevent favorites from being too generous
-// while still allowing calibration to converge
+// RANK-SPECIFIC CAPS - Disabled. The flatter temperature (1.40) and weight ladder
+// handle distribution naturally. Rank caps were consuming too much of the implied
+// sum budget (e.g. 1/3+1/5+1/8 = 0.658, exceeding the 0.91 target for 12-person fields).
 const RANK_CAPS: Record<string, Record<number, number>> = {
-  WINNER: { 1: 3.0, 2: 5.0, 3: 8.0 },
-  PODIUM: { 1: 2.0, 2: 3.5, 3: 5.0 },
-  HIGHEST_SCORE: { 1: 3.0, 2: 5.0, 3: 7.0 },
+  WINNER: {},
+  PODIUM: {},
+  HIGHEST_SCORE: {},
 };
 
 // Softmax temperature per market type (higher = flatter distribution)
