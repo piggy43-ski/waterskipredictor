@@ -1,43 +1,36 @@
 
 
-## Fix: Flatten Multiplier Distribution to Prevent Longshot Exploitation
+## Update Men's Trick Multipliers + Add Champion/Injury Indicators
 
-### Problem
-The current probability model is too concentrated on favorites:
-- **Men's Trick**: Rank 1 = 3.4x, Rank 2 = 8.5x, Ranks 3-12 = ALL 20x
-- **Women's Trick**: Rank 1 = 2.4x, Rank 2 = 7.5x, Ranks 3-9 = mostly 20x
+### 1. Database: Add `defending_champion_discipline` column to athletes table
+Add a text array column `defending_champion_disciplines` (e.g. `['trick']`) to the `athletes` table so we can show a trophy badge per discipline. This is better than a boolean because an athlete could be defending champion in one discipline but not another.
 
-This means 80% of athletes pay out 20:1 — massively favorable for bettors who pick any longshot.
+**Migration SQL:**
+```sql
+ALTER TABLE athletes ADD COLUMN defending_champion_disciplines text[] DEFAULT '{}';
+```
 
-### Root Cause
-1. **Temperature too low** (0.85 for WINNER) — makes the softmax too sharp, concentrating probability on rank 1-2
-2. **Global max cap too low** (8.0x in config) — forces the adaptive logic to push all the way to 20x to converge
-3. **Weight ladder drops too steeply** — rank 1 = 1.00, rank 5 = 0.45, rank 10 = 0.24
+### 2. Data Updates (via insert/update tool)
+- **Martin Labra**: Set `injury_flag = true`
+- **Matías González**: Set `defending_champion_disciplines = ['trick']`
+- **Erika Lang**: Set `defending_champion_disciplines = ['trick']`
+- **Men's Trick market multipliers** (update `market_odds` + `selections`):
+  - Dorien Lelong → 15.0x
+  - Font Pablo → 18.0x
+  - Martin Labra → 20.0x
+  - Elias Adrian → 20.0x
+  - Kruger Ridge → 20.0x
 
-### Fix (all in `supabase/functions/generate-market-odds/index.ts`)
+### 3. UI: Add trophy badge to SelectionCard and PodiumSelectionCard
+Show a 🏆 **Defending Champion** badge next to the athlete name when `defending_champion_disciplines` includes the current discipline.
 
-| Change | Before | After |
-|--------|--------|-------|
-| WINNER temperature | 0.85 | 1.40 |
-| WINNER max cap | 8.0 | 15.0 |
-| Weight ladder | Steep drop (1.00 → 0.24) | Flatter curve (1.00 → 0.40) |
-| Re-enable soft rank caps | All empty `{}` | Rank 1: 3.0x, Rank 2: 5.0x, Rank 3: 8.0x |
-
-### Expected Outcome
-For a 12-person men's field, multipliers should look roughly like:
-- Rank 1: ~2.5-3.0x
-- Rank 3: ~5-6x
-- Rank 6: ~8-10x
-- Rank 12: ~14-15x
-
-Implied sum stays in 0.90-0.92 band, but spread is much more compressed — no athlete at 20x.
-
-### After Deploy
-- Re-run `generate-market-odds` for both Swiss Pro trick markets
-- Verify no athlete exceeds 15x and implied sum is in band
-
-### Files Changed
+**Files changed:**
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-market-odds/index.ts` | Raise temperature, raise global max cap, flatten weight ladder, add soft rank caps |
+| `src/components/SelectionCard.tsx` | Add 🏆 badge when athlete is defending champion for the discipline |
+| `src/components/PodiumSelectionCard.tsx` | Same trophy badge |
+| `src/types/index.ts` | Add `defending_champion_disciplines` to the `Athlete` type |
+
+### 4. Verify
+Check the tournament detail page to confirm multipliers, injury badge on Martin Labra, and trophy badges on Matías González and Erika Lang.
 
