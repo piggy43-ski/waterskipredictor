@@ -1,38 +1,33 @@
 
 
-## Plan: Backfill BALLER Rewards + "Pay Now" Button for Creator Credits
+## Add Swiss Pro Tricks Athletes
 
-### 1. Data Operations (via insert tool)
+### Summary
+Create 3 missing athletes in the database and ensure all 21 participants are linked to the Swiss Pro Tricks tournament markets. No code changes needed -- this is purely database work.
 
-**Assign BALLER owner:**
-```sql
-UPDATE referral_codes SET owner_user_id = '5ba913f1-8fb8-4932-a9b4-4a41f4d6d82a' WHERE code = 'BALLER';
-```
+### Step 1: Create 3 new athletes via database migration
 
-**Backfill BALLER redemption records** — recalculate `referrer_reward_value` to correct token amounts (20% of `purchase_amount_tokens`) and set `referrer_user_id` to BallOfSpray's ID.
+Insert these athletes into the `athletes` table:
 
-**Credit BallOfSpray's wallet** — add the total owed tokens to `earned_tokens` in `token_wallets`, create `token_transactions` entries with `reference_type = 'referral_reward'`, and mark the redemptions as paid (`referrer_paid_at`).
+| Name | Gender | Country | Disciplines |
+|------|--------|---------|-------------|
+| Gay Ella | female | USA | trick |
+| Krueger Ridge | male | USA | trick |
+| Elias Adrian | male | SVK | trick |
 
-### 2. Enhance "Mark Paid" → "Credit & Pay" (Referrals.tsx)
+Note: Names follow the existing "LastName FirstName" convention used in the database (matching IWWF format).
 
-The current "Mark Paid" button only timestamps `referrer_paid_at` — it does NOT actually credit tokens to the creator's wallet. This needs to change:
+### Step 2: Add market entries for the Swiss Pro Tricks tournament
 
-**Replace `markPaidMutation`** with a new mutation that:
-1. Looks up the redemption's `referrer_user_id` and `referrer_reward_value`
-2. Calls `supabase.rpc('increment_earned_tokens', { user_id_param, amount })` to credit the wallet
-3. Inserts a `token_transactions` record (type: `bonus`, reference_type: `referral_reward`)
-4. Updates `referrer_paid_at` on the redemption
+Query the existing markets for tournament `7bf0f645-54f5-497a-9b95-208c01fb9609` and create `market_entries` linking all 21 athletes to the appropriate trick markets (open_men and open_women categories).
 
-**Add visual status indicators** to the redemptions table:
-- Green "Credited" badge when `referrer_paid_at` is set
-- Red "Unpaid" badge when null
-- Show this in both the Activity tab and Payouts tab
+If markets don't exist yet for this tournament, they'll need to be created first (trick/open_men and trick/open_women).
 
-### 3. Fix display of reward values
+### Files Changed
+No source code changes. All work is database inserts via migration + insert tools.
 
-Currently showing `referrer_reward_value.toFixed(2)` — since values are now token integers (e.g., 1500, 3500), change display to whole numbers without decimals for token type.
-
-### Files to modify
-- `src/pages/admin/Referrals.tsx` — update Mark Paid to actually credit tokens, add status badges, fix number formatting
-- Data operations — assign BALLER owner, backfill rewards, credit wallet
+### What won't change
+- No UI changes
+- No edge function changes
+- Existing athletes' data untouched
 
