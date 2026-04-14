@@ -1,62 +1,46 @@
 
 
-## Update Trick Rankings from IWWF + Adjust Multipliers
+## Auto-select discipline + center single tab
 
-### Current vs IWWF Rankings Comparison
-
-**Men's Trick (athletes in tournament):**
-| Athlete | DB Rank | IWWF Rank | Change | Current Multiplier |
-|---------|---------|-----------|--------|-------------------|
-| Gonzalez Matias | 3 | **1** | ↑2 | 4.80x (override) |
-| Abelson Jake | 1 | **2** | ↓1 | 2.60x (override) |
-| Font Patricio | 2 | **3** | ↓1 | 4.00x (override) |
-| Labra Martin | null | **4** | new | 20.0x (override) |
-| Poland Joel | 5 | **6** | ↓1 | 12.0x (override) |
-| Llewellyn Dorien | 8 | **9** | ↓1 | 15.0x (override) |
-| Pickos Adam | 9 | **10** | ↓1 | 20x |
-| Marenzi Edoardo | 11 | **12** | ↓1 | 20x |
-| Font Pablo | 12 | **13** | ↓1 | 18.0x (override) |
-| Kuhn Dominic | 17 | **16** | ↑1 | 20x |
-| Elias Adrian | null | **29** | new | 20.0x (override) |
-| Krueger Ridge | null | **93** | new | 20.0x (override) |
-
-**Big change**: Gonzalez Matias is now world #1, Abelson Jake drops to #2. Since Gonzalez is the defending champ AND now world #1, his multiplier should drop significantly. Abelson should also adjust.
-
-**Women's Trick**: The IWWF site didn't render the women's section via static fetch (requires JavaScript filter). Rankings stay as-is unless you can tell me the updated women's rankings.
+### Problem
+1. The default discipline tab is `slalom` (line 50), so when this tournament only has `trick`, nothing shows until user clicks the Trick tab.
+2. The discipline `TabsList` always renders a 3-column grid (`grid-cols-3`), so a single tab appears left-aligned instead of centered.
 
 ### Plan
 
-#### 1. Update `current_rank_trick` in athletes table
-Update all men's trick athletes with their new IWWF world rankings.
+**File: `src/pages/TournamentDetailClean.tsx`**
 
-#### 2. Adjust multipliers based on new rankings
-Since Gonzalez Matias is now world #1 (was #3), his multiplier needs to come down. Suggested new multipliers based on new rankings:
+1. **Fix default discipline** (line 50): Change the initial discipline logic to auto-select the first available discipline from the tournament data instead of defaulting to `slalom`. Since tournament data loads async, we'll also add a `useEffect` to update the active tab once disciplines are known.
 
-| Athlete | New Rank | Suggested Multiplier | Reasoning |
-|---------|----------|---------------------|-----------|
-| Gonzalez Matias | 1 | **2.5x** | Now #1 + defending champ |
-| Abelson Jake | 2 | **3.5x** | Dropped to #2 |
-| Font Patricio | 3 | **5.0x** | Dropped to #3 |
-| Labra Martin | 4 | **8.0x** | Now ranked #4 (was unranked), but injury flag stays |
-| Poland Joel | 6 | **12.0x** | Keep at 12x |
-| Llewellyn Dorien | 9 | **15.0x** | Keep at 15x |
-| Pickos Adam | 10 | **18.0x** | Was 20x, rank 10 |
-| Marenzi Edoardo | 12 | **20.0x** | Keep |
-| Font Pablo | 13 | **18.0x** | Keep |
-| Kuhn Dominic | 16 | **20.0x** | Keep |
-| Elias Adrian | 29 | **20.0x** | Keep |
-| Krueger Ridge | 93 | **20.0x** | Keep |
+2. **Dynamic grid columns** (line 1030): Change `grid-cols-3` to be dynamic based on the number of disciplines:
+   - 1 discipline → `grid-cols-1` with `max-w-[200px] mx-auto` to center
+   - 2 disciplines → `grid-cols-2`
+   - 3 disciplines → `grid-cols-3`
 
-**Note**: Labra Martin moving from unranked to world #4 is a big deal — dropping from 20x to 8x reflects that (even with injury). Want me to adjust differently?
+### Technical detail
 
-#### 3. Update `market_multiplier_overrides`, `market_odds`, and `selections` tables
-Sync all three tables for consistency.
+```tsx
+// Line 50: smarter default
+const initialDiscipline = searchParams.get('discipline') || '';
 
-#### 4. Women's rankings
-The IWWF site requires JavaScript rendering to load the women's filter. I couldn't get the women's trick rankings from the static page fetch. Do you want to:
-- Tell me the women's rankings manually?
-- Keep women's rankings as-is for now?
+// Add useEffect after tournament loads to set first discipline as default
+// Use a state variable for the active tab so we can update it
+const [activeDiscipline, setActiveDiscipline] = useState(initialDiscipline);
 
-### Files Changed
-No code file changes — all database updates via insert/update tool.
+useEffect(() => {
+  if (!activeDiscipline && tournament?.disciplines?.length) {
+    setActiveDiscipline(tournament.disciplines[0]);
+  }
+}, [tournament]);
+
+// Line 1029: controlled Tabs
+<Tabs value={activeDiscipline} onValueChange={setActiveDiscipline}>
+
+// Line 1030: dynamic grid
+const discCount = tournament.disciplines.length;
+<TabsList className={cn(
+  "w-full mb-6",
+  discCount === 1 ? "flex justify-center" : `grid grid-cols-${discCount}`
+)}>
+```
 
