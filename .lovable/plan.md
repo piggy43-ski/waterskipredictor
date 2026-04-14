@@ -1,46 +1,34 @@
 
 
-## Auto-select discipline + center single tab
+## Send Swiss Pro Tricks Announcement Email
 
-### Problem
-1. The default discipline tab is `slalom` (line 50), so when this tournament only has `trick`, nothing shows until user clicks the Trick tab.
-2. The discipline `TabsList` always renders a 3-column grid (`grid-cols-3`), so a single tab appears left-aligned instead of centered.
+### Summary
+Update the `send-announcement` edge function to announce "Swiss Pro Tricks is Open for Predictions", then invoke it in 3 batches (100/day) to stay within your daily email limit.
 
-### Plan
+### What Changes
 
-**File: `src/pages/TournamentDetailClean.tsx`**
+**1. Update `supabase/functions/send-announcement/index.ts`**
+- Change email subject to "Swiss Pro Tricks is Open for Predictions!"
+- Update HTML template: replace all "Moomba Masters" references with "Swiss Pro Tricks"
+- Update copy to mention Trick discipline only (not Slalom/Jump)
+- Update `tournamentPath` default to `/tournaments/7bf0f645-54f5-497a-9b95-208c01fb9609`
+- Update `campaignId` default to `swiss-pro-tricks-2026`
+- Update dedup filter to match the new subject
+- Set default `batchSize` to 100
 
-1. **Fix default discipline** (line 50): Change the initial discipline logic to auto-select the first available discipline from the tournament data instead of defaulting to `slalom`. Since tournament data loads async, we'll also add a `useEffect` to update the active tab once disciplines are known.
+**2. Deploy and send Day 1 batch**
+- Deploy the updated edge function
+- Invoke it with `batchSize: 100` — sends first 100 emails
+- Dedup logic ensures no double-sends
 
-2. **Dynamic grid columns** (line 1030): Change `grid-cols-3` to be dynamic based on the number of disciplines:
-   - 1 discipline → `grid-cols-1` with `max-w-[200px] mx-auto` to center
-   - 2 disciplines → `grid-cols-2`
-   - 3 disciplines → `grid-cols-3`
+**3. Day 2 and Day 3**
+- Same function call again (dedup skips already-sent users)
+- Day 2: next 100, Day 3: remaining ~30
 
-### Technical detail
+### Stats
+- **230 total users** with emails
+- **100/day limit** → Day 1: 100, Day 2: 100, Day 3: ~30
+- Existing dedup logic prevents duplicate sends across batches
 
-```tsx
-// Line 50: smarter default
-const initialDiscipline = searchParams.get('discipline') || '';
-
-// Add useEffect after tournament loads to set first discipline as default
-// Use a state variable for the active tab so we can update it
-const [activeDiscipline, setActiveDiscipline] = useState(initialDiscipline);
-
-useEffect(() => {
-  if (!activeDiscipline && tournament?.disciplines?.length) {
-    setActiveDiscipline(tournament.disciplines[0]);
-  }
-}, [tournament]);
-
-// Line 1029: controlled Tabs
-<Tabs value={activeDiscipline} onValueChange={setActiveDiscipline}>
-
-// Line 1030: dynamic grid
-const discCount = tournament.disciplines.length;
-<TabsList className={cn(
-  "w-full mb-6",
-  discCount === 1 ? "flex justify-center" : `grid grid-cols-${discCount}`
-)}>
-```
+### No code file changes needed in the frontend — this is all edge function + invocation.
 
