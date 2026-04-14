@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { cn } from '@/lib/utils';
 import { useParams, useNavigate, useLocation, Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
@@ -47,7 +48,8 @@ const TournamentDetail = () => {
   const { isAdmin } = useIsAdmin();
   
   // Determine initial discipline from URL query param
-  const initialDiscipline = searchParams.get('discipline') || 'slalom';
+  const initialDiscipline = searchParams.get('discipline') || '';
+  const [activeDiscipline, setActiveDiscipline] = useState(initialDiscipline);
   
   // Get highlighted athletes from "Predict Again" navigation
   const predictAgainAthletes: string[] = location.state?.predictAgainAthletes || location.state?.betAgainAthletes || [];
@@ -62,8 +64,15 @@ const TournamentDetail = () => {
   const [predictionWindow, setPredictionWindow] = useState<ReturnType<typeof getPredictionWindowStatus> | null>(null);
   const [athleteResults, setAthleteResults] = useState<any[]>([]);
   const [userPredictions, setUserPredictions] = useState<any[]>([]);
+
+  // Auto-select first discipline when tournament loads
+  useEffect(() => {
+    if (!activeDiscipline && tournament?.disciplines?.length) {
+      setActiveDiscipline(tournament.disciplines[0]);
+    }
+  }, [tournament, activeDiscipline]);
+
   
-  // Podium prediction state - scoped by discipline+gender
   const [podiumStateMap, setPodiumStateMap] = useState<Record<string, {
     selectedAthletes: Selection[];
     assignedPositions: { first: Selection; second: Selection; third: Selection } | null;
@@ -1026,8 +1035,11 @@ const TournamentDetail = () => {
             </Button>
           </Card>
         ) : (
-          <Tabs defaultValue={initialDiscipline} className="w-full">
-            <TabsList className="w-full grid grid-cols-3 mb-6">
+          <Tabs value={activeDiscipline} onValueChange={setActiveDiscipline} className="w-full">
+            <TabsList className={cn(
+              "mb-6",
+              tournament.disciplines.length === 1 ? "flex justify-center max-w-[200px] mx-auto" : `w-full grid grid-cols-${tournament.disciplines.length}`
+            )}>
               {tournament.disciplines.map((disc) => (
                 <TabsTrigger key={disc} value={disc} className="capitalize">
                   {disc}
