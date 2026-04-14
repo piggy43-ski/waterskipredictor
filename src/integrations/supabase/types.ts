@@ -153,6 +153,7 @@ export type Database = {
           current_rating_jump: number | null
           current_rating_slalom: number | null
           current_rating_trick: number | null
+          defending_champion_disciplines: string[] | null
           disciplines: string[]
           fantasy_price_jump: number | null
           fantasy_price_slalom: number | null
@@ -238,6 +239,7 @@ export type Database = {
           current_rating_jump?: number | null
           current_rating_slalom?: number | null
           current_rating_trick?: number | null
+          defending_champion_disciplines?: string[] | null
           disciplines?: string[]
           fantasy_price_jump?: number | null
           fantasy_price_slalom?: number | null
@@ -323,6 +325,7 @@ export type Database = {
           current_rating_jump?: number | null
           current_rating_slalom?: number | null
           current_rating_trick?: number | null
+          defending_champion_disciplines?: string[] | null
           disciplines?: string[]
           fantasy_price_jump?: number | null
           fantasy_price_slalom?: number | null

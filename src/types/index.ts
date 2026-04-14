@@ -17,6 +17,7 @@ export interface Athlete {
   current_points_trick?: number;
   current_points_jump?: number;
   injury_flag?: boolean;
+  defending_champion_disciplines?: string[];
 }
 
 export interface TournamentEntry {

@@ -1,0 +1,1 @@
+ALTER TABLE athletes ADD COLUMN defending_champion_disciplines text[] DEFAULT '{}';
