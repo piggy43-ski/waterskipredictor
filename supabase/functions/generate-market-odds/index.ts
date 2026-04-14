@@ -20,34 +20,33 @@ const TARGET_IMPLIED_SUM = {
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
 };
 
-// Updated global caps - AGGRESSIVE to prevent bankruptcy
+// Updated global caps - raised max to allow proper spread
 const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.50, max: 8.0 },
-  PODIUM: { min: 1.25, max: 6.0 },
-  HIGHEST_SCORE: { min: 1.50, max: 7.0 },
+  WINNER: { min: 1.50, max: 15.0 },
+  PODIUM: { min: 1.25, max: 10.0 },
+  HIGHEST_SCORE: { min: 1.50, max: 12.0 },
 };
 
-// RANK-SPECIFIC CAPS - Disabled to allow calibration convergence.
-// Previously these forced favorites to very low multipliers (e.g. 1.5x for rank 1)
-// which made the implied sum exceed the target by 2-3x. The calibration loop
-// naturally assigns appropriate multipliers based on probabilities.
+// RANK-SPECIFIC CAPS - Disabled. The flatter temperature (1.40) and weight ladder
+// handle distribution naturally. Rank caps were consuming too much of the implied
+// sum budget (e.g. 1/3+1/5+1/8 = 0.658, exceeding the 0.91 target for 12-person fields).
 const RANK_CAPS: Record<string, Record<number, number>> = {
   WINNER: {},
   PODIUM: {},
   HIGHEST_SCORE: {},
 };
 
-// Softmax temperature per market type (lower = sharper favorites)
+// Softmax temperature per market type (higher = flatter distribution)
 const TEMPERATURE = {
-  WINNER: 0.85,
+  WINNER: 1.40,
   PODIUM: 1.05,
   HIGHEST_SCORE: 1.00,
 };
 
-// Realistic WINNER probability weight ladder
+// Flattened WINNER probability weight ladder - prevents extreme longshot clumping
 const WINNER_WEIGHT_LADDER: Record<number, number> = {
-  1: 1.00, 2: 0.80, 3: 0.65, 4: 0.48, 5: 0.45,
-  6: 0.42, 7: 0.40, 8: 0.38, 9: 0.30, 10: 0.24
+  1: 1.00, 2: 0.85, 3: 0.72, 4: 0.62, 5: 0.55,
+  6: 0.50, 7: 0.46, 8: 0.43, 9: 0.41, 10: 0.40
 };
 
 // PODIUM transformation factor
