@@ -36,15 +36,15 @@ const RANK_CAPS: Record<string, Record<number, number>> = {
 
 // Softmax temperature per market type (lower = sharper favorites)
 const TEMPERATURE = {
-  WINNER: 0.55,
+  WINNER: 0.40,
   PODIUM: 1.05,
   HIGHEST_SCORE: 1.00,
 };
 
-// Steep WINNER weight ladder: top 4 get bulk of probability, big drop after rank 5
+// Very steep WINNER weight ladder: rank 1 dominant, big drop after rank 4
 const WINNER_WEIGHT_LADDER: Record<number, number> = {
-  1: 1.00, 2: 0.50, 3: 0.28, 4: 0.18, 5: 0.08,
-  6: 0.05, 7: 0.04, 8: 0.035, 9: 0.03, 10: 0.025
+  1: 1.00, 2: 0.40, 3: 0.20, 4: 0.12, 5: 0.05,
+  6: 0.03, 7: 0.025, 8: 0.02, 9: 0.018, 10: 0.015
 };
 
 // PODIUM transformation factor
