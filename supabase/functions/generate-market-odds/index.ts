@@ -22,31 +22,29 @@ const TARGET_IMPLIED_SUM = {
 
 // Updated global caps - raised max to allow proper spread
 const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.50, max: 15.0 },
+  WINNER: { min: 1.50, max: 20.0 },
   PODIUM: { min: 1.25, max: 10.0 },
   HIGHEST_SCORE: { min: 1.50, max: 12.0 },
 };
 
-// RANK-SPECIFIC CAPS - Disabled. The flatter temperature (1.40) and weight ladder
-// handle distribution naturally. Rank caps were consuming too much of the implied
-// sum budget (e.g. 1/3+1/5+1/8 = 0.658, exceeding the 0.91 target for 12-person fields).
+// RANK-SPECIFIC CAPS - empty, let the steep ladder + low temperature do the work
 const RANK_CAPS: Record<string, Record<number, number>> = {
   WINNER: {},
   PODIUM: {},
   HIGHEST_SCORE: {},
 };
 
-// Softmax temperature per market type (higher = flatter distribution)
+// Softmax temperature per market type (lower = sharper favorites)
 const TEMPERATURE = {
-  WINNER: 1.40,
+  WINNER: 0.55,
   PODIUM: 1.05,
   HIGHEST_SCORE: 1.00,
 };
 
-// Flattened WINNER probability weight ladder - prevents extreme longshot clumping
+// Steep WINNER weight ladder: top 4 get bulk of probability, big drop after rank 5
 const WINNER_WEIGHT_LADDER: Record<number, number> = {
-  1: 1.00, 2: 0.85, 3: 0.72, 4: 0.62, 5: 0.55,
-  6: 0.50, 7: 0.46, 8: 0.43, 9: 0.41, 10: 0.40
+  1: 1.00, 2: 0.50, 3: 0.28, 4: 0.18, 5: 0.08,
+  6: 0.05, 7: 0.04, 8: 0.035, 9: 0.03, 10: 0.025
 };
 
 // PODIUM transformation factor
