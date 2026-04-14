@@ -1,25 +1,43 @@
 
 
-## Fix: Extend Odds Ladder in generate-market-odds Edge Function
+## Fix: Flatten Multiplier Distribution to Prevent Longshot Exploitation
+
+### Problem
+The current probability model is too concentrated on favorites:
+- **Men's Trick**: Rank 1 = 3.4x, Rank 2 = 8.5x, Ranks 3-12 = ALL 20x
+- **Women's Trick**: Rank 1 = 2.4x, Rank 2 = 7.5x, Ranks 3-9 = mostly 20x
+
+This means 80% of athletes pay out 20:1 — massively favorable for bettors who pick any longshot.
 
 ### Root Cause
-The `ODDS_LADDER` array in `generate-market-odds/index.ts` (line 73-81) stops at **8.00**. The `roundToLadder()` function clamps every value to this max, so all longshot athletes (ranks 6-12) get 8.00x regardless of their true probability (~3-5%). This makes the implied sum balloon to 3.45 instead of the target 0.91.
+1. **Temperature too low** (0.85 for WINNER) — makes the softmax too sharp, concentrating probability on rank 1-2
+2. **Global max cap too low** (8.0x in config) — forces the adaptive logic to push all the way to 20x to converge
+3. **Weight ladder drops too steeply** — rank 1 = 1.00, rank 5 = 0.45, rank 10 = 0.24
 
-### Fix
-1. **Extend `ODDS_LADDER`** in the edge function to match the ladder in `multiplierUtils.ts` -- add values from 8.50 through 20.00
-2. **Re-run odds generation** for both Swiss Pro Trick markets after deploying
+### Fix (all in `supabase/functions/generate-market-odds/index.ts`)
 
-### What This Fixes
-- Longshots (ranks 6-12) will get proper multipliers like 12x, 15x, 20x instead of all being 8x
-- Implied sum will converge to the 0.90-0.92 target band
-- House edge will be properly maintained at ~9%
+| Change | Before | After |
+|--------|--------|-------|
+| WINNER temperature | 0.85 | 1.40 |
+| WINNER max cap | 8.0 | 15.0 |
+| Weight ladder | Steep drop (1.00 → 0.24) | Flatter curve (1.00 → 0.40) |
+| Re-enable soft rank caps | All empty `{}` | Rank 1: 3.0x, Rank 2: 5.0x, Rank 3: 8.0x |
+
+### Expected Outcome
+For a 12-person men's field, multipliers should look roughly like:
+- Rank 1: ~2.5-3.0x
+- Rank 3: ~5-6x
+- Rank 6: ~8-10x
+- Rank 12: ~14-15x
+
+Implied sum stays in 0.90-0.92 band, but spread is much more compressed — no athlete at 20x.
+
+### After Deploy
+- Re-run `generate-market-odds` for both Swiss Pro trick markets
+- Verify no athlete exceeds 15x and implied sum is in band
 
 ### Files Changed
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-market-odds/index.ts` | Extend ODDS_LADDER array to include values up to 20.00 |
-
-### After Deploy
-- Re-invoke `generate-market-odds` for both Swiss Pro men's and women's trick markets
-- Verify implied sums land in 0.90-0.92 band
+| `supabase/functions/generate-market-odds/index.ts` | Raise temperature, raise global max cap, flatten weight ladder, add soft rank caps |
 
