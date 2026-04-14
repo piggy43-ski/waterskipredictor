@@ -27,28 +27,14 @@ const MULTIPLIER_CAPS = {
   HIGHEST_SCORE: { min: 1.50, max: 7.0 },
 };
 
-// RANK-SPECIFIC CAPS - Favorites are capped VERY tight
+// RANK-SPECIFIC CAPS - Disabled to allow calibration convergence.
+// Previously these forced favorites to very low multipliers (e.g. 1.5x for rank 1)
+// which made the implied sum exceed the target by 2-3x. The calibration loop
+// naturally assigns appropriate multipliers based on probabilities.
 const RANK_CAPS: Record<string, Record<number, number>> = {
-  WINNER: {
-    1: 1.50,  // Rank 1 (best athlete) capped at 1.5x
-    2: 2.25,
-    3: 3.00,
-    4: 4.00,
-    5: 5.00,
-    // Rank 6+ use global max (8.0)
-  },
-  PODIUM: {
-    1: 1.25,
-    2: 1.75,
-    3: 2.25,
-    // Rank 4+ use global max (6.0)
-  },
-  HIGHEST_SCORE: {
-    1: 1.80,
-    2: 2.50,
-    3: 3.50,
-    // Rank 4+ use global max (7.0)
-  },
+  WINNER: {},
+  PODIUM: {},
+  HIGHEST_SCORE: {},
 };
 
 // Softmax temperature per market type (lower = sharper favorites)
@@ -77,7 +63,9 @@ const ODDS_LADDER = [
   4.00, 4.20, 4.40, 4.60, 4.80,
   5.00, 5.25, 5.50, 5.75,
   6.00, 6.25, 6.50, 6.75,
-  7.00, 7.50, 8.00
+  7.00, 7.50, 8.00, 8.50, 9.00, 9.50,
+  10.00, 10.50, 11.00, 11.50, 12.00, 12.50, 13.00, 13.50, 14.00, 14.50, 15.00,
+  16.00, 17.00, 18.00, 19.00, 20.00
 ];
 
 // ============================================================
