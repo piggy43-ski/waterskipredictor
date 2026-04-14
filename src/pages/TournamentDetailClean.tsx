@@ -64,8 +64,15 @@ const TournamentDetail = () => {
   const [predictionWindow, setPredictionWindow] = useState<ReturnType<typeof getPredictionWindowStatus> | null>(null);
   const [athleteResults, setAthleteResults] = useState<any[]>([]);
   const [userPredictions, setUserPredictions] = useState<any[]>([]);
+
+  // Auto-select first discipline when tournament loads
+  useEffect(() => {
+    if (!activeDiscipline && tournament?.disciplines?.length) {
+      setActiveDiscipline(tournament.disciplines[0]);
+    }
+  }, [tournament, activeDiscipline]);
+
   
-  // Podium prediction state - scoped by discipline+gender
   const [podiumStateMap, setPodiumStateMap] = useState<Record<string, {
     selectedAthletes: Selection[];
     assignedPositions: { first: Selection; second: Selection; third: Selection } | null;
