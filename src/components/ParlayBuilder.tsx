@@ -711,7 +711,7 @@ export function ParlayBuilder({
             athletes={selectedAthletes}
             onAssignPositions={(positions) => {
               handlePodiumComplete(positions);
-              setCurrentStep('highestScore');
+              setCurrentStep(getNextStep('podium'));
             }}
             onCancel={() => setShowAssigner(false)}
           />
