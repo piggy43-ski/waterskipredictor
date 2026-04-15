@@ -41,6 +41,7 @@ interface ValidateEntryRequest {
   stakeAmount: number;
   currentOdds: number;
   marketType: 'WINNER' | 'PODIUM' | 'HIGHEST_SCORE';
+  betType?: 'single' | 'parlay';
 }
 
 interface ValidationResult {
@@ -73,7 +74,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body: ValidateEntryRequest = await req.json();
-    const { userId, tournamentId, marketId, athleteId, stakeAmount, currentOdds, marketType } = body;
+    const { userId, tournamentId, marketId, athleteId, stakeAmount, currentOdds, marketType, betType = 'single' } = body;
 
     const result: ValidationResult = {
       allowed: true,
@@ -111,20 +112,23 @@ serve(async (req) => {
     }
 
     // === VALIDATION 3: Duplicate Athlete Check (same user, same market) ===
-    const { data: existingEntries } = await supabase
-      .from('bet_slips')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('market_id', marketId)
-      .eq('athlete_id', athleteId)
-      .eq('status', 'PENDING');
+    // Skip duplicate check for parlays — parlays may reference markets where user already has singles
+    if (betType !== 'parlay') {
+      const { data: existingEntries } = await supabase
+        .from('bet_slips')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('market_id', marketId)
+        .eq('athlete_id', athleteId)
+        .eq('status', 'PENDING');
 
-    if (existingEntries && existingEntries.length > 0) {
-      return new Response(JSON.stringify({
-        allowed: false,
-        reason: 'You already have an active entry on this athlete in this market',
-        warnings: [],
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (existingEntries && existingEntries.length > 0) {
+        return new Response(JSON.stringify({
+          allowed: false,
+          reason: 'You already have an active entry on this athlete in this market',
+          warnings: [],
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
 
     // === VALIDATION 4: GLOBAL SOLVENCY CHECK ===

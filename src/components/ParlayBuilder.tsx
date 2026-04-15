@@ -262,7 +262,8 @@ export function ParlayBuilder({
           athleteId: firstAthleteId,
           stakeAmount,
           currentOdds: multiplier,
-          marketType: 'WINNER'
+          marketType: 'WINNER',
+          betType: 'parlay'
         }
       });
 
