@@ -91,6 +91,35 @@ export function ParlayBuilder({
     );
   };
 
+  const hasMarketType = (marketType: string) => !!getMarketForType(marketType);
+
+  // Get the ordered list of available steps for the current discipline/gender
+  const getAvailableSteps = (): ParlayStep[] => {
+    const steps: ParlayStep[] = ['winner'];
+    if (hasMarketType('PODIUM')) steps.push('podium');
+    if (hasMarketType('HIGHEST_SCORE')) steps.push('highestScore');
+    return steps;
+  };
+
+  const getNextStep = (current: ParlayStep): ParlayStep => {
+    const steps = getAvailableSteps();
+    const idx = steps.indexOf(current);
+    if (idx >= 0 && idx < steps.length - 1) return steps[idx + 1];
+    return 'summary';
+  };
+
+  const getPrevStep = (current: ParlayStep): ParlayStep => {
+    const steps = getAvailableSteps();
+    const idx = steps.indexOf(current);
+    if (idx > 0) return steps[idx - 1];
+    return 'context';
+  };
+
+  const isLastMarketStep = (current: ParlayStep): boolean => {
+    const steps = getAvailableSteps();
+    return current === steps[steps.length - 1];
+  };
+
   const getSelectionsForMarket = (marketId: string) => {
     return selections.filter(s => s.market_id === marketId);
   };
@@ -149,6 +178,10 @@ export function ParlayBuilder({
     if (!currentLeg) return;
     
     const updatedLeg = { ...currentLeg, winner: selection };
+    // Mark complete if winner is the last available step
+    if (isLastMarketStep('winner')) {
+      updatedLeg.isComplete = true;
+    }
     const updatedLegs = [...legs];
     updatedLegs[currentLegIndex] = updatedLeg;
     setLegs(updatedLegs);
@@ -165,6 +198,10 @@ export function ParlayBuilder({
       ...currentLeg, 
       podium: positions
     };
+    // Mark complete if podium is the last available step
+    if (isLastMarketStep('podium')) {
+      updatedLeg.isComplete = true;
+    }
     const updatedLegs = [...legs];
     updatedLegs[currentLegIndex] = updatedLeg;
     setLegs(updatedLegs);
@@ -455,13 +492,19 @@ export function ParlayBuilder({
   };
 
   const renderStepIndicator = () => {
-    const steps = [
+    const allSteps = [
       { key: 'context', label: 'Context', icon: Target },
       { key: 'winner', label: 'Winner', icon: Trophy },
       { key: 'podium', label: 'Podium', icon: Medal },
       { key: 'highestScore', label: 'Highest', icon: Target },
       { key: 'summary', label: 'Summary', icon: Plus }
     ];
+    // Filter out steps for market types that don't exist
+    const steps = allSteps.filter(step => {
+      if (step.key === 'podium') return hasMarketType('PODIUM');
+      if (step.key === 'highestScore') return hasMarketType('HIGHEST_SCORE');
+      return true;
+    });
 
     return (
       <div className="flex items-center justify-between mb-6">
@@ -601,11 +644,11 @@ export function ParlayBuilder({
             <ArrowLeft className="mr-2 w-4 h-4" /> Back
           </Button>
           <Button 
-            onClick={() => setCurrentStep('podium')} 
+            onClick={() => setCurrentStep(getNextStep('winner'))} 
             disabled={!currentLeg?.winner}
             className="flex-1"
           >
-            Continue to Podium <ArrowRight className="ml-2 w-4 h-4" />
+            Continue to {hasMarketType('PODIUM') ? 'Podium' : hasMarketType('HIGHEST_SCORE') ? 'Highest Score' : 'Summary'} <ArrowRight className="ml-2 w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -665,8 +708,8 @@ export function ParlayBuilder({
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setCurrentStep('winner')} className="flex-1">
-                <ArrowLeft className="mr-2 w-4 h-4" /> Back
+          <Button variant="outline" onClick={() => setCurrentStep(getPrevStep('podium'))} className="flex-1">
+            <ArrowLeft className="mr-2 w-4 h-4" /> Back
               </Button>
               <Button 
                 onClick={() => setShowAssigner(true)} 
@@ -682,7 +725,7 @@ export function ParlayBuilder({
             athletes={selectedAthletes}
             onAssignPositions={(positions) => {
               handlePodiumComplete(positions);
-              setCurrentStep('highestScore');
+              setCurrentStep(getNextStep('podium'));
             }}
             onCancel={() => setShowAssigner(false)}
           />
@@ -725,7 +768,7 @@ export function ParlayBuilder({
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setCurrentStep('podium')} className="flex-1">
+          <Button variant="outline" onClick={() => setCurrentStep(getPrevStep('highestScore'))} className="flex-1">
             <ArrowLeft className="mr-2 w-4 h-4" /> Back
           </Button>
           <Button 
