@@ -492,12 +492,19 @@ export function ParlayBuilder({
   };
 
   const renderStepIndicator = () => {
-    const steps = [
+    const allSteps = [
       { key: 'context', label: 'Context', icon: Target },
       { key: 'winner', label: 'Winner', icon: Trophy },
       { key: 'podium', label: 'Podium', icon: Medal },
       { key: 'highestScore', label: 'Highest', icon: Target },
       { key: 'summary', label: 'Summary', icon: Plus }
+    ];
+    // Filter out steps for market types that don't exist
+    const steps = allSteps.filter(step => {
+      if (step.key === 'podium') return hasMarketType('PODIUM');
+      if (step.key === 'highestScore') return hasMarketType('HIGHEST_SCORE');
+      return true;
+    });
     ];
 
     return (
