@@ -505,7 +505,6 @@ export function ParlayBuilder({
       if (step.key === 'highestScore') return hasMarketType('HIGHEST_SCORE');
       return true;
     });
-    ];
 
     return (
       <div className="flex items-center justify-between mb-6">
