@@ -91,6 +91,35 @@ export function ParlayBuilder({
     );
   };
 
+  const hasMarketType = (marketType: string) => !!getMarketForType(marketType);
+
+  // Get the ordered list of available steps for the current discipline/gender
+  const getAvailableSteps = (): ParlayStep[] => {
+    const steps: ParlayStep[] = ['winner'];
+    if (hasMarketType('PODIUM')) steps.push('podium');
+    if (hasMarketType('HIGHEST_SCORE')) steps.push('highestScore');
+    return steps;
+  };
+
+  const getNextStep = (current: ParlayStep): ParlayStep => {
+    const steps = getAvailableSteps();
+    const idx = steps.indexOf(current);
+    if (idx >= 0 && idx < steps.length - 1) return steps[idx + 1];
+    return 'summary';
+  };
+
+  const getPrevStep = (current: ParlayStep): ParlayStep => {
+    const steps = getAvailableSteps();
+    const idx = steps.indexOf(current);
+    if (idx > 0) return steps[idx - 1];
+    return 'context';
+  };
+
+  const isLastMarketStep = (current: ParlayStep): boolean => {
+    const steps = getAvailableSteps();
+    return current === steps[steps.length - 1];
+  };
+
   const getSelectionsForMarket = (marketId: string) => {
     return selections.filter(s => s.market_id === marketId);
   };
