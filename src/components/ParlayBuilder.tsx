@@ -630,11 +630,11 @@ export function ParlayBuilder({
             <ArrowLeft className="mr-2 w-4 h-4" /> Back
           </Button>
           <Button 
-            onClick={() => setCurrentStep('podium')} 
+            onClick={() => setCurrentStep(getNextStep('winner'))} 
             disabled={!currentLeg?.winner}
             className="flex-1"
           >
-            Continue to Podium <ArrowRight className="ml-2 w-4 h-4" />
+            Continue to {hasMarketType('PODIUM') ? 'Podium' : hasMarketType('HIGHEST_SCORE') ? 'Highest Score' : 'Summary'} <ArrowRight className="ml-2 w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -694,8 +694,8 @@ export function ParlayBuilder({
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setCurrentStep('winner')} className="flex-1">
-                <ArrowLeft className="mr-2 w-4 h-4" /> Back
+          <Button variant="outline" onClick={() => setCurrentStep(getPrevStep('podium'))} className="flex-1">
+            <ArrowLeft className="mr-2 w-4 h-4" /> Back
               </Button>
               <Button 
                 onClick={() => setShowAssigner(true)} 
@@ -754,7 +754,7 @@ export function ParlayBuilder({
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setCurrentStep('podium')} className="flex-1">
+          <Button variant="outline" onClick={() => setCurrentStep(getPrevStep('highestScore'))} className="flex-1">
             <ArrowLeft className="mr-2 w-4 h-4" /> Back
           </Button>
           <Button 
