@@ -178,6 +178,10 @@ export function ParlayBuilder({
     if (!currentLeg) return;
     
     const updatedLeg = { ...currentLeg, winner: selection };
+    // Mark complete if winner is the last available step
+    if (isLastMarketStep('winner')) {
+      updatedLeg.isComplete = true;
+    }
     const updatedLegs = [...legs];
     updatedLegs[currentLegIndex] = updatedLeg;
     setLegs(updatedLegs);
@@ -194,6 +198,10 @@ export function ParlayBuilder({
       ...currentLeg, 
       podium: positions
     };
+    // Mark complete if podium is the last available step
+    if (isLastMarketStep('podium')) {
+      updatedLeg.isComplete = true;
+    }
     const updatedLegs = [...legs];
     updatedLegs[currentLegIndex] = updatedLeg;
     setLegs(updatedLegs);
