@@ -1,66 +1,43 @@
 
-## Update Swiss Pro Slalom Men's Multipliers & Rankings
+# End-to-End Testing: All Bet Types + Fantasy
 
-### Problem
-- Charlie Ross is skiing near world-record level, so he and Nate Smith should be very close favorites (not 3.0x vs 5.0x)
-- The rest of the field is clumped at 20x with no differentiation
-- Tornquist Tim has no proper ranking/rating
+I'll use the browser to place real bets on the Swiss Pro Slalom through the app UI, testing every prediction type and fantasy entry. Your account has **8,514 tokens** available.
 
-### Changes
+## Bet Allocation Plan (playing to win)
 
-#### 1. Update Tim's athlete rating
-Set `current_rating_slalom` to ~78 (mid-tier European pro) so the engine treats him correctly.
+| # | Type | Category | Pick | Stake | Why |
+|---|------|----------|------|-------|-----|
+| 1 | **Winner** (Men) | open_men | Nate Smith (2.50x) | 500 | Defending champ, highest rating (99) |
+| 2 | **Winner** (Women) | open_women | Regina Jaquess (2.50x) | 500 | Defending champ, rating 98 |
+| 3 | **Highest Score** (Men) | open_men | Nate Smith (2.50x) | 500 | Best raw scoring ability |
+| 4 | **Highest Score** (Women) | open_women | Regina Jaquess | 500 | Dominant scorer |
+| 5 | **Podium** (Men) | open_men | Nate/Charlie/Will | 500 | Top 3 rated skiers |
+| 6 | **Podium** (Women) | open_women | Regina/Jaimee/Allie | 500 | Top 3 rated skiers |
+| 7 | **Parlay** | Men slalom | Multi-selection | 500 | Test parlay builder flow |
+| 8 | **Fantasy** | Slalom | Join pot + draft roster | 1,000 | Entry fee for Swiss Pro Slalom 2026 pot |
 
-#### 2. Update multipliers across all 3 men's markets (WINNER, PODIUM, HIGHEST_SCORE)
+**Total: ~4,500 tokens** (well within your 8,514 balance)
 
-**WINNER market** (19 athletes) — smooth curve from favorites to longshots:
+## Steps
 
-| Rank | Athlete | Multiplier |
-|------|---------|------------|
-| 1 | Smith Nate | 2.30x |
-| 2 | Ross Charlie | 2.80x |
-| 3 | Asher William | 5.00x |
-| 4 | Winter Frederick | 6.00x |
-| 5 | Degasperi Thomas | 7.00x |
-| 6 | Hazelwood Robert | 8.00x |
-| 7 | Mccormick Cole | 9.00x |
-| 8 | Travers Jonathan | 10.00x |
-| 9 | Mechler Dane | 11.00x |
-| 10 | Palomino Blanch Jaime | 12.00x |
-| 11 | Tornquist Tim | 13.00x |
-| 12 | Dailland Thibaut | 14.00x |
-| 13 | Sedlmajer Adam | 15.00x |
-| 14 | Poland Joel | 16.00x |
-| 15 | Calhoun Jamie | 17.00x |
-| 16 | Stadlbaur Benjamin | 18.00x |
-| 17 | Neveu Stephen | 19.00x |
-| 18 | Attensam Nikolaus | 20.00x |
-| 19 | Belmrah Kamil | 20.00x |
+1. Navigate to Swiss Pro Slalom tournament page
+2. Place Men's Winner bet on Nate Smith (500 tokens)
+3. Place Women's Winner bet on Regina Jaquess (500 tokens)
+4. Place Men's Highest Score bet on Nate Smith (500 tokens)
+5. Place Women's Highest Score bet on Regina Jaquess (500 tokens)
+6. Place Men's Podium prediction (Nate 1st, Charlie 2nd, Will 3rd - 500 tokens)
+7. Place Women's Podium prediction (Regina 1st, Jaimee 2nd, Allie 3rd - 500 tokens)
+8. Build and place a Parlay (men's slalom multi-leg - 500 tokens)
+9. Navigate to Fantasy page, join Swiss Pro Slalom 2026 pot (1,000 tokens)
+10. Draft a roster of top-rated slalom athletes within 100k budget
+11. Verify all bets appear on the Predictions page
+12. Report any issues found during testing
 
-**PODIUM market** — compressed multipliers (easier to hit top 3):
-
-| Athlete | Multiplier |
-|---------|------------|
-| Smith Nate | 1.50x |
-| Ross Charlie | 1.70x |
-| Asher William | 2.50x |
-| Winter Frederick | 3.00x |
-| Degasperi Thomas | 3.50x |
-| Hazelwood Robert | 4.00x |
-| Mccormick Cole | 4.50x |
-| Travers Jonathan | 5.00x |
-| Mechler Dane | 5.50x |
-| Remaining 10 | 6.00x down to smooth curve |
-
-**HIGHEST_SCORE market** — similar to WINNER but slightly compressed.
-
-#### 3. Sync `market_odds` and `selections` tables
-Both `selections.decimal_odds` and `market_odds.final_decimal_odds` will be updated to match.
-
-#### 4. Update `market_odds.athlete_rank` to reflect new ordering
-Nate = rank 1, Charlie = rank 2, etc.
-
-### Technical Details
-- Direct SQL updates via migration on `selections`, `market_odds` tables
-- Update `athletes.current_rating_slalom` for Tornquist Tim
-- All 3 market IDs: WINNER (`86170dbb`), PODIUM (`c7964561`), HIGHEST_SCORE (`465d688a`)
+## What This Tests
+- Full bet placement flow (insert bet_slip + prediction + wallet deduction)
+- All 3 market types: WINNER, PODIUM, HIGHEST_SCORE
+- Both genders (open_men and open_women)
+- Parlay builder flow
+- Fantasy pot joining + team building
+- Wallet balance updates
+- UI navigation and confirmation flows
