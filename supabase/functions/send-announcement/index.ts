@@ -120,7 +120,7 @@ serve(async (req) => {
       .from("email_logs")
       .select("recipient")
       .eq("email_type", "announcement")
-      .eq("status", "sent")
+      .in("status", ["sent", "failed"])
       .like("subject", "%Swiss Pro Slalom%");
     
     const alreadySentSet = new Set((alreadySent || []).map((r: any) => r.recipient));
@@ -151,7 +151,7 @@ serve(async (req) => {
 
     for (const user of batch) {
       try {
-        await delay(1200);
+        await delay(800);
 
         const html = generateAnnouncementHtml(
           user.username || user.email.split("@")[0],
