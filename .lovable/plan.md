@@ -1,75 +1,44 @@
 
 
-# Settle Swiss Pro Tricks (T-26USA010) — All 3 Rounds
+# Settle 3 Stuck PODIUM Bet Slips (Swiss Pro Tricks)
 
-Insert per-round scores from the IWWF results screenshots into `tournament_results` (R1=qualifying, R2=semifinal, R3=final), then settle all 29 pending bet slips.
+Three PODIUM bet slips for the Swiss Pro Tricks tournament were skipped by the auto-settlement because their `selection_id` values use a composite format (`<market_uuid>-podium`) that doesn't join to a single `selections` row. They need a manual settlement update.
 
-## Round Mapping
+## Comparison vs. Official Results
 
-- **Round 1 → `round_type = 'qualifying'`**
-- **Round 2 → `round_type = 'semifinal'`**
-- **Round 3 → `round_type = 'final'`**
+**Actual Open Men podium:** 🥇 Gonzalez Matias · 🥈 Abelson Jake · 🥉 Labra Martin
+**Actual Open Women podium:** 🥇 Lang Erika · 🥈 Ross Neilly · 🥉 Hansen Kennedy
 
-Each athlete gets one row per round they actually skied (no row when the round cell is blank).
+| Pred ID | User Pick | Result |
+|---|---|---|
+| `a3cec460…` (Men) | Font Patricio / Gonzalez / Abelson | **LOST** (no positions match in exact order) |
+| `0bfca8e3…` (Men) | Gonzalez / Font Patricio / Abelson | **LOST** (only 1st matches; exact-order requires all 3) |
+| `f603cf76…` (Women) | Lang / Ross / **Hunter Anna** | **LOST** (3rd is Hansen, not Hunter) |
 
-## Open Men Tricks
-
-| Rank | Athlete | R1 (Quali) | R2 (Semi) | R3 (Final) |
-|---|---|---|---|---|
-| 1 | Gonzalez Matias | 11,310 | 12,840 | 12,860 |
-| 2 | Abelson Jake | 12,400 | 12,620 | 12,720 |
-| 3 | Labra Martin | 12,110 | 12,140 | 12,490 |
-| 4 | Font Patricio | 12,590 | 11,940 | 12,010 |
-| 5 | Poland Joel | 11,610 | 11,050 | 11,390 |
-| 6 | Marenzi Edoardo | 9,320 | 10,250 | 10,480 |
-| 7 | Font Pablo | 9,940 | 10,140 | 10,390 |
-| 8 | Pickos Adam | 9,000 | 10,940 | 9,930 |
-| 9 | Kuhn Dominic | 7,970 | 8,670 | — |
-| 10 | Elias Adrian | 6,480 | 7,970 | — |
-| 11 | Krueger Ridge | 1,960 | 6,430 | — |
-
-## Open Women Tricks
-
-| Rank | Athlete | R1 (Quali) | R2 (Semi) | R3 (Final) |
-|---|---|---|---|---|
-| 1 | Lang Erika | 11,310 | 11,610 | 10,980 |
-| 2 | Ross Neilly | 10,550 | 10,550 | 10,550 |
-| 3 | Hansen Kennedy | 9,130 | 8,320 | 9,580 |
-| 4 | Abelson Alexia | 7,760 | 8,940 | 9,490 |
-| 5 | Stopnicki Hannah | 7,620 | 8,100 | 8,580 |
-| 6 | Hunter Anna | 9,540 | 10,190 | 5,610 |
-| 7 | Danisheuskaya Aliaksandra | 6,960 | 7,380 | — |
-| 8 | Gay Ella | 5,040 | 5,150 | — |
-
-## Highest Score Settlement (best round across R1/R2/R3)
-
-- **Open Women** → Lang Erika (11,610, R2)
-- **Open Men** → Gonzalez Matias (12,860, R3)
+Per project rule **"Podium Exact Order Settlement"**, all three positions must match exactly → all 3 settle as `LOST`.
 
 ## Steps
 
-1. **Insert tournament_results** for `tournament_id = 7bf0f645-54f5-497a-9b95-208c01fb9609`, discipline `trick`:
-   - 11 men × 3 rounds − 3 missing finals = **30 men rows**
-   - 8 women × 3 rounds − 2 missing finals = **22 women rows**
-   - Total: **52 rows**, with `final_overall_rank` set on every row, `raw_score` per round (auto-fills `trick_points`), `made_finals` auto-derived (true for athletes with a Round 3 row).
-2. **Run `settle-predictions`** for all 6 markets:
-   - **WINNER** → Gonzalez (M) / Lang (W)
-   - **PODIUM (exact order)** → Men {1 Gonzalez, 2 Abelson, 3 Labra}; Women {1 Lang, 2 Ross, 3 Hansen}
-   - **HIGHEST_SCORE** → MAX(raw_score) across rounds → Gonzalez 12,860 / Lang 11,610
-3. **Mark tournament settled** — `tournaments.settled_at = now()`, `status = 'completed'` (auto-clears `market_liability`).
-4. **Verify** — all 29 PENDING slips → WON/LOST, `settlement_metadata` populated, wallets credited, liability cleared.
+1. **Update predictions** — set `status = 'LOST'`, `payout_tokens = 0`, `settled_at = now()`, and populate `settlement_metadata` JSONB with:
+   - `status: 'LOST'`
+   - `actual_results.position_1st/2nd/3rd` (Men or Women podium)
+   - `your_pick.market_type: 'PODIUM'` + `podium_picks` array (parsed from `athlete_name`)
+   - `payout_details.stake` + `odds_decimal`
+   - `explanation: "Podium picks did not match the exact order."`
+2. **Update bet_slips** — set `status = 'LOST'`, `actual_payout_tokens = 0`, `settled_at = now()` for the 3 slip IDs.
+3. **No wallet changes** — entry tokens were already deducted at placement; LOST = no payout, no refund.
+4. **Verify** — confirm 0 PENDING slips remain for tournament `7bf0f645-54f5-497a-9b95-208c01fb9609`.
+5. **Mark tournament fully settled** — set `tournaments.settled_at = now()`, `status = 'completed'` (clears `market_liability` via trigger). This step was deferred earlier and can now complete.
 
 ## Technical Details
 
-- Statuses stay UPPERCASE per project rules.
-- `tournament_results_auto_flags` trigger handles `trick_points`, `made_finals`, `no_score`.
-- Settlement runs in a single batch (29 slips, well under chunk limits).
-- All 19 athlete UUIDs already reconciled to the `athletes` table.
-- Tournament Recap admin page will now display Quali / Semi / Final tabs with per-round scores.
+- Done via a single migration (UPDATE-only, satisfies UPPERCASE status rule).
+- `settlement_metadata` shape matches `SettlementExplanation.tsx` so the UI renders the side-by-side podium comparison and the "Entry Used: 100/350 tokens" line.
+- No email resend needed — these are losses, not wins.
+- Root cause to consider for follow-up: `settle-predictions` should detect the `-podium` suffix in `selection_id` and resolve the parent market UUID. Out of scope for this fix; flag-only.
 
 ## Out of Scope
 
-- Athlete rating updates (separate `update-ratings-from-results` action — can run after on request).
-- Future-tournament odds generation.
-- Fantasy pot settlement (none active for this trick-only event).
+- Patching the `settle-predictions` function for composite podium selection IDs (separate hardening task).
+- Athlete rating updates from results.
 
