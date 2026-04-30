@@ -151,7 +151,7 @@ serve(async (req) => {
 
     for (const user of batch) {
       try {
-        await delay(1200);
+        await delay(400);
 
         const html = generateAnnouncementHtml(
           user.username || user.email.split("@")[0],
