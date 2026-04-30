@@ -1,44 +1,71 @@
 
+# Add Skiers to Swiss Pro Slalom (T-26USA011)
 
-# Settle 3 Stuck PODIUM Bet Slips (Swiss Pro Tricks)
+Tournament: **Swiss Pro Slalom** (`76329f1b-a36d-4232-b1f8-5ced4484fd4d`)
+Date: May 3, 2026 | Discipline: slalom | Format: 2 rounds + finals
 
-Three PODIUM bet slips for the Swiss Pro Tricks tournament were skipped by the auto-settlement because their `selection_id` values use a composite format (`<market_uuid>-podium`) that doesn't join to a single `selections` row. They need a manual settlement update.
+## Athletes from Start Lists
 
-## Comparison vs. Official Results
+**Open Women (11 skiers):**
+1. Bagnoli Alice (ITA) -- exists
+2. Kretschmer Daniela (CHI) -- exists
+3. Espinal Trinidad (CHI) -- exists
+4. De Osma Bedoya Cristhiana (PER) -- exists as "De Osma Cristhiana" (will use existing record)
+5. Montavon Elizabeth (USA) -- exists
+6. Vieke Vennesa (AUS) -- exists
+7. Garcia Alexandra (USA) -- exists
+8. Ross Neilly (CAN) -- exists
+9. Jaquess Regina (USA) -- exists
+10. Nicholson Allie (USA) -- exists
+11. Bull Jaimee (CAN) -- exists
 
-**Actual Open Men podium:** 🥇 Gonzalez Matias · 🥈 Abelson Jake · 🥉 Labra Martin
-**Actual Open Women podium:** 🥇 Lang Erika · 🥈 Ross Neilly · 🥉 Hansen Kennedy
-
-| Pred ID | User Pick | Result |
-|---|---|---|
-| `a3cec460…` (Men) | Font Patricio / Gonzalez / Abelson | **LOST** (no positions match in exact order) |
-| `0bfca8e3…` (Men) | Gonzalez / Font Patricio / Abelson | **LOST** (only 1st matches; exact-order requires all 3) |
-| `f603cf76…` (Women) | Lang / Ross / **Hunter Anna** | **LOST** (3rd is Hansen, not Hunter) |
-
-Per project rule **"Podium Exact Order Settlement"**, all three positions must match exactly → all 3 settle as `LOST`.
+**Open Men (19 skiers):**
+1. Stadlbaur Benjamin (SUI) -- NEEDS CREATING (Vincent exists, Benjamin is different)
+2. Belmrah Kamil (MAR) -- exists
+3. Attensam Nikolaus (AUT) -- exists
+4. Neveu Stephen (CAN) -- exists
+5. Calhoun Jamie (CAN) -- exists
+6. Poland Joel (GBR) -- exists
+7. Dailland Thibaut (FRA) -- exists
+8. Tornquist Tim (SWE) -- NEEDS CREATING
+9. Mccormick Cole (CAN) -- exists
+10. Palomino Blanch Jaime (MEX) -- NEEDS CREATING
+11. Travers Jonathan (USA) -- exists
+12. Asher William (GBR) -- exists
+13. Mechler Dane (USA) -- exists
+14. Hazelwood Robert (GBR) -- exists
+15. Ross Charlie (CAN) -- exists
+16. Sedlmajer Adam (CZE) -- exists
+17. Degasperi Thomas (ITA) -- exists
+18. Smith Nate (USA) -- exists
+19. Winter Frederick (GBR) -- exists
 
 ## Steps
 
-1. **Update predictions** — set `status = 'LOST'`, `payout_tokens = 0`, `settled_at = now()`, and populate `settlement_metadata` JSONB with:
-   - `status: 'LOST'`
-   - `actual_results.position_1st/2nd/3rd` (Men or Women podium)
-   - `your_pick.market_type: 'PODIUM'` + `podium_picks` array (parsed from `athlete_name`)
-   - `payout_details.stake` + `odds_decimal`
-   - `explanation: "Podium picks did not match the exact order."`
-2. **Update bet_slips** — set `status = 'LOST'`, `actual_payout_tokens = 0`, `settled_at = now()` for the 3 slip IDs.
-3. **No wallet changes** — entry tokens were already deducted at placement; LOST = no payout, no refund.
-4. **Verify** — confirm 0 PENDING slips remain for tournament `7bf0f645-54f5-497a-9b95-208c01fb9609`.
-5. **Mark tournament fully settled** — set `tournaments.settled_at = now()`, `status = 'completed'` (clears `market_liability` via trigger). This step was deferred earlier and can now complete.
+### 1. Create 3 missing athletes
+Insert into `athletes` table:
+- **Stadlbaur Benjamin** (SUI, male, slalom)
+- **Tornquist Tim** (SWE, male, slalom)
+- **Palomino Blanch Jaime** (MEX, male, slalom)
 
-## Technical Details
+Each will get default slalom ratings (~70). Add `slalom` to their disciplines array.
 
-- Done via a single migration (UPDATE-only, satisfies UPPERCASE status rule).
-- `settlement_metadata` shape matches `SettlementExplanation.tsx` so the UI renders the side-by-side podium comparison and the "Entry Used: 100/350 tokens" line.
-- No email resend needed — these are losses, not wins.
-- Root cause to consider for follow-up: `settle-predictions` should detect the `-podium` suffix in `selection_id` and resolve the parent market UUID. Out of scope for this fix; flag-only.
+### 2. Add slalom to disciplines for existing athletes
+Some existing athletes (from the tricks tournament) may not have `slalom` in their disciplines array. Will check and update where needed.
 
-## Out of Scope
+### 3. Insert tournament entries
+30 rows into `tournament_entries` (11 women + 19 men), all with `discipline = 'slalom'`, linking to the tournament ID.
 
-- Patching the `settle-predictions` function for composite podium selection IDs (separate hardening task).
-- Athlete rating updates from results.
+### 4. Generate markets and odds
+Call `auto-generate-markets` for the tournament, which will:
+- Create 6 markets (WINNER / PODIUM / HIGHEST_SCORE x open_men / open_women)
+- Run Monte Carlo odds generation
+- Multipliers will stay reasonable with 11 women and 19 men (large enough fields for healthy distributions)
 
+### 5. Review and publish markets
+After generation, verify multipliers are sensible (no crazy 50x+ on anyone). Publish the markets so they're visible to users.
+
+## Notes
+- "De Osma Bedoya Cristhiana" on IWWF matches existing "De Osma Cristhiana" -- same person, will use existing ID (`8cca512c-2734-4b25-8f35-e6860d184436`)
+- Tournament format is 2 rounds + finals (qualifying, semifinal, final) -- same as Swiss Pro Tricks
+- The user wants "predictions" terminology, not "betting slips" -- no code changes needed, this is just a reminder for any UI text
