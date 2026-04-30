@@ -1,71 +1,66 @@
 
-# Add Skiers to Swiss Pro Slalom (T-26USA011)
+## Update Swiss Pro Slalom Men's Multipliers & Rankings
 
-Tournament: **Swiss Pro Slalom** (`76329f1b-a36d-4232-b1f8-5ced4484fd4d`)
-Date: May 3, 2026 | Discipline: slalom | Format: 2 rounds + finals
+### Problem
+- Charlie Ross is skiing near world-record level, so he and Nate Smith should be very close favorites (not 3.0x vs 5.0x)
+- The rest of the field is clumped at 20x with no differentiation
+- Tornquist Tim has no proper ranking/rating
 
-## Athletes from Start Lists
+### Changes
 
-**Open Women (11 skiers):**
-1. Bagnoli Alice (ITA) -- exists
-2. Kretschmer Daniela (CHI) -- exists
-3. Espinal Trinidad (CHI) -- exists
-4. De Osma Bedoya Cristhiana (PER) -- exists as "De Osma Cristhiana" (will use existing record)
-5. Montavon Elizabeth (USA) -- exists
-6. Vieke Vennesa (AUS) -- exists
-7. Garcia Alexandra (USA) -- exists
-8. Ross Neilly (CAN) -- exists
-9. Jaquess Regina (USA) -- exists
-10. Nicholson Allie (USA) -- exists
-11. Bull Jaimee (CAN) -- exists
+#### 1. Update Tim's athlete rating
+Set `current_rating_slalom` to ~78 (mid-tier European pro) so the engine treats him correctly.
 
-**Open Men (19 skiers):**
-1. Stadlbaur Benjamin (SUI) -- NEEDS CREATING (Vincent exists, Benjamin is different)
-2. Belmrah Kamil (MAR) -- exists
-3. Attensam Nikolaus (AUT) -- exists
-4. Neveu Stephen (CAN) -- exists
-5. Calhoun Jamie (CAN) -- exists
-6. Poland Joel (GBR) -- exists
-7. Dailland Thibaut (FRA) -- exists
-8. Tornquist Tim (SWE) -- NEEDS CREATING
-9. Mccormick Cole (CAN) -- exists
-10. Palomino Blanch Jaime (MEX) -- NEEDS CREATING
-11. Travers Jonathan (USA) -- exists
-12. Asher William (GBR) -- exists
-13. Mechler Dane (USA) -- exists
-14. Hazelwood Robert (GBR) -- exists
-15. Ross Charlie (CAN) -- exists
-16. Sedlmajer Adam (CZE) -- exists
-17. Degasperi Thomas (ITA) -- exists
-18. Smith Nate (USA) -- exists
-19. Winter Frederick (GBR) -- exists
+#### 2. Update multipliers across all 3 men's markets (WINNER, PODIUM, HIGHEST_SCORE)
 
-## Steps
+**WINNER market** (19 athletes) — smooth curve from favorites to longshots:
 
-### 1. Create 3 missing athletes
-Insert into `athletes` table:
-- **Stadlbaur Benjamin** (SUI, male, slalom)
-- **Tornquist Tim** (SWE, male, slalom)
-- **Palomino Blanch Jaime** (MEX, male, slalom)
+| Rank | Athlete | Multiplier |
+|------|---------|------------|
+| 1 | Smith Nate | 2.30x |
+| 2 | Ross Charlie | 2.80x |
+| 3 | Asher William | 5.00x |
+| 4 | Winter Frederick | 6.00x |
+| 5 | Degasperi Thomas | 7.00x |
+| 6 | Hazelwood Robert | 8.00x |
+| 7 | Mccormick Cole | 9.00x |
+| 8 | Travers Jonathan | 10.00x |
+| 9 | Mechler Dane | 11.00x |
+| 10 | Palomino Blanch Jaime | 12.00x |
+| 11 | Tornquist Tim | 13.00x |
+| 12 | Dailland Thibaut | 14.00x |
+| 13 | Sedlmajer Adam | 15.00x |
+| 14 | Poland Joel | 16.00x |
+| 15 | Calhoun Jamie | 17.00x |
+| 16 | Stadlbaur Benjamin | 18.00x |
+| 17 | Neveu Stephen | 19.00x |
+| 18 | Attensam Nikolaus | 20.00x |
+| 19 | Belmrah Kamil | 20.00x |
 
-Each will get default slalom ratings (~70). Add `slalom` to their disciplines array.
+**PODIUM market** — compressed multipliers (easier to hit top 3):
 
-### 2. Add slalom to disciplines for existing athletes
-Some existing athletes (from the tricks tournament) may not have `slalom` in their disciplines array. Will check and update where needed.
+| Athlete | Multiplier |
+|---------|------------|
+| Smith Nate | 1.50x |
+| Ross Charlie | 1.70x |
+| Asher William | 2.50x |
+| Winter Frederick | 3.00x |
+| Degasperi Thomas | 3.50x |
+| Hazelwood Robert | 4.00x |
+| Mccormick Cole | 4.50x |
+| Travers Jonathan | 5.00x |
+| Mechler Dane | 5.50x |
+| Remaining 10 | 6.00x down to smooth curve |
 
-### 3. Insert tournament entries
-30 rows into `tournament_entries` (11 women + 19 men), all with `discipline = 'slalom'`, linking to the tournament ID.
+**HIGHEST_SCORE market** — similar to WINNER but slightly compressed.
 
-### 4. Generate markets and odds
-Call `auto-generate-markets` for the tournament, which will:
-- Create 6 markets (WINNER / PODIUM / HIGHEST_SCORE x open_men / open_women)
-- Run Monte Carlo odds generation
-- Multipliers will stay reasonable with 11 women and 19 men (large enough fields for healthy distributions)
+#### 3. Sync `market_odds` and `selections` tables
+Both `selections.decimal_odds` and `market_odds.final_decimal_odds` will be updated to match.
 
-### 5. Review and publish markets
-After generation, verify multipliers are sensible (no crazy 50x+ on anyone). Publish the markets so they're visible to users.
+#### 4. Update `market_odds.athlete_rank` to reflect new ordering
+Nate = rank 1, Charlie = rank 2, etc.
 
-## Notes
-- "De Osma Bedoya Cristhiana" on IWWF matches existing "De Osma Cristhiana" -- same person, will use existing ID (`8cca512c-2734-4b25-8f35-e6860d184436`)
-- Tournament format is 2 rounds + finals (qualifying, semifinal, final) -- same as Swiss Pro Tricks
-- The user wants "predictions" terminology, not "betting slips" -- no code changes needed, this is just a reminder for any UI text
+### Technical Details
+- Direct SQL updates via migration on `selections`, `market_odds` tables
+- Update `athletes.current_rating_slalom` for Tornquist Tim
+- All 3 market IDs: WINNER (`86170dbb`), PODIUM (`c7964561`), HIGHEST_SCORE (`465d688a`)
