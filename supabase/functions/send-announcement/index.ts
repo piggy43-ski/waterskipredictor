@@ -120,7 +120,7 @@ serve(async (req) => {
       .from("email_logs")
       .select("recipient")
       .eq("email_type", "announcement")
-      .eq("status", "sent")
+      .in("status", ["sent", "failed"])
       .like("subject", "%Swiss Pro Slalom%");
     
     const alreadySentSet = new Set((alreadySent || []).map((r: any) => r.recipient));
