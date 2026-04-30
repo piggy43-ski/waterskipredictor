@@ -30,7 +30,7 @@ const generateAnnouncementHtml = (username: string, appUrl: string, tournamentPa
           <tr>
             <td style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 40px; border: 1px solid #2a2a4a;">
               <h1 style="color: #ffffff; font-size: 28px; font-weight: 700; margin: 0 0 16px 0; text-align: center;">
-                Swiss Pro Tricks is Open! 🏆
+                Swiss Pro Slalom is Open! 🏆
               </h1>
               
               <p style="color: #a0a0a0; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0; text-align: center;">
@@ -38,7 +38,7 @@ const generateAnnouncementHtml = (username: string, appUrl: string, tournamentPa
               </p>
               
               <p style="color: #e0e0e0; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
-                Predictions are now open for <strong style="color: #3b82f6;">Swiss Pro Tricks</strong>! Get in early and lock in your picks before the action starts.
+                Predictions are now open for <strong style="color: #3b82f6;">Swiss Pro Slalom</strong>! Get in early and lock in your picks before the action starts.
               </p>
               
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
@@ -52,7 +52,7 @@ const generateAnnouncementHtml = (username: string, appUrl: string, tournamentPa
               </table>
               
               <p style="color: #e0e0e0; font-size: 16px; line-height: 1.6; margin: 0 0 32px 0;">
-                Pick your winners in Trick — and see how your predictions stack up when results come in.
+                Pick your winners in Slalom — Nate and Charlie are neck-and-neck as favorites. Who's your pick?
               </p>
               
               <table width="100%" cellpadding="0" cellspacing="0">
@@ -94,9 +94,9 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const batchSize = body.batchSize ?? 100;
-    const tournamentPath = body.tournamentPath ?? "/tournaments/7bf0f645-54f5-497a-9b95-208c01fb9609";
+    const tournamentPath = body.tournamentPath ?? "/tournaments/76329f1b-a36d-4232-b1f8-5ced4484fd4d";
     const sendToAll = body.sendToAll === true;
-    const campaignId = body.campaignId ?? "swiss-pro-tricks-2026";
+    const campaignId = body.campaignId ?? "swiss-pro-slalom-2026";
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -121,7 +121,7 @@ serve(async (req) => {
       .select("recipient")
       .eq("email_type", "announcement")
       .eq("status", "sent")
-      .like("subject", "%Swiss Pro Tricks%");
+      .like("subject", "%Swiss Pro Slalom%");
     
     const alreadySentSet = new Set((alreadySent || []).map((r: any) => r.recipient));
 
@@ -144,7 +144,7 @@ serve(async (req) => {
 
     const fromEmail = "noreply@waterskipredictor.com";
     const appUrl = Deno.env.get("APP_URL") || "https://waterskipredictor.lovable.app";
-    const subject = "🎿 Swiss Pro Tricks is Open for Predictions!";
+    const subject = "🎿 Swiss Pro Slalom is Open for Predictions!";
 
     let sent = 0;
     const failures: string[] = [];
