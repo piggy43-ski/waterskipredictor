@@ -77,7 +77,7 @@ const Fantasy = () => {
   // Controlled form state for Create League
   const [formName, setFormName] = useState('');
   const [formTournamentId, setFormTournamentId] = useState('');
-  const [formEntryFee, setFormEntryFee] = useState('1000');
+  const [formEntryFee, setFormEntryFee] = useState('100');
   const [formMaxEntrants, setFormMaxEntrants] = useState('');
   const [formPayoutStructure, setFormPayoutStructure] = useState('top_3_split');
   const [formVisibility, setFormVisibility] = useState('private');
