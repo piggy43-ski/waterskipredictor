@@ -112,7 +112,7 @@ export default function AdminFantasyPots() {
         pot_type: selectedPotType,
         // Season pots don't need a tournament_id - they auto-link to ALL tournaments
         tournament_id: isSeasonType ? null : ((formData.get('tournament_id') as string) === 'none' ? null : formData.get('tournament_id') as string),
-        entry_fee_tokens: parseInt(formData.get('entry_fee_tokens') as string) || 1000,
+        entry_fee_tokens: parseInt(formData.get('entry_fee_tokens') as string) || 100,
         max_entrants: parseInt(formData.get('max_entrants') as string) || null,
         team_budget: parseInt(formData.get('team_budget') as string) || FANTASY_TEAM_BUDGET,
         payout_structure: formData.get('payout_structure') as string || 'top_3_split',
@@ -225,7 +225,7 @@ export default function AdminFantasyPots() {
       name: formData.get('name') as string,
       pot_type: formData.get('pot_type') as string,
       tournament_id: (formData.get('tournament_id') as string) === 'none' ? null : formData.get('tournament_id') as string,
-      entry_fee_tokens: parseInt(formData.get('entry_fee_tokens') as string) || 1000,
+      entry_fee_tokens: parseInt(formData.get('entry_fee_tokens') as string) || 100,
       max_entrants: parseInt(formData.get('max_entrants') as string) || null,
       team_budget: parseInt(formData.get('team_budget') as string) || FANTASY_TEAM_BUDGET,
       payout_structure: formData.get('payout_structure') as string,
@@ -337,7 +337,7 @@ export default function AdminFantasyPots() {
                       id="entry_fee_tokens" 
                       name="entry_fee_tokens" 
                       type="number" 
-                      defaultValue="1000"
+                      defaultValue="100"
                       min="0"
                       required 
                     />
