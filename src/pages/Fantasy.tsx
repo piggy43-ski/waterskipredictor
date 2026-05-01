@@ -260,7 +260,7 @@ const Fantasy = () => {
         name: formName,
         pot_type: 'tournament',
         tournament_id: formTournamentId || null,
-        entry_fee_tokens: parseInt(formEntryFee) || 1000,
+        entry_fee_tokens: parseInt(formEntryFee) || 100,
         max_entrants: formMaxEntrants ? parseInt(formMaxEntrants) : null,
         team_budget: FANTASY_TEAM_BUDGET,
         payout_structure: formPayoutStructure,
