@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 // Base token packs (before any discount)
 // Base tokens = price × 100 (1 token = 1 cent)
 const BASE_TOKEN_PACKS = [
+  { name: 'Mini', price: 10, baseTokens: 1000, baseBonus: 0, popular: false, priceId: 'price_1TSfAECpRLHrrx2GWf2ovF8F' },
   { name: 'Starter', price: 25, baseTokens: 2500, baseBonus: 0, popular: false, priceId: 'price_1SkYKkCpRLHrrx2GRXBgdwXG' },
   { name: 'Standard', price: 50, baseTokens: 5000, baseBonus: 5, popular: true, priceId: 'price_1SkYLACpRLHrrx2GDI8vkP3G' },
   { name: 'Pro', price: 100, baseTokens: 10000, baseBonus: 10, popular: false, priceId: 'price_1SkYM0CpRLHrrx2GCwCNySQs' },
