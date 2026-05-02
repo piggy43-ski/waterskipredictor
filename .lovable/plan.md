@@ -1,43 +1,34 @@
+## Add $10 Token Pack
 
-# End-to-End Testing: All Bet Types + Fantasy
+Add a new entry-level token pack at $10 to give users a smaller starting price point.
 
-I'll use the browser to place real bets on the Swiss Pro Slalom through the app UI, testing every prediction type and fantasy entry. Your account has **8,514 tokens** available.
+### New pack details
+- **Name:** Mini
+- **Price:** $10
+- **Base tokens:** 1,000 (matches the 100 tokens = $1 rate)
+- **Bonus:** 0% (entry-tier, no bonus — same as Starter)
+- **Popular flag:** false
 
-## Bet Allocation Plan (playing to win)
+### Steps
 
-| # | Type | Category | Pick | Stake | Why |
-|---|------|----------|------|-------|-----|
-| 1 | **Winner** (Men) | open_men | Nate Smith (2.50x) | 500 | Defending champ, highest rating (99) |
-| 2 | **Winner** (Women) | open_women | Regina Jaquess (2.50x) | 500 | Defending champ, rating 98 |
-| 3 | **Highest Score** (Men) | open_men | Nate Smith (2.50x) | 500 | Best raw scoring ability |
-| 4 | **Highest Score** (Women) | open_women | Regina Jaquess | 500 | Dominant scorer |
-| 5 | **Podium** (Men) | open_men | Nate/Charlie/Will | 500 | Top 3 rated skiers |
-| 6 | **Podium** (Women) | open_women | Regina/Jaimee/Allie | 500 | Top 3 rated skiers |
-| 7 | **Parlay** | Men slalom | Multi-selection | 500 | Test parlay builder flow |
-| 8 | **Fantasy** | Slalom | Join pot + draft roster | 1,000 | Entry fee for Swiss Pro Slalom 2026 pot |
+1. **Create the Stripe price** — Use Stripe tools to create a new product "Mini Token Pack" with a one-time price of $10 USD. Capture the resulting `price_id` (e.g. `price_xxx`). This will be created in whichever mode (test/live) the current Stripe key is using.
 
-**Total: ~4,500 tokens** (well within your 8,514 balance)
+2. **Update `src/pages/Wallet.tsx`** — Prepend a new entry to `BASE_TOKEN_PACKS`:
+   ```ts
+   { name: 'Mini', price: 10, baseTokens: 1000, baseBonus: 0, popular: false, priceId: '<new_price_id>' },
+   ```
+   Order: Mini → Starter → Standard → Pro → Elite.
 
-## Steps
+3. **Referral bonus handling** — The referral bonus switch in `Wallet.tsx` only handles Starter/Standard/Pro/Elite. For Mini, it will fall back to `bonusPct = 0`, which is the desired behavior (no referral bonus on the smallest pack). No schema change needed.
 
-1. Navigate to Swiss Pro Slalom tournament page
-2. Place Men's Winner bet on Nate Smith (500 tokens)
-3. Place Women's Winner bet on Regina Jaquess (500 tokens)
-4. Place Men's Highest Score bet on Nate Smith (500 tokens)
-5. Place Women's Highest Score bet on Regina Jaquess (500 tokens)
-6. Place Men's Podium prediction (Nate 1st, Charlie 2nd, Will 3rd - 500 tokens)
-7. Place Women's Podium prediction (Regina 1st, Jaimee 2nd, Allie 3rd - 500 tokens)
-8. Build and place a Parlay (men's slalom multi-leg - 500 tokens)
-9. Navigate to Fantasy page, join Swiss Pro Slalom 2026 pot (1,000 tokens)
-10. Draft a roster of top-rated slalom athletes within 100k budget
-11. Verify all bets appear on the Predictions page
-12. Report any issues found during testing
+4. **No backend/webhook changes required** — `create-token-checkout` and `stripe-webhook` already handle any `priceId` + `tokenAmount` passed from the client; they don't hardcode pack names.
 
-## What This Tests
-- Full bet placement flow (insert bet_slip + prediction + wallet deduction)
-- All 3 market types: WINNER, PODIUM, HIGHEST_SCORE
-- Both genders (open_men and open_women)
-- Parlay builder flow
-- Fantasy pot joining + team building
-- Wallet balance updates
-- UI navigation and confirmation flows
+### Files changed
+- `src/pages/Wallet.tsx` (one-line addition to the packs array)
+
+### Note on live vs test
+Since you just got live mode approved, let me know if you want me to:
+- **A)** Create the new $10 price in **live mode** (real customers can buy immediately), or
+- **B)** Create it in **test mode** first to verify, then duplicate to live
+
+I'll default to whichever mode your existing 4 price IDs are in (so all 5 packs stay consistent) unless you say otherwise.
