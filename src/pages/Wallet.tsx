@@ -19,9 +19,10 @@ import { Badge } from '@/components/ui/badge';
 const BASE_TOKEN_PACKS = [
   { name: 'Mini', price: 10, baseTokens: 1000, baseBonus: 0, popular: false, priceId: 'price_1TSfAECpRLHrrx2GWf2ovF8F' },
   { name: 'Starter', price: 25, baseTokens: 2500, baseBonus: 0, popular: false, priceId: 'price_1SkYKkCpRLHrrx2GRXBgdwXG' },
-  { name: 'Standard', price: 50, baseTokens: 5000, baseBonus: 5, popular: true, priceId: 'price_1SkYLACpRLHrrx2GDI8vkP3G' },
-  { name: 'Pro', price: 100, baseTokens: 10000, baseBonus: 10, popular: false, priceId: 'price_1SkYM0CpRLHrrx2GCwCNySQs' },
-  { name: 'Elite', price: 250, baseTokens: 25000, baseBonus: 15, popular: false, priceId: 'price_1SkYMCCpRLHrrx2GQ6lHCyxS' },
+  { name: 'Standard', price: 50, baseTokens: 5000, baseBonus: 25, popular: true, priceId: 'price_1SkYLACpRLHrrx2GDI8vkP3G' },
+  { name: 'Pro', price: 100, baseTokens: 10000, baseBonus: 50, popular: false, priceId: 'price_1SkYM0CpRLHrrx2GCwCNySQs' },
+  { name: 'Elite', price: 250, baseTokens: 25000, baseBonus: 75, popular: false, priceId: 'price_1SkYMCCpRLHrrx2GQ6lHCyxS' },
+  { name: 'Whale', price: 500, baseTokens: 50000, baseBonus: 100, popular: false, priceId: 'price_1TSfJACpRLHrrx2GTutaIJK7' },
 ];
 
 interface ReferralCodeInfo {
@@ -71,29 +72,31 @@ const Wallet = () => {
     enabled: !!user?.id,
   });
 
-  // Calculate token packs with appropriate bonus (referral OR base, never both)
+  // Calculate token packs — use the better of base bonus vs referral bonus
   const tokenPacks = BASE_TOKEN_PACKS.map(pack => {
-    let bonusPct = pack.baseBonus / 100; // Default to base discount
-    let isReferralBonus = false;
-    
-    // If user has active referral code and hasn't made first purchase, use referral bonus
+    const baseBonusPct = pack.baseBonus / 100;
+    let referralBonusPct = 0;
+
     if (referralInfo) {
-      isReferralBonus = true;
       switch (pack.name) {
         case 'Starter':
-          bonusPct = referralInfo.starter_bonus_pct;
+          referralBonusPct = referralInfo.starter_bonus_pct;
           break;
         case 'Standard':
-          bonusPct = referralInfo.standard_bonus_pct;
+          referralBonusPct = referralInfo.standard_bonus_pct;
           break;
         case 'Pro':
-          bonusPct = referralInfo.pro_bonus_pct;
+          referralBonusPct = referralInfo.pro_bonus_pct;
           break;
         case 'Elite':
-          bonusPct = referralInfo.elite_bonus_pct;
+          referralBonusPct = referralInfo.elite_bonus_pct;
           break;
       }
     }
+
+    // Always give the user the better deal so referrals never reduce the bonus
+    const bonusPct = Math.max(baseBonusPct, referralBonusPct);
+    const isReferralBonus = !!referralInfo && referralBonusPct > baseBonusPct;
     
     const bonusPercentage = Math.round(bonusPct * 100);
     const tokens = Math.floor(pack.baseTokens * (1 + bonusPct));
