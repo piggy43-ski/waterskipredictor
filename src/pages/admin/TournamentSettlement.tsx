@@ -68,6 +68,20 @@ type SettlementPreview = {
   unique_entries: number;
   won_entries: number;
   lost_entries: number;
+  tie_count: number;
+  tie_explanation: string | null;
+  bet_breakdown: BetBreakdownRow[];
+};
+
+type BetBreakdownRow = {
+  bet_slip_id: string;
+  username: string;
+  athlete_name: string;
+  stake: number;
+  odds: number;
+  potential_payout: number;
+  result: 'WON' | 'LOST';
+  payout: number;
 };
 
 type ParsedAthlete = {
