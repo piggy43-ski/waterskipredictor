@@ -2147,6 +2147,15 @@ export default function TournamentSettlement() {
                       )}
                     </div>
 
+                    {preview.tie_explanation && (
+                      <Alert className="border-warning bg-warning/10">
+                        <AlertTriangle className="h-4 w-4 text-warning" />
+                        <AlertDescription className="text-sm">
+                          <strong>Tie handling:</strong> {preview.tie_explanation}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                     <div className="grid grid-cols-4 gap-3 pt-3 border-t">
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
@@ -2177,6 +2186,53 @@ export default function TournamentSettlement() {
                         <p className="text-lg font-bold">{preview.total_payout.toLocaleString()}</p>
                       </div>
                     </div>
+
+                    {preview.bet_breakdown.length > 0 && (
+                      <Collapsible>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-full justify-between">
+                            <span>View per-bet breakdown ({preview.bet_breakdown.length})</span>
+                            <span className="text-xs text-muted-foreground">click to expand</span>
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-2 border rounded-md overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted text-muted-foreground">
+                                <tr>
+                                  <th className="text-left px-3 py-2">User</th>
+                                  <th className="text-left px-3 py-2">Pick</th>
+                                  <th className="text-right px-3 py-2">Stake</th>
+                                  <th className="text-right px-3 py-2">Odds</th>
+                                  <th className="text-right px-3 py-2">Payout</th>
+                                  <th className="text-center px-3 py-2">Result</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {preview.bet_breakdown.map((row) => (
+                                  <tr key={row.bet_slip_id} className="border-t">
+                                    <td className="px-3 py-2 font-medium">{row.username}</td>
+                                    <td className="px-3 py-2">{row.athlete_name}</td>
+                                    <td className="px-3 py-2 text-right">{row.stake.toLocaleString()}</td>
+                                    <td className="px-3 py-2 text-right">{row.odds.toFixed(2)}x</td>
+                                    <td className={`px-3 py-2 text-right font-semibold ${row.result === 'WON' ? 'text-success' : 'text-muted-foreground'}`}>
+                                      {row.result === 'WON' ? `+${row.payout.toLocaleString()}` : '0'}
+                                    </td>
+                                    <td className="px-3 py-2 text-center">
+                                      {row.result === 'WON' ? (
+                                        <Badge className="bg-success text-success-foreground">WON</Badge>
+                                      ) : (
+                                        <Badge variant="outline" className="text-destructive border-destructive">LOST</Badge>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
                   </div>
                 ))}
               </CardContent>
