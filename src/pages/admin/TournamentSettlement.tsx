@@ -1061,6 +1061,82 @@ export default function TournamentSettlement() {
         }
       }
 
+      // Tie detection: how many athletes share the winning position(s)?
+      let tieCount = 0;
+      let tieExplanation: string | null = null;
+      if (market.market_type === 'WINNER') {
+        const winnersAtPos1 = positions?.get(1) || [];
+        if (winnersAtPos1.length > 1) {
+          tieCount = winnersAtPos1.length;
+          tieExplanation = `${winnersAtPos1.length}-way tie for 1st — all bets on any of these athletes are paid as winners: ${winningAthleteNames.join(', ')}.`;
+        }
+      } else if (market.market_type === 'HIGHEST_SCORE') {
+        if (winningSelectionIds.length > 1) {
+          tieCount = winningSelectionIds.length;
+          tieExplanation = `${winningSelectionIds.length}-way tie for highest score — all bets on any of these athletes are paid as winners: ${winningAthleteNames.join(', ')}.`;
+        }
+      } else if (market.market_type === 'PODIUM') {
+        // Detect ties at any of positions 1/2/3
+        const tiesAtPodium: string[] = [];
+        if (positions) {
+          for (const [pos, athleteIds] of positions) {
+            if (pos <= 3 && athleteIds.length > 1) {
+              tiesAtPodium.push(`pos ${pos} (${athleteIds.length}-way)`);
+            }
+          }
+        }
+        if (tiesAtPodium.length > 0) {
+          tieCount = tiesAtPodium.length;
+          tieExplanation = `Podium tie detected: ${tiesAtPodium.join(', ')}. All tied athletes count as occupying that position.`;
+        }
+      }
+
+      // Per-bet breakdown: enrich predictions with username + athlete + payout
+      const betBreakdown: BetBreakdownRow[] = [];
+      const betSlipIds = Array.from(uniqueEntryIds) as string[];
+      if (betSlipIds.length > 0) {
+        const { data: slipRows } = await supabase
+          .from('bet_slips')
+          .select('id, user_id, athlete_id, total_stake_tokens, total_odds_decimal, potential_payout_tokens')
+          .in('id', betSlipIds);
+
+        const userIds = Array.from(new Set((slipRows || []).map(s => s.user_id).filter(Boolean))) as string[];
+        const athleteIds = Array.from(new Set((slipRows || []).map(s => s.athlete_id).filter(Boolean))) as string[];
+
+        const [{ data: profiles }, { data: athleteRows }] = await Promise.all([
+          userIds.length > 0
+            ? supabase.from('profiles').select('id, username').in('id', userIds)
+            : Promise.resolve({ data: [] as { id: string; username: string | null }[] }),
+          athleteIds.length > 0
+            ? supabase.from('athletes').select('id, name').in('id', athleteIds)
+            : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+        ]);
+
+        const usernameById = new Map((profiles || []).map(p => [p.id, p.username || 'Unknown']));
+        const athleteNameById = new Map((athleteRows || []).map(a => [a.id, a.name || 'Unknown']));
+
+        for (const slip of slipRows || []) {
+          const slipPredIds = predictionsBySlip.get(slip.id) || [];
+          const allWon = slipPredIds.length > 0 && slipPredIds.every(id => winningSet.has(id));
+          const result: 'WON' | 'LOST' = allWon ? 'WON' : 'LOST';
+          betBreakdown.push({
+            bet_slip_id: slip.id,
+            username: usernameById.get(slip.user_id) || 'Unknown',
+            athlete_name: slip.athlete_id ? (athleteNameById.get(slip.athlete_id) || 'Unknown') : '—',
+            stake: slip.total_stake_tokens,
+            odds: Number(slip.total_odds_decimal),
+            potential_payout: slip.potential_payout_tokens,
+            result,
+            payout: allWon ? Math.floor(slip.potential_payout_tokens) : 0,
+          });
+        }
+        // Sort: winners first, then by stake desc
+        betBreakdown.sort((a, b) => {
+          if (a.result !== b.result) return a.result === 'WON' ? -1 : 1;
+          return b.stake - a.stake;
+        });
+      }
+
       previews.push({
         market_id: market.id,
         market_name: market.name,
@@ -1079,6 +1155,9 @@ export default function TournamentSettlement() {
         unique_entries: uniqueEntryIds.size,
         won_entries: wonEntries,
         lost_entries: lostEntries,
+        tie_count: tieCount,
+        tie_explanation: tieExplanation,
+        bet_breakdown: betBreakdown,
       });
     }
 
