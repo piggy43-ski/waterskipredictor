@@ -68,6 +68,20 @@ type SettlementPreview = {
   unique_entries: number;
   won_entries: number;
   lost_entries: number;
+  tie_count: number;
+  tie_explanation: string | null;
+  bet_breakdown: BetBreakdownRow[];
+};
+
+type BetBreakdownRow = {
+  bet_slip_id: string;
+  username: string;
+  athlete_name: string;
+  stake: number;
+  odds: number;
+  potential_payout: number;
+  result: 'WON' | 'LOST';
+  payout: number;
 };
 
 type ParsedAthlete = {
@@ -1047,6 +1061,82 @@ export default function TournamentSettlement() {
         }
       }
 
+      // Tie detection: how many athletes share the winning position(s)?
+      let tieCount = 0;
+      let tieExplanation: string | null = null;
+      if (market.market_type === 'WINNER') {
+        const winnersAtPos1 = positions?.get(1) || [];
+        if (winnersAtPos1.length > 1) {
+          tieCount = winnersAtPos1.length;
+          tieExplanation = `${winnersAtPos1.length}-way tie for 1st — all bets on any of these athletes are paid as winners: ${winningAthleteNames.join(', ')}.`;
+        }
+      } else if (market.market_type === 'HIGHEST_SCORE') {
+        if (winningSelectionIds.length > 1) {
+          tieCount = winningSelectionIds.length;
+          tieExplanation = `${winningSelectionIds.length}-way tie for highest score — all bets on any of these athletes are paid as winners: ${winningAthleteNames.join(', ')}.`;
+        }
+      } else if (market.market_type === 'PODIUM') {
+        // Detect ties at any of positions 1/2/3
+        const tiesAtPodium: string[] = [];
+        if (positions) {
+          for (const [pos, athleteIds] of positions) {
+            if (pos <= 3 && athleteIds.length > 1) {
+              tiesAtPodium.push(`pos ${pos} (${athleteIds.length}-way)`);
+            }
+          }
+        }
+        if (tiesAtPodium.length > 0) {
+          tieCount = tiesAtPodium.length;
+          tieExplanation = `Podium tie detected: ${tiesAtPodium.join(', ')}. All tied athletes count as occupying that position.`;
+        }
+      }
+
+      // Per-bet breakdown: enrich predictions with username + athlete + payout
+      const betBreakdown: BetBreakdownRow[] = [];
+      const betSlipIds = Array.from(uniqueEntryIds) as string[];
+      if (betSlipIds.length > 0) {
+        const { data: slipRows } = await supabase
+          .from('bet_slips')
+          .select('id, user_id, athlete_id, total_stake_tokens, total_odds_decimal, potential_payout_tokens')
+          .in('id', betSlipIds);
+
+        const userIds = Array.from(new Set((slipRows || []).map(s => s.user_id).filter(Boolean))) as string[];
+        const athleteIds = Array.from(new Set((slipRows || []).map(s => s.athlete_id).filter(Boolean))) as string[];
+
+        const [{ data: profiles }, { data: athleteRows }] = await Promise.all([
+          userIds.length > 0
+            ? supabase.from('profiles').select('id, username').in('id', userIds)
+            : Promise.resolve({ data: [] as { id: string; username: string | null }[] }),
+          athleteIds.length > 0
+            ? supabase.from('athletes').select('id, name').in('id', athleteIds)
+            : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+        ]);
+
+        const usernameById = new Map((profiles || []).map(p => [p.id, p.username || 'Unknown']));
+        const athleteNameById = new Map((athleteRows || []).map(a => [a.id, a.name || 'Unknown']));
+
+        for (const slip of slipRows || []) {
+          const slipPredIds = predictionsBySlip.get(slip.id) || [];
+          const allWon = slipPredIds.length > 0 && slipPredIds.every(id => winningSet.has(id));
+          const result: 'WON' | 'LOST' = allWon ? 'WON' : 'LOST';
+          betBreakdown.push({
+            bet_slip_id: slip.id,
+            username: usernameById.get(slip.user_id) || 'Unknown',
+            athlete_name: slip.athlete_id ? (athleteNameById.get(slip.athlete_id) || 'Unknown') : '—',
+            stake: slip.total_stake_tokens,
+            odds: Number(slip.total_odds_decimal),
+            potential_payout: slip.potential_payout_tokens,
+            result,
+            payout: allWon ? Math.floor(slip.potential_payout_tokens) : 0,
+          });
+        }
+        // Sort: winners first, then by stake desc
+        betBreakdown.sort((a, b) => {
+          if (a.result !== b.result) return a.result === 'WON' ? -1 : 1;
+          return b.stake - a.stake;
+        });
+      }
+
       previews.push({
         market_id: market.id,
         market_name: market.name,
@@ -1065,6 +1155,9 @@ export default function TournamentSettlement() {
         unique_entries: uniqueEntryIds.size,
         won_entries: wonEntries,
         lost_entries: lostEntries,
+        tie_count: tieCount,
+        tie_explanation: tieExplanation,
+        bet_breakdown: betBreakdown,
       });
     }
 
@@ -2054,6 +2147,15 @@ export default function TournamentSettlement() {
                       )}
                     </div>
 
+                    {preview.tie_explanation && (
+                      <Alert className="border-warning bg-warning/10">
+                        <AlertTriangle className="h-4 w-4 text-warning" />
+                        <AlertDescription className="text-sm">
+                          <strong>Tie handling:</strong> {preview.tie_explanation}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                     <div className="grid grid-cols-4 gap-3 pt-3 border-t">
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
@@ -2084,6 +2186,53 @@ export default function TournamentSettlement() {
                         <p className="text-lg font-bold">{preview.total_payout.toLocaleString()}</p>
                       </div>
                     </div>
+
+                    {preview.bet_breakdown.length > 0 && (
+                      <Collapsible>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-full justify-between">
+                            <span>View per-bet breakdown ({preview.bet_breakdown.length})</span>
+                            <span className="text-xs text-muted-foreground">click to expand</span>
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-2 border rounded-md overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted text-muted-foreground">
+                                <tr>
+                                  <th className="text-left px-3 py-2">User</th>
+                                  <th className="text-left px-3 py-2">Pick</th>
+                                  <th className="text-right px-3 py-2">Stake</th>
+                                  <th className="text-right px-3 py-2">Odds</th>
+                                  <th className="text-right px-3 py-2">Payout</th>
+                                  <th className="text-center px-3 py-2">Result</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {preview.bet_breakdown.map((row) => (
+                                  <tr key={row.bet_slip_id} className="border-t">
+                                    <td className="px-3 py-2 font-medium">{row.username}</td>
+                                    <td className="px-3 py-2">{row.athlete_name}</td>
+                                    <td className="px-3 py-2 text-right">{row.stake.toLocaleString()}</td>
+                                    <td className="px-3 py-2 text-right">{row.odds.toFixed(2)}x</td>
+                                    <td className={`px-3 py-2 text-right font-semibold ${row.result === 'WON' ? 'text-success' : 'text-muted-foreground'}`}>
+                                      {row.result === 'WON' ? `+${row.payout.toLocaleString()}` : '0'}
+                                    </td>
+                                    <td className="px-3 py-2 text-center">
+                                      {row.result === 'WON' ? (
+                                        <Badge className="bg-success text-success-foreground">WON</Badge>
+                                      ) : (
+                                        <Badge variant="outline" className="text-destructive border-destructive">LOST</Badge>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
                   </div>
                 ))}
               </CardContent>
