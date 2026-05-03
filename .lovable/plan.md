@@ -1,34 +1,30 @@
-## Add $10 Token Pack
+## Add Pigoski Gift Card Rewards
 
-Add a new entry-level token pack at $10 to give users a smaller starting price point.
+The user wants Pigoski added to the rewards catalog as **gift cards** (merch / gear category), unlimited availability, ~$5 fulfillment cost note (interpreting that as "small admin/processing cost" — actual face value will drive the token price).
 
-### New pack details
-- **Name:** Mini
-- **Price:** $10
-- **Base tokens:** 1,000 (matches the 100 tokens = $1 rate)
-- **Bonus:** 0% (entry-tier, no bonus — same as Starter)
-- **Popular flag:** false
+Since the user said "do gift cards" and didn't specify an amount, I'll add a **tiered set of 3 gift cards** so users have a low/mid/high option, matching how gift card programs are typically structured.
 
-### Steps
+### Pricing (100 tokens = $1)
 
-1. **Create the Stripe price** — Use Stripe tools to create a new product "Mini Token Pack" with a one-time price of $10 USD. Capture the resulting `price_id` (e.g. `price_xxx`). This will be created in whichever mode (test/live) the current Stripe key is using.
+| Reward | Face value | Required tokens | USD cost (liability) |
+|---|---|---|---|
+| Pigoski $25 Gift Card | $25 | 2,500 | $25 |
+| Pigoski $50 Gift Card | $50 | 5,000 | $50 |
+| Pigoski $100 Gift Card | $100 | 10,000 | $100 |
 
-2. **Update `src/pages/Wallet.tsx`** — Prepend a new entry to `BASE_TOKEN_PACKS`:
-   ```ts
-   { name: 'Mini', price: 10, baseTokens: 1000, baseBonus: 0, popular: false, priceId: '<new_price_id>' },
-   ```
-   Order: Mini → Starter → Standard → Pro → Elite.
+Note: I'm setting `usd_cost` to the actual face value (true liability), not the $5 the user mentioned — $5 doesn't make sense as the cost of fulfilling a gift card and would massively understate house liability. Will flag this in the response so the user can correct if they really meant something else (e.g. a $5 processing fee on top of card value tracked separately, or a single $5 gift card).
 
-3. **Referral bonus handling** — The referral bonus switch in `Wallet.tsx` only handles Starter/Standard/Pro/Elite. For Mini, it will fall back to `bonusPct = 0`, which is the desired behavior (no referral bonus on the smallest pack). No schema change needed.
+### Common fields for all 3
+- **Partner:** Pigoski Family Ski School
+- **Category:** `merchandise`
+- **Fulfillment type:** `digital` (gift cards are digital codes)
+- **Available:** true
+- **Limits:** unlimited (max_total = null, max_per_user = null)
+- **Image:** none initially — admin can upload via the Rewards admin page later
 
-4. **No backend/webhook changes required** — `create-token-checkout` and `stripe-webhook` already handle any `priceId` + `tokenAmount` passed from the client; they don't hardcode pack names.
+### Implementation
 
-### Files changed
-- `src/pages/Wallet.tsx` (one-line addition to the packs array)
+Single step: **insert 3 rows** into `public.rewards` via the data insert tool. No schema changes, no code changes — the existing `Rewards` page (`src/pages/Rewards.tsx`) and admin `Rewards` page already render whatever's in the table.
 
-### Note on live vs test
-Since you just got live mode approved, let me know if you want me to:
-- **A)** Create the new $10 price in **live mode** (real customers can buy immediately), or
-- **B)** Create it in **test mode** first to verify, then duplicate to live
-
-I'll default to whichever mode your existing 4 price IDs are in (so all 5 packs stay consistent) unless you say otherwise.
+### Open question for the user
+- Confirm the 3-tier structure is what they want, **or** specify a single denomination + the $5 interpretation. The plan currently assumes tiered cards with face-value liability tracking.
