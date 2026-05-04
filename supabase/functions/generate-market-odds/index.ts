@@ -20,18 +20,19 @@ const TARGET_IMPLIED_SUM = {
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
 };
 
-// Updated global caps - raised max to allow proper spread
+// SINGLE SOURCE OF TRUTH: mirrors src/utils/multiplierCaps.ts
+// Do NOT diverge — update src/utils/multiplierCaps.ts AND this block in lockstep.
 const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.50, max: 20.0 },
-  PODIUM: { min: 1.25, max: 10.0 },
-  HIGHEST_SCORE: { min: 1.50, max: 12.0 },
+  WINNER: { min: 1.50, max: 8.0 },
+  PODIUM: { min: 1.25, max: 6.0 },
+  HIGHEST_SCORE: { min: 1.50, max: 7.0 },
 };
 
-// RANK-SPECIFIC CAPS - empty, let the steep ladder + low temperature do the work
+// Rank-specific caps — favorites are capped tight (mirrors multiplierCaps.RANK_CAPS).
 const RANK_CAPS: Record<string, Record<number, number>> = {
-  WINNER: {},
-  PODIUM: {},
-  HIGHEST_SCORE: {},
+  WINNER: { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 5.00 },
+  PODIUM: { 1: 1.25, 2: 1.75, 3: 2.25 },
+  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.50 },
 };
 
 // Softmax temperature per market type (lower = sharper favorites)
@@ -364,9 +365,11 @@ function deriveMultipliersCalibrated(
   let temperatureAttempts = 0;
   const maxTempAttempts = 5;
   
-  // Adaptive cap ceiling - will increase if convergence fails
-  let adaptiveMaxCap = caps.max;
-  const HARD_CAP_CEILING = 25.0;
+  // Strict cap: caps.max from multiplierCaps.ts is the absolute ceiling.
+  // No adaptive escalation — single source of truth wins, even if convergence
+  // misses the target band (calibration will scale within bounds).
+  const adaptiveMaxCap = caps.max;
+  const HARD_CAP_CEILING = caps.max;
   
   console.log(`[CALIBRATION] Field: ${fieldSize}, marketType: ${marketType}, globalCaps: ${caps.min}-${caps.max}`);
   
@@ -477,13 +480,9 @@ function deriveMultipliersCalibrated(
       // Re-check implied sum after clamping
       const newImplied = multipliers.reduce((s, m) => s + (1 / m), 0);
       
-      // If caps are preventing convergence, use adaptive caps
-      if (Math.abs(newImplied - impliedSum) < 0.001 && (newImplied < target.min || newImplied > target.max)) {
-        if (adaptiveMaxCap < HARD_CAP_CEILING) {
-          adaptiveMaxCap = Math.min(adaptiveMaxCap * 1.15, HARD_CAP_CEILING);
-          console.log(`[CALIBRATION] Adaptive cap increased to ${adaptiveMaxCap.toFixed(1)}x`);
-        }
-      }
+      // Strict caps: do NOT escalate adaptiveMaxCap. If convergence stalls
+      // at the cap, we accept the residual implied-sum drift rather than
+      // letting multipliers exceed the canonical ceiling.
       
       impliedSum = newImplied;
     }

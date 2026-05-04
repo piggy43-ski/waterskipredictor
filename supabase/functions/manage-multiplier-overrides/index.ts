@@ -5,13 +5,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Multiplier caps per market type - SYNCED with generate-market-odds
+// SINGLE SOURCE OF TRUTH: mirrors src/utils/multiplierCaps.ts
+// Do NOT diverge — update src/utils/multiplierCaps.ts AND this block in lockstep.
 const MULTIPLIER_CAPS: Record<string, { min: number; max: number }> = {
-  WINNER: { min: 1.8, max: 12.0 },
-  PODIUM: { min: 1.4, max: 10.0 },
-  HIGHEST_SCORE: { min: 2.0, max: 8.0 },
+  WINNER: { min: 1.50, max: 8.0 },
+  PODIUM: { min: 1.25, max: 6.0 },
+  HIGHEST_SCORE: { min: 1.50, max: 7.0 },
   HEAD_TO_HEAD: { min: 1.5, max: 5.0 },
   OVER_UNDER: { min: 1.5, max: 5.0 },
+};
+
+// Rank-specific caps — applied on top of market-type caps for manual overrides.
+const RANK_CAPS: Record<string, Record<number, number>> = {
+  WINNER: { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 5.00 },
+  PODIUM: { 1: 1.25, 2: 1.75, 3: 2.25 },
+  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.50 },
 };
 
 // Target implied sum bands per market type
@@ -276,17 +284,21 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Validate against caps
-        const clampedMultiplier = Math.max(caps.min, Math.min(caps.max, manual_multiplier));
+        // Validate against market-type caps AND rank-specific caps.
+        const rankCaps = RANK_CAPS[marketType] || {};
+        const athleteRank = rankMap.get(athlete_id) || 999;
+        const rankMaxCap = rankCaps[athleteRank];
+        const effectiveMax = rankMaxCap !== undefined ? Math.min(caps.max, rankMaxCap) : caps.max;
+
+        const clampedMultiplier = Math.max(caps.min, Math.min(effectiveMax, manual_multiplier));
         const roundedMultiplier = roundToStep(clampedMultiplier);
-        
-        if (manual_multiplier < caps.min || manual_multiplier > caps.max) {
-          console.log(`[OVERRIDE] Clamped ${manual_multiplier} to ${roundedMultiplier} for ${marketType}`);
+
+        if (manual_multiplier < caps.min || manual_multiplier > effectiveMax) {
+          console.log(`[OVERRIDE] Clamped ${manual_multiplier} to ${roundedMultiplier} for ${marketType} rank ${athleteRank} (effectiveMax=${effectiveMax})`);
         }
 
         // Check monotonic if enabled
         if (enforce_monotonic) {
-          const athleteRank = rankMap.get(athlete_id) || 999;
           const athletes = buildAthleteData();
           
           for (const a of athletes) {

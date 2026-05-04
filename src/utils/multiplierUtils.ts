@@ -11,49 +11,22 @@
 // ============================================================
 // CONFIGURATION
 // ============================================================
+// SINGLE SOURCE OF TRUTH for caps lives in `./multiplierCaps`.
+// This config re-exports those caps so legacy imports keep working,
+// and adds derivation-only knobs (temperature, rounding step, target bands).
+import {
+  MULTIPLIER_CAPS as CANONICAL_CAPS,
+  RANK_CAPS as CANONICAL_RANK_CAPS,
+  TARGET_IMPLIED_SUM as CANONICAL_TARGET,
+} from './multiplierCaps';
+
 export const MULTIPLIER_CONFIG = {
-  // Target implied sum bands (Σ(1/multiplier) should fall within these)
-  // Lower values = more house edge
-  TARGET_IMPLIED_SUM: {
-    WINNER: { min: 0.90, max: 0.92 },
-    PODIUM: { min: 0.84, max: 0.86 },
-    HIGHEST_SCORE: { min: 0.87, max: 0.89 },
-  },
-  
-  // Multiplier caps per market type - AGGRESSIVE to prevent bankruptcy
-  MULTIPLIER_CAPS: {
-    WINNER: { min: 1.50, max: 8.0 },
-    PODIUM: { min: 1.25, max: 6.0 },
-    HIGHEST_SCORE: { min: 1.50, max: 7.0 },
-  },
-  
-  // Rank-specific caps for WINNER market - AGGRESSIVE favorite caps
-  WINNER_RANK_CAPS: {
-    1: 1.50,   // Rank 1 (best athlete) max 1.5x
-    2: 2.25,   // Rank 2 max 2.25x
-    3: 3.00,   // Rank 3 max 3.0x
-    4: 4.00,   // Rank 4 max 4.0x
-    5: 5.00,   // Rank 5 max 5.0x
-  } as Record<number, number>,
-  
-  // Rank-specific caps for PODIUM market
-  PODIUM_RANK_CAPS: {
-    1: 1.25,
-    2: 1.75,
-    3: 2.25,
-  } as Record<number, number>,
-  
-  // Rank-specific caps for HIGHEST_SCORE market
-  HIGHEST_SCORE_RANK_CAPS: {
-    1: 1.80,
-    2: 2.50,
-    3: 3.50,
-  } as Record<number, number>,
-  
-  // Rounding step
+  TARGET_IMPLIED_SUM: CANONICAL_TARGET,
+  MULTIPLIER_CAPS: CANONICAL_CAPS,
+  WINNER_RANK_CAPS: CANONICAL_RANK_CAPS.WINNER,
+  PODIUM_RANK_CAPS: CANONICAL_RANK_CAPS.PODIUM,
+  HIGHEST_SCORE_RANK_CAPS: CANONICAL_RANK_CAPS.HIGHEST_SCORE,
   ROUNDING_STEP: 0.1,
-  
-  // Softmax temperature per market type (lower = sharper favorites)
   TEMPERATURE: {
     WINNER: 0.85,
     PODIUM: 1.05,
@@ -180,30 +153,34 @@ export function deriveMultipliers(
   const target = MULTIPLIER_CONFIG.TARGET_IMPLIED_SUM[marketType];
   const caps = MULTIPLIER_CONFIG.MULTIPLIER_CAPS[marketType];
   const targetMid = (target.min + target.max) / 2;
-  
-  // Dynamic cap scaling for large fields to prevent clumping at max
-  const fieldSizeAdjustment = Math.max(1, fieldSize / 20);
-  const dynamicMax = Math.min(caps.max * fieldSizeAdjustment, 25.0);
-  
+
+  // Strict cap: caps.max from `multiplierCaps.ts` is the absolute ceiling.
+  // No field-size scaling — single source of truth wins.
+  const hardMax = caps.max;
+
   // Calculate edge factor to hit target implied sum
   const edgeFactor = targetMid;
-  
+
   // Apply edge and derive multipliers
   const multipliers = probabilities.map((p, idx) => {
     const p_adj = p * edgeFactor;
-    if (p_adj <= 0) return dynamicMax;
-    
+    if (p_adj <= 0) return hardMax;
+
     let m = 1 / p_adj;
-    
-    // Apply rank-specific caps for WINNER
-    if (marketType === 'WINNER' && fieldRanks && athleteIds) {
+
+    // Apply rank-specific caps (WINNER / PODIUM / HIGHEST_SCORE)
+    if (fieldRanks && athleteIds) {
       const fieldRank = fieldRanks.get(athleteIds[idx]);
-      if (fieldRank && MULTIPLIER_CONFIG.WINNER_RANK_CAPS[fieldRank]) {
-        m = Math.min(m, MULTIPLIER_CONFIG.WINNER_RANK_CAPS[fieldRank]);
+      const rankCaps =
+        marketType === 'WINNER' ? MULTIPLIER_CONFIG.WINNER_RANK_CAPS :
+        marketType === 'PODIUM' ? MULTIPLIER_CONFIG.PODIUM_RANK_CAPS :
+        MULTIPLIER_CONFIG.HIGHEST_SCORE_RANK_CAPS;
+      if (fieldRank && rankCaps[fieldRank]) {
+        m = Math.min(m, rankCaps[fieldRank]);
       }
     }
-    
-    m = clamp(m, caps.min, dynamicMax);
+
+    m = clamp(m, caps.min, hardMax);
     return roundToLadder(m);
   });
   

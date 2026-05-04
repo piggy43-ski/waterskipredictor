@@ -1,16 +1,20 @@
 /**
  * Podium prediction multiplier calculation
- * 
+ *
  * Formula: (M1 + M2 + M3) × 2
- * 
+ *
  * Rationale: Predicting exact podium positions is difficult,
  * so we reward with sum × 2 instead of product × haircut.
  * This makes podium predictions more attractive while still
  * being risk-managed via the cap.
+ *
+ * Combined cap is sourced from the single source of truth
+ * (`multiplierCaps.MAX_PODIUM_COMBINED_MULTIPLIER` = PODIUM.max × 3).
  */
+import { MAX_PODIUM_COMBINED_MULTIPLIER } from './multiplierCaps';
 
 const PODIUM_BONUS_FACTOR = 2;
-const MAX_PODIUM_MULTIPLIER = 30;
+const MAX_PODIUM_MULTIPLIER = MAX_PODIUM_COMBINED_MULTIPLIER;
 
 /**
  * Calculate combined multiplier for podium predictions
