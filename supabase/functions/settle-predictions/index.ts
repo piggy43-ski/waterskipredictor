@@ -516,6 +516,7 @@ Deno.serve(async (req) => {
                 payout_tokens: payoutAmount,
                 settled_at: new Date().toISOString(),
                 settlement_metadata: settlementMetadata,
+                settlement_run_id: settlementRunId,
               })
               .eq('id', prediction.id);
 
@@ -562,28 +563,44 @@ Deno.serve(async (req) => {
               
               if (walletData) {
                 const profit = payoutAmount - prediction.staked_tokens;
-                const { error: txError } = await supabaseClient.from('token_transactions').insert({
-                  user_id: prediction.user_id,
+                const wonKey = buildCreditIdempotencyKey({
+                  userId: prediction.user_id,
+                  referenceType: 'prediction',
+                  referenceId: prediction.id,
                   type: 'prediction_won',
-                  amount: payoutAmount,
-                  balance_after: walletData.purchased_tokens + walletData.earned_tokens,
-                  reference_type: 'prediction',
-                  reference_id: prediction.id,
-                  description: `Won prediction on ${prediction.athlete_name} (${prediction.discipline}) - Staked ${prediction.staked_tokens}, won ${payoutAmount} (+${profit} profit)`,
-                  metadata: {
-                    tournament_name: prediction.tournament_name,
-                    athlete_name: prediction.athlete_name,
-                    discipline: prediction.discipline,
-                    market_type: prediction.market_type,
-                    staked: prediction.staked_tokens,
-                    odds: prediction.decimal_odds,
-                    payout: payoutAmount,
-                    profit: profit
-                  }
                 });
-                if (txError) {
-                  console.error(`❌ Failed to log WON transaction for prediction ${prediction.id}:`, txError);
-                  result.errors?.push(`Transaction log failed for prediction ${prediction.id}: ${txError.message}`);
+                if (!wonKey) {
+                  console.warn(`⚠️ idempotency key null for WON prediction ${prediction.id} — skipping ledger write`);
+                  result.errors?.push(`Idempotency key null for prediction ${prediction.id}`);
+                } else {
+                  const { error: txError } = await supabaseClient.from('token_transactions').insert({
+                    user_id: prediction.user_id,
+                    type: 'prediction_won',
+                    amount: payoutAmount,
+                    balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                    reference_type: 'prediction',
+                    reference_id: prediction.id,
+                    settlement_run_id: settlementRunId,
+                    description: `Won prediction on ${prediction.athlete_name} (${prediction.discipline}) - Staked ${prediction.staked_tokens}, won ${payoutAmount} (+${profit} profit)`,
+                    metadata: {
+                      tournament_name: prediction.tournament_name,
+                      athlete_name: prediction.athlete_name,
+                      discipline: prediction.discipline,
+                      market_type: prediction.market_type,
+                      staked: prediction.staked_tokens,
+                      odds: prediction.decimal_odds,
+                      payout: payoutAmount,
+                      profit: profit,
+                    },
+                  });
+                  if (txError) {
+                    if (isUniqueViolation(txError)) {
+                      console.log(`ℹ️ idempotent skip: prediction ${prediction.id} already credited (token_tx_credit_idem)`);
+                    } else {
+                      console.error(`❌ Failed to log WON transaction for prediction ${prediction.id}:`, txError);
+                      result.errors?.push(`Transaction log failed for prediction ${prediction.id}: ${txError.message}`);
+                    }
+                  }
                 }
               }
 
@@ -625,6 +642,7 @@ Deno.serve(async (req) => {
                 payout_tokens: 0,
                 settled_at: new Date().toISOString(),
                 settlement_metadata: settlementMetadata,
+                settlement_run_id: settlementRunId,
               })
               .eq('id', prediction.id);
 
@@ -652,6 +670,7 @@ Deno.serve(async (req) => {
                 balance_after: walletData.purchased_tokens + walletData.earned_tokens,
                 reference_type: 'prediction',
                 reference_id: prediction.id,
+                settlement_run_id: settlementRunId,
                 description: `Lost prediction on ${prediction.athlete_name} (${prediction.discipline}) - Lost ${prediction.staked_tokens} tokens`,
                 metadata: {
                   tournament_name: prediction.tournament_name,
@@ -703,6 +722,7 @@ Deno.serve(async (req) => {
                 payout_tokens: isPartOfParlay ? 0 : prediction.staked_tokens,
                 settled_at: new Date().toISOString(),
                 settlement_metadata: settlementMetadata,
+                settlement_run_id: settlementRunId,
               })
               .eq('id', prediction.id);
 
@@ -746,24 +766,40 @@ Deno.serve(async (req) => {
                 .single();
               
               if (walletData) {
-                const { error: txError } = await supabaseClient.from('token_transactions').insert({
-                  user_id: prediction.user_id,
+                const voidKey = buildCreditIdempotencyKey({
+                  userId: prediction.user_id,
+                  referenceType: 'prediction',
+                  referenceId: prediction.id,
                   type: 'prediction_void',
-                  amount: prediction.staked_tokens,
-                  balance_after: walletData.purchased_tokens + walletData.earned_tokens,
-                  reference_type: 'prediction',
-                  reference_id: prediction.id,
-                  description: `Voided prediction on ${prediction.athlete_name} (${prediction.discipline}) - Refunded ${prediction.staked_tokens} tokens`,
-                  metadata: {
-                    tournament_name: prediction.tournament_name,
-                    athlete_name: prediction.athlete_name,
-                    discipline: prediction.discipline,
-                    refunded: prediction.staked_tokens
-                  }
                 });
-                if (txError) {
-                  console.error(`❌ Failed to log VOID transaction for prediction ${prediction.id}:`, txError);
-                  result.errors?.push(`Transaction log failed for prediction ${prediction.id}: ${txError.message}`);
+                if (!voidKey) {
+                  console.warn(`⚠️ idempotency key null for VOID prediction ${prediction.id} — skipping ledger write`);
+                  result.errors?.push(`Idempotency key null for prediction ${prediction.id}`);
+                } else {
+                  const { error: txError } = await supabaseClient.from('token_transactions').insert({
+                    user_id: prediction.user_id,
+                    type: 'prediction_void',
+                    amount: prediction.staked_tokens,
+                    balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                    reference_type: 'prediction',
+                    reference_id: prediction.id,
+                    settlement_run_id: settlementRunId,
+                    description: `Voided prediction on ${prediction.athlete_name} (${prediction.discipline}) - Refunded ${prediction.staked_tokens} tokens`,
+                    metadata: {
+                      tournament_name: prediction.tournament_name,
+                      athlete_name: prediction.athlete_name,
+                      discipline: prediction.discipline,
+                      refunded: prediction.staked_tokens,
+                    },
+                  });
+                  if (txError) {
+                    if (isUniqueViolation(txError)) {
+                      console.log(`ℹ️ idempotent skip: prediction ${prediction.id} already refunded`);
+                    } else {
+                      console.error(`❌ Failed to log VOID transaction for prediction ${prediction.id}:`, txError);
+                      result.errors?.push(`Transaction log failed for prediction ${prediction.id}: ${txError.message}`);
+                    }
+                  }
                 }
               }
             }
