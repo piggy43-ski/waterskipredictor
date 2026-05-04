@@ -94,8 +94,8 @@ describe("idempotency contract: second settle of same slip is a no-op", () => {
   // Simulates the partial unique index behaviour at the application layer.
   it("rejects a duplicate credit insert with the same idempotency key", () => {
     const seen = new Set<string>();
-    const tryInsert = (args: Parameters<typeof buildCreditIdempotencyKey>[0]) => {
-      const key = buildCreditIdempotencyKey(args);
+    const tryInsert = (input: Parameters<typeof buildCreditIdempotencyKey>[0]) => {
+      const key = buildCreditIdempotencyKey(input);
       if (key === null) return { inserted: false, reason: "non-credit" };
       if (seen.has(key)) return { inserted: false, reason: "duplicate" };
       seen.add(key);
