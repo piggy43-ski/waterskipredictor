@@ -428,6 +428,7 @@ export type Database = {
           market_id: string | null
           potential_payout_tokens: number
           settled_at: string | null
+          settlement_run_id: string | null
           status: string
           total_odds_american: number
           total_odds_decimal: number
@@ -445,6 +446,7 @@ export type Database = {
           market_id?: string | null
           potential_payout_tokens: number
           settled_at?: string | null
+          settlement_run_id?: string | null
           status?: string
           total_odds_american: number
           total_odds_decimal: number
@@ -462,6 +464,7 @@ export type Database = {
           market_id?: string | null
           potential_payout_tokens?: number
           settled_at?: string | null
+          settlement_run_id?: string | null
           status?: string
           total_odds_american?: number
           total_odds_decimal?: number
@@ -1918,6 +1921,7 @@ export type Database = {
           selection_id: string
           settled_at: string | null
           settlement_metadata: Json | null
+          settlement_run_id: string | null
           staked_tokens: number
           status: string
           tournament_name: string
@@ -1940,6 +1944,7 @@ export type Database = {
           selection_id: string
           settled_at?: string | null
           settlement_metadata?: Json | null
+          settlement_run_id?: string | null
           staked_tokens: number
           status?: string
           tournament_name: string
@@ -1962,6 +1967,7 @@ export type Database = {
           selection_id?: string
           settled_at?: string | null
           settlement_metadata?: Json | null
+          settlement_run_id?: string | null
           staked_tokens?: number
           status?: string
           tournament_name?: string
@@ -2623,6 +2629,7 @@ export type Database = {
           reference_id: string | null
           reference_type: string | null
           settlement_batch_id: string | null
+          settlement_run_id: string | null
           source_id: string | null
           source_type: string | null
           tournament_id: string | null
@@ -2642,6 +2649,7 @@ export type Database = {
           reference_id?: string | null
           reference_type?: string | null
           settlement_batch_id?: string | null
+          settlement_run_id?: string | null
           source_id?: string | null
           source_type?: string | null
           tournament_id?: string | null
@@ -2661,6 +2669,7 @@ export type Database = {
           reference_id?: string | null
           reference_type?: string | null
           settlement_batch_id?: string | null
+          settlement_run_id?: string | null
           source_id?: string | null
           source_type?: string | null
           tournament_id?: string | null
@@ -3075,6 +3084,20 @@ export type Database = {
       }
       is_pot_public: { Args: { _pot_id: string }; Returns: boolean }
       rebuild_market_liability: { Args: never; Returns: undefined }
+      reverse_settlement: {
+        Args: {
+          p_actor_id?: string
+          p_reason?: string
+          p_run_id?: string
+          p_slip_id?: string
+        }
+        Returns: {
+          amount: number
+          compensating_tx_id: string
+          original_tx_id: string
+          reversed_slip_id: string
+        }[]
+      }
       user_has_accepted_invite: {
         Args: { _pot_id: string; _user_id: string }
         Returns: boolean
