@@ -117,6 +117,8 @@ const sanitizeCssKey = (key: string): string | null => {
  * user input) to ChartConfig without additional application-level validation.
  */
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+  // TODO(shadow): shadcn template — rename when touching this code
+  // eslint-disable-next-line @typescript-eslint/no-shadow
   const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
 
   if (!colorConfig.length) {
