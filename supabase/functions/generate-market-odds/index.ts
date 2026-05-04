@@ -365,9 +365,11 @@ function deriveMultipliersCalibrated(
   let temperatureAttempts = 0;
   const maxTempAttempts = 5;
   
-  // Adaptive cap ceiling - will increase if convergence fails
-  let adaptiveMaxCap = caps.max;
-  const HARD_CAP_CEILING = 25.0;
+  // Strict cap: caps.max from multiplierCaps.ts is the absolute ceiling.
+  // No adaptive escalation — single source of truth wins, even if convergence
+  // misses the target band (calibration will scale within bounds).
+  const adaptiveMaxCap = caps.max;
+  const HARD_CAP_CEILING = caps.max;
   
   console.log(`[CALIBRATION] Field: ${fieldSize}, marketType: ${marketType}, globalCaps: ${caps.min}-${caps.max}`);
   
@@ -478,13 +480,9 @@ function deriveMultipliersCalibrated(
       // Re-check implied sum after clamping
       const newImplied = multipliers.reduce((s, m) => s + (1 / m), 0);
       
-      // If caps are preventing convergence, use adaptive caps
-      if (Math.abs(newImplied - impliedSum) < 0.001 && (newImplied < target.min || newImplied > target.max)) {
-        if (adaptiveMaxCap < HARD_CAP_CEILING) {
-          adaptiveMaxCap = Math.min(adaptiveMaxCap * 1.15, HARD_CAP_CEILING);
-          console.log(`[CALIBRATION] Adaptive cap increased to ${adaptiveMaxCap.toFixed(1)}x`);
-        }
-      }
+      // Strict caps: do NOT escalate adaptiveMaxCap. If convergence stalls
+      // at the cap, we accept the residual implied-sum drift rather than
+      // letting multipliers exceed the canonical ceiling.
       
       impliedSum = newImplied;
     }

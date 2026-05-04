@@ -5,11 +5,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Multiplier caps for preview calculation
+// SINGLE SOURCE OF TRUTH: mirrors src/utils/multiplierCaps.ts
+// Do NOT diverge — update src/utils/multiplierCaps.ts AND this block in lockstep.
 const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.5, max: 20.0 },
-  PODIUM: { min: 1.10, max: 8.0 },
-  HIGHEST_SCORE: { min: 1.5, max: 12.0 },
+  WINNER: { min: 1.50, max: 8.0 },
+  PODIUM: { min: 1.25, max: 6.0 },
+  HIGHEST_SCORE: { min: 1.50, max: 7.0 },
 };
 
 const TARGET_IMPLIED_SUM = {

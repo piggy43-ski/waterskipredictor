@@ -284,11 +284,11 @@ Deno.serve(async (req) => {
         allImpliedSumsOK = false;
       }
 
-      // Check multiplier caps
+      // Check multiplier caps — mirrors src/utils/multiplierCaps.ts (single source of truth).
       const multiplierCaps: Record<string, { min: number; max: number }> = {
-        WINNER: { min: 1.05, max: 50 },
-        PODIUM: { min: 1.02, max: 20 },
-        HIGHEST_SCORE: { min: 1.05, max: 50 },
+        WINNER: { min: 1.50, max: 8.0 },
+        PODIUM: { min: 1.25, max: 6.0 },
+        HIGHEST_SCORE: { min: 1.50, max: 7.0 },
       };
       const caps = multiplierCaps[market.market_type] || multiplierCaps.WINNER;
       for (const o of odds) {
