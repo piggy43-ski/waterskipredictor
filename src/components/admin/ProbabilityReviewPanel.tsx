@@ -172,6 +172,8 @@ export function ProbabilityReviewPanel({ tournamentId, onPublish }: ProbabilityR
     if (total === 0) return 0;
     
     // Calculate implied sum based on multipliers derived from normalized probabilities
+    // TODO(shadow): rename when touching this code
+    // eslint-disable-next-line @typescript-eslint/no-shadow
     let impliedSum = 0;
     marketOdds.forEach(odds => {
       const rawProb = localOverrides[odds.athlete_id] || odds.p_final;
