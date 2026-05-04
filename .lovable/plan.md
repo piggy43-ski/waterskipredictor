@@ -1,61 +1,72 @@
-## Root cause
+I’ll fix the settlement flow so the results you enter become the single source of truth, and settlement becomes repeatable, auditable, and much harder to get wrong.
 
-The Swiss Pro Slalom 2026 manual settlement updated `bet_slips` via `EXISTS market_results` joined on `market_id`. **PODIUM single bets have `market_id IS NULL`** (the 3-athlete pick lives in `predictions.athlete_name` like `"Podium: Jaquess Regina, Bull Jaimee, Nicholson Allie"`), so every podium single was silently marked LOST and their `predictions` rows left as PENDING.
+Plan:
 
-User reports map cleanly to this bug:
-- **User 2 = SkiLucas🤙** — picked women's podium in **exact actual order** (Jaquess/Bull/Nicholson) on **two slips**. Both wrongly LOST.
-- **User 1 ("won 8850")** — best fit is **Boatntony** (true total 8,030 across 5 slips: 300+2,600+2,480+1,250+1,400). Could also be Max (9,600). Either way the missing payout is from the same podium bug.
+1. Centralize outcome calculation from tournament results
+- Add shared settlement helpers used by both the admin preview and backend settlement.
+- Derive all markets from saved `tournament_results`, not from fragile UI-only assumptions:
+  - `WINNER`: final round position 1, including ties.
+  - `PODIUM`: final round top 3 positions, including ties.
+  - `HIGHEST_SCORE`: best score across all rounds, including every tied athlete.
+- For slalom, keep discipline-aware score comparison so scores like `1 @ 9.75`, `5 @ 10.25`, etc. rank correctly.
+- Preserve exact-order podium behavior: a 1st/2nd/3rd podium slip only wins if all three positions match exactly.
 
-Actual results (already in `market_results`):
-- Men podium: 1 Ross, 2 Smith, 3 Winter
-- Women podium: 1 Jaquess, 2 Bull, 3 Nicholson
-- Men HIGHEST_SCORE: 3-way tie Ross/Smith/Winter
+2. Fix backend settlement so singles and parlays/combos cannot drift apart
+- Update `settle-predictions` so it settles by `prediction_id` overrides first, not only by `selection_id`.
+- Ensure exact-order podium singles with synthetic selection IDs like `<market-id>-podium` are always found and settled.
+- Ensure every prediction in a settled slip gets a final status (`WON`, `LOST`, or `VOID`) so users never see a slip as settled while legs still say `PENDING`.
+- Restrict entry settlement to the selected tournament only, instead of scanning all pending slips globally.
+- For singles, sync `bet_slips.status`, `actual_payout_tokens`, and `predictions.payout_tokens` consistently.
+- For parlays/combos, settle the whole slip only after every leg is settled:
+  - any lost leg means the slip loses;
+  - all winning/void legs means the slip pays from the stored slip payout, using `Math.floor()` / integer payout rules.
+- Use the existing stored `potential_payout_tokens` / `total_odds_decimal` as the source of payout instead of recalculating with a different haircut at settlement time.
 
-## Settlement rules (per memory)
+3. Fix fantasy scoring tie handling
+- Update `score-fantasy` highest-score bonus logic to award the +5 bonus to every athlete tied for the highest score in that discipline+gender.
+- This specifically covers cases like men’s Nate, Charlie, and Freddy all earning highest-score winner treatment when they all achieved the same top score.
+- Keep fantasy points deterministic on rescore: clear/rebuild scoring events, then set each entry’s total from the rebuilt events.
 
-- Single PODIUM = strict exact-order match.
-- Parlay PODIUM leg (single athlete, market_type=PODIUM) = "to finish top 3".
-- `total_odds_decimal` is already capped at 15 on parlays.
-- All payouts via `Math.floor()`, all statuses UPPERCASE, soft updates only.
-- Notifications must be neutral — no mention of bug/error/limits.
+4. Fix fantasy pot settlement ranking and payout ties
+- Update `settle-fantasy-pot` to use competition ranking with ties instead of simple array index ranking.
+- If multiple fantasy entries have the same `total_points`, they receive the same rank.
+- Prize percentages for tied ranks will be pooled and split evenly across the tied entries, with integer rounding via `Math.floor()`.
+- Prevent double payouts by checking transaction history/reference before paying a pot, and keep settlement idempotent.
 
-## Slips to fix
+5. Add pre-settlement validation and a clearer admin review
+- Add backend validation before final settlement that reports:
+  - total pending singles;
+  - total pending parlays/combos;
+  - exact-order podium entries found;
+  - unsettled or missing prediction legs;
+  - expected winners per market;
+  - expected fantasy pots to score/settle.
+- Update the admin settlement screen so the preview reflects entry-level outcomes, not only market-by-market prediction fragments.
+- Show warnings when a parlay has any leg not represented in the current result set.
+- Stop settlement if validation finds unresolved pending legs for the selected tournament.
 
-**PODIUM singles → flip LOST → WON:**
+6. Strengthen the automated settlement test
+- Extend `run-settlement-test` to cover the actual risky cases:
+  - normal single winner;
+  - losing single;
+  - exact-order podium single with synthetic selection ID;
+  - parlay/combination with winner + podium + highest-score legs;
+  - highest-score tie with multiple winners;
+  - fantasy scoring with tied highest score;
+  - fantasy pot tie payout.
+- Fix the test to use `tournament_results` rather than the older `athlete_results` path, so it tests the real current settlement pipeline.
 
-| User | Slip | Pick | Payout |
-|---|---|---|---|
-| SkiLucas🤙 | b567c940 | Jaquess, Bull, Nicholson | 1,300 |
-| SkiLucas🤙 | b8b35328 | Jaquess, Bull, Nicholson | 1,300 |
-| Boatntony | cead994d | Jaquess, Bull, Nicholson | 2,600 |
-| Boatntony | d6562bf2 | Ross, Smith, Winter | 2,480 |
-| Max | bd06a7fb | Ross, Smith, Winter | 6,200 |
-| hannahstopnicki | dac6a38c | Ross, Smith, Winter | 1,240 |
+7. Add a Swiss Pro safety check after implementation
+- Run read-only verification against Swiss Pro Slalom after the code changes:
+  - no settled Swiss Pro slip should have `PENDING` prediction rows;
+  - no winning single should have missing payout fields;
+  - every parlay/combination should have leg statuses consistent with slip status;
+  - fantasy entries should reflect the corrected tied highest-score bonus.
+- If the verification shows remaining Swiss Pro data mismatches, I’ll present the exact data correction before applying it.
 
-**PODIUM singles → stay LOST** (wrong order): WaterskiNation, Bsmogard (both Bull/Jaquess/Nicholson — 1st/2nd swapped), piggy43 (Smith/Ross/Asher).
-
-**Parlays → re-evaluate** (verify each leg before flipping; expected all-legs-win → WON at stake×15):
-- bretellis (250) → 3,750
-- JakeGlazer2 (100) → 1,500
-- Jedgell (100) → 1,500
-- Jaeden_Eade 8946 women (100) → 1,500
-- Travis Anderson a661 men (50) → 750
-- Travis Anderson d9cd women (50) → 750
-- Jaeden_Eade 97fc → stays LOST (Smith WINNER leg lost)
-
-## Steps
-
-1. Run a verification query to print the full diff (slip_id, user, current_status, correct_status, correct_payout) so you can sanity-check before any write.
-2. `UPDATE bet_slips SET status='WON', actual_payout_tokens=<floor>, settled_at=now()` for each fixed slip.
-3. `UPDATE predictions SET status='WON', payout_tokens=<floor>, settled_at=now()` for the matching rows so user UIs reflect the win.
-4. Credit each user's wallet via `increment_earned_tokens(user_id, payout)` and insert a `token_transactions` row of type `bet_won` for each fixed slip.
-5. Insert one neutral `notifications` row per affected user: *"Your Swiss Pro Slalom entry has been updated and your reward has been credited."* linking to `/profile?tab=predictions`.
-6. Run `SELECT rebuild_market_liability()` at the end to keep liability counters consistent.
-7. Insert a single `audit_logs` row (`actor_type='admin'`, `action_type='SETTLEMENT_CORRECTION'`, `entity_type='tournament'`, `entity_id='76329f1b…'`) with the full diff in `metadata`.
-8. Re-query and report back: per-user totals credited, list of affected slips, confirmation that no PODIUM slip remains in an inconsistent state.
-
-## Notes
-
-- No code changes — pure data correction.
-- Will not touch already-correct LOST slips or already-WON singles.
-- Will DM-friendly summary at the end so you can copy/paste replies to SkiLucas🤙 and the other user.
+Technical notes:
+- No direct edits to generated backend client/types files.
+- Statuses stay uppercase.
+- Payouts stay integer-safe with floor rounding.
+- No record deletes for bet slips; corrections stay soft/audited.
+- User-facing error messages remain neutral.
