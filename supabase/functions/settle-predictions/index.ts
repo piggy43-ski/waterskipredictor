@@ -281,6 +281,13 @@ Deno.serve(async (req) => {
 
     console.log(`🎯 Starting settlement for ${selections.length} selections`);
     
+    // STEP 2: One settlement_run_id per invocation. Stamped on every slip,
+    // prediction, and token_transactions row written by this run so that:
+    //  - re-runs become a no-op via the atomic claim + partial unique index
+    //  - reverse_settlement(p_run_id := ...) can undo the entire batch cleanly
+    const settlementRunId = crypto.randomUUID();
+    console.log(`🆔 settlement_run_id = ${settlementRunId}`);
+
     // Extract all selection IDs - ensure they're strings
     // Also include -podium suffixed variants so podium predictions are always found
     const baseSelectionIds = selections.map(s => String(s.selection_id));
