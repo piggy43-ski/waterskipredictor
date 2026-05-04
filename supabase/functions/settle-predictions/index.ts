@@ -771,11 +771,27 @@ Deno.serve(async (req) => {
     console.log(`\n🎯 Starting entry settlement...`);
     
     try {
-      // Fetch all pending bet slips that might have been affected
-      const { data: pendingSlips, error: slipsFetchError } = await supabaseClient
-        .from('bet_slips')
-        .select('*')
-        .eq('status', 'PENDING');
+      // Fetch only pending bet slips for tournaments touched by this settlement batch.
+      // This prevents accidentally settling slips for unrelated tournaments.
+      const affectedTournamentIds = new Set<string>();
+      for (const { slip } of betSlipsToSettle.values()) {
+        if (slip?.tournament_id) affectedTournamentIds.add(slip.tournament_id);
+      }
+
+      let pendingSlips: any[] | null = null;
+      let slipsFetchError: any = null;
+
+      if (affectedTournamentIds.size > 0) {
+        const { data, error } = await supabaseClient
+          .from('bet_slips')
+          .select('*')
+          .eq('status', 'PENDING')
+          .in('tournament_id', Array.from(affectedTournamentIds));
+        pendingSlips = data;
+        slipsFetchError = error;
+      } else {
+        pendingSlips = [];
+      }
 
       if (slipsFetchError) {
         console.error('❌ Error fetching bet slips:', slipsFetchError);
