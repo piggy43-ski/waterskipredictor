@@ -299,7 +299,6 @@ Deno.serve(async (req) => {
 
         // Check monotonic if enabled
         if (enforce_monotonic) {
-          const athleteRank = rankMap.get(athlete_id) || 999;
           const athletes = buildAthleteData();
           
           for (const a of athletes) {
