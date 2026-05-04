@@ -101,31 +101,31 @@ export function getTransferWindowStatus(
 
   // All tournaments finished = season ended
   if (upcomingTournaments.length === 0 && finishedTournaments.length > 0) {
-    const lastFinished = finishedTournaments[finishedTournaments.length - 1];
+    const seasonEndedLast = finishedTournaments[finishedTournaments.length - 1];
     return {
       status: 'season_ended',
       canTransfer: false,
       canEditRoster: false,
-      lastFinishedTournament: lastFinished,
+      lastFinishedTournament: seasonEndedLast,
       message: 'Season has ended'
     };
   }
 
   // No tournaments have started yet
   if (finishedTournaments.length === 0) {
-    const nextTournament = upcomingTournaments[0];
-    const deadline = nextTournament 
-      ? new Date(nextTournament.start_datetime || nextTournament.start_date || 0)
+    const initialNext = upcomingTournaments[0];
+    const initialDeadline = initialNext
+      ? new Date(initialNext.start_datetime || initialNext.start_date || 0)
       : undefined;
 
     return {
       status: 'initial',
       canTransfer: true,
       canEditRoster: true,
-      nextTournament,
-      deadline,
-      message: deadline 
-        ? `Build your team before ${formatDeadline(deadline)}`
+      nextTournament: initialNext,
+      deadline: initialDeadline,
+      message: initialDeadline
+        ? `Build your team before ${formatDeadline(initialDeadline)}`
         : 'Build your initial team'
     };
   }
