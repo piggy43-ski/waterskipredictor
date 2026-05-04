@@ -831,21 +831,27 @@ Deno.serve(async (req) => {
       let slipsFetchError: any = null;
 
       if (affectedTournamentIds.size > 0) {
+        // ATOMIC CLAIM: only the rows we actually flip from PENDING → SETTLING with our run id
+        // are returned. A re-run of this function (same settlement_run_id never reused; new id per
+        // invocation) sees no PENDING+null-run rows and does nothing.
         const { data, error } = await supabaseClient
           .from('bet_slips')
-          .select('*')
+          .update({ status: 'SETTLING', settlement_run_id: settlementRunId })
           .eq('status', 'PENDING')
-          .in('tournament_id', Array.from(affectedTournamentIds));
-        pendingSlips = data;
+          .is('settlement_run_id', null)
+          .in('tournament_id', Array.from(affectedTournamentIds))
+          .select('*');
+        pendingSlips = filterNewlyClaimed(data, settlementRunId);
         slipsFetchError = error;
+        console.log(`🔒 Atomic claim returned ${data?.length ?? 0} rows; ${pendingSlips.length} newly claimed by run ${settlementRunId}`);
       } else {
         pendingSlips = [];
       }
 
       if (slipsFetchError) {
-        console.error('❌ Error fetching bet slips:', slipsFetchError);
+        console.error('❌ Error claiming bet slips:', slipsFetchError);
       } else if (pendingSlips && pendingSlips.length > 0) {
-        console.log(`📋 Found ${pendingSlips.length} pending bet slips to check`);
+        console.log(`📋 Processing ${pendingSlips.length} claimed bet slips`);
 
         for (const slip of pendingSlips) {
           try {
@@ -860,27 +866,87 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Check if all legs are settled
-            const allSettled = legs.every(leg => leg.status !== 'PENDING');
-            if (!allSettled) {
-              console.log(`⏳ Slip ${slip.id} has pending legs, skipping`);
+            const isParlay = slip.type === 'parlay' || slip.leg_count > 1;
+
+            // Use the pure helper to decide the slip's resolution and which sibling
+            // legs need patching. resolveParlay returns PENDING when (no LOST AND
+            // some leg still PENDING) — that mirrors the old "skip if any pending" guard.
+            const parlayLegs: ParlayLeg[] = legs.map((l: any) => ({
+              id: l.id,
+              status: l.status as ParlayLeg['status'],
+            }));
+            const resolution = isParlay
+              ? resolveParlay(parlayLegs)
+              : { resolution: legs[0]?.status === 'PENDING' ? 'PENDING' : (legs[0]?.status as 'WON'|'LOST'|'VOID'), legUpdates: [], warnings: [] as string[] };
+
+            for (const w of resolution.warnings) {
+              console.warn(`⚠️ resolveParlay (slip ${slip.id}): ${w}`);
+            }
+
+            if (resolution.resolution === 'PENDING') {
+              // Release the claim so a future run can pick it up once legs settle.
+              await supabaseClient
+                .from('bet_slips')
+                .update({ status: 'PENDING', settlement_run_id: null })
+                .eq('id', slip.id);
+              console.log(`⏳ Slip ${slip.id} not yet resolvable — released claim`);
               continue;
             }
 
-            const isParlay = slip.type === 'parlay' || slip.leg_count > 1;
+            // Apply leg updates (LOST branch: PENDING siblings → VOID) BEFORE flipping the slip.
+            if (resolution.legUpdates.length > 0) {
+              const updateIds = resolution.legUpdates.map(u => u.id);
+              const { data: updatedLegs, error: legUpdateError } = await supabaseClient
+                .from('predictions')
+                .update({
+                  status: 'VOID',
+                  payout_tokens: 0,
+                  settled_at: new Date().toISOString(),
+                  settlement_run_id: settlementRunId,
+                })
+                .in('id', updateIds)
+                .eq('status', 'PENDING')
+                .select('id');
+
+              const updatedCount = updatedLegs?.length ?? 0;
+              if (legUpdateError || updatedCount !== resolution.legUpdates.length) {
+                console.error(`❌ Sibling leg update mismatch for slip ${slip.id}: requested=${resolution.legUpdates.length} updated=${updatedCount}`, legUpdateError);
+                await supabaseClient.from('audit_logs').insert({
+                  actor_type: 'system',
+                  action_type: 'PARLAY_LEG_UPDATE_MISMATCH',
+                  entity_type: 'bet_slip',
+                  entity_id: slip.id,
+                  metadata: {
+                    settlement_run_id: settlementRunId,
+                    requested_ids: updateIds,
+                    updated_ids: updatedLegs?.map((r: any) => r.id) ?? [],
+                    error: legUpdateError?.message ?? null,
+                  },
+                });
+                // Release claim and abort this slip — do not silently proceed.
+                await supabaseClient
+                  .from('bet_slips')
+                  .update({ status: 'PENDING', settlement_run_id: null })
+                  .eq('id', slip.id);
+                continue;
+              }
+              // Reflect the new statuses locally so subsequent payout math sees them.
+              for (const u of resolution.legUpdates) {
+                const leg = legs.find((l: any) => l.id === u.id);
+                if (leg) leg.status = u.to;
+              }
+            }
 
             if (isParlay) {
-              // PARLAY LOGIC
-              // Check if any leg is LOST
-              const hasLostLeg = legs.some(leg => leg.status === 'LOST');
-              if (hasLostLeg) {
+              if (resolution.resolution === 'LOST') {
                 // Parlay loses if any leg loses
                 await supabaseClient
                   .from('bet_slips')
                   .update({
                     status: 'LOST',
                     actual_payout_tokens: 0,
-                    settled_at: new Date().toISOString()
+                    settled_at: new Date().toISOString(),
+                    settlement_run_id: settlementRunId,
                   })
                   .eq('id', slip.id);
 
@@ -900,6 +966,7 @@ Deno.serve(async (req) => {
                     balance_after: lostWallet.purchased_tokens + lostWallet.earned_tokens,
                     reference_type: 'entry',
                     reference_id: slip.id,
+                    settlement_run_id: settlementRunId,
                     description: `Lost ${slip.leg_count}-leg parlay (${athleteNames}) - Lost ${slip.total_stake_tokens} tokens`,
                     metadata: {
                       entry_type: 'parlay',
@@ -957,7 +1024,8 @@ Deno.serve(async (req) => {
                 .update({
                   status: 'WON',
                   actual_payout_tokens: actualPayout,
-                  settled_at: new Date().toISOString()
+                  settled_at: new Date().toISOString(),
+                  settlement_run_id: settlementRunId,
                 })
                 .eq('id', slip.id);
 
@@ -974,7 +1042,8 @@ Deno.serve(async (req) => {
                   .update({
                     status: 'PENDING',
                     actual_payout_tokens: null,
-                    settled_at: null
+                    settled_at: null,
+                    settlement_run_id: null,
                   })
                   .eq('id', slip.id);
                 continue;
@@ -990,27 +1059,43 @@ Deno.serve(async (req) => {
               if (wonWallet) {
                 const profit = actualPayout - slip.total_stake_tokens;
                 const athleteNames = legs.map(l => l.athlete_name).join(', ');
-                const { error: txError } = await supabaseClient.from('token_transactions').insert({
-                  user_id: slip.user_id,
+                const parlayKey = buildCreditIdempotencyKey({
+                  userId: slip.user_id,
+                  referenceType: 'entry',
+                  referenceId: slip.id,
                   type: 'prediction_won',
-                  amount: actualPayout,
-                  balance_after: wonWallet.purchased_tokens + wonWallet.earned_tokens,
-                  reference_type: 'entry',
-                  reference_id: slip.id,
-                  description: `Won ${slip.leg_count}-leg parlay (${athleteNames}) - Staked ${slip.total_stake_tokens}, won ${actualPayout} (+${profit} profit)`,
-                  metadata: {
-                    entry_type: 'parlay',
-                    leg_count: slip.leg_count,
-                    staked: slip.total_stake_tokens,
-                    odds: finalOdds,
-                    payout: actualPayout,
-                    profit: profit,
-                    athletes: legs.map(l => l.athlete_name)
-                  }
                 });
-                if (txError) {
-                  console.error(`❌ Failed to log parlay WON transaction for slip ${slip.id}:`, txError);
-                  result.errors?.push(`Parlay transaction log failed for slip ${slip.id}: ${txError.message}`);
+                if (!parlayKey) {
+                  console.warn(`⚠️ idempotency key null for parlay WON slip ${slip.id} — skipping ledger write`);
+                  result.errors?.push(`Idempotency key null for slip ${slip.id}`);
+                } else {
+                  const { error: txError } = await supabaseClient.from('token_transactions').insert({
+                    user_id: slip.user_id,
+                    type: 'prediction_won',
+                    amount: actualPayout,
+                    balance_after: wonWallet.purchased_tokens + wonWallet.earned_tokens,
+                    reference_type: 'entry',
+                    reference_id: slip.id,
+                    settlement_run_id: settlementRunId,
+                    description: `Won ${slip.leg_count}-leg parlay (${athleteNames}) - Staked ${slip.total_stake_tokens}, won ${actualPayout} (+${profit} profit)`,
+                    metadata: {
+                      entry_type: 'parlay',
+                      leg_count: slip.leg_count,
+                      staked: slip.total_stake_tokens,
+                      odds: finalOdds,
+                      payout: actualPayout,
+                      profit: profit,
+                      athletes: legs.map(l => l.athlete_name),
+                    },
+                  });
+                  if (txError) {
+                    if (isUniqueViolation(txError)) {
+                      console.log(`ℹ️ idempotent skip: parlay slip ${slip.id} already credited`);
+                    } else {
+                      console.error(`❌ Failed to log parlay WON transaction for slip ${slip.id}:`, txError);
+                      result.errors?.push(`Parlay transaction log failed for slip ${slip.id}: ${txError.message}`);
+                    }
+                  }
                 }
               }
 
@@ -1056,7 +1141,8 @@ Deno.serve(async (req) => {
                 .update({
                   status: slipStatus,
                   actual_payout_tokens: actualPayout,
-                  settled_at: new Date().toISOString()
+                  settled_at: new Date().toISOString(),
+                  settlement_run_id: settlementRunId,
                 })
                 .eq('id', slip.id);
 
