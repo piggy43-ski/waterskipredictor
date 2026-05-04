@@ -29,6 +29,13 @@ export const RANK_CAPS = {
   } as Record<number, number>,
 };
 
+/**
+ * Combined podium (exact-order) multiplier ceiling.
+ * Equal to PODIUM.max * 3 — the strict per-leg cap × the 3 podium positions.
+ * Used by `podiumMultipliers.calculatePodiumCombinedMultiplier`.
+ */
+export const MAX_PODIUM_COMBINED_MULTIPLIER = MULTIPLIER_CAPS.PODIUM.max * 3; // 18
+
 export const TARGET_IMPLIED_SUM = {
   WINNER: { min: 0.90, max: 0.92 },
   PODIUM: { min: 0.84, max: 0.86 },
