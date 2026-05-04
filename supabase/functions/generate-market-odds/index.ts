@@ -20,18 +20,19 @@ const TARGET_IMPLIED_SUM = {
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
 };
 
-// Updated global caps - raised max to allow proper spread
+// SINGLE SOURCE OF TRUTH: mirrors src/utils/multiplierCaps.ts
+// Do NOT diverge — update src/utils/multiplierCaps.ts AND this block in lockstep.
 const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.50, max: 20.0 },
-  PODIUM: { min: 1.25, max: 10.0 },
-  HIGHEST_SCORE: { min: 1.50, max: 12.0 },
+  WINNER: { min: 1.50, max: 8.0 },
+  PODIUM: { min: 1.25, max: 6.0 },
+  HIGHEST_SCORE: { min: 1.50, max: 7.0 },
 };
 
-// RANK-SPECIFIC CAPS - empty, let the steep ladder + low temperature do the work
+// Rank-specific caps — favorites are capped tight (mirrors multiplierCaps.RANK_CAPS).
 const RANK_CAPS: Record<string, Record<number, number>> = {
-  WINNER: {},
-  PODIUM: {},
-  HIGHEST_SCORE: {},
+  WINNER: { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 5.00 },
+  PODIUM: { 1: 1.25, 2: 1.75, 3: 2.25 },
+  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.50 },
 };
 
 // Softmax temperature per market type (lower = sharper favorites)
