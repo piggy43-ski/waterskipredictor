@@ -139,12 +139,14 @@ export const RISK_CONFIG = {
   } as const,
   
   /**
-   * HARD MULTIPLIER CAPS (safety backstop only)
+   * HARD MULTIPLIER CAPS (safety backstop only).
+   * SINGLE SOURCE OF TRUTH: values mirror `multiplierCaps.MULTIPLIER_CAPS[*].max`.
+   * Do NOT diverge — update `src/utils/multiplierCaps.ts` instead.
    */
   MULTIPLIER_CAPS: {
-    WINNER: 15.0,
-    HIGHEST_SCORE: 12.0,
-    PODIUM: 8.0,
+    WINNER: 8.0,
+    HIGHEST_SCORE: 7.0,
+    PODIUM: 6.0,
   } as const,
 } as const;
 
