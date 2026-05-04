@@ -258,13 +258,13 @@ serve(async (req) => {
     let totalScoringEvents = 0;
 
     for (const pot of pots || []) {
-      const { data: entries, error: entriesError } = await supabase
+      const { data: entries, error: potEntriesError } = await supabase
         .from('fantasy_entries')
         .select('id, user_id')
         .eq('pot_id', pot.id);
 
-      if (entriesError) {
-        console.error(`Error fetching entries for pot ${pot.id}:`, entriesError);
+      if (potEntriesError) {
+        console.error(`Error fetching entries for pot ${pot.id}:`, potEntriesError);
         continue;
       }
 
