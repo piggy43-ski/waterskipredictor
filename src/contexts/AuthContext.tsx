@@ -30,11 +30,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event, nextSession) => {
         console.log('Auth state change:', event);
         
         // Handle token refresh errors silently
-        if (event === 'TOKEN_REFRESHED' && !session) {
+        if (event === 'TOKEN_REFRESHED' && !nextSession) {
           console.log('Token refresh failed, clearing session');
           setSession(null);
           setUser(null);
@@ -48,15 +48,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
         
-        setSession(session);
-        setUser(session?.user ?? null);
+        setSession(nextSession);
+        setUser(nextSession?.user ?? null);
       }
     );
 
     // Then check for existing session
     const initSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         
         // Handle invalid/expired session errors silently
         if (error) {
@@ -66,8 +66,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setSession(null);
           setUser(null);
         } else {
-          setSession(session);
-          setUser(session?.user ?? null);
+          setSession(currentSession);
+          setUser(currentSession?.user ?? null);
         }
       } catch (err) {
         console.log('Session init error:', err);
