@@ -143,23 +143,53 @@ serve(async (req) => {
     // Get payout structure
     const payoutStructure = PAYOUT_STRUCTURES[pot.payout_structure] || PAYOUT_STRUCTURES.top_3_split;
 
-    // Calculate and distribute payouts
-    const payouts: { user_id: string; amount: number; rank: number }[] = [];
-
+    // Assign competition ranks (ties share the same rank)
+    // Example: scores [10, 8, 8, 5] → ranks [1, 2, 2, 4]
+    const ranks: number[] = [];
     for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      const rank = i + 1;
-      const payoutPercent = payoutStructure[rank];
+      if (i === 0) {
+        ranks.push(1);
+      } else if (Number(entries[i].total_points) === Number(entries[i - 1].total_points)) {
+        ranks.push(ranks[i - 1]);
+      } else {
+        ranks.push(i + 1);
+      }
+    }
 
-      // Update entry rank
+    // Persist ranks
+    for (let i = 0; i < entries.length; i++) {
       await supabase
         .from('fantasy_entries')
-        .update({ rank })
-        .eq('id', entry.id);
+        .update({ rank: ranks[i] })
+        .eq('id', entries[i].id);
+    }
 
-      if (payoutPercent) {
-        const payoutAmount = Math.floor(netPrizePool * (payoutPercent / 100));
-        payouts.push({ user_id: entry.user_id, amount: payoutAmount, rank });
+    // Group entries by rank, then pool the prize percentages for tied ranks
+    // and split evenly among the tied entries.
+    const payouts: { user_id: string; amount: number; rank: number }[] = [];
+    const rankToIndices = new Map<number, number[]>();
+    for (let i = 0; i < entries.length; i++) {
+      const list = rankToIndices.get(ranks[i]) ?? [];
+      list.push(i);
+      rankToIndices.set(ranks[i], list);
+    }
+
+    for (const [rank, indices] of rankToIndices) {
+      // Sum the percentages of all positions occupied by this tied group.
+      // E.g. two-way tie for 1st absorbs both the 1st and 2nd payout slots.
+      let pooledPercent = 0;
+      for (let offset = 0; offset < indices.length; offset++) {
+        const slotPosition = rank + offset;
+        pooledPercent += payoutStructure[slotPosition] || 0;
+      }
+      if (pooledPercent <= 0) continue;
+
+      const pooledAmount = Math.floor(netPrizePool * (pooledPercent / 100));
+      const perEntry = Math.floor(pooledAmount / indices.length);
+      if (perEntry <= 0) continue;
+
+      for (const idx of indices) {
+        payouts.push({ user_id: entries[idx].user_id, amount: perEntry, rank });
       }
     }
 

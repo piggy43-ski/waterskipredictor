@@ -159,18 +159,27 @@ serve(async (req) => {
     const roundTypes = [...new Set(allResults.map(r => r.round_type))];
     console.log(`Round types present: ${roundTypes.join(', ')}`);
 
-    // Find highest scores by discipline/gender across ALL rounds
-    const highestScores = new Map<string, { athlete_id: string; score: number }>();
+    // Find highest scores by discipline/gender across ALL rounds (with TIE support)
+    // We collect ALL athletes that share the highest raw_score for each discipline+gender.
+    const highestScoreValue = new Map<string, number>();
+    const highestScoreAthletes = new Map<string, Set<string>>();
     for (const result of allResults) {
       if (result.raw_score === null || result.raw_score === 0) continue;
       const key = `${result.discipline}_${result.gender}`;
-      const current = highestScores.get(key);
-      if (!current || result.raw_score > current.score) {
-        highestScores.set(key, { athlete_id: result.athlete_id, score: result.raw_score });
+      const currentBest = highestScoreValue.get(key);
+      if (currentBest === undefined || result.raw_score > currentBest) {
+        highestScoreValue.set(key, result.raw_score);
+        highestScoreAthletes.set(key, new Set([result.athlete_id]));
+      } else if (result.raw_score === currentBest) {
+        const set = highestScoreAthletes.get(key) ?? new Set<string>();
+        set.add(result.athlete_id);
+        highestScoreAthletes.set(key, set);
       }
     }
 
-    console.log(`Highest scores found:`, Object.fromEntries(highestScores));
+    console.log(`Highest scores found:`, Object.fromEntries(
+      Array.from(highestScoreValue.entries()).map(([k, v]) => [k, { score: v, winners: Array.from(highestScoreAthletes.get(k) || []) }])
+    ));
 
     // Get finals results (for position points)
     // Priority: 'final' > 'semi' > any other round with rank
@@ -332,10 +341,10 @@ serve(async (req) => {
                 breakdown.made_finals_bonus = BONUSES.made_finals;
               }
 
-              // Highest score bonus (across all rounds)
+              // Highest score bonus (across all rounds) — every athlete tied at the top earns the bonus
               const categoryKey = `${rosterAthlete.discipline}_${finalistData.gender}`;
-              const highestInCategory = highestScores.get(categoryKey);
-              if (highestInCategory?.athlete_id === rosterAthlete.athlete_id) {
+              const tiedTopAthletes = highestScoreAthletes.get(categoryKey);
+              if (tiedTopAthletes?.has(rosterAthlete.athlete_id)) {
                 rawPoints += BONUSES.highest_score_event;
                 breakdown.highest_score_bonus = BONUSES.highest_score_event;
               }
@@ -394,11 +403,11 @@ serve(async (req) => {
 
             console.log(`Athlete ${rosterAthlete.athlete_id} competed but didn't make finals - applying did_not_make_finals penalty (-5)`);
 
-            // Check if they had the highest score even without making finals
+            // Check if they had the highest score even without making finals (tie-aware)
             if (athleteGender) {
               const categoryKey = `${rosterAthlete.discipline}_${athleteGender}`;
-              const highestInCategory = highestScores.get(categoryKey);
-              if (highestInCategory?.athlete_id === rosterAthlete.athlete_id) {
+              const tiedTopAthletes = highestScoreAthletes.get(categoryKey);
+              if (tiedTopAthletes?.has(rosterAthlete.athlete_id)) {
                 rawPoints += BONUSES.highest_score_event;
                 breakdown.highest_score_bonus = BONUSES.highest_score_event;
               }

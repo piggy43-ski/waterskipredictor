@@ -771,11 +771,27 @@ Deno.serve(async (req) => {
     console.log(`\n🎯 Starting entry settlement...`);
     
     try {
-      // Fetch all pending bet slips that might have been affected
-      const { data: pendingSlips, error: slipsFetchError } = await supabaseClient
-        .from('bet_slips')
-        .select('*')
-        .eq('status', 'PENDING');
+      // Fetch only pending bet slips for tournaments touched by this settlement batch.
+      // This prevents accidentally settling slips for unrelated tournaments.
+      const affectedTournamentIds = new Set<string>();
+      for (const { slip } of betSlipsToSettle.values()) {
+        if (slip?.tournament_id) affectedTournamentIds.add(slip.tournament_id);
+      }
+
+      let pendingSlips: any[] | null = null;
+      let slipsFetchError: any = null;
+
+      if (affectedTournamentIds.size > 0) {
+        const { data, error } = await supabaseClient
+          .from('bet_slips')
+          .select('*')
+          .eq('status', 'PENDING')
+          .in('tournament_id', Array.from(affectedTournamentIds));
+        pendingSlips = data;
+        slipsFetchError = error;
+      } else {
+        pendingSlips = [];
+      }
 
       if (slipsFetchError) {
         console.error('❌ Error fetching bet slips:', slipsFetchError);
@@ -870,18 +886,21 @@ Deno.serve(async (req) => {
                 continue;
               }
 
-              // All legs are WON or VOID - parlay wins
-              // Recalculate odds treating VOID legs as 1.0
-              const adjustedOdds = legs.reduce((acc, leg) => {
-                if (leg.status === 'VOID') {
-                  return acc * 1.0;
+              // All legs are WON or VOID - parlay wins.
+              // Use the slip's stored potential_payout_tokens as the source of truth
+              // (this is what the user agreed to at place-time, including the haircut).
+              // If any legs are VOID, scale the payout down by the lost odds factor
+              // so refunded legs don't inflate the win.
+              const voidOddsFactor = legs.reduce((acc, leg) => {
+                if (leg.status === 'VOID' && leg.decimal_odds && leg.decimal_odds > 1) {
+                  return acc / leg.decimal_odds;
                 }
-                return acc * leg.decimal_odds;
+                return acc;
               }, 1);
-
-              // Apply 5% house edge
-              const finalOdds = adjustedOdds * 0.95;
-              const actualPayout = Math.floor(slip.total_stake_tokens * finalOdds);
+              const actualPayout = Math.floor(
+                (slip.potential_payout_tokens || 0) * voidOddsFactor
+              );
+              const finalOdds = slip.total_odds_decimal; // for logging
 
               // Update slip to WON
               await supabaseClient
