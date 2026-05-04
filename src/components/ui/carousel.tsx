@@ -50,6 +50,8 @@ const Carousel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivEl
     const [canScrollPrev, setCanScrollPrev] = React.useState(false);
     const [canScrollNext, setCanScrollNext] = React.useState(false);
 
+    // TODO(shadow): shadcn template — rename when touching this code
+    // eslint-disable-next-line @typescript-eslint/no-shadow
     const onSelect = React.useCallback((api: CarouselApi) => {
       if (!api) {
         return;

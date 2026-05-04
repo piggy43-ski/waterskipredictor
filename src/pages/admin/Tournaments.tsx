@@ -456,6 +456,8 @@ export default function AdminTournaments() {
         {/* Edit Dialog */}
         <Dialog 
           open={editOpen} 
+          // TODO(shadow): rename when touching this code
+          // eslint-disable-next-line @typescript-eslint/no-shadow
           onOpenChange={(open) => {
             setEditOpen(open);
             if (open && editingTournament) {

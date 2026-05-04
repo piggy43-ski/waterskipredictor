@@ -72,6 +72,8 @@ const SidebarProvider = React.forwardRef<
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
+    // TODO(shadow): shadcn template — rename when touching this code
+    // eslint-disable-next-line @typescript-eslint/no-shadow
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
   }, [isMobile, setOpen, setOpenMobile]);
 

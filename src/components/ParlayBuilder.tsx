@@ -794,6 +794,8 @@ export function ParlayBuilder({
 
   const renderSummary = () => {
     const completeLegs = legs.filter(l => l.isComplete);
+    // TODO(shadow): rename when touching this code
+    // eslint-disable-next-line @typescript-eslint/no-shadow
     const multiplierDetails = getParlayMultiplierDetails(legs);
     const availableCombinations = getAvailableCombinations();
 
@@ -956,6 +958,8 @@ export function ParlayBuilder({
 
   const renderStakeStep = () => {
     const completeLegs = legs.filter(l => l.isComplete);
+    // TODO(shadow): rename when touching this code
+    // eslint-disable-next-line @typescript-eslint/no-shadow
     const multiplierDetails = getParlayMultiplierDetails(legs);
     const stakeAmount = parseInt(stake) || 0;
     const potentialPayout = Math.floor(stakeAmount * multiplierDetails.finalMultiplier);

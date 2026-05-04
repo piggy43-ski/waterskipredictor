@@ -495,6 +495,8 @@ export default function AdminAthletes() {
         )}
 
         {/* Edit Dialog */}
+        {/* TODO(shadow): rename when touching this code */}
+        {/* eslint-disable-next-line @typescript-eslint/no-shadow */}
         <Dialog open={editOpen} onOpenChange={(open) => {
           setEditOpen(open);
           if (!open) {

@@ -37,6 +37,8 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
   const { data: bettingStats } = useQuery({
     queryKey: ['user-betting-stats', userId],
     queryFn: async () => {
+      // TODO(shadow): rename when touching this code
+      // eslint-disable-next-line @typescript-eslint/no-shadow
       const { data: predictions, error } = await supabase
         .from('predictions')
         .select('*')
