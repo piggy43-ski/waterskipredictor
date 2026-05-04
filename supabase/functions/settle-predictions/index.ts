@@ -1,4 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.84.0';
+import {
+  buildCreditIdempotencyKey,
+  filterNewlyClaimed,
+  isUniqueViolation,
+} from '../../../src/utils/settlement/idempotency.ts';
+import { resolveParlay, type ParlayLeg } from '../../../src/utils/settlement/parlay.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
