@@ -117,12 +117,12 @@ export default function FantasySeasonView() {
     queryFn: async () => {
       if (!pot?.season_tournaments?.length) {
         // For season pots without explicit list, get all tournaments
-        const { data, error } = await supabase
+        const { data: allData, error: allError } = await supabase
           .from('tournaments')
           .select('id, name, start_datetime, end_datetime, start_date, end_date, status, location')
           .order('start_date', { ascending: true });
-        if (error) throw error;
-        return data as (TournamentInfo & { location: string })[];
+        if (allError) throw allError;
+        return allData as (TournamentInfo & { location: string })[];
       }
       
       const { data, error } = await supabase

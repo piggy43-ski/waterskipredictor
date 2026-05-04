@@ -116,12 +116,12 @@ export default function ContestEntries() {
   // Add athletes to market
   const addAthletesMutation = useMutation({
     mutationFn: async (athleteIds: string[]) => {
-      const entries = athleteIds.map(athlete_id => ({
+      const newEntries = athleteIds.map(athlete_id => ({
         market_id: selectedMarket,
         athlete_id,
         is_active: true,
       }));
-      const { error } = await supabase.from('market_entries').insert(entries);
+      const { error } = await supabase.from('market_entries').insert(newEntries);
       if (error) throw error;
     },
     onSuccess: () => {

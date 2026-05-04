@@ -299,9 +299,9 @@ Deno.serve(async (req) => {
 
         // Check monotonic if enabled
         if (enforce_monotonic) {
-          const athletes = buildAthleteData();
+          const monotonicAthletes = buildAthleteData();
           
-          for (const a of athletes) {
+          for (const a of monotonicAthletes) {
             if (a.athlete_id === athlete_id) continue;
             
             // Better rank should have lower or equal multiplier

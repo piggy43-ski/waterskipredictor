@@ -836,19 +836,19 @@ Deno.serve(async (req) => {
                   .eq('id', slip.id);
 
                 // Log transaction for parlay loss
-                const { data: walletData } = await supabaseClient
+                const { data: lostWallet } = await supabaseClient
                   .from('token_wallets')
                   .select('purchased_tokens, earned_tokens')
                   .eq('user_id', slip.user_id)
                   .single();
                 
-                if (walletData) {
+                if (lostWallet) {
                   const athleteNames = legs.map(l => l.athlete_name).join(', ');
                   const { error: txError } = await supabaseClient.from('token_transactions').insert({
                     user_id: slip.user_id,
                     type: 'prediction_lost',
                     amount: -slip.total_stake_tokens,
-                    balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                    balance_after: lostWallet.purchased_tokens + lostWallet.earned_tokens,
                     reference_type: 'entry',
                     reference_id: slip.id,
                     description: `Lost ${slip.leg_count}-leg parlay (${athleteNames}) - Lost ${slip.total_stake_tokens} tokens`,
@@ -932,20 +932,20 @@ Deno.serve(async (req) => {
               }
 
               // Log transaction for parlay win
-              const { data: walletData } = await supabaseClient
+              const { data: wonWallet } = await supabaseClient
                 .from('token_wallets')
                 .select('purchased_tokens, earned_tokens')
                 .eq('user_id', slip.user_id)
                 .single();
               
-              if (walletData) {
+              if (wonWallet) {
                 const profit = actualPayout - slip.total_stake_tokens;
                 const athleteNames = legs.map(l => l.athlete_name).join(', ');
                 const { error: txError } = await supabaseClient.from('token_transactions').insert({
                   user_id: slip.user_id,
                   type: 'prediction_won',
                   amount: actualPayout,
-                  balance_after: walletData.purchased_tokens + walletData.earned_tokens,
+                  balance_after: wonWallet.purchased_tokens + wonWallet.earned_tokens,
                   reference_type: 'entry',
                   reference_id: slip.id,
                   description: `Won ${slip.leg_count}-leg parlay (${athleteNames}) - Staked ${slip.total_stake_tokens}, won ${actualPayout} (+${profit} profit)`,
