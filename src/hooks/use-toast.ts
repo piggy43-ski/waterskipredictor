@@ -90,6 +90,8 @@ export const reducer = (state: State, action: Action): State => {
       if (toastId) {
         addToRemoveQueue(toastId);
       } else {
+        // TODO(shadow): shadcn template — rename when touching this code
+        // eslint-disable-next-line @typescript-eslint/no-shadow
         state.toasts.forEach((toast) => {
           addToRemoveQueue(toast.id);
         });
@@ -137,6 +139,8 @@ type Toast = Omit<ToasterToast, "id">;
 function toast({ ...props }: Toast) {
   const id = genId();
 
+  // TODO(shadow): shadcn template — rename when touching this code
+  // eslint-disable-next-line @typescript-eslint/no-shadow
   const update = (props: ToasterToast) =>
     dispatch({
       type: "UPDATE_TOAST",
