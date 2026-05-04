@@ -3,8 +3,8 @@ import {
   buildCreditIdempotencyKey,
   filterNewlyClaimed,
   isUniqueViolation,
-} from '../../../src/utils/settlement/idempotency.ts';
-import { resolveParlay, type ParlayLeg } from '../../../src/utils/settlement/parlay.ts';
+} from './_shared/idempotency.ts';
+import { resolveParlay, type ParlayLeg } from './_shared/parlay.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
