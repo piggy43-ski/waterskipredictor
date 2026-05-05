@@ -1076,12 +1076,12 @@ export default function TournamentSettlement() {
         const winnersAtPos1 = positions?.get(1) || [];
         if (winnersAtPos1.length > 1) {
           tieCount = winnersAtPos1.length;
-          tieExplanation = `${winnersAtPos1.length}-way tie for 1st — all bets on any of these athletes are paid as winners: ${winningAthleteNames.join(', ')}.`;
+          tieExplanation = `${winnersAtPos1.length}-way tie for 1st — all entries on any of these athletes resolve as winning predictions: ${winningAthleteNames.join(', ')}.`;
         }
       } else if (market.market_type === 'HIGHEST_SCORE') {
         if (winningSelectionIds.length > 1) {
           tieCount = winningSelectionIds.length;
-          tieExplanation = `${winningSelectionIds.length}-way tie for highest score — all bets on any of these athletes are paid as winners: ${winningAthleteNames.join(', ')}.`;
+          tieExplanation = `${winningSelectionIds.length}-way tie for highest score — all entries on any of these athletes resolve as winning predictions: ${winningAthleteNames.join(', ')}.`;
         }
       } else if (market.market_type === 'PODIUM') {
         // Detect ties at any of positions 1/2/3
@@ -2124,11 +2124,11 @@ export default function TournamentSettlement() {
                   <div className="flex gap-4 text-sm font-normal">
                     <div className="flex items-center gap-2">
                       <Coins className="w-4 h-4" />
-                      <span>Wagered: {settlementPreviews.reduce((s, p) => s + p.total_wagered, 0).toLocaleString()}</span>
+                      <span>Entered: {settlementPreviews.reduce((s, p) => s + p.total_wagered, 0).toLocaleString()}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-4 h-4" />
-                      <span>Payout: {settlementPreviews.reduce((s, p) => s + p.total_payout, 0).toLocaleString()}</span>
+                      <span>Winnings: {settlementPreviews.reduce((s, p) => s + p.total_payout, 0).toLocaleString()}</span>
                     </div>
                     <div className={`flex items-center gap-2 ${totalHouseProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
                       <Trophy className="w-4 h-4" />
@@ -2191,7 +2191,7 @@ export default function TournamentSettlement() {
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                           <Coins className="w-4 h-4" />
-                          <span className="text-xs">Payout</span>
+                          <span className="text-xs">Winnings</span>
                         </div>
                         <p className="text-lg font-bold">{preview.total_payout.toLocaleString()}</p>
                       </div>
@@ -2201,7 +2201,7 @@ export default function TournamentSettlement() {
                       <Collapsible>
                         <CollapsibleTrigger asChild>
                           <Button variant="ghost" size="sm" className="w-full justify-between">
-                            <span>View per-bet breakdown ({preview.bet_breakdown.length})</span>
+                            <span>View per-entry breakdown ({preview.bet_breakdown.length})</span>
                             <span className="text-xs text-muted-foreground">click to expand</span>
                           </Button>
                         </CollapsibleTrigger>
@@ -2213,8 +2213,8 @@ export default function TournamentSettlement() {
                                   <th className="text-left px-3 py-2">User</th>
                                   <th className="text-left px-3 py-2">Pick</th>
                                   <th className="text-right px-3 py-2">Stake</th>
-                                  <th className="text-right px-3 py-2">Odds</th>
-                                  <th className="text-right px-3 py-2">Payout</th>
+                                  <th className="text-right px-3 py-2">Multiplier</th>
+                                  <th className="text-right px-3 py-2">Winnings</th>
                                   <th className="text-center px-3 py-2">Result</th>
                                 </tr>
                               </thead>
