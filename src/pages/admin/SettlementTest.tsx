@@ -15,8 +15,10 @@ interface TestResults {
   athletes?: string[];
   selections_created?: number;
   athlete_results_created?: number;
-  single_bet_created?: boolean;
-  parlay_bet_created?: boolean;
+  single_entry_created?: boolean;
+  parlay_entry_created?: boolean;
+  single_entry_error?: string;
+  parlay_entry_error?: string;
   fantasy_scoring?: Record<string, unknown>;
   predictions_settlement?: Record<string, unknown>;
   fantasy_pot_settlement?: Record<string, unknown>;
@@ -173,17 +175,23 @@ const SettlementTest = () => {
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Single Bet:</span>
-                        <Badge variant={results.single_bet_created ? 'default' : 'secondary'}>
-                          {results.single_bet_created ? 'Created' : 'Failed'}
+                        <span className="text-muted-foreground">Single Entry:</span>
+                        <Badge variant={results.single_entry_created ? 'default' : 'destructive'}>
+                          {results.single_entry_created ? 'Created' : 'Failed'}
                         </Badge>
                       </div>
+                      {results.single_entry_error && (
+                        <p className="text-xs text-destructive">{results.single_entry_error}</p>
+                      )}
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Parlay Bet:</span>
-                        <Badge variant={results.parlay_bet_created ? 'default' : 'secondary'}>
-                          {results.parlay_bet_created ? 'Created' : 'Failed'}
+                        <span className="text-muted-foreground">Parlay Entry:</span>
+                        <Badge variant={results.parlay_entry_created ? 'default' : 'destructive'}>
+                          {results.parlay_entry_created ? 'Created' : 'Failed'}
                         </Badge>
                       </div>
+                      {results.parlay_entry_error && (
+                        <p className="text-xs text-destructive">{results.parlay_entry_error}</p>
+                      )}
                     </CardContent>
                   </Card>
 
