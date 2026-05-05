@@ -202,7 +202,7 @@ const MarketLiability = () => {
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-sm text-muted-foreground">Max Payout</div>
+              <div className="text-sm text-muted-foreground">Max Projected Reward</div>
               <div className="text-2xl font-bold">{RISK_CONFIG.MAX_PAYOUT.toLocaleString()}</div>
             </CardContent>
           </Card>
@@ -279,7 +279,7 @@ const MarketLiability = () => {
               <CardContent className="pt-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Users className="w-4 h-4" />
-                  Total Bets
+                  Total Entries
                 </div>
                 <div className="text-2xl font-bold">{totalBets}</div>
               </CardContent>
@@ -288,7 +288,7 @@ const MarketLiability = () => {
               <CardContent className="pt-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Shield className="w-4 h-4" />
-                  Athletes w/ Bets
+                  Athletes w/ Entries
                 </div>
                 <div className="text-2xl font-bold">{liabilityData.length}</div>
               </CardContent>
@@ -310,9 +310,9 @@ const MarketLiability = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Athlete</TableHead>
-                    <TableHead className="text-right">Bets</TableHead>
+                    <TableHead className="text-right">Entries</TableHead>
                     <TableHead className="text-right">Total Stake</TableHead>
-                    <TableHead className="text-right">Potential Payout</TableHead>
+                    <TableHead className="text-right">Projected Reward</TableHead>
                     <TableHead className="text-right">Liability if Wins</TableHead>
                     <TableHead className="w-[200px]">Liability %</TableHead>
                     <TableHead>Status</TableHead>
@@ -365,7 +365,7 @@ const MarketLiability = () => {
               <Shield className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <h3 className="font-semibold mb-2">No Liability Data</h3>
               <p className="text-sm text-muted-foreground">
-                No bets have been placed on this market yet
+                No entries have been placed on this market yet
               </p>
             </CardContent>
           </Card>

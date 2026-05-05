@@ -18,9 +18,9 @@ type EmailType = 'welcome' | 'bet_confirmation' | 'bet_result' | 'bet_result_los
 
 const EMAIL_TYPES: { value: EmailType; label: string }[] = [
   { value: 'welcome', label: 'Welcome Email' },
-  { value: 'bet_confirmation', label: 'Bet Confirmation' },
-  { value: 'bet_result', label: 'Bet Result (Win)' },
-  { value: 'bet_result_lost', label: 'Bet Result (Lost)' },
+  { value: 'bet_confirmation', label: 'Entry Confirmation' },
+  { value: 'bet_result', label: 'Prediction Won' },
+  { value: 'bet_result_lost', label: 'Prediction Lost' },
   { value: 'redemption_receipt', label: 'Redemption Receipt' },
 ];
 

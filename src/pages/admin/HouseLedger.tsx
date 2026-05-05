@@ -481,7 +481,7 @@ const HouseLedger = () => {
             loading={loadingPurchased}
           />
           <StatCard
-            title="Total Bets"
+            title="Total Entries"
             value={totalBets || 0}
             icon={Target}
             loading={loadingBets}
@@ -515,7 +515,7 @@ const HouseLedger = () => {
                   {formatTokensWithUSD(housePL?.houseGain || 0)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Stakes from lost bets
+                  Tokens from losing predictions
                 </p>
               </Card>
 
@@ -528,7 +528,7 @@ const HouseLedger = () => {
                   {formatTokensWithUSD(housePL?.houseLoss || 0)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Payouts to winners
+                  Winnings paid to winning predictions
                 </p>
               </Card>
 
@@ -568,15 +568,15 @@ const HouseLedger = () => {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div className="text-center p-3 rounded-lg bg-muted/50">
-                <p className="text-xs text-muted-foreground">Wagered</p>
+                <p className="text-xs text-muted-foreground">Tokens Entered</p>
                 <p className="font-bold">{formatTokensWithUSD(tokenFlow?.wagered || 0)}</p>
               </div>
               <div className="text-center p-3 rounded-lg bg-muted/50">
-                <p className="text-xs text-muted-foreground">Paid Out</p>
+                <p className="text-xs text-muted-foreground">Winnings Paid</p>
                 <p className="font-bold">{formatTokensWithUSD(tokenFlow?.paidOut || 0)}</p>
               </div>
               <div className="text-center p-3 rounded-lg bg-muted/50">
-                <p className="text-xs text-muted-foreground">Pending Stakes</p>
+                <p className="text-xs text-muted-foreground">Pending Tokens</p>
                 <p className="font-bold">{formatTokensWithUSD(tokenFlow?.pendingStakes || 0)}</p>
               </div>
               <div className="text-center p-3 rounded-lg bg-muted/50">
@@ -628,9 +628,9 @@ const HouseLedger = () => {
                         return (
                           <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
                             <p className="font-bold text-foreground">{label}</p>
-                            <p className="text-sm text-muted-foreground">Bets: {data.bets}</p>
-                            <p className="text-sm text-muted-foreground">Wagered: {formatTokensWithUSD(data.wagered)}</p>
-                            <p className="text-sm text-muted-foreground">Paid Out: {formatTokensWithUSD(data.paidOut)}</p>
+                            <p className="text-sm text-muted-foreground">Entries: {data.bets}</p>
+                            <p className="text-sm text-muted-foreground">Tokens Entered: {formatTokensWithUSD(data.wagered)}</p>
+                            <p className="text-sm text-muted-foreground">Winnings Paid: {formatTokensWithUSD(data.paidOut)}</p>
                             <p className={`text-sm font-bold ${data.pl >= 0 ? 'text-success' : 'text-destructive'}`}>
                               P/L: {data.pl >= 0 ? '+' : ''}{formatTokensWithUSD(data.pl)}
                             </p>
@@ -670,9 +670,9 @@ const HouseLedger = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Tournament</TableHead>
-                  <TableHead className="text-right">Bets</TableHead>
-                  <TableHead className="text-right">Wagered</TableHead>
-                  <TableHead className="text-right">Paid Out</TableHead>
+                  <TableHead className="text-right">Entries</TableHead>
+                  <TableHead className="text-right">Tokens Entered</TableHead>
+                  <TableHead className="text-right">Winnings Paid</TableHead>
                   <TableHead className="text-right">House P/L</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
@@ -694,7 +694,7 @@ const HouseLedger = () => {
                         onClick={() => setSelectedTournament({ id: t.id, name: t.name })}
                       >
                         <Eye className="w-4 h-4 mr-1" />
-                        View Bets
+                        View Entries
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -712,7 +712,7 @@ const HouseLedger = () => {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold flex items-center gap-2">
                 <Target className="w-5 h-5" />
-                Bets for: {selectedTournament.name}
+                Entries for: {selectedTournament.name}
               </h2>
               <Button
                 variant="ghost"
@@ -743,9 +743,9 @@ const HouseLedger = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Market Type</TableHead>
-                  <TableHead className="text-right">Bets</TableHead>
-                  <TableHead className="text-right">Wagered</TableHead>
-                  <TableHead className="text-right">Paid Out</TableHead>
+                  <TableHead className="text-right">Entries</TableHead>
+                  <TableHead className="text-right">Tokens Entered</TableHead>
+                  <TableHead className="text-right">Winnings Paid</TableHead>
                   <TableHead className="text-right">House P/L</TableHead>
                 </TableRow>
               </TableHeader>
@@ -774,7 +774,7 @@ const HouseLedger = () => {
         <Card className="p-6">
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
-            Parlay vs Single Bets P/L
+            Parlay vs Single Entries P/L
           </h2>
           {loadingParlayPL ? (
             <Skeleton className="h-24" />
@@ -782,10 +782,10 @@ const HouseLedger = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Bet Type</TableHead>
+                  <TableHead>Entry Type</TableHead>
                   <TableHead className="text-right">Count</TableHead>
-                  <TableHead className="text-right">Wagered</TableHead>
-                  <TableHead className="text-right">Paid Out</TableHead>
+                  <TableHead className="text-right">Tokens Entered</TableHead>
+                  <TableHead className="text-right">Winnings Paid</TableHead>
                   <TableHead className="text-right">House P/L</TableHead>
                 </TableRow>
               </TableHeader>
@@ -821,8 +821,8 @@ const HouseLedger = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
-                  <TableHead className="text-right">Bets</TableHead>
-                  <TableHead className="text-right">Wagered</TableHead>
+                  <TableHead className="text-right">Entries</TableHead>
+                  <TableHead className="text-right">Tokens Entered</TableHead>
                   <TableHead className="text-right">Won</TableHead>
                   <TableHead className="text-right">User Net P/L</TableHead>
                   <TableHead className="text-right">House P/L</TableHead>
@@ -853,7 +853,7 @@ const HouseLedger = () => {
               </TableBody>
             </Table>
           ) : (
-            <p className="text-muted-foreground text-center py-8">No user betting data yet</p>
+            <p className="text-muted-foreground text-center py-8">No user prediction data yet</p>
           )}
         </Card>
       </div>

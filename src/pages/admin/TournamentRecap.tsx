@@ -402,7 +402,7 @@ const TournamentRecap = () => {
                         <TableRow>
                           <TableHead>User</TableHead>
                           <TableHead>Athlete</TableHead>
-                          <TableHead className="text-right">Missed Payout</TableHead>
+                          <TableHead className="text-right">Missed Winnings</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -503,7 +503,7 @@ const TournamentRecap = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Market</TableHead>
-                        <TableHead className="text-right">Wagered</TableHead>
+                        <TableHead className="text-right">Entered</TableHead>
                         <TableHead className="text-right">Win Rate</TableHead>
                       </TableRow>
                     </TableHeader>
