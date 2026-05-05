@@ -521,7 +521,7 @@ const TournamentDetail = () => {
         ? Math.round((combinedOdds - 1) * 100)
         : Math.round(-100 / (combinedOdds - 1));
         
-      const { data: betSlip, error: slipError } = await supabase
+      const { data: entrySlip, error: slipError } = await supabase
         .from('bet_slips')
         .insert({
           user_id: user.id,
@@ -553,7 +553,7 @@ const TournamentDetail = () => {
           staked_tokens: stakeAmount,
           decimal_odds: combinedOdds,
           potential_payout: potentialPayout,
-          bet_slip_id: betSlip.id,
+          bet_slip_id: entrySlip.id,
           is_parlay_parent: true,
           status: 'PENDING'
         })
@@ -620,7 +620,7 @@ const TournamentDetail = () => {
         amount: -stakeAmount,
         balance_after: newBalance,
         reference_type: 'bet_slip',
-        reference_id: betSlip.id,
+        reference_id: entrySlip.id,
         description: `Podium prediction: ${podiumState.assignedPositions.first.athlete.name}, ${podiumState.assignedPositions.second.athlete.name}, ${podiumState.assignedPositions.third.athlete.name} - ${tournament.name}`,
         metadata: {
           tournament_name: tournament.name,
@@ -761,7 +761,7 @@ const TournamentDetail = () => {
         ? Math.round((finalOdds - 1) * 100)
         : Math.round(-100 / (finalOdds - 1));
         
-      const { data: betSlip, error: slipError } = await supabase
+      const { data: entrySlip, error: slipError } = await supabase
         .from('bet_slips')
         .insert({
           user_id: user.id,
@@ -795,7 +795,7 @@ const TournamentDetail = () => {
           staked_tokens: stakeAmount,
           decimal_odds: finalOdds,
           potential_payout: potentialPayout,
-          bet_slip_id: betSlip.id,
+          bet_slip_id: entrySlip.id,
           status: 'PENDING'
         });
 
@@ -834,7 +834,7 @@ const TournamentDetail = () => {
         amount: -stakeAmount,
         balance_after: newBalance,
         reference_type: 'bet_slip',
-        reference_id: betSlip.id,
+        reference_id: entrySlip.id,
         description: `Prediction placed on ${selectedSelection.athlete.name} - ${tournament.name}`,
         metadata: {
           tournament_name: tournament.name,

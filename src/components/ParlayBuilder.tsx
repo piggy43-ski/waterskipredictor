@@ -263,7 +263,7 @@ export function ParlayBuilder({
           stakeAmount,
           currentOdds: multiplier,
           marketType: 'WINNER',
-          betType: 'parlay'
+          entryType: 'parlay'
         }
       });
 
