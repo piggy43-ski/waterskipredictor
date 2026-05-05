@@ -120,7 +120,9 @@ serve(async (req) => {
         .eq('user_id', userId)
         .eq('market_id', marketId)
         .eq('athlete_id', athleteId)
-        .eq('status', 'PENDING');
+        // Include SETTLING: a slip mid-settlement is still a "live" entry from the
+        // user's POV. Excluding it would let them double-bet during the settle window.
+        .in('status', ['PENDING', 'SETTLING']);
 
       if (existingEntries && existingEntries.length > 0) {
         return new Response(JSON.stringify({
