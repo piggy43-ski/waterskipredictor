@@ -270,7 +270,8 @@ serve(async (req) => {
     
     // Create a single entry
     const singleSelection = selections[0];
-    const singleStake = 50;
+    const singleMarket = markets.find(m => m.id === singleSelection.market_id)!;
+    const singleStake = 100;
     const singlePayout = Math.floor(singleStake * singleSelection.decimal_odds);
     
     // Deduct stake
@@ -281,7 +282,7 @@ serve(async (req) => {
 
     // Create entry record for single
     const singleEntryId = crypto.randomUUID();
-    await supabase
+    const { error: singleSlipError } = await supabase
       .from('bet_slips')
       .insert({
         id: singleEntryId,
@@ -296,44 +297,55 @@ serve(async (req) => {
         status: 'PENDING'
       });
 
-    // Get athlete name for prediction
-    const singleAthlete = selectedAthletes.find(a => a.id === singleSelection.athlete_id);
-    
-    await supabase
-      .from('predictions')
-      .insert({
-        user_id,
-        selection_id: singleSelection.id,
-        bet_slip_id: singleEntryId,
-        staked_tokens: singleStake,
-        decimal_odds: singleSelection.decimal_odds,
-        potential_payout: singlePayout,
-        status: 'PENDING',
-        market_type: 'WINNER',
-        discipline: 'slalom',
-        category: singleSelection.athlete_id === maleAthletes[0]?.id ? 'male' : 'female',
-        tournament_name: `Auto Test Tournament`,
-        athlete_name: singleAthlete?.name || 'Unknown'
-      });
+    if (singleSlipError) {
+      console.error('Single bet_slip insert failed:', singleSlipError);
+      results.single_entry_created = false;
+      results.single_entry_error = singleSlipError.message;
+    } else {
+      // Get athlete name for prediction
+      const singleAthlete = selectedAthletes.find(a => a.id === singleSelection.athlete_id);
 
-    await supabase
-      .from('token_transactions')
-      .insert({
-        user_id,
-        type: 'entry_placed',
-        amount: -singleStake,
-        balance_after: entryBalance - singleStake,
-        description: 'Single entry placed (auto test)',
-        reference_id: singleEntryId,
-        reference_type: 'entry'
-      });
+      const { error: singlePredError } = await supabase
+        .from('predictions')
+        .insert({
+          user_id,
+          selection_id: singleSelection.id,
+          bet_slip_id: singleEntryId,
+          staked_tokens: singleStake,
+          decimal_odds: singleSelection.decimal_odds,
+          potential_payout: singlePayout,
+          status: 'PENDING',
+          market_type: 'WINNER',
+          discipline: singleMarket.discipline,
+          category: singleMarket.category,
+          tournament_name: `Auto Test Tournament`,
+          athlete_name: singleAthlete?.name || 'Unknown'
+        });
 
-    console.log('Created single entry');
-    results.single_entry_created = true;
+      if (singlePredError) {
+        console.error('Single prediction insert failed:', singlePredError);
+        results.single_entry_created = false;
+        results.single_entry_error = singlePredError.message;
+      } else {
+        await supabase
+          .from('token_transactions')
+          .insert({
+            user_id,
+            type: 'entry_placed',
+            amount: -singleStake,
+            balance_after: entryBalance - singleStake,
+            description: 'Single entry placed (auto test)',
+            reference_id: singleEntryId,
+            reference_type: 'entry'
+          });
+        console.log('Created single entry');
+        results.single_entry_created = true;
+      }
+    }
 
     // Create a parlay entry (2 legs)
     const parlaySelections = [selections[1], selections[3]];
-    const parlayStake = 25;
+    const parlayStake = 100;
     const parlayOdds = parlaySelections.reduce((acc, s) => acc * s.decimal_odds, 1);
     const parlayPayout = Math.floor(parlayStake * parlayOdds);
 
@@ -351,7 +363,7 @@ serve(async (req) => {
       .eq('user_id', user_id);
 
     const parlayEntryId = crypto.randomUUID();
-    await supabase
+    const { error: parlaySlipError } = await supabase
       .from('bet_slips')
       .insert({
         id: parlayEntryId,
@@ -366,40 +378,57 @@ serve(async (req) => {
         status: 'PENDING'
       });
 
-    for (const sel of parlaySelections) {
-      const parlayAthlete = selectedAthletes.find(a => a.id === sel.athlete_id);
-      await supabase
-        .from('predictions')
-        .insert({
-          user_id,
-          selection_id: sel.id,
-          bet_slip_id: parlayEntryId,
-          staked_tokens: parlayStake,
-          decimal_odds: sel.decimal_odds,
-          potential_payout: parlayPayout,
-          status: 'PENDING',
-          market_type: 'WINNER',
-          discipline: 'slalom',
-          category: 'male',
-          tournament_name: `Auto Test Tournament`,
-          athlete_name: parlayAthlete?.name || 'Unknown'
-        });
+    if (parlaySlipError) {
+      console.error('Parlay bet_slip insert failed:', parlaySlipError);
+      results.parlay_entry_created = false;
+      results.parlay_entry_error = parlaySlipError.message;
+    } else {
+      let parlayLegError: string | null = null;
+      for (const sel of parlaySelections) {
+        const parlayAthlete = selectedAthletes.find(a => a.id === sel.athlete_id);
+        const legMarket = markets.find(m => m.id === sel.market_id)!;
+        const { error: legError } = await supabase
+          .from('predictions')
+          .insert({
+            user_id,
+            selection_id: sel.id,
+            bet_slip_id: parlayEntryId,
+            staked_tokens: parlayStake,
+            decimal_odds: sel.decimal_odds,
+            potential_payout: parlayPayout,
+            status: 'PENDING',
+            market_type: 'WINNER',
+            discipline: legMarket.discipline,
+            category: legMarket.category,
+            tournament_name: `Auto Test Tournament`,
+            athlete_name: parlayAthlete?.name || 'Unknown'
+          });
+        if (legError) {
+          console.error('Parlay leg prediction insert failed:', legError);
+          parlayLegError = legError.message;
+          break;
+        }
+      }
+
+      if (parlayLegError) {
+        results.parlay_entry_created = false;
+        results.parlay_entry_error = parlayLegError;
+      } else {
+        await supabase
+          .from('token_transactions')
+          .insert({
+            user_id,
+            type: 'entry_placed',
+            amount: -parlayStake,
+            balance_after: parlayBalance - parlayStake,
+            description: 'Parlay entry placed (auto test)',
+            reference_id: parlayEntryId,
+            reference_type: 'entry'
+          });
+        console.log('Created parlay entry');
+        results.parlay_entry_created = true;
+      }
     }
-
-    await supabase
-      .from('token_transactions')
-      .insert({
-        user_id,
-        type: 'entry_placed',
-        amount: -parlayStake,
-        balance_after: parlayBalance - parlayStake,
-        description: 'Parlay entry placed (auto test)',
-        reference_id: parlayEntryId,
-        reference_type: 'entry'
-      });
-
-    console.log('Created parlay entry');
-    results.parlay_entry_created = true;
 
     // Step 8: Create athlete results
     const athleteResults = [];
@@ -484,7 +513,7 @@ serve(async (req) => {
     console.log('Settling predictions...');
     const selectionResults = selections.map(sel => {
       const market = markets.find(m => m.id === sel.market_id);
-      const genderAthletes = market?.category === 'male' ? maleAthletes : femaleAthletes;
+      const genderAthletes = market?.category === 'open_men' ? maleAthletes : femaleAthletes;
       const isWinner = sel.athlete_id === genderAthletes[0].id;
       return {
         selection_id: sel.id,
