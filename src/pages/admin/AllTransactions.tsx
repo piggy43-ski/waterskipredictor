@@ -35,7 +35,6 @@ const TRANSACTION_TYPES = [
   'all',
   'deposit',
   'bonus',
-  'bet',
   'win',
   'refund',
   'transfer',
@@ -168,7 +167,7 @@ export default function AllTransactions() {
     if (['deposit', 'bonus', 'win', 'fantasy_payout', 'refund'].includes(type)) {
       return 'default';
     }
-    if (['bet', 'burn', 'reward_redemption', 'fantasy_entry'].includes(type)) {
+    if (['burn', 'reward_redemption', 'fantasy_entry'].includes(type)) {
       return 'secondary';
     }
     return 'outline';
