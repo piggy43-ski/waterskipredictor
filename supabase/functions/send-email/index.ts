@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-type EmailType = "welcome" | "bet_confirmation" | "bet_result" | "redemption_receipt";
+type EmailType = "welcome" | "entry_confirmation" | "prediction_result" | "redemption_receipt";
 
 interface EmailRequest {
   type: EmailType;
@@ -82,7 +82,7 @@ function generateWelcomeEmail(data: { username: string; appUrl: string }): strin
 </html>`;
 }
 
-function generateBetConfirmationEmail(data: {
+function generateEntryConfirmationEmail(data: {
   username: string;
   athleteName: string;
   tournamentName: string;
@@ -121,15 +121,15 @@ function generateBetConfirmationEmail(data: {
         <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Athlete</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.athleteName}</td></tr>
         <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Tournament</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.tournamentName}</td></tr>
         <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Discipline</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.discipline}</td></tr>
-        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Market</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.marketType}</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Prediction Type</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.marketType}</td></tr>
       </table>
       
       <div style="border-top: 1px solid #374151; margin: 16px 0;"></div>
       
       <table style="width: 100%; border-collapse: collapse;">
-        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Staked</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.stakedTokens.toLocaleString()} tokens</td></tr>
-        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Odds</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.odds.toFixed(2)}x</td></tr>
-        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Potential Win</td><td style="color: #22c55e; font-size: 16px; font-weight: bold; text-align: right; padding: 4px 0;">${data.potentialPayout.toLocaleString()} tokens</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Tokens Entered</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.stakedTokens.toLocaleString()} tokens</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Multiplier</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.odds.toFixed(2)}x</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Projected Reward</td><td style="color: #22c55e; font-size: 16px; font-weight: bold; text-align: right; padding: 4px 0;">${data.potentialPayout.toLocaleString()} tokens</td></tr>
       </table>
     </div>
     
@@ -148,7 +148,7 @@ function generateBetConfirmationEmail(data: {
 </html>`;
 }
 
-function generateBetResultEmail(data: {
+function generatePredictionResultEmail(data: {
   username: string;
   athleteName: string;
   tournamentName: string;
@@ -169,7 +169,7 @@ function generateBetResultEmail(data: {
     resultContent = `
       <p style="color: rgba(255,255,255,0.7); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px;">You Won</p>
       <p style="color: #ffffff; font-size: 36px; font-weight: bold; margin: 0 0 8px;">${data.payoutTokens?.toLocaleString()} tokens</p>
-      <p style="color: rgba(255,255,255,0.6); font-size: 14px; margin: 0;">Staked: ${data.stakedTokens.toLocaleString()} tokens</p>
+      <p style="color: rgba(255,255,255,0.6); font-size: 14px; margin: 0;">Entered: ${data.stakedTokens.toLocaleString()} tokens</p>
     `;
   } else if (isVoid) {
     resultContent = `
@@ -305,9 +305,9 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
         subject: "Welcome to WaterSki Predictor! 🎿",
       };
     
-    case "bet_confirmation":
+    case "entry_confirmation":
       return {
-        html: generateBetConfirmationEmail({
+        html: generateEntryConfirmationEmail({
           username: data.username || "Champion",
           athleteName: data.athleteName || "Athlete",
           tournamentName: data.tournamentName || "Tournament",
@@ -321,12 +321,12 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
         subject: `Prediction Confirmed: ${data.athleteName || 'Your Pick'}`,
       };
     
-    case "bet_result": {
+    case "prediction_result": {
       const resultEmoji = data.result === "won" ? "🎉" : data.result === "void" ? "↩️" : "";
       const subjectPrefix = data.result === "won" ? "You Won!" : data.result === "void" ? "Prediction Voided" : "Prediction Result";
       const marketSuffix = data.marketType ? ` (${data.marketType})` : "";
       return {
-        html: generateBetResultEmail({
+        html: generatePredictionResultEmail({
           username: data.username || "Champion",
           athleteName: data.athleteName || "Athlete",
           tournamentName: data.tournamentName || "Tournament",
@@ -364,7 +364,7 @@ async function checkEmailPreferences(
   emailType: EmailType
 ): Promise<boolean> {
   // Transactional emails are always sent
-  const transactionalTypes: EmailType[] = ["welcome", "bet_confirmation", "redemption_receipt"];
+  const transactionalTypes: EmailType[] = ["welcome", "entry_confirmation", "redemption_receipt"];
   if (transactionalTypes.includes(emailType)) {
     return true;
   }
@@ -379,8 +379,8 @@ async function checkEmailPreferences(
     return true;
   }
   
-  // bet_result respects notifications preference
-  if (emailType === "bet_result") {
+  // prediction_result respects notifications preference
+  if (emailType === "prediction_result") {
     return (prefs as any).notifications;
   }
   

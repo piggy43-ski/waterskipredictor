@@ -14,13 +14,13 @@ import { toast } from 'sonner';
 import { UnpublishedMarketsCard } from '@/components/admin/UnpublishedMarketsCard';
 import { RealtimeActivityFeed } from '@/components/admin/RealtimeActivityFeed';
 
-type EmailType = 'welcome' | 'bet_confirmation' | 'bet_result' | 'bet_result_lost' | 'redemption_receipt';
+type EmailType = 'welcome' | 'entry_confirmation' | 'prediction_result' | 'prediction_result_lost' | 'redemption_receipt';
 
 const EMAIL_TYPES: { value: EmailType; label: string }[] = [
   { value: 'welcome', label: 'Welcome Email' },
-  { value: 'bet_confirmation', label: 'Entry Confirmation' },
-  { value: 'bet_result', label: 'Prediction Won' },
-  { value: 'bet_result_lost', label: 'Prediction Lost' },
+  { value: 'entry_confirmation', label: 'Entry Confirmation' },
+  { value: 'prediction_result', label: 'Prediction Won' },
+  { value: 'prediction_result_lost', label: 'Prediction Lost' },
   { value: 'redemption_receipt', label: 'Redemption Receipt' },
 ];
 
@@ -28,7 +28,7 @@ const TEST_DATA: Record<EmailType, Record<string, any>> = {
   welcome: {
     username: 'TestUser',
   },
-  bet_confirmation: {
+  entry_confirmation: {
     username: 'TestUser',
     athleteName: 'Freddie Winter',
     tournamentName: 'World Championships 2025',
@@ -38,7 +38,7 @@ const TEST_DATA: Record<EmailType, Record<string, any>> = {
     potentialPayout: 1500,
     odds: 3.0,
   },
-  bet_result: {
+  prediction_result: {
     username: 'TestUser',
     athleteName: 'Freddie Winter',
     tournamentName: 'World Championships 2025',
@@ -46,7 +46,7 @@ const TEST_DATA: Record<EmailType, Record<string, any>> = {
     stakedTokens: 500,
     payoutTokens: 1500,
   },
-  bet_result_lost: {
+  prediction_result_lost: {
     username: 'TestUser',
     athleteName: 'Freddie Winter',
     tournamentName: 'World Championships 2025',
@@ -143,7 +143,7 @@ export default function AdminDashboard() {
     setLastResult(null);
 
     try {
-      const actualEmailType = emailType === 'bet_result_lost' ? 'bet_result' : emailType;
+      const actualEmailType = emailType === 'prediction_result_lost' ? 'prediction_result' : emailType;
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           type: actualEmailType,

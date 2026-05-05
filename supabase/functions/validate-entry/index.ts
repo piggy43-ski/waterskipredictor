@@ -41,7 +41,7 @@ interface ValidateEntryRequest {
   stakeAmount: number;
   currentOdds: number;
   marketType: 'WINNER' | 'PODIUM' | 'HIGHEST_SCORE';
-  betType?: 'single' | 'parlay';
+  entryType?: 'single' | 'parlay';
 }
 
 interface ValidationResult {
@@ -74,7 +74,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body: ValidateEntryRequest = await req.json();
-    const { userId, tournamentId, marketId, athleteId, stakeAmount, currentOdds, marketType, betType = 'single' } = body;
+    const { userId, tournamentId, marketId, athleteId, stakeAmount, currentOdds, marketType, entryType = 'single' } = body;
 
     const result: ValidationResult = {
       allowed: true,
@@ -113,7 +113,7 @@ serve(async (req) => {
 
     // === VALIDATION 3: Duplicate Athlete Check (same user, same market) ===
     // Skip duplicate check for parlays — parlays may reference markets where user already has singles
-    if (betType !== 'parlay') {
+    if (entryType !== 'parlay') {
       const { data: existingEntries } = await supabase
         .from('bet_slips')
         .select('id')

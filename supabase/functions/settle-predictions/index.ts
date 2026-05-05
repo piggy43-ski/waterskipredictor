@@ -487,8 +487,8 @@ Deno.serve(async (req) => {
           
           // FIXED: Check if this is part of a parlay using bet_slip data
           // A prediction is part of a parlay if its bet_slip has leg_count > 1 OR type === 'parlay'
-          const betSlip = prediction.bet_slip;
-          const isPartOfParlay = betSlip && (betSlip.leg_count > 1 || betSlip.type === 'parlay');
+          const entrySlip = prediction.bet_slip;
+          const isPartOfParlay = entrySlip && (entrySlip.leg_count > 1 || entrySlip.type === 'parlay');
 
           // Check for prediction override (exact-order podium bets have explicit results)
           const overrideResult = predictionOverrideMap.get(String(prediction.id));
@@ -1431,7 +1431,7 @@ Deno.serve(async (req) => {
                     'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
                   },
                   body: JSON.stringify({
-                    type: 'bet_result',
+                    type: 'prediction_result',
                     to: profile.email,
                     userId: userId,
                     data: {

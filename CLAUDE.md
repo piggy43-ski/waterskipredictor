@@ -13,3 +13,10 @@ Two possibilities:
 - Cosmetic-only → ledger lies about wallet movements. Reconciliation is wrong.
 
 Investigation needed: trace settle-predictions L637 and L849, cross-check against historical token_wallets balances for 5 sample users with prediction_lost rows. Must be resolved before public launch.
+
+## Manual Audit Required — Stripe Dashboard (logged 2026-05-04)
+Product names, descriptions, and price metadata live in the Stripe dashboard, not in the codebase. Receipts emailed to paying users render these strings verbatim. Audit and clean before public launch:
+- Stripe Dashboard → Products → every product name + description
+- Stripe Dashboard → Customer portal text
+- Stripe Dashboard → Email branding / receipt headers
+Replace any: bet, wager, odds, payout, cashout, bookie, sportsbook, gamble, gambling.

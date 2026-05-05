@@ -60,7 +60,7 @@ verify_jwt = false
 [functions.compress-multipliers]
 verify_jwt = true
 
-[functions.validate-bet]
+[functions.validate-entry]
 verify_jwt = true
 
 [functions.auto-generate-markets]
