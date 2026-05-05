@@ -20,3 +20,20 @@ Product names, descriptions, and price metadata live in the Stripe dashboard, no
 - Stripe Dashboard → Customer portal text
 - Stripe Dashboard → Email branding / receipt headers
 Replace any: bet, wager, odds, payout, cashout, bookie, sportsbook, gamble, gambling.
+
+## Bake Period — 4C Legacy Enum Cleanup (started 2026-05-04)
+Backfill complete. 403 rows migrated from `bet_*` to `prediction_*` / `entry_placed`.
+Zero rows remain with legacy values. Reader fallbacks for legacy values are still in place in:
+- src/pages/Transactions.tsx (icon switch + badge config)
+- src/components/admin/UserAnalyticsDrilldown.tsx (color/label maps)
+- supabase/functions/settle-predictions/_shared/idempotency.ts (credit type list)
+- src/utils/settlement/idempotency.ts (mirror)
+- public.reverse_settlement (SQL function body)
+
+Drop migration drafted at `supabase/migrations/20260505141609_drop_legacy_bet_enum_DRAFT.sql` but NOT applied.
+
+Bake until at least 2026-05-11. Before applying drop:
+1. Re-run grep: zero writers of `bet_*` outside `_archive`
+2. Confirm zero rows with `type IN ('bet','bet_placed','bet_won','bet_lost','bet_void')`
+3. Confirm app has been used (entries created, settlements run) since 2026-05-04
+4. Then: rename `_DRAFT.sql` to remove suffix, `supabase db push`, remove reader fallbacks in a separate PR
