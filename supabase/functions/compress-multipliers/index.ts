@@ -179,7 +179,9 @@ Deno.serve(async (req) => {
       .from("predictions")
       .select("selection_id, staked_tokens, potential_payout, status")
       .in("selection_id", selections.map(s => s.id))
-      .in("status", ["PENDING", "pending"]);
+      // Include SETTLING: liability exposure is real until the settlement run
+      // completes (or its compensating reversal lands).
+      .in("status", ["PENDING", "pending", "SETTLING"]);
 
     if (predictionsError) throw predictionsError;
 
