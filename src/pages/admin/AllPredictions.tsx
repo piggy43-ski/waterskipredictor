@@ -391,8 +391,11 @@ export default function AllPredictions() {
                           {Number(pred.decimal_odds).toFixed(2)}x
                         </TableCell>
                         <TableCell>
-                          <Badge variant={getStatusBadgeVariant(pred.status)}>
-                            {pred.status}
+                          <Badge
+                            variant={getStatusBadgeVariant(pred.status)}
+                            className={getStatusBadgeClass(pred.status)}
+                          >
+                            {getStatusLabel(pred.status)}
                           </Badge>
                         </TableCell>
                         <TableCell className={cn(
