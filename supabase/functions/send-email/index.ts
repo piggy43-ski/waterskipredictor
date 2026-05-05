@@ -121,15 +121,15 @@ function generateBetConfirmationEmail(data: {
         <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Athlete</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.athleteName}</td></tr>
         <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Tournament</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.tournamentName}</td></tr>
         <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Discipline</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.discipline}</td></tr>
-        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Market</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.marketType}</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Prediction Type</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.marketType}</td></tr>
       </table>
       
       <div style="border-top: 1px solid #374151; margin: 16px 0;"></div>
       
       <table style="width: 100%; border-collapse: collapse;">
-        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Staked</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.stakedTokens.toLocaleString()} tokens</td></tr>
-        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Odds</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.odds.toFixed(2)}x</td></tr>
-        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Potential Win</td><td style="color: #22c55e; font-size: 16px; font-weight: bold; text-align: right; padding: 4px 0;">${data.potentialPayout.toLocaleString()} tokens</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Tokens Entered</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.stakedTokens.toLocaleString()} tokens</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Multiplier</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.odds.toFixed(2)}x</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Projected Reward</td><td style="color: #22c55e; font-size: 16px; font-weight: bold; text-align: right; padding: 4px 0;">${data.potentialPayout.toLocaleString()} tokens</td></tr>
       </table>
     </div>
     
@@ -169,7 +169,7 @@ function generateBetResultEmail(data: {
     resultContent = `
       <p style="color: rgba(255,255,255,0.7); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px;">You Won</p>
       <p style="color: #ffffff; font-size: 36px; font-weight: bold; margin: 0 0 8px;">${data.payoutTokens?.toLocaleString()} tokens</p>
-      <p style="color: rgba(255,255,255,0.6); font-size: 14px; margin: 0;">Staked: ${data.stakedTokens.toLocaleString()} tokens</p>
+      <p style="color: rgba(255,255,255,0.6); font-size: 14px; margin: 0;">Entered: ${data.stakedTokens.toLocaleString()} tokens</p>
     `;
   } else if (isVoid) {
     resultContent = `
