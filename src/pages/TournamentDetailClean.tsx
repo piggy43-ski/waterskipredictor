@@ -664,7 +664,7 @@ const TournamentDetail = () => {
           const athleteNames = `${podiumState.assignedPositions.first.athlete.name}, ${podiumState.assignedPositions.second.athlete.name}, ${podiumState.assignedPositions.third.athlete.name}`;
           await supabase.functions.invoke('send-email', {
             body: {
-              type: 'bet_confirmation',
+              type: 'entry_confirmation',
               to: userData.user.email,
               userId: user.id,
               data: {
@@ -873,7 +873,7 @@ const TournamentDetail = () => {
         if (userData?.user?.email) {
           await supabase.functions.invoke('send-email', {
             body: {
-              type: 'bet_confirmation',
+              type: 'entry_confirmation',
               to: userData.user.email,
               userId: user.id,
               data: {

@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-type EmailType = "welcome" | "bet_confirmation" | "bet_result" | "redemption_receipt";
+type EmailType = "welcome" | "entry_confirmation" | "prediction_result" | "redemption_receipt";
 
 interface EmailRequest {
   type: EmailType;
@@ -82,7 +82,7 @@ function generateWelcomeEmail(data: { username: string; appUrl: string }): strin
 </html>`;
 }
 
-function generateBetConfirmationEmail(data: {
+function generateEntryConfirmationEmail(data: {
   username: string;
   athleteName: string;
   tournamentName: string;
@@ -148,7 +148,7 @@ function generateBetConfirmationEmail(data: {
 </html>`;
 }
 
-function generateBetResultEmail(data: {
+function generatePredictionResultEmail(data: {
   username: string;
   athleteName: string;
   tournamentName: string;
@@ -305,9 +305,9 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
         subject: "Welcome to WaterSki Predictor! 🎿",
       };
     
-    case "bet_confirmation":
+    case "entry_confirmation":
       return {
-        html: generateBetConfirmationEmail({
+        html: generateEntryConfirmationEmail({
           username: data.username || "Champion",
           athleteName: data.athleteName || "Athlete",
           tournamentName: data.tournamentName || "Tournament",
@@ -321,12 +321,12 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
         subject: `Prediction Confirmed: ${data.athleteName || 'Your Pick'}`,
       };
     
-    case "bet_result": {
+    case "prediction_result": {
       const resultEmoji = data.result === "won" ? "🎉" : data.result === "void" ? "↩️" : "";
       const subjectPrefix = data.result === "won" ? "You Won!" : data.result === "void" ? "Prediction Voided" : "Prediction Result";
       const marketSuffix = data.marketType ? ` (${data.marketType})` : "";
       return {
-        html: generateBetResultEmail({
+        html: generatePredictionResultEmail({
           username: data.username || "Champion",
           athleteName: data.athleteName || "Athlete",
           tournamentName: data.tournamentName || "Tournament",
@@ -364,7 +364,7 @@ async function checkEmailPreferences(
   emailType: EmailType
 ): Promise<boolean> {
   // Transactional emails are always sent
-  const transactionalTypes: EmailType[] = ["welcome", "bet_confirmation", "redemption_receipt"];
+  const transactionalTypes: EmailType[] = ["welcome", "entry_confirmation", "redemption_receipt"];
   if (transactionalTypes.includes(emailType)) {
     return true;
   }
@@ -379,8 +379,8 @@ async function checkEmailPreferences(
     return true;
   }
   
-  // bet_result respects notifications preference
-  if (emailType === "bet_result") {
+  // prediction_result respects notifications preference
+  if (emailType === "prediction_result") {
     return (prefs as any).notifications;
   }
   

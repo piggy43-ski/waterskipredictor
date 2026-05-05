@@ -1431,7 +1431,7 @@ Deno.serve(async (req) => {
                     'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
                   },
                   body: JSON.stringify({
-                    type: 'bet_result',
+                    type: 'prediction_result',
                     to: profile.email,
                     userId: userId,
                     data: {

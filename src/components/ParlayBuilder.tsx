@@ -429,7 +429,7 @@ export function ParlayBuilder({
           
           await supabase.functions.invoke('send-email', {
             body: {
-              type: 'bet_confirmation',
+              type: 'entry_confirmation',
               to: userData.user.email,
               userId: userId,
               data: {
