@@ -14,6 +14,14 @@ Two possibilities:
 
 Investigation needed: trace settle-predictions L637 and L849, cross-check against historical token_wallets balances for 5 sample users with prediction_lost rows. Must be resolved before public launch.
 
+## Known Issue — 16 prediction_won rows with null reference_id (logged 2026-05-05)
+16 token_transactions rows from batch dated 2026-05-03 23:39:16 carry type='prediction_won' and reference_type='tournament_settlement' with reference_id=NULL. Created by an aggregate tournament-settlement payout, not per-slip crediting. Audit trail incomplete — wallet credits exist but cannot be linked back to specific predictions.
+
+Pre-existing (not caused by 4C migration). Investigate jointly with prediction_lost ledger semantics finding. Consider:
+- Should these reference settlement_run_id instead of reference_id?
+- Was this a one-time aggregate fix, or does the producing code path still run?
+- Backfill correct reference_ids if recoverable from audit_logs.
+
 ## Manual Audit Required — Stripe Dashboard (logged 2026-05-04)
 Product names, descriptions, and price metadata live in the Stripe dashboard, not in the codebase. Receipts emailed to paying users render these strings verbatim. Audit and clean before public launch:
 - Stripe Dashboard → Products → every product name + description
@@ -30,10 +38,11 @@ Zero rows remain with legacy values. Reader fallbacks for legacy values are stil
 - src/utils/settlement/idempotency.ts (mirror)
 - public.reverse_settlement (SQL function body)
 
-Drop migration drafted at `supabase/migrations/20260505141609_drop_legacy_bet_enum_DRAFT.sql` but NOT applied.
+Drop migration prepared at: `supabase/migrations_drafts/20260505141609_drop_legacy_bet_enum.sql`
+When ready to apply (after bake): move file back to `supabase/migrations/`, then `supabase db push`.
 
 Bake until at least 2026-05-11. Before applying drop:
 1. Re-run grep: zero writers of `bet_*` outside `_archive`
 2. Confirm zero rows with `type IN ('bet','bet_placed','bet_won','bet_lost','bet_void')`
 3. Confirm app has been used (entries created, settlements run) since 2026-05-04
-4. Then: rename `_DRAFT.sql` to remove suffix, `supabase db push`, remove reader fallbacks in a separate PR
+4. Then: move file from `migrations_drafts/` to `migrations/`, `supabase db push`, remove reader fallbacks in a separate PR
