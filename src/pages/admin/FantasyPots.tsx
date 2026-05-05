@@ -366,7 +366,7 @@ export default function AdminFantasyPots() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="payout_structure">Payout Structure</Label>
+                    <Label htmlFor="payout_structure">Prize Structure</Label>
                     <Select name="payout_structure" defaultValue="top_3_split">
                       <SelectTrigger>
                         <SelectValue />
@@ -642,7 +642,7 @@ export default function AdminFantasyPots() {
               </div>
 
               <div>
-                <Label htmlFor="edit-payout_structure">Payout Structure</Label>
+                <Label htmlFor="edit-payout_structure">Prize Structure</Label>
                 <Select name="payout_structure" defaultValue={editingPot.payout_structure}>
                   <SelectTrigger>
                     <SelectValue />
