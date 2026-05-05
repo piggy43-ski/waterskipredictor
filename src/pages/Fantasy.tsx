@@ -717,7 +717,7 @@ const Fantasy = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="payout_structure">Payout Structure</Label>
+                  <Label htmlFor="payout_structure">Prize Structure</Label>
                   <Select value={formPayoutStructure} onValueChange={setFormPayoutStructure}>
                     <SelectTrigger>
                       <SelectValue />
