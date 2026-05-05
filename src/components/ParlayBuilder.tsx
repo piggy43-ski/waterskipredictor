@@ -254,7 +254,7 @@ export function ParlayBuilder({
       const firstAthleteId = firstLeg.winner?.athlete_id || firstLeg.podium.first?.athlete_id || '';
       const firstMarketId = firstLeg.winner?.market_id || firstLeg.podium.first?.market_id || '';
       
-      const { data: validation, error: valError } = await supabase.functions.invoke('validate-bet', {
+      const { data: validation, error: valError } = await supabase.functions.invoke('validate-entry', {
         body: {
           userId,
           tournamentId: tournament.id,

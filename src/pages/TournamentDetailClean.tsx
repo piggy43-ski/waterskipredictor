@@ -436,7 +436,7 @@ const TournamentDetail = () => {
     if (!user || !tournament) return null;
     
     try {
-      const { data, error } = await supabase.functions.invoke('validate-bet', {
+      const { data, error } = await supabase.functions.invoke('validate-entry', {
         body: {
           userId: user.id,
           tournamentId: tournament.id,
