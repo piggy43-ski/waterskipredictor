@@ -47,7 +47,8 @@ const TournamentRecap = () => {
           markets!bet_slips_market_id_fkey(discipline, category, market_type)
         `)
         .eq('tournament_id', selectedId!)
-        .in('status', ['WON', 'LOST', 'VOID', 'PENDING']);
+        // Include SETTLING so slips mid-settlement remain visible in the recap.
+        .in('status', ['WON', 'LOST', 'VOID', 'PENDING', 'SETTLING']);
       if (error) throw error;
       return data;
     },
