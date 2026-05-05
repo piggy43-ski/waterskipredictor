@@ -174,7 +174,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
 
   const getTransactionBadge = (type: string) => {
     const typeColors: Record<string, string> = {
-      'WAGER': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+      'ENTRY': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
       'bet_placed': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
       'bet_won': 'bg-green-500/10 text-green-500 border-green-500/20',
       'bet_lost': 'bg-red-500/10 text-red-500 border-red-500/20',
@@ -206,7 +206,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Wagered</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Entered</CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -300,7 +300,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
                   <p className="text-2xl font-bold text-green-600">{formatTokensWithUSD(bettingStats?.totalPayout || 0)}</p>
                 </div>
                 <div className="p-4 bg-orange-500/10 rounded-lg">
-                  <p className="text-sm text-orange-600">Total Wagered</p>
+                  <p className="text-sm text-orange-600">Total Entered</p>
                   <p className="text-2xl font-bold text-orange-600">{formatTokensWithUSD(bettingStats?.totalWagered || 0)}</p>
                 </div>
                 <div className={`p-4 rounded-lg ${(bettingStats?.netPL || 0) >= 0 ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
@@ -329,9 +329,9 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
                       <TableHead>Pick</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead className="text-right">Stake</TableHead>
-                      <TableHead className="text-right">Odds</TableHead>
+                      <TableHead className="text-right">Multiplier</TableHead>
                       <TableHead>Result</TableHead>
-                      <TableHead className="text-right">Payout</TableHead>
+                      <TableHead className="text-right">Winnings</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -342,7 +342,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
                     ) : predictions?.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                          No bets found
+                          No entries found
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -385,13 +385,13 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
         <TabsContent value="byTournament" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Bets by Tournament ({tournamentGroups.length} tournaments)</CardTitle>
+              <CardTitle>Entries by Tournament ({tournamentGroups.length} tournaments)</CardTitle>
             </CardHeader>
             <CardContent>
               {predictionsLoading ? (
                 <div className="text-center py-8">Loading...</div>
               ) : tournamentGroups.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No bets found</div>
+                <div className="text-center py-8 text-muted-foreground">No entries found</div>
               ) : (
                 <Accordion type="multiple" className="space-y-2">
                   {tournamentGroups.map((group) => (
@@ -411,7 +411,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
                             <span className="font-semibold">{group.tournamentName}</span>
                           </div>
                           <div className="flex items-center gap-4 text-sm">
-                            <span className="text-muted-foreground">{group.bets.length} bets</span>
+                            <span className="text-muted-foreground">{group.bets.length} entries</span>
                             <span className="text-muted-foreground">
                               {group.wins}W / {group.losses}L
                               {group.pending > 0 && ` / ${group.pending}P`}
@@ -430,7 +430,7 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
                         {/* Per-tournament summary stats */}
                         <div className="grid grid-cols-4 gap-2 mb-4 pt-2">
                           <div className="p-3 bg-background rounded-lg border">
-                            <p className="text-xs text-muted-foreground">Wagered</p>
+                            <p className="text-xs text-muted-foreground">Entered</p>
                             <p className="font-semibold">{formatTokens(group.totalWagered)}</p>
                           </div>
                           <div className="p-3 bg-background rounded-lg border">
@@ -457,9 +457,9 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
                               <TableHead>Pick</TableHead>
                               <TableHead>Type</TableHead>
                               <TableHead className="text-right">Stake</TableHead>
-                              <TableHead className="text-right">Odds</TableHead>
+                              <TableHead className="text-right">Multiplier</TableHead>
                               <TableHead>Result</TableHead>
-                              <TableHead className="text-right">Payout</TableHead>
+                              <TableHead className="text-right">Winnings</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
