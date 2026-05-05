@@ -185,7 +185,23 @@ export const UserAnalyticsDrilldown = ({ userId, username, onBack }: UserAnalyti
       'fantasy_entry': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
       'fantasy_payout': 'bg-green-500/10 text-green-500 border-green-500/20',
     };
-    return <Badge className={typeColors[type] || 'bg-muted text-muted-foreground'}>{type.replace('_', ' ')}</Badge>;
+    const typeLabels: Record<string, string> = {
+      'ENTRY': 'Entry',
+      'bet_placed': 'Entry Placed',
+      'bet_won': 'Won',
+      'bet_lost': 'Lost',
+      'bet_void': 'Refunded',
+      'prediction_placed': 'Entry Placed',
+      'prediction_won': 'Won',
+      'prediction_lost': 'Lost',
+      'prediction_void': 'Refunded',
+      'bonus': 'Bonus',
+      'adjustment': 'Adjustment',
+      'burn': 'Burn',
+      'fantasy_entry': 'Fantasy Entry',
+      'fantasy_payout': 'Fantasy Reward',
+    };
+    return <Badge className={typeColors[type] || 'bg-muted text-muted-foreground'}>{typeLabels[type] || type.replace(/_/g, ' ')}</Badge>;
   };
 
   return (
