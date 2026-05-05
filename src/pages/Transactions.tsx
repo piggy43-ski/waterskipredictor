@@ -126,12 +126,16 @@ const Transactions = () => {
     if (type === 'bonus' && referenceType === 'referral_reward') return <TrendingUp className="w-5 h-5" />;
     switch (type) {
       case 'bet_placed':
+      case 'entry_placed':
         return <Coins className="w-5 h-5" />;
       case 'bet_won':
+      case 'prediction_won':
         return <TrendingUp className="w-5 h-5" />;
       case 'bet_lost':
+      case 'prediction_lost':
         return <TrendingDown className="w-5 h-5" />;
       case 'bet_void':
+      case 'prediction_void':
         return <RefreshCw className="w-5 h-5" />;
       case 'deposit':
         return <DollarSign className="w-5 h-5" />;
@@ -172,6 +176,10 @@ const Transactions = () => {
       bet_won: { variant: 'default', label: 'Correct', className: 'bg-success text-success-foreground' },
       bet_lost: { variant: 'destructive', label: 'Incorrect' },
       bet_void: { variant: 'outline', label: 'Voided' },
+      entry_placed: { variant: 'secondary', label: 'Entry Placed' },
+      prediction_won: { variant: 'default', label: 'Correct', className: 'bg-success text-success-foreground' },
+      prediction_lost: { variant: 'destructive', label: 'Incorrect' },
+      prediction_void: { variant: 'outline', label: 'Voided' },
       deposit: { variant: 'default', label: 'Tokens Purchased', className: 'bg-success text-success-foreground' },
       bonus: { variant: 'default', label: 'Bonus', className: 'bg-purple-600 text-white' },
       daily_bonus: { variant: 'default', label: 'Daily Bonus', className: 'bg-success text-success-foreground' },
@@ -247,10 +255,10 @@ const Transactions = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="bet_placed">Entry Placed</SelectItem>
-                  <SelectItem value="bet_won">Entry Correct</SelectItem>
-                  <SelectItem value="bet_lost">Entry Incorrect</SelectItem>
-                  <SelectItem value="bet_void">Entry Voided</SelectItem>
+                  <SelectItem value="entry_placed">Entry Placed</SelectItem>
+                  <SelectItem value="prediction_won">Entry Correct</SelectItem>
+                  <SelectItem value="prediction_lost">Entry Incorrect</SelectItem>
+                  <SelectItem value="prediction_void">Entry Voided</SelectItem>
                   <SelectItem value="deposit">Tokens Purchased</SelectItem>
                   <SelectItem value="bonus">Bonus</SelectItem>
                   <SelectItem value="daily_bonus">Daily Bonus</SelectItem>

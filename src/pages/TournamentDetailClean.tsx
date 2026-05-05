@@ -616,7 +616,7 @@ const TournamentDetail = () => {
       // Log transaction
       await supabase.from('token_transactions').insert({
         user_id: user.id,
-        type: 'bet_placed',
+        type: 'entry_placed',
         amount: -stakeAmount,
         balance_after: newBalance,
         reference_type: 'bet_slip',
@@ -830,7 +830,7 @@ const TournamentDetail = () => {
       // Log transaction
       await supabase.from('token_transactions').insert({
         user_id: user.id,
-        type: 'bet_placed',
+        type: 'entry_placed',
         amount: -stakeAmount,
         balance_after: newBalance,
         reference_type: 'bet_slip',
