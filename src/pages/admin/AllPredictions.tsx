@@ -34,7 +34,7 @@ interface PredictionWithProfile {
   } | null;
 }
 
-const STATUS_OPTIONS = ['all', 'PENDING', 'WON', 'LOST', 'VOID', 'CANCELLED'];
+const STATUS_OPTIONS = ['all', 'PENDING', 'SETTLING', 'WON', 'LOST', 'VOID', 'CANCELLED'];
 const MARKET_TYPES = ['all', 'WINNER', 'PODIUM', 'TOP_5', 'HEAD_TO_HEAD'];
 
 export default function AllPredictions() {
@@ -174,6 +174,8 @@ export default function AllPredictions() {
         return 'destructive';
       case 'PENDING':
         return 'secondary';
+      case 'SETTLING':
+        return 'secondary';
       case 'VOID':
       case 'CANCELLED':
         return 'outline';
@@ -181,6 +183,13 @@ export default function AllPredictions() {
         return 'outline';
     }
   };
+
+  const getStatusBadgeClass = (status: string) =>
+    status === 'SETTLING'
+      ? 'bg-amber-500/15 text-amber-600 border border-amber-500/30 hover:bg-amber-500/20'
+      : '';
+
+  const getStatusLabel = (status: string) => (status === 'SETTLING' ? 'Settling…' : status);
 
   return (
     <AdminLayout>
@@ -382,8 +391,11 @@ export default function AllPredictions() {
                           {Number(pred.decimal_odds).toFixed(2)}x
                         </TableCell>
                         <TableCell>
-                          <Badge variant={getStatusBadgeVariant(pred.status)}>
-                            {pred.status}
+                          <Badge
+                            variant={getStatusBadgeVariant(pred.status)}
+                            className={getStatusBadgeClass(pred.status)}
+                          >
+                            {getStatusLabel(pred.status)}
                           </Badge>
                         </TableCell>
                         <TableCell className={cn(
