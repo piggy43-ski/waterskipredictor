@@ -937,6 +937,8 @@ export default function TournamentSettlement() {
             position_predicted
           )
         `)
+        // Explicitly exclude SETTLING: preview must not double-count slips another
+        // run is mid-settling. Strict PENDING only.
         .eq('status', 'PENDING')
         .in('selection_id', selectionIdsToQuery);
 
@@ -996,6 +998,8 @@ export default function TournamentSettlement() {
           .from('bet_slips')
           .select('id, total_stake_tokens, total_odds_decimal, potential_payout_tokens, leg_count, status')
           .eq('tournament_id', selectedTournament)
+          // Explicitly exclude SETTLING: preview must not double-count slips another
+          // run is mid-settling. Strict PENDING only.
           .eq('status', 'PENDING')
           .eq('type', 'parlay');
         
@@ -1006,6 +1010,8 @@ export default function TournamentSettlement() {
               .from('predictions')
               .select('id')
               .eq('bet_slip_id', slip.id)
+              // Upstream parlaySlips query already filtered to status='PENDING',
+              // so SETTLING is implicitly excluded here.
               .eq('status', 'PENDING');
             
             if (slipPredictions) {
@@ -1027,6 +1033,8 @@ export default function TournamentSettlement() {
             .select('id, potential_payout_tokens, leg_count')
             .in('id', zeroPayoutWinners.map(p => p.bet_slip_id).filter(Boolean) as string[])
             .eq('leg_count', 1)
+            // Explicitly exclude SETTLING: preview must not double-count slips another
+            // run is mid-settling. Strict PENDING only.
             .eq('status', 'PENDING');
           
           if (singleSlips) {
@@ -1501,6 +1509,8 @@ export default function TournamentSettlement() {
       const { data: pendingPredictions, error: fetchErr } = await supabase
         .from('predictions')
         .select('id, user_id, staked_tokens, bet_slip_id, bet_slips!bet_slip_id(tournament_id)')
+        // Explicitly exclude SETTLING: void must not race a settlement run that is
+        // actively claiming/processing slips. Strict PENDING only.
         .eq('status', 'PENDING')
         .eq('bet_slips.tournament_id', selectedTournament);
 
