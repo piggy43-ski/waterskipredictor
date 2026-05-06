@@ -71,11 +71,11 @@ const fetchAll = async (): Promise<DashboardData> => {
 
   // Cash collected
   const depositSumUsd = (deposits.data ?? []).reduce(
-    (s, r: any) => s + Number(r.amount_usd ?? 0),
+    (s, r) => s + Number(r.amount_usd ?? 0),
     0,
   );
   const purchasedTokens = (wallets.data ?? []).reduce(
-    (s, r: any) => s + Number(r.purchased_tokens ?? 0),
+    (s, r) => s + Number(r.purchased_tokens ?? 0),
     0,
   );
   const cashUsd = depositSumUsd > 0 ? depositSumUsd : tokensToUSD(purchasedTokens);
@@ -84,17 +84,17 @@ const fetchAll = async (): Promise<DashboardData> => {
 
   // Wallet liability
   const walletLiabilityTokens = (wallets.data ?? []).reduce(
-    (s, r: any) => s + Number(r.earned_tokens ?? 0) + Number(r.purchased_tokens ?? 0),
+    (s, r) => s + Number(r.earned_tokens ?? 0) + Number(r.purchased_tokens ?? 0),
     0,
   );
   const totalEarnedTokens = (wallets.data ?? []).reduce(
-    (s, r: any) => s + Number(r.earned_tokens ?? 0),
+    (s, r) => s + Number(r.earned_tokens ?? 0),
     0,
   );
 
   // Realized payouts
   const realizedTokens = (realized.data ?? []).reduce(
-    (s, r: any) => s + Number(r.amount ?? 0),
+    (s, r) => s + Number(r.amount ?? 0),
     0,
   );
   const realizedPayoutsUsd = tokensToUSD(realizedTokens);
@@ -119,12 +119,12 @@ const fetchAll = async (): Promise<DashboardData> => {
 
   // Top users
   const sortedWallets = [...(wallets.data ?? [])].sort(
-    (a: any, b: any) => Number(b.earned_tokens ?? 0) - Number(a.earned_tokens ?? 0),
+    (a: Record<string, unknown>, b) => Number(b.earned_tokens ?? 0) - Number(a.earned_tokens ?? 0),
   );
   const topUsers: UserConcentrationRow[] = sortedWallets
-    .filter((w: any) => Number(w.earned_tokens ?? 0) > 0)
+    .filter((w) => Number(w.earned_tokens ?? 0) > 0)
     .slice(0, 10)
-    .map((w: any) => ({
+    .map((w) => ({
       user_id: w.user_id,
       earned_tokens: Number(w.earned_tokens ?? 0),
       pct_of_total:
@@ -133,10 +133,10 @@ const fetchAll = async (): Promise<DashboardData> => {
 
   // Markets index
   const marketById = new Map(
-    (marketsRes.data ?? []).map((m: any) => [m.id, m]),
+    (marketsRes.data ?? []).map((m) => [m.id, m]),
   );
   const tournamentById = new Map(
-    (tournamentsRes.data ?? []).map((t: any) => [t.id, t]),
+    (tournamentsRes.data ?? []).map((t) => [t.id, t]),
   );
 
   // Open exposure by market (+ aggregate "Parlays" bucket for null market_id)
@@ -149,8 +149,8 @@ const fetchAll = async (): Promise<DashboardData> => {
       parlayPayout += Number(r.potential_payout_tokens ?? 0);
       continue;
     }
-    const m: any = marketById.get(r.market_id);
-    const t: any = r.tournament_id ? tournamentById.get(r.tournament_id) : null;
+    const m: Record<string, unknown> = marketById.get(r.market_id);
+    const t: Record<string, unknown> = r.tournament_id ? tournamentById.get(r.tournament_id) : null;
     const existing = marketAgg.get(r.market_id);
     if (existing) {
       existing.open_tickets += 1;
@@ -229,7 +229,7 @@ const fetchAll = async (): Promise<DashboardData> => {
   }
   const events: EventRow[] = Array.from(eventAgg.values())
     .map((e) => {
-      const t: any = tournamentById.get(e.tournament_id);
+      const t: Record<string, unknown> = tournamentById.get(e.tournament_id);
       return {
         ...e,
         name: t?.name ?? '(unknown)',
@@ -238,8 +238,8 @@ const fetchAll = async (): Promise<DashboardData> => {
       };
     })
     .sort((a, b) => {
-      const ta: any = tournamentById.get(a.tournament_id);
-      const tb: any = tournamentById.get(b.tournament_id);
+      const ta: Record<string, unknown> = tournamentById.get(a.tournament_id);
+      const tb: Record<string, unknown> = tournamentById.get(b.tournament_id);
       const da = ta?.start_datetime ? new Date(ta.start_datetime).getTime() : 0;
       const db = tb?.start_datetime ? new Date(tb.start_datetime).getTime() : 0;
       return db - da;
