@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { formatUSD, tokensToUSD } from '@/utils/tokenConversion';
+import { formatUSD } from '@/utils/tokenConversion';
 
 export type MetricTone = 'neutral' | 'green' | 'yellow' | 'red';
 
@@ -55,5 +55,3 @@ export const HeadlineMetrics = ({ metrics }: { metrics: HeadlineMetric[] }) => (
     ))}
   </div>
 );
-
-export { tokensToUSD };
