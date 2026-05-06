@@ -498,12 +498,18 @@ serve(async (req) => {
     // Step 10: Score fantasy
     console.log('Triggering fantasy scoring...');
     const { data: scoreData, error: scoreError } = await supabase.functions.invoke('score-fantasy', {
-      body: { tournament_id: tournamentId }
+      body: { tournament_id: tournamentId },
+      headers: { Authorization: authHeader },
     });
 
     if (scoreError) {
       console.error('Fantasy scoring error:', scoreError);
-      results.fantasy_scoring_error = scoreError.message;
+      let detail: string = scoreError.message ?? String(scoreError);
+      const ctx = (scoreError as unknown as { context?: { text?: () => Promise<string> } })?.context;
+      if (ctx?.text) {
+        try { detail = await ctx.text(); } catch { /* keep generic */ }
+      }
+      results.fantasy_scoring_error = detail;
     } else {
       console.log('Fantasy scoring complete:', scoreData);
       results.fantasy_scoring = scoreData;
@@ -522,12 +528,18 @@ serve(async (req) => {
     });
 
     const { data: settleData, error: settleError } = await supabase.functions.invoke('settle-predictions', {
-      body: { selections: selectionResults }
+      body: { selections: selectionResults },
+      headers: { Authorization: authHeader },
     });
 
     if (settleError) {
       console.error('Settlement error:', settleError);
-      results.settlement_error = settleError.message;
+      let detail: string = settleError.message ?? String(settleError);
+      const ctx = (settleError as unknown as { context?: { text?: () => Promise<string> } })?.context;
+      if (ctx?.text) {
+        try { detail = await ctx.text(); } catch { /* keep generic */ }
+      }
+      results.settlement_error = detail;
     } else {
       console.log('Settlement complete:', settleData);
       results.predictions_settlement = settleData;
@@ -536,12 +548,18 @@ serve(async (req) => {
     // Step 12: Settle fantasy pot
     console.log('Settling fantasy pot...');
     const { data: potSettleData, error: potSettleError } = await supabase.functions.invoke('settle-fantasy-pot', {
-      body: { pot_id: potId }
+      body: { pot_id: potId },
+      headers: { Authorization: authHeader },
     });
 
     if (potSettleError) {
       console.error('Fantasy pot settlement error:', potSettleError);
-      results.fantasy_pot_settlement_error = potSettleError.message;
+      let detail: string = potSettleError.message ?? String(potSettleError);
+      const ctx = (potSettleError as unknown as { context?: { text?: () => Promise<string> } })?.context;
+      if (ctx?.text) {
+        try { detail = await ctx.text(); } catch { /* keep generic */ }
+      }
+      results.fantasy_pot_settlement_error = detail;
     } else {
       console.log('Fantasy pot settled:', potSettleData);
       results.fantasy_pot_settlement = potSettleData;
