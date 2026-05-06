@@ -433,8 +433,8 @@ const BankrollDashboard = () => {
     }
 
     return { metrics, triggers };
-    // `now` triggers re-computation so age-relative delta text refreshes each second
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // `now` is included so age-relative delta text refreshes each second
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, snapshot, now]);
 
   const updatedSecondsAgo = dataUpdatedAt ? Math.max(0, Math.floor((now - dataUpdatedAt) / 1000)) : 0;
