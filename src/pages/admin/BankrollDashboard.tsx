@@ -433,9 +433,10 @@ const BankrollDashboard = () => {
     }
     const topConcentration = data.topUsers[0];
     if (topConcentration && topConcentration.pct_of_total > 10) {
+      const who = topConcentration.username || topConcentration.user_id.slice(0, 8);
       triggers.push({
         level: 'warning',
-        message: `User ${topConcentration.user_id.slice(0, 8)} holds ${topConcentration.pct_of_total.toFixed(1)}% of total earned tokens (${formatUSD(tokensToUSD(topConcentration.earned_tokens))}). Single-user concentration risk.`,
+        message: `User ${who} holds ${topConcentration.pct_of_total.toFixed(1)}% of total earned tokens (${formatUSD(tokensToUSD(topConcentration.earned_tokens))}). Single-user concentration risk.`,
       });
     }
     if (data.maxSingleSlipTokens > SINGLE_SLIP_THRESHOLD_TOKENS) {
