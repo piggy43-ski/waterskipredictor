@@ -119,7 +119,7 @@ const fetchAll = async (): Promise<DashboardData> => {
 
   // Top users
   const sortedWallets = [...(wallets.data ?? [])].sort(
-    (a: Record<string, unknown>, b) => Number(b.earned_tokens ?? 0) - Number(a.earned_tokens ?? 0),
+    (a, b) => Number(b.earned_tokens ?? 0) - Number(a.earned_tokens ?? 0),
   );
   const topUsers: UserConcentrationRow[] = sortedWallets
     .filter((w) => Number(w.earned_tokens ?? 0) > 0)
@@ -132,11 +132,13 @@ const fetchAll = async (): Promise<DashboardData> => {
     }));
 
   // Markets index
-  const marketById = new Map(
-    (marketsRes.data ?? []).map((m) => [m.id, m]),
+  type MarketRow = { id: string; name: string; market_type: string | null; tournament_id: string | null };
+  type TournamentRow = { id: string; name: string; status: string | null; settled_at: string | null; start_datetime: string | null };
+  const marketById = new Map<string, MarketRow>(
+    ((marketsRes.data ?? []) as MarketRow[]).map((m) => [m.id, m]),
   );
-  const tournamentById = new Map(
-    (tournamentsRes.data ?? []).map((t) => [t.id, t]),
+  const tournamentById = new Map<string, TournamentRow>(
+    ((tournamentsRes.data ?? []) as TournamentRow[]).map((t) => [t.id, t]),
   );
 
   // Open exposure by market (+ aggregate "Parlays" bucket for null market_id)
@@ -149,8 +151,8 @@ const fetchAll = async (): Promise<DashboardData> => {
       parlayPayout += Number(r.potential_payout_tokens ?? 0);
       continue;
     }
-    const m: Record<string, unknown> = marketById.get(r.market_id);
-    const t: Record<string, unknown> = r.tournament_id ? tournamentById.get(r.tournament_id) : null;
+    const m = marketById.get(r.market_id);
+    const t = r.tournament_id ? tournamentById.get(r.tournament_id) : undefined;
     const existing = marketAgg.get(r.market_id);
     if (existing) {
       existing.open_tickets += 1;
@@ -210,7 +212,8 @@ const fetchAll = async (): Promise<DashboardData> => {
     e.open_payout_tokens += Number(r.potential_payout_tokens ?? 0);
     eventAgg.set(r.tournament_id, e);
   }
-  for (const r of (closedSlips.data ?? []) as any[]) {
+  type ClosedSlip = { id: string; tournament_id: string | null; status: string; total_stake_tokens: number; actual_payout_tokens: number | null; created_at: string };
+  for (const r of ((closedSlips.data ?? []) as ClosedSlip[])) {
     if (!r.tournament_id) continue;
     if (new Date(r.created_at).getTime() < cutoff) continue;
     const e =
@@ -229,7 +232,7 @@ const fetchAll = async (): Promise<DashboardData> => {
   }
   const events: EventRow[] = Array.from(eventAgg.values())
     .map((e) => {
-      const t: Record<string, unknown> = tournamentById.get(e.tournament_id);
+      const t = tournamentById.get(e.tournament_id);
       return {
         ...e,
         name: t?.name ?? '(unknown)',
@@ -238,8 +241,8 @@ const fetchAll = async (): Promise<DashboardData> => {
       };
     })
     .sort((a, b) => {
-      const ta: Record<string, unknown> = tournamentById.get(a.tournament_id);
-      const tb: Record<string, unknown> = tournamentById.get(b.tournament_id);
+      const ta = tournamentById.get(a.tournament_id);
+      const tb = tournamentById.get(b.tournament_id);
       const da = ta?.start_datetime ? new Date(ta.start_datetime).getTime() : 0;
       const db = tb?.start_datetime ? new Date(tb.start_datetime).getTime() : 0;
       return db - da;
