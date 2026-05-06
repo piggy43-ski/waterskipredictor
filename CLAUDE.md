@@ -51,3 +51,19 @@ Bake until at least 2026-05-11. Before applying drop:
 2. Confirm zero rows with `type IN ('bet','bet_placed','bet_won','bet_lost','bet_void')`
 3. Confirm app has been used (entries created, settlements run) since 2026-05-04
 4. Then: move file from `migrations_drafts/` to `migrations/`, `supabase db push`, remove reader fallbacks in a separate PR
+## Configuration Decisions
+
+### Cap Configuration (locked 2026-05-06)
+
+Per-leg multiplier caps (multiplierCaps.ts):
+- WINNER: rank 1 = 1.5x, rank 2 = 2.25x, rank 3 = 3.0x, rank 4 = 4.0x, rank 5 = 5.0x, market max = 8.0x
+- PODIUM (per-leg): rank 1 = 1.25x, rank 2 = 1.75x, rank 3 = 2.25x, market max = 6.0x
+- HIGHEST_SCORE: rank 1 = 1.8x, rank 2 = 2.5x, rank 3 = 3.5x, market max = 7.0x
+
+Composite caps:
+- PODIUM combined exact-order: 25x (raised from 18x to reflect 6x combinatorial difficulty)
+- Parlay caps by leg count: {1:15, 2:20, 3:35, 4:50, 5:60, 6:80, 7:105, 8:130}, haircut 0.75
+- MAX_PARLAY_LEGS: 8
+
+Rationale: bankroll-conservative ceiling appropriate for current $304 cash position.
+Revisit when bankroll exceeds $5,000 or after first 3 high-volume events post-launch.
