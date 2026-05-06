@@ -4,6 +4,11 @@ Project notes for Claude / Lovable agents.
 
 ## Known Issues / Backlog
 
+## Known Issue — Shadow analysis script PODIUM handling (logged 2026-05-06)
+The synthetic shadow analysis script joins predictions.selection_id → selections.id → market_odds.athlete_rank, which silently fails for PODIUM exact-order predictions whose selection_id is a synthetic composite (e.g. "<uuid>-podium"). These predictions use calculatePodiumCombinedMultiplier instead and are correctly priced in production. The shadow script underrepresents PODIUM in delta reports.
+
+Fix when next running shadow analysis: branch on market_type='PODIUM' with composite selection_id and recompute via calculatePodiumCombinedMultiplier(r1, r2, r3) × 2, capped at 18. Production engine and rank data are correct; this is a script limitation only.
+
 ## Known Issue — prediction_lost ledger semantics (logged 2026-05-04)
 
 `prediction_lost` rows in `token_transactions` carry real negative amounts (-1 to -1000), totaling -21,397 across 176 rows. Same pattern for legacy `bet_lost` (-2,102 / 27 rows). The Step 1 audit assumed losses don't debit the wallet because the stake was taken at entry. That assumption is wrong or incomplete.
