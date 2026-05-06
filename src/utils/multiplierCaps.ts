@@ -31,10 +31,12 @@ export const RANK_CAPS = {
 
 /**
  * Combined podium (exact-order) multiplier ceiling.
- * Equal to PODIUM.max * 3 — the strict per-leg cap × the 3 podium positions.
+ * Raised to 25x (from 18x) to reflect the genuine difficulty of predicting
+ * exact podium order — 6x harder than top-3-any-order combinatorially (3!).
+ * Worst case at $10 entry = $250.
  * Used by `podiumMultipliers.calculatePodiumCombinedMultiplier`.
  */
-export const MAX_PODIUM_COMBINED_MULTIPLIER = MULTIPLIER_CAPS.PODIUM.max * 3; // 18
+export const MAX_PODIUM_COMBINED_MULTIPLIER = 25; // was 18 (= PODIUM.max × 3)
 
 export const TARGET_IMPLIED_SUM = {
   WINNER: { min: 0.90, max: 0.92 },
