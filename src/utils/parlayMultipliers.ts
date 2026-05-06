@@ -15,9 +15,13 @@ const PARLAY_CAPS: Record<number, number> = {
   2: 20,    // 2-leg max 20x
   3: 35,    // 3-leg max 35x
   4: 50,    // 4-leg max 50x
+  5: 75,    // 5-leg max 75x  (worst-case $750 on $10)
+  6: 100,   // 6-leg max 100x
+  7: 130,   // 7-leg max 130x
+  8: 160,   // 8-leg max 160x
 };
 
-const MAX_PARLAY_LEGS = 4;
+const MAX_PARLAY_LEGS = 8;
 
 /**
  * Convert American odds to decimal odds
