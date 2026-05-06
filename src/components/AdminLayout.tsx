@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database, DollarSign, UserCog, Crown, FlaskConical, ClipboardList, Menu, X, FileText, PieChart, Shield, Share2, History, Target } from 'lucide-react';
+import { LayoutDashboard, Trophy, Users, TrendingUp, Gift, FileCheck, Database, DollarSign, UserCog, Crown, FlaskConical, ClipboardList, Menu, X, FileText, PieChart, Shield, Share2, History, Target, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAdminCheck } from '@/hooks/useAdminCheck';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -14,6 +14,7 @@ interface AdminLayoutProps {
 const navItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/admin/risk-dashboard', label: 'Risk Dashboard', icon: Shield },
+  { path: '/admin/bankroll', label: 'Bankroll', icon: Wallet },
   { path: '/admin/house-ledger', label: 'Platform Ledger', icon: DollarSign },
   { path: '/admin/market-liability', label: 'Market Liability', icon: TrendingUp },
   { path: '/admin/users', label: 'Users', icon: UserCog },

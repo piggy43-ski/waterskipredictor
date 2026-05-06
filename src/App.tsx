@@ -55,6 +55,7 @@ import AdminReferrals from "./pages/admin/Referrals";
 import AdminTournamentRecap from "./pages/admin/TournamentRecap";
 import AdminAllTransactions from "./pages/admin/AllTransactions";
 import AdminAllPredictions from "./pages/admin/AllPredictions";
+import AdminBankrollDashboard from "./pages/admin/BankrollDashboard";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCanceled from "./pages/PaymentCanceled";
 import HelpCenter from "./pages/HelpCenter";
@@ -138,6 +139,7 @@ const App = () => (
               <Route path="/admin/audit-logs" element={<ProtectedRoute><AdminAuditLogs /></ProtectedRoute>} />
               <Route path="/admin/reward-dashboard" element={<ProtectedRoute><AdminRewardLiabilityDashboard /></ProtectedRoute>} />
               <Route path="/admin/probability-overrides" element={<ProtectedRoute><AdminProbabilityOverrides /></ProtectedRoute>} />
+              <Route path="/admin/bankroll" element={<ProtectedRoute><AdminBankrollDashboard /></ProtectedRoute>} />
               
               <Route path="*" element={<NotFound />} />
             </Routes>
