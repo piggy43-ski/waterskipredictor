@@ -89,7 +89,7 @@ const SettlementTest = () => {
           <CardHeader>
             <CardTitle>Automated Settlement Test</CardTitle>
             <CardDescription>
-              This will create a test tournament, bets, fantasy entries, and run the full settlement flow.
+              This will create a test tournament, entries, fantasy entries, and run the full settlement flow.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -100,7 +100,7 @@ const SettlementTest = () => {
                 <li>Add 6 athletes (3 male, 3 female) to the tournament</li>
                 <li>Create markets and selections for each discipline</li>
                 <li>Create a fantasy pot and enter you into it</li>
-                <li>Place a single bet and a parlay bet</li>
+                <li>Place a single entry and a parlay entry</li>
                 <li>Input athlete results</li>
                 <li>Run fantasy scoring</li>
                 <li>Settle all predictions</li>
@@ -171,7 +171,7 @@ const SettlementTest = () => {
 
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Bets Created</CardTitle>
+                      <CardTitle className="text-sm">Entries Created</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
                       <div className="flex justify-between items-center">
@@ -206,18 +206,27 @@ const SettlementTest = () => {
                           {results.fantasy_scoring_error ? 'Error' : 'Done'}
                         </Badge>
                       </div>
+                      {results.fantasy_scoring_error && (
+                        <p className="text-xs text-destructive">{results.fantasy_scoring_error}</p>
+                      )}
                       <div className="flex justify-between items-center">
                         <span className="text-muted-foreground">Predictions:</span>
                         <Badge variant={results.settlement_error ? 'destructive' : 'default'}>
                           {results.settlement_error ? 'Error' : 'Settled'}
                         </Badge>
                       </div>
+                      {results.settlement_error && (
+                        <p className="text-xs text-destructive">{results.settlement_error}</p>
+                      )}
                       <div className="flex justify-between items-center">
                         <span className="text-muted-foreground">Fantasy Pot:</span>
                         <Badge variant={results.fantasy_pot_settlement_error ? 'destructive' : 'default'}>
                           {results.fantasy_pot_settlement_error ? 'Error' : 'Settled'}
                         </Badge>
                       </div>
+                      {results.fantasy_pot_settlement_error && (
+                        <p className="text-xs text-destructive">{results.fantasy_pot_settlement_error}</p>
+                      )}
                     </CardContent>
                   </Card>
 
