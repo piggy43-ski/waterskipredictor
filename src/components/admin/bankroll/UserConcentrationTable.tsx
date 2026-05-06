@@ -6,6 +6,7 @@ export interface UserConcentrationRow {
   user_id: string;
   earned_tokens: number;
   pct_of_total: number;
+  username?: string | null;
 }
 
 export const UserConcentrationTable = ({
@@ -39,7 +40,12 @@ export const UserConcentrationTable = ({
           <TableBody>
             {rows.map((r) => (
               <TableRow key={r.user_id}>
-                <TableCell className="font-mono text-xs">{r.user_id.slice(0, 8)}</TableCell>
+                <TableCell>
+                  <div className="font-medium">{r.username ?? '(unknown)'}</div>
+                  <div className="font-mono text-xs text-muted-foreground">
+                    {r.user_id.slice(0, 8)}
+                  </div>
+                </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {r.earned_tokens.toLocaleString()}
                 </TableCell>

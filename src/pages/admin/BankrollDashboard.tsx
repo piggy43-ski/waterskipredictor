@@ -121,15 +121,28 @@ const fetchAll = async (): Promise<DashboardData> => {
   const sortedWallets = [...(wallets.data ?? [])].sort(
     (a, b) => Number(b.earned_tokens ?? 0) - Number(a.earned_tokens ?? 0),
   );
-  const topUsers: UserConcentrationRow[] = sortedWallets
+  const topWallets = sortedWallets
     .filter((w) => Number(w.earned_tokens ?? 0) > 0)
-    .slice(0, 10)
-    .map((w) => ({
-      user_id: w.user_id,
-      earned_tokens: Number(w.earned_tokens ?? 0),
-      pct_of_total:
-        totalEarnedTokens > 0 ? (Number(w.earned_tokens ?? 0) / totalEarnedTokens) * 100 : 0,
-    }));
+    .slice(0, 10);
+  const topUserIds = topWallets.map((w) => w.user_id);
+  const profilesRes =
+    topUserIds.length > 0
+      ? await supabase.from('profiles').select('id, username').in('id', topUserIds)
+      : { data: [], error: null };
+  if (profilesRes.error) throw profilesRes.error;
+  const usernameById = new Map<string, string>(
+    ((profilesRes.data ?? []) as Array<{ id: string; username: string | null }>).map((p) => [
+      p.id,
+      p.username ?? '',
+    ]),
+  );
+  const topUsers: UserConcentrationRow[] = topWallets.map((w) => ({
+    user_id: w.user_id,
+    earned_tokens: Number(w.earned_tokens ?? 0),
+    pct_of_total:
+      totalEarnedTokens > 0 ? (Number(w.earned_tokens ?? 0) / totalEarnedTokens) * 100 : 0,
+    username: usernameById.get(w.user_id) || null,
+  }));
 
   // Markets index
   type MarketRow = { id: string; name: string; market_type: string | null; tournament_id: string | null };
@@ -420,9 +433,10 @@ const BankrollDashboard = () => {
     }
     const topConcentration = data.topUsers[0];
     if (topConcentration && topConcentration.pct_of_total > 10) {
+      const who = topConcentration.username || topConcentration.user_id.slice(0, 8);
       triggers.push({
         level: 'warning',
-        message: `User ${topConcentration.user_id.slice(0, 8)} holds ${topConcentration.pct_of_total.toFixed(1)}% of total earned tokens (${formatUSD(tokensToUSD(topConcentration.earned_tokens))}). Single-user concentration risk.`,
+        message: `User ${who} holds ${topConcentration.pct_of_total.toFixed(1)}% of total earned tokens (${formatUSD(tokensToUSD(topConcentration.earned_tokens))}). Single-user concentration risk.`,
       });
     }
     if (data.maxSingleSlipTokens > SINGLE_SLIP_THRESHOLD_TOKENS) {
