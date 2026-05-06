@@ -72,7 +72,7 @@ describe("multiplierCaps - rank caps", () => {
     expect(RANK_CAPS.HIGHEST_SCORE[3]).toBe(3.5);
   });
 
-  it("MAX_PODIUM_COMBINED_MULTIPLIER = 18", () => {
-    expect(MAX_PODIUM_COMBINED_MULTIPLIER).toBe(18);
+  it("MAX_PODIUM_COMBINED_MULTIPLIER = 25", () => {
+    expect(MAX_PODIUM_COMBINED_MULTIPLIER).toBe(25);
   });
 });
