@@ -7,7 +7,7 @@ import {
 import type { ParlayLeg } from "@/types/parlay";
 
 const EXPECTED_CAPS: Record<number, number> = {
-  1: 15, 2: 20, 3: 35, 4: 50, 5: 75, 6: 100, 7: 130, 8: 160,
+  1: 15, 2: 20, 3: 35, 4: 50, 5: 60, 6: 80, 7: 105, 8: 130,
 };
 
 function makeLeg(odds: number): ParlayLeg {

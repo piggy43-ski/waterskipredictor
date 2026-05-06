@@ -3,9 +3,9 @@ import { calculatePodiumCombinedMultiplier, getPodiumMultiplierConfig } from "..
 import { MAX_PODIUM_COMBINED_MULTIPLIER } from "../multiplierCaps";
 
 describe("podiumMultipliers", () => {
-  it("combined exact-order ≤ 18 even at max inputs", () => {
-    const result = calculatePodiumCombinedMultiplier(6, 6, 6); // (18) * 2 = 36 → cap 18
-    expect(result).toBeLessThanOrEqual(18);
+  it("combined exact-order ≤ 25 even at max inputs", () => {
+    const result = calculatePodiumCombinedMultiplier(6, 6, 6); // (18) * 2 = 36 → cap 25
+    expect(result).toBeLessThanOrEqual(25);
     expect(result).toBe(MAX_PODIUM_COMBINED_MULTIPLIER);
   });
 
@@ -14,17 +14,17 @@ describe("podiumMultipliers", () => {
     expect(result).toBe(12);
   });
 
-  it("never exceeds 18 for any reasonable input", () => {
+  it("never exceeds 25 for any reasonable input", () => {
     for (let a = 1; a <= 8; a++) {
       for (let b = 1; b <= 8; b++) {
         for (let c = 1; c <= 8; c++) {
-          expect(calculatePodiumCombinedMultiplier(a, b, c)).toBeLessThanOrEqual(18);
+          expect(calculatePodiumCombinedMultiplier(a, b, c)).toBeLessThanOrEqual(25);
         }
       }
     }
   });
 
-  it("config exposes maxMultiplier = 18", () => {
-    expect(getPodiumMultiplierConfig().maxMultiplier).toBe(18);
+  it("config exposes maxMultiplier = 25", () => {
+    expect(getPodiumMultiplierConfig().maxMultiplier).toBe(25);
   });
 });

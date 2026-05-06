@@ -15,10 +15,10 @@ const PARLAY_CAPS: Record<number, number> = {
   2: 20,    // 2-leg max 20x
   3: 35,    // 3-leg max 35x
   4: 50,    // 4-leg max 50x
-  5: 75,    // 5-leg max 75x  (worst-case $750 on $10)
-  6: 100,   // 6-leg max 100x
-  7: 130,   // 7-leg max 130x
-  8: 160,   // 8-leg max 160x
+  5: 60,    // 5-leg max 60x  (bankroll-conservative; was 75)
+  6: 80,    // 6-leg max 80x  (was 100)
+  7: 105,   // 7-leg max 105x (was 130)
+  8: 130,   // 8-leg max 130x (was 160)
 };
 
 const MAX_PARLAY_LEGS = 8;
