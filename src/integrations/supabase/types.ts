@@ -2586,6 +2586,93 @@ export type Database = {
           },
         ]
       }
+      shadow_prediction_legs: {
+        Row: {
+          actual_decimal_odds: number | null
+          actual_status: string | null
+          bet_slip_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          prediction_id: string
+          shadow_capped: boolean | null
+          shadow_decimal_odds: number | null
+          shadow_run_id: string
+          shadow_status: string | null
+        }
+        Insert: {
+          actual_decimal_odds?: number | null
+          actual_status?: string | null
+          bet_slip_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          prediction_id: string
+          shadow_capped?: boolean | null
+          shadow_decimal_odds?: number | null
+          shadow_run_id: string
+          shadow_status?: string | null
+        }
+        Update: {
+          actual_decimal_odds?: number | null
+          actual_status?: string | null
+          bet_slip_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          prediction_id?: string
+          shadow_capped?: boolean | null
+          shadow_decimal_odds?: number | null
+          shadow_run_id?: string
+          shadow_status?: string | null
+        }
+        Relationships: []
+      }
+      shadow_settlements: {
+        Row: {
+          actual_payout_tokens: number | null
+          actual_status: string | null
+          bet_slip_id: string
+          created_at: string
+          delta_tokens: number | null
+          id: string
+          notes: string | null
+          shadow_payout_tokens: number | null
+          shadow_run_id: string
+          shadow_status: string | null
+          tournament_id: string
+          user_id: string
+        }
+        Insert: {
+          actual_payout_tokens?: number | null
+          actual_status?: string | null
+          bet_slip_id: string
+          created_at?: string
+          delta_tokens?: number | null
+          id?: string
+          notes?: string | null
+          shadow_payout_tokens?: number | null
+          shadow_run_id: string
+          shadow_status?: string | null
+          tournament_id: string
+          user_id: string
+        }
+        Update: {
+          actual_payout_tokens?: number | null
+          actual_status?: string | null
+          bet_slip_id?: string
+          created_at?: string
+          delta_tokens?: number | null
+          id?: string
+          notes?: string | null
+          shadow_payout_tokens?: number | null
+          shadow_run_id?: string
+          shadow_status?: string | null
+          tournament_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       system_events: {
         Row: {
           created_at: string
