@@ -16,13 +16,20 @@ import { Badge } from '@/components/ui/badge';
 
 // Base token packs (before any discount)
 // Base tokens = price × 100 (1 token = 1 cent)
+//
+// 2026-05-07: Conservative bonus restructure based on prediction-market industry research.
+// Previous structure (pre-2026-05-07):
+//   Mini 0%, Starter 0%, Standard +25%, Pro +50%, Elite +75%, Whale +100% ($500/100k tokens)
+// New structure (current):
+//   Mini 0%, Starter 0%, Standard +10%, Pro +20%, Elite +30%. Whale tier REMOVED.
+// Whale Stripe product (price_1TSfJACpRLHrrx2GTutaIJK7) intentionally NOT deleted —
+// preserved for transaction history / audit trail. No retroactive change to existing wallets.
 const BASE_TOKEN_PACKS = [
   { name: 'Mini', price: 10, baseTokens: 1000, baseBonus: 0, popular: false, priceId: 'price_1TSfAECpRLHrrx2GWf2ovF8F' },
   { name: 'Starter', price: 25, baseTokens: 2500, baseBonus: 0, popular: false, priceId: 'price_1SkYKkCpRLHrrx2GRXBgdwXG' },
-  { name: 'Standard', price: 50, baseTokens: 5000, baseBonus: 25, popular: true, priceId: 'price_1SkYLACpRLHrrx2GDI8vkP3G' },
-  { name: 'Pro', price: 100, baseTokens: 10000, baseBonus: 50, popular: false, priceId: 'price_1SkYM0CpRLHrrx2GCwCNySQs' },
-  { name: 'Elite', price: 250, baseTokens: 25000, baseBonus: 75, popular: false, priceId: 'price_1SkYMCCpRLHrrx2GQ6lHCyxS' },
-  { name: 'Whale', price: 500, baseTokens: 50000, baseBonus: 100, popular: false, priceId: 'price_1TSfJACpRLHrrx2GTutaIJK7' },
+  { name: 'Standard', price: 50, baseTokens: 5000, baseBonus: 10, popular: true, priceId: 'price_1SkYLACpRLHrrx2GDI8vkP3G' },
+  { name: 'Pro', price: 100, baseTokens: 10000, baseBonus: 20, popular: false, priceId: 'price_1SkYM0CpRLHrrx2GCwCNySQs' },
+  { name: 'Elite', price: 250, baseTokens: 25000, baseBonus: 30, popular: false, priceId: 'price_1SkYMCCpRLHrrx2GQ6lHCyxS' },
 ];
 
 interface ReferralCodeInfo {
