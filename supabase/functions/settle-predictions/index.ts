@@ -672,6 +672,7 @@ Deno.serve(async (req) => {
                 reference_id: prediction.id,
                 settlement_run_id: settlementRunId,
                 description: `Lost prediction on ${prediction.athlete_name} (${prediction.discipline}) - Lost ${prediction.staked_tokens} tokens`,
+                affects_wallet: false,
                 metadata: {
                   tournament_name: prediction.tournament_name,
                   athlete_name: prediction.athlete_name,
@@ -968,6 +969,7 @@ Deno.serve(async (req) => {
                     reference_id: slip.id,
                     settlement_run_id: settlementRunId,
                     description: `Lost ${slip.leg_count}-leg parlay (${athleteNames}) - Lost ${slip.total_stake_tokens} tokens`,
+                    affects_wallet: false,
                     metadata: {
                       entry_type: 'parlay',
                       leg_count: slip.leg_count,
