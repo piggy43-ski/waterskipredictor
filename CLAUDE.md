@@ -9,23 +9,11 @@ The synthetic shadow analysis script joins predictions.selection_id → selectio
 
 Fix when next running shadow analysis: branch on market_type='PODIUM' with composite selection_id and recompute via calculatePodiumCombinedMultiplier(r1, r2, r3) × 2, capped at MAX_PODIUM_COMBINED_MULTIPLIER (currently 25). Production engine and rank data are correct; this is a script limitation only.
 
-## Known Issue — prediction_lost ledger semantics (logged 2026-05-04)
+## RESOLVED 2026-05-07 — prediction_lost ledger semantics
+Diagnosis: cosmetic ledger only (Scenario 2). `prediction_lost` rows do NOT decrement `token_wallets`; the stake was already debited at `entry_placed`. Users were never overcharged. Resolution: added `affects_wallet boolean` column to `token_transactions` (default true). All 203 historical `prediction_lost` rows backfilled to `affects_wallet=false`. New writes from `settle-predictions` (single L666 + parlay L962) include `affects_wallet: false`. View `v_wallet_ledger` (security_invoker) filters to wallet-affecting rows only — use it for reconciliation.
 
-`prediction_lost` rows in `token_transactions` carry real negative amounts (-1 to -1000), totaling -21,397 across 176 rows. Same pattern for legacy `bet_lost` (-2,102 / 27 rows). The Step 1 audit assumed losses don't debit the wallet because the stake was taken at entry. That assumption is wrong or incomplete.
-
-Two possibilities:
-- Real debits → users charged twice when they lose. House gains. User-trust risk.
-- Cosmetic-only → ledger lies about wallet movements. Reconciliation is wrong.
-
-Investigation needed: trace settle-predictions L637 and L849, cross-check against historical token_wallets balances for 5 sample users with prediction_lost rows. Must be resolved before public launch.
-
-## Known Issue — 16 prediction_won rows with null reference_id (logged 2026-05-05)
-16 token_transactions rows from batch dated 2026-05-03 23:39:16 carry type='prediction_won' and reference_type='tournament_settlement' with reference_id=NULL. Created by an aggregate tournament-settlement payout, not per-slip crediting. Audit trail incomplete — wallet credits exist but cannot be linked back to specific predictions.
-
-Pre-existing (not caused by 4C migration). Investigate jointly with prediction_lost ledger semantics finding. Consider:
-- Should these reference settlement_run_id instead of reference_id?
-- Was this a one-time aggregate fix, or does the producing code path still run?
-- Backfill correct reference_ids if recoverable from audit_logs.
+## RESOLVED 2026-05-07 — 16 prediction_won rows with null reference_id (logged 2026-05-05)
+Backfilled with tournament reference and `backfilled` metadata flag. Source identified: aggregate catch-up payout from 2026-05-03 23:39 UTC for Swiss Pro Slalom (tournament `76329f1b-a36d-4232-b1f8-5ced4484fd4d`). Producer code no longer exists in codebase. 13/16 rows match per-user WON slip totals exactly; 3/16 are partial catch-ups (flagged in metadata.backfill_note). All 16 carry `affects_wallet=true` (real wallet credits).
 
 ## Manual Audit Required — Stripe Dashboard (logged 2026-05-04)
 Product names, descriptions, and price metadata live in the Stripe dashboard, not in the codebase. Receipts emailed to paying users render these strings verbatim. Audit and clean before public launch:
