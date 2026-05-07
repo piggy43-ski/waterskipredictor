@@ -2705,6 +2705,7 @@ export type Database = {
       }
       token_transactions: {
         Row: {
+          affects_wallet: boolean
           amount: number
           balance_after: number
           counterparty: string | null
@@ -2725,6 +2726,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          affects_wallet?: boolean
           amount: number
           balance_after: number
           counterparty?: string | null
@@ -2745,6 +2747,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          affects_wallet?: boolean
           amount?: number
           balance_after?: number
           counterparty?: string | null
@@ -3139,6 +3142,87 @@ export type Database = {
             columns: ["market_id"]
             isOneToOne: false
             referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_wallet_ledger: {
+        Row: {
+          affects_wallet: boolean | null
+          amount: number | null
+          balance_after: number | null
+          counterparty: string | null
+          created_at: string | null
+          description: string | null
+          fantasy_entry_id: string | null
+          id: string | null
+          metadata: Json | null
+          reference_id: string | null
+          reference_type: string | null
+          settlement_batch_id: string | null
+          settlement_run_id: string | null
+          source_id: string | null
+          source_type: string | null
+          tournament_id: string | null
+          transaction_status: string | null
+          type: string | null
+          user_id: string | null
+        }
+        Insert: {
+          affects_wallet?: boolean | null
+          amount?: number | null
+          balance_after?: number | null
+          counterparty?: string | null
+          created_at?: string | null
+          description?: string | null
+          fantasy_entry_id?: string | null
+          id?: string | null
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          settlement_batch_id?: string | null
+          settlement_run_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          tournament_id?: string | null
+          transaction_status?: string | null
+          type?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          affects_wallet?: boolean | null
+          amount?: number | null
+          balance_after?: number | null
+          counterparty?: string | null
+          created_at?: string | null
+          description?: string | null
+          fantasy_entry_id?: string | null
+          id?: string | null
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          settlement_batch_id?: string | null
+          settlement_run_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          tournament_id?: string | null
+          transaction_status?: string | null
+          type?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_transactions_fantasy_entry_id_fkey"
+            columns: ["fantasy_entry_id"]
+            isOneToOne: false
+            referencedRelation: "fantasy_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "token_transactions_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
             referencedColumns: ["id"]
           },
         ]
