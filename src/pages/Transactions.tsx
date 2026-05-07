@@ -25,6 +25,7 @@ interface Transaction {
   description: string;
   metadata?: any;
   reference_type?: string | null;
+  affects_wallet?: boolean;
   created_at: string;
 }
 
@@ -61,7 +62,7 @@ const Transactions = () => {
 
     const { data, error } = await supabase
       .from('token_transactions')
-      .select('id, type, amount, balance_after, description, metadata, reference_type, created_at')
+      .select('id, type, amount, balance_after, description, metadata, reference_type, affects_wallet, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(500);
@@ -385,35 +386,60 @@ const Transactions = () => {
         ) : (
           <div className="space-y-3">
             {filteredTransactions.map((transaction) => (
-              <Card key={transaction.id} className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 flex-1">
-                    <div className="mt-1 text-muted-foreground">
-                      {getTypeIcon(transaction.type, transaction.reference_type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        {getTypeBadge(transaction.type, transaction.reference_type)}
+              {(() => {
+                const isAuditMarker =
+                  transaction.affects_wallet === false ||
+                  transaction.type === 'prediction_lost' ||
+                  transaction.type === 'bet_lost';
+                return (
+                  <Card key={transaction.id} className={cn('p-4', isAuditMarker && 'bg-muted/30')}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className="mt-1 text-muted-foreground">
+                          {isAuditMarker ? (
+                            <TrendingDown className="w-5 h-5" />
+                          ) : (
+                            getTypeIcon(transaction.type, transaction.reference_type)
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            {isAuditMarker ? (
+                              <Badge variant="outline" className="text-xs">Result: Lost</Badge>
+                            ) : (
+                              getTypeBadge(transaction.type, transaction.reference_type)
+                            )}
+                          </div>
+                          <p className="text-sm font-medium text-foreground mb-1">
+                            {transaction.description}
+                          </p>
+                          {isAuditMarker && (
+                            <p className="text-xs text-muted-foreground italic mb-1">
+                              No charge — your stake was held when you placed the entry.
+                            </p>
+                          )}
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span>
+                              Balance: {transaction.balance_after.toLocaleString()} tokens
+                            </span>
+                            <span>•</span>
+                            <span>
+                              {format(new Date(transaction.created_at), 'MMM d, yyyy h:mm a')}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-sm font-medium text-foreground mb-1">
-                        {transaction.description}
-                      </p>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>
-                          Balance: {transaction.balance_after.toLocaleString()} tokens
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {format(new Date(transaction.created_at), 'MMM d, yyyy h:mm a')}
-                        </span>
-                      </div>
+                      {isAuditMarker ? (
+                        <div className="text-right text-sm text-muted-foreground font-medium">—</div>
+                      ) : (
+                        <div className={`text-right font-bold text-lg ${getAmountColor(transaction.amount)}`}>
+                          {formatAmount(transaction.amount)}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <div className={`text-right font-bold text-lg ${getAmountColor(transaction.amount)}`}>
-                    {formatAmount(transaction.amount)}
-                  </div>
-                </div>
-              </Card>
+                  </Card>
+                );
+              })()
             ))}
           </div>
         )}
