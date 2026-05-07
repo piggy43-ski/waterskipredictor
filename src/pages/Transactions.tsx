@@ -386,7 +386,7 @@ const Transactions = () => {
         ) : (
           <div className="space-y-3">
             {filteredTransactions.map((transaction) => (
-              {(() => {
+              (() => {
                 const isAuditMarker =
                   transaction.affects_wallet === false ||
                   transaction.type === 'prediction_lost' ||
