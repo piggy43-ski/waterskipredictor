@@ -15,6 +15,17 @@ Diagnosis: cosmetic ledger only (Scenario 2). `prediction_lost` rows do NOT decr
 ## RESOLVED 2026-05-07 — 16 prediction_won rows with null reference_id (logged 2026-05-05)
 Backfilled with tournament reference and `backfilled` metadata flag. Source identified: aggregate catch-up payout from 2026-05-03 23:39 UTC for Swiss Pro Slalom (tournament `76329f1b-a36d-4232-b1f8-5ced4484fd4d`). Producer code no longer exists in codebase. 13/16 rows match per-user WON slip totals exactly; 3/16 are partial catch-ups (flagged in metadata.backfill_note). All 16 carry `affects_wallet=true` (real wallet credits).
 
+## RESOLVED 2026-05-07 — May 3 catch-up wallet bug
+Root cause: On 2026-05-03 23:39 UTC, a manual catch-up payout for Swiss Pro Slalom was performed via raw SQL inserts into `token_transactions` WITHOUT corresponding `token_wallets` UPDATEs. The ledger showed 16 `prediction_won` rows totaling 42,283 tokens (~$422.83), but no money reached the wallets.
+
+Discovery: User Max Strilchuk reported missing 3,400 tokens via Instagram on 2026-05-07. Audit identified all 16 affected users (every catch-up row had `catchup_balance_after == prior_balance_after`, confirming wallet was never bumped).
+
+Fix: Single atomic CTE statement on 2026-05-07 incremented all 16 affected wallets and inserted matching `adjustment` audit rows with `reference_type='admin'` and `metadata.correction_type='may_3_catchup_wallet_apply'`. Total corrected: 42,283 tokens / $422.83. Pre-snapshot total balance across 16 users: 33,715. Post: 75,998 (delta 42,283 ✓).
+
+Affected users (in order of amount): Samson Clunie 10000, BallOfSpray 8500, Mati González 5300, piggy43 3750, Max 3400, Boatntony 2950, Jakechambers 1931, hannahstopnicki 1530, WaterskiNation 1400, Tincholabra 840, Conleypinette 571, Jbolan 571, Pinner69 560, Jacobsen916 420, CamiPhoto 280, Bsmogard 280.
+
+Lesson learned: any future ledger insert that should affect a wallet MUST go through a single code path that updates both atomically. Manual SQL bypasses are forbidden going forward.
+
 ## Manual Audit Required — Stripe Dashboard (logged 2026-05-04)
 Product names, descriptions, and price metadata live in the Stripe dashboard, not in the codebase. Receipts emailed to paying users render these strings verbatim. Audit and clean before public launch:
 - Stripe Dashboard → Products → every product name + description
