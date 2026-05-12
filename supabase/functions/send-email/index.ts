@@ -7,7 +7,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-type EmailType = "welcome" | "entry_confirmation" | "prediction_result" | "redemption_receipt";
+type EmailType =
+  | "welcome"
+  | "entry_confirmation"
+  | "prediction_result"
+  | "redemption_receipt"
+  | "redemption_confirmation"
+  | "redemption_shipped"
+  | "redemption_fulfilled"
+  | "redemption_cancelled";
 
 interface EmailRequest {
   type: EmailType;
