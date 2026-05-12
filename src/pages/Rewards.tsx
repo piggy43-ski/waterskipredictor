@@ -461,49 +461,29 @@ const Rewards = () => {
             </div>
           </Card>
         ) : (
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList className="w-full grid grid-cols-4 mb-6">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="coaching">Coaching</TabsTrigger>
-              <TabsTrigger value="gear">Gear</TabsTrigger>
-              <TabsTrigger value="experience">VIP</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="all" className="space-y-4">
-              {rewards.map((reward) => (
-                <RewardCard key={reward.id} reward={reward} />
-              ))}
-            </TabsContent>
-
-            <TabsContent value="coaching" className="space-y-4">
-              {categories.coaching.map((reward) => (
-                <RewardCard key={reward.id} reward={reward} />
-              ))}
-            </TabsContent>
-
-            <TabsContent value="gear" className="space-y-4">
-              {categories.gear.map((reward) => (
-                <RewardCard key={reward.id} reward={reward} />
-              ))}
-            </TabsContent>
-
-            <TabsContent value="experience" className="space-y-4">
-              <Card className="p-8 bg-gradient-card border-border/50 text-center">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Sparkles className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2">VIP Experiences</h3>
-                    <Badge variant="secondary" className="mb-3">Coming Soon</Badge>
-                    <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-                      More rewards are coming soon. Keep earning tokens!
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          <div className="space-y-8">
+            <CatalogSection
+              title="Gear"
+              subtitle="PIGOSKI gloves — built for the line"
+              icon={ShoppingBag}
+              items={sections.gear}
+              renderCard={(r) => <RewardCard key={r.id} reward={r} />}
+            />
+            <CatalogSection
+              title="Store Credit"
+              subtitle="Spend anywhere in the PIGOSKI catalog"
+              icon={Gift}
+              items={sections.store_credit}
+              renderCard={(r) => <RewardCard key={r.id} reward={r} />}
+            />
+            <CatalogSection
+              title="Elite Tier · Skis"
+              subtitle="Shortline · Season-Long Grind"
+              icon={Trophy}
+              items={sections.elite_skis}
+              renderCard={(r) => <RewardCard key={r.id} reward={r} />}
+            />
+          </div>
         )}
       </div>
 
