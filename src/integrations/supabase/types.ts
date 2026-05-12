@@ -2227,29 +2227,53 @@ export type Database = {
       }
       redemptions: {
         Row: {
+          carrier: string | null
           created_at: string
+          estimated_arrival_date: string | null
           id: string
+          order_reference: string | null
           reward_id: string
+          shopify_gift_card_id: string | null
+          shopify_order_id: string | null
+          shopify_order_url: string | null
           status: string
+          supplier: string | null
           tokens_spent: number
+          tracking_number: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          carrier?: string | null
           created_at?: string
+          estimated_arrival_date?: string | null
           id?: string
+          order_reference?: string | null
           reward_id: string
+          shopify_gift_card_id?: string | null
+          shopify_order_id?: string | null
+          shopify_order_url?: string | null
           status?: string
+          supplier?: string | null
           tokens_spent: number
+          tracking_number?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          carrier?: string | null
           created_at?: string
+          estimated_arrival_date?: string | null
           id?: string
+          order_reference?: string | null
           reward_id?: string
+          shopify_gift_card_id?: string | null
+          shopify_order_id?: string | null
+          shopify_order_url?: string | null
           status?: string
+          supplier?: string | null
           tokens_spent?: number
+          tracking_number?: string | null
           updated_at?: string
           user_id?: string
         }
