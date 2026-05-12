@@ -2227,12 +2227,24 @@ export type Database = {
       }
       redemptions: {
         Row: {
+          cancellation_reason: string | null
+          cancelled_at: string | null
           carrier: string | null
           created_at: string
           estimated_arrival_date: string | null
+          fulfillment_status: string
+          gift_card_email: string | null
+          glove_size: string | null
           id: string
           order_reference: string | null
           reward_id: string
+          shipping_address_line1: string | null
+          shipping_address_line2: string | null
+          shipping_city: string | null
+          shipping_name: string | null
+          shipping_phone: string | null
+          shipping_state: string | null
+          shipping_zip: string | null
           shopify_gift_card_id: string | null
           shopify_order_id: string | null
           shopify_order_url: string | null
@@ -2244,12 +2256,24 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
           carrier?: string | null
           created_at?: string
           estimated_arrival_date?: string | null
+          fulfillment_status?: string
+          gift_card_email?: string | null
+          glove_size?: string | null
           id?: string
           order_reference?: string | null
           reward_id: string
+          shipping_address_line1?: string | null
+          shipping_address_line2?: string | null
+          shipping_city?: string | null
+          shipping_name?: string | null
+          shipping_phone?: string | null
+          shipping_state?: string | null
+          shipping_zip?: string | null
           shopify_gift_card_id?: string | null
           shopify_order_id?: string | null
           shopify_order_url?: string | null
@@ -2261,12 +2285,24 @@ export type Database = {
           user_id: string
         }
         Update: {
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
           carrier?: string | null
           created_at?: string
           estimated_arrival_date?: string | null
+          fulfillment_status?: string
+          gift_card_email?: string | null
+          glove_size?: string | null
           id?: string
           order_reference?: string | null
           reward_id?: string
+          shipping_address_line1?: string | null
+          shipping_address_line2?: string | null
+          shipping_city?: string | null
+          shipping_name?: string | null
+          shipping_phone?: string | null
+          shipping_state?: string | null
+          shipping_zip?: string | null
           shopify_gift_card_id?: string | null
           shopify_order_id?: string | null
           shopify_order_url?: string | null
@@ -3285,6 +3321,14 @@ export type Database = {
       }
       is_pot_public: { Args: { _pot_id: string }; Returns: boolean }
       rebuild_market_liability: { Args: never; Returns: undefined }
+      refund_redemption: {
+        Args: { p_reason: string; p_redemption_id: string }
+        Returns: {
+          new_status: string
+          refunded_tokens: number
+          success: boolean
+        }[]
+      }
       reverse_settlement: {
         Args: {
           p_actor_id?: string

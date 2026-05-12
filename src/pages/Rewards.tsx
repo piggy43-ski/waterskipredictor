@@ -11,14 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { useWallet } from '@/hooks/useWallet';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { RedemptionFormDialog, RedemptionFormData } from '@/components/RedemptionFormDialog';
 
 type Reward = {
   id: string;
@@ -217,12 +210,15 @@ const Rewards = () => {
     setSelectedReward(reward);
   };
 
-  const handleConfirmRedeem = async () => {
+  const handleConfirmRedeem = async (formData: RedemptionFormData) => {
     if (!user || !selectedReward || isRedeeming) return;
 
     setIsRedeeming(true);
 
     try {
+      const fulfillmentStatus =
+        selectedReward.category === 'elite_skis' ? 'concierge_review' : 'pending_fulfillment';
+
       // Create redemption record
       const { data: redemptionData, error: redemptionError } = await supabase
         .from('redemptions')
@@ -230,7 +226,17 @@ const Rewards = () => {
           user_id: user.id,
           reward_id: selectedReward.id,
           tokens_spent: selectedReward.required_tokens,
-          status: 'pending'
+          status: 'pending',
+          fulfillment_status: fulfillmentStatus,
+          glove_size: formData.glove_size ?? null,
+          shipping_name: formData.shipping_name ?? null,
+          shipping_address_line1: formData.shipping_address_line1 ?? null,
+          shipping_address_line2: formData.shipping_address_line2 ?? null,
+          shipping_city: formData.shipping_city ?? null,
+          shipping_state: formData.shipping_state ?? null,
+          shipping_zip: formData.shipping_zip ?? null,
+          shipping_phone: formData.shipping_phone ?? null,
+          gift_card_email: formData.gift_card_email ?? null,
         })
         .select('id')
         .single();
@@ -278,28 +284,41 @@ const Rewards = () => {
         status: 'unfulfilled'
       });
 
-      // Send redemption receipt email
+      // Send branded redemption confirmation email
       try {
         await supabase.functions.invoke('send-email', {
           body: {
-            type: 'redemption_receipt',
+            type: 'redemption_confirmation',
             to: user.email,
             userId: user.id,
             data: {
+              username: (user.user_metadata as any)?.username || user.email?.split('@')[0] || 'Champion',
               rewardName: selectedReward.name,
               tokensSpent: selectedReward.required_tokens,
               redemptionId: redemptionData.id,
+              category: selectedReward.category,
+              shipping: formData.shipping_name ? {
+                shipping_name: formData.shipping_name,
+                shipping_address_line1: formData.shipping_address_line1,
+                shipping_address_line2: formData.shipping_address_line2 || '',
+                shipping_city: formData.shipping_city,
+                shipping_state: formData.shipping_state,
+                shipping_zip: formData.shipping_zip,
+                shipping_phone: formData.shipping_phone,
+              } : null,
+              gloveSize: formData.glove_size || null,
+              giftCardEmail: formData.gift_card_email || null,
             }
           }
         });
-        console.log('Redemption receipt email sent');
+        console.log('Redemption confirmation email sent');
       } catch (emailError) {
-        console.error('Failed to send redemption email:', emailError);
+        console.error('Failed to send redemption confirmation email:', emailError);
       }
 
       toast({
-        title: "Reward Redeemed!",
-        description: `${selectedReward.name} - Check your email for details`,
+        title: "Redemption confirmed",
+        description: `${selectedReward.name} — ID ${redemptionData.id.slice(0,8).toUpperCase()}`,
       });
 
       // Update local counts
@@ -532,100 +551,19 @@ const Rewards = () => {
         )}
       </div>
 
-      {/* Confirmation Modal */}
-      <Dialog open={!!selectedReward} onOpenChange={(open) => !open && !isRedeeming && setSelectedReward(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirm Reward Redemption</DialogTitle>
-            <DialogDescription>
-              Your reward request will be received. Fulfillment times vary by reward.
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedReward && (
-            <div className="space-y-4 py-4">
-              {/* Reward Info */}
-              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
-                  {selectedReward.image_url ? (
-                    <img 
-                      src={selectedReward.image_url} 
-                      alt={selectedReward.name} 
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    (() => {
-                      const Icon = getCategoryIcon(selectedReward.category);
-                      return <Icon className="w-6 h-6 text-primary" />;
-                    })()
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-semibold">{selectedReward.name}</h4>
-                  <Badge variant="outline" className="text-xs capitalize mt-1">
-                    {selectedReward.category}
-                  </Badge>
-                  <p className="text-sm text-muted-foreground">By {selectedReward.partner}</p>
-                </div>
-              </div>
-
-              {/* Token breakdown */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Cost</span>
-                  <div className="flex items-center gap-2">
-                    <Coins className="w-4 h-4 text-primary" />
-                    <span className="font-semibold text-red-600">
-                      -{selectedReward.required_tokens.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Current Balance</span>
-                  <div className="flex items-center gap-2">
-                    <Coins className="w-4 h-4 text-primary" />
-                    <span className="font-semibold">{walletBalance.toLocaleString()}</span>
-                  </div>
-                </div>
-                
-                <div className="border-t pt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Balance After</span>
-                    <div className="flex items-center gap-2">
-                      <Coins className="w-4 h-4 text-primary" />
-                      <span className="font-bold text-lg">{balanceAfterRedeem.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button 
-              variant="outline" 
-              onClick={() => setSelectedReward(null)}
-              disabled={isRedeeming}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleConfirmRedeem}
-              disabled={isRedeeming}
-            >
-              {isRedeeming ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Redeeming...
-                </>
-              ) : (
-                'Confirm Redeem'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {selectedReward && (
+        <RedemptionFormDialog
+          open={!!selectedReward}
+          onOpenChange={(open) => { if (!open) setSelectedReward(null); }}
+          rewardName={selectedReward.name}
+          rewardCategory={selectedReward.category}
+          requiredTokens={selectedReward.required_tokens}
+          walletBalance={walletBalance}
+          defaultEmail={user?.email || ''}
+          isSubmitting={isRedeeming}
+          onConfirm={handleConfirmRedeem}
+        />
+      )}
 
       <BottomNav />
     </div>
