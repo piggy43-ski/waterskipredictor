@@ -36,6 +36,51 @@ type Reward = {
   usd_cost: number | null;
 };
 
+type SectionProps = {
+  title: string;
+  subtitle: string;
+  icon: React.ComponentType<{ className?: string }>;
+  items: Reward[];
+  renderCard: (r: Reward) => React.ReactNode;
+};
+
+const CatalogSection = ({ title, subtitle, icon: Icon, items, renderCard }: SectionProps) => (
+  <section className="space-y-3">
+    <div className="flex items-center gap-3">
+      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+        <Icon className="w-5 h-5 text-primary" />
+      </div>
+      <div>
+        <h2 className="font-bold tracking-tight uppercase text-sm">{title}</h2>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+    </div>
+    {items.length === 0 ? (
+      <Card className="p-6 bg-gradient-card border-border/50 text-center">
+        <p className="text-sm text-muted-foreground">Nothing in this vault yet — keep earning.</p>
+      </Card>
+    ) : (
+      <div className="space-y-3">{items.map(renderCard)}</div>
+    )}
+  </section>
+);
+
+type _RewardLegacyPlaceholder = {
+  id: string;
+  name: string;
+  description: string;
+  required_tokens: number;
+  partner: string;
+  category: 'coaching' | 'gear' | 'experience' | 'store_credit' | 'elite_skis';
+  tier: 'ENTRY' | 'MID' | 'PRO' | 'ELITE' | null;
+  sort_order: number;
+  image_url: string | null;
+  max_total: number | null;
+  max_per_user: number | null;
+  fulfillment_type: string | null;
+  usd_cost: number | null;
+};
+
 const Rewards = () => {
   const { toast } = useToast();
   const { user } = useAuth();
