@@ -302,6 +302,147 @@ function generateRedemptionReceiptEmail(data: {
 </html>`;
 }
 
+// ============================================================
+// Phase-1 redemption workflow email templates (dark mode)
+// Voice: redeem / unlock / vault. Never purchase / buy.
+// ============================================================
+
+const BRAND_HEADER = `
+    <div style="text-align: center; margin-bottom: 32px;">
+      <span style="font-size: 28px; font-weight: bold; color: #3b82f6;">🎿 Waterski Predictor</span>
+    </div>`;
+
+const BRAND_FOOTER = `
+    <div style="color: #6b7280; font-size: 13px; line-height: 22px; margin-top: 40px; text-align: center; border-top: 1px solid #374151; padding-top: 24px;">
+      Waterski Predictor — Predict. Earn. Redeem.<br/>
+      Questions? Reply to this email and Robert will follow up.
+    </div>`;
+
+function emailShell(inner: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0;">
+  <div style="max-width: 560px; margin: 0 auto; padding: 40px 20px;">${BRAND_HEADER}${inner}${BRAND_FOOTER}</div>
+</body></html>`;
+}
+
+function generateRedemptionConfirmationEmail(data: {
+  username: string; rewardName: string; tokensSpent: number; redemptionId: string;
+  category: string; shipping: any; gloveSize: string | null; giftCardEmail: string | null; appUrl: string;
+}): string {
+  const isElite = data.category === 'elite_skis';
+  const isStoreCredit = data.category === 'store_credit';
+  const isGear = data.category === 'gear';
+
+  let detailsBlock = '';
+  if (isGear && data.shipping) {
+    const s = data.shipping;
+    detailsBlock = `
+      <div style="border-top: 1px solid #374151; margin: 16px 0;"></div>
+      <p style="color: #9ca3af; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px;">Shipping to</p>
+      <p style="color: #ffffff; font-size: 14px; line-height: 22px; margin: 0;">
+        ${s.shipping_name}<br/>
+        ${s.shipping_address_line1}${s.shipping_address_line2 ? '<br/>' + s.shipping_address_line2 : ''}<br/>
+        ${s.shipping_city}, ${s.shipping_state} ${s.shipping_zip}<br/>
+        ${s.shipping_phone}
+      </p>
+      ${data.gloveSize ? `<p style="color: #9ca3af; font-size: 14px; margin: 12px 0 0;">Glove size: <strong style="color:#fff">${data.gloveSize}</strong></p>` : ''}
+      <p style="color: #9ca3af; font-size: 13px; margin: 16px 0 0;">Free US shipping. Allow 5–10 business days.</p>`;
+  } else if (isStoreCredit) {
+    detailsBlock = `
+      <div style="border-top: 1px solid #374151; margin: 16px 0;"></div>
+      <p style="color: #9ca3af; font-size: 14px; margin: 0;">Digital gift card delivery email:</p>
+      <p style="color: #ffffff; font-size: 14px; margin: 4px 0 12px;"><strong>${data.giftCardEmail}</strong></p>
+      <p style="color: #9ca3af; font-size: 13px; margin: 0;">Your gift card code arrives within 24 hours.</p>`;
+  } else if (isElite) {
+    detailsBlock = `
+      <div style="border-top: 1px solid #374151; margin: 16px 0;"></div>
+      <p style="color: #d1d5db; font-size: 14px; line-height: 22px; margin: 0;">
+        Elite tier redemption confirmed. Robert will contact you within 48 hours to confirm specs and arrange delivery. Your tokens are reserved.
+      </p>`;
+  }
+
+  return emailShell(`
+    <p style="font-size: 48px; text-align: center; margin: 0 0 8px;">🔓</p>
+    <h1 style="color: #ffffff; font-size: 26px; font-weight: bold; text-align: center; margin: 0 0 24px;">Redemption confirmed</h1>
+    <p style="color: #d1d5db; font-size: 16px; line-height: 24px; margin: 16px 0; text-align: center;">
+      Thanks ${data.username} — your <strong>${data.rewardName}</strong> redemption is locked in.
+    </p>
+    <div style="background-color: #1f2937; border-radius: 12px; padding: 24px; margin: 24px 0;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Reward</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.rewardName}</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Tokens redeemed</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.tokensSpent.toLocaleString()}</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Redemption ID</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.redemptionId.slice(0,8).toUpperCase()}</td></tr>
+      </table>
+      ${detailsBlock}
+    </div>
+  `);
+}
+
+function generateRedemptionShippedEmail(data: {
+  username: string; rewardName: string; trackingNumber: string; carrier: string; redemptionId: string; appUrl: string;
+}): string {
+  const trackUrl = data.carrier && data.trackingNumber
+    ? `https://www.google.com/search?q=${encodeURIComponent(data.carrier + ' tracking ' + data.trackingNumber)}`
+    : null;
+  return emailShell(`
+    <p style="font-size: 48px; text-align: center; margin: 0 0 8px;">📦</p>
+    <h1 style="color: #ffffff; font-size: 26px; font-weight: bold; text-align: center; margin: 0 0 24px;">Your reward is on the way</h1>
+    <p style="color: #d1d5db; font-size: 16px; line-height: 24px; margin: 16px 0; text-align: center;">
+      Hey ${data.username}, your <strong>${data.rewardName}</strong> just shipped.
+    </p>
+    <div style="background-color: #1f2937; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+      <p style="color: #9ca3af; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px;">${data.carrier || 'Carrier'}</p>
+      <p style="color: #ffffff; font-size: 22px; font-weight: bold; font-family: monospace; margin: 0;">${data.trackingNumber || '—'}</p>
+    </div>
+    ${trackUrl ? `<div style="text-align: center; margin: 24px 0;">
+      <a href="${trackUrl}" style="background-color: #3b82f6; border-radius: 8px; color: #ffffff; font-size: 16px; font-weight: bold; text-decoration: none; padding: 14px 28px; display: inline-block;">Track Package</a>
+    </div>` : ''}
+  `);
+}
+
+function generateRedemptionFulfilledEmail(data: {
+  username: string; rewardName: string; giftCardCode: string | null; redemptionId: string; appUrl: string;
+}): string {
+  return emailShell(`
+    <p style="font-size: 48px; text-align: center; margin: 0 0 8px;">✅</p>
+    <h1 style="color: #ffffff; font-size: 26px; font-weight: bold; text-align: center; margin: 0 0 24px;">Redemption fulfilled</h1>
+    <p style="color: #d1d5db; font-size: 16px; line-height: 24px; margin: 16px 0; text-align: center;">
+      ${data.username}, your <strong>${data.rewardName}</strong> has been fulfilled.
+    </p>
+    ${data.giftCardCode ? `
+    <div style="background-color: #14532d; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+      <p style="color: rgba(255,255,255,0.7); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px;">Your gift card code</p>
+      <p style="color: #ffffff; font-size: 24px; font-weight: bold; font-family: monospace; letter-spacing: 2px; margin: 0;">${data.giftCardCode}</p>
+      <p style="color: rgba(255,255,255,0.6); font-size: 13px; margin: 16px 0 0;">Redeem at PIGOSKI checkout.</p>
+    </div>` : `
+    <p style="color: #9ca3af; font-size: 14px; text-align: center; margin: 16px 0;">
+      Enjoy your gear — and tag @waterskipredictor when you ride.
+    </p>`}
+  `);
+}
+
+function generateRedemptionCancelledEmail(data: {
+  username: string; rewardName: string; tokensRefunded: number; reason: string; redemptionId: string; appUrl: string;
+}): string {
+  return emailShell(`
+    <p style="font-size: 48px; text-align: center; margin: 0 0 8px;">↩️</p>
+    <h1 style="color: #ffffff; font-size: 26px; font-weight: bold; text-align: center; margin: 0 0 24px;">Redemption cancelled</h1>
+    <p style="color: #d1d5db; font-size: 16px; line-height: 24px; margin: 16px 0; text-align: center;">
+      ${data.username}, your <strong>${data.rewardName}</strong> redemption was cancelled and your tokens have been returned.
+    </p>
+    <div style="background-color: #1e3a5f; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+      <p style="color: rgba(255,255,255,0.7); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px;">Refunded to your vault</p>
+      <p style="color: #ffffff; font-size: 32px; font-weight: bold; margin: 0;">${data.tokensRefunded.toLocaleString()} tokens</p>
+    </div>
+    <p style="color: #9ca3af; font-size: 13px; line-height: 20px; margin: 16px 0; text-align: center;">
+      Reason: ${data.reason}
+    </p>
+    <div style="text-align: center; margin: 32px 0;">
+      <a href="${data.appUrl}/rewards" style="background-color: #3b82f6; border-radius: 8px; color: #ffffff; font-size: 16px; font-weight: bold; text-decoration: none; padding: 14px 28px; display: inline-block;">Browse Rewards</a>
+    </div>
+  `);
+}
+
 function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: string): { html: string; subject: string } {
   switch (type) {
     case "welcome":
