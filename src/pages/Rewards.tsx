@@ -11,14 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { useWallet } from '@/hooks/useWallet';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { RedemptionFormDialog, RedemptionFormData } from '@/components/RedemptionFormDialog';
 
 type Reward = {
   id: string;
@@ -217,12 +210,15 @@ const Rewards = () => {
     setSelectedReward(reward);
   };
 
-  const handleConfirmRedeem = async () => {
+  const handleConfirmRedeem = async (formData: RedemptionFormData) => {
     if (!user || !selectedReward || isRedeeming) return;
 
     setIsRedeeming(true);
 
     try {
+      const fulfillmentStatus =
+        selectedReward.category === 'elite_skis' ? 'concierge_review' : 'pending_fulfillment';
+
       // Create redemption record
       const { data: redemptionData, error: redemptionError } = await supabase
         .from('redemptions')
@@ -230,7 +226,17 @@ const Rewards = () => {
           user_id: user.id,
           reward_id: selectedReward.id,
           tokens_spent: selectedReward.required_tokens,
-          status: 'pending'
+          status: 'pending',
+          fulfillment_status: fulfillmentStatus,
+          glove_size: formData.glove_size ?? null,
+          shipping_name: formData.shipping_name ?? null,
+          shipping_address_line1: formData.shipping_address_line1 ?? null,
+          shipping_address_line2: formData.shipping_address_line2 ?? null,
+          shipping_city: formData.shipping_city ?? null,
+          shipping_state: formData.shipping_state ?? null,
+          shipping_zip: formData.shipping_zip ?? null,
+          shipping_phone: formData.shipping_phone ?? null,
+          gift_card_email: formData.gift_card_email ?? null,
         })
         .select('id')
         .single();
@@ -278,28 +284,41 @@ const Rewards = () => {
         status: 'unfulfilled'
       });
 
-      // Send redemption receipt email
+      // Send branded redemption confirmation email
       try {
         await supabase.functions.invoke('send-email', {
           body: {
-            type: 'redemption_receipt',
+            type: 'redemption_confirmation',
             to: user.email,
             userId: user.id,
             data: {
+              username: (user.user_metadata as any)?.username || user.email?.split('@')[0] || 'Champion',
               rewardName: selectedReward.name,
               tokensSpent: selectedReward.required_tokens,
               redemptionId: redemptionData.id,
+              category: selectedReward.category,
+              shipping: formData.shipping_name ? {
+                shipping_name: formData.shipping_name,
+                shipping_address_line1: formData.shipping_address_line1,
+                shipping_address_line2: formData.shipping_address_line2 || '',
+                shipping_city: formData.shipping_city,
+                shipping_state: formData.shipping_state,
+                shipping_zip: formData.shipping_zip,
+                shipping_phone: formData.shipping_phone,
+              } : null,
+              gloveSize: formData.glove_size || null,
+              giftCardEmail: formData.gift_card_email || null,
             }
           }
         });
-        console.log('Redemption receipt email sent');
+        console.log('Redemption confirmation email sent');
       } catch (emailError) {
-        console.error('Failed to send redemption email:', emailError);
+        console.error('Failed to send redemption confirmation email:', emailError);
       }
 
       toast({
-        title: "Reward Redeemed!",
-        description: `${selectedReward.name} - Check your email for details`,
+        title: "Redemption confirmed",
+        description: `${selectedReward.name} — ID ${redemptionData.id.slice(0,8).toUpperCase()}`,
       });
 
       // Update local counts
