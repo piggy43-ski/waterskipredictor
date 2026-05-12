@@ -8,9 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Package, User, DollarSign, Clock, Check, Truck, X, FileText } from 'lucide-react';
+import { Package, User, DollarSign, Clock, Check, Truck, X, FileText, Copy, ShoppingBag, Factory, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 
 type Liability = {
@@ -31,6 +33,7 @@ type Liability = {
 type RewardInfo = {
   id: string;
   name: string;
+  category?: string | null;
 };
 
 type UserInfo = {
@@ -60,8 +63,16 @@ export default function AdminLiabilities() {
   const [statusFilter, setStatusFilter] = useState('unfulfilled');
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectedLiability, setSelectedLiability] = useState<Liability | null>(null);
-  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+  const [fulfillDialogOpen, setFulfillDialogOpen] = useState(false);
   const [notesText, setNotesText] = useState('');
+  const [shopifyOrderId, setShopifyOrderId] = useState('');
+  const [shopifyOrderUrl, setShopifyOrderUrl] = useState('');
+  const [shopifyGiftCardId, setShopifyGiftCardId] = useState('');
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [carrier, setCarrier] = useState('');
+  const [supplier, setSupplier] = useState('');
+  const [orderReference, setOrderReference] = useState('');
+  const [estimatedArrival, setEstimatedArrival] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -94,7 +105,7 @@ export default function AdminLiabilities() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rewards')
-        .select('id, name');
+        .select('id, name, category');
       if (error) throw error;
       return data as RewardInfo[];
     },
