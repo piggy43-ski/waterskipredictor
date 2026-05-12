@@ -2436,6 +2436,8 @@ export type Database = {
           name: string
           partner: string
           required_tokens: number
+          sort_order: number
+          tier: string | null
           updated_at: string
           usd_cost: number | null
         }
@@ -2452,6 +2454,8 @@ export type Database = {
           name: string
           partner: string
           required_tokens: number
+          sort_order?: number
+          tier?: string | null
           updated_at?: string
           usd_cost?: number | null
         }
@@ -2468,6 +2472,8 @@ export type Database = {
           name?: string
           partner?: string
           required_tokens?: number
+          sort_order?: number
+          tier?: string | null
           updated_at?: string
           usd_cost?: number | null
         }
