@@ -360,7 +360,61 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
         }),
         subject: `🎁 Reward Redeemed: ${data.rewardName || 'Your Reward'}`,
       };
-    
+
+    case "redemption_confirmation":
+      return {
+        html: generateRedemptionConfirmationEmail({
+          username: data.username || "Champion",
+          rewardName: data.rewardName || "Reward",
+          tokensSpent: data.tokensSpent || 0,
+          redemptionId: data.redemptionId || "unknown",
+          category: data.category || "gear",
+          shipping: data.shipping || null,
+          gloveSize: data.gloveSize || null,
+          giftCardEmail: data.giftCardEmail || null,
+          appUrl,
+        }),
+        subject: `[Waterski Predictor] Redemption confirmed: ${data.rewardName || 'Your Reward'}`,
+      };
+
+    case "redemption_shipped":
+      return {
+        html: generateRedemptionShippedEmail({
+          username: data.username || "Champion",
+          rewardName: data.rewardName || "Reward",
+          trackingNumber: data.trackingNumber || "",
+          carrier: data.carrier || "",
+          redemptionId: data.redemptionId || "unknown",
+          appUrl,
+        }),
+        subject: `[Waterski Predictor] Your ${data.rewardName || 'reward'} has shipped`,
+      };
+
+    case "redemption_fulfilled":
+      return {
+        html: generateRedemptionFulfilledEmail({
+          username: data.username || "Champion",
+          rewardName: data.rewardName || "Reward",
+          giftCardCode: data.giftCardCode || null,
+          redemptionId: data.redemptionId || "unknown",
+          appUrl,
+        }),
+        subject: `[Waterski Predictor] Redemption fulfilled: ${data.rewardName || 'Your Reward'}`,
+      };
+
+    case "redemption_cancelled":
+      return {
+        html: generateRedemptionCancelledEmail({
+          username: data.username || "Champion",
+          rewardName: data.rewardName || "Reward",
+          tokensRefunded: data.tokensRefunded || 0,
+          reason: data.reason || "Cancelled by support",
+          redemptionId: data.redemptionId || "unknown",
+          appUrl,
+        }),
+        subject: `[Waterski Predictor] Redemption cancelled — tokens refunded`,
+      };
+
     default:
       throw new Error(`Unknown email type: ${type}`);
   }
