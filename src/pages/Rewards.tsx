@@ -4,7 +4,7 @@ import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Coins, Award, ShoppingBag, Sparkles, Loader2, Package, HelpCircle } from 'lucide-react';
+import { Coins, Award, ShoppingBag, Sparkles, Loader2, Package, HelpCircle, Gift, Trophy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,7 +26,54 @@ type Reward = {
   description: string;
   required_tokens: number;
   partner: string;
-  category: 'coaching' | 'gear' | 'experience';
+  category: 'coaching' | 'gear' | 'experience' | 'store_credit' | 'elite_skis';
+  tier: 'ENTRY' | 'MID' | 'PRO' | 'ELITE' | null;
+  sort_order: number;
+  image_url: string | null;
+  max_total: number | null;
+  max_per_user: number | null;
+  fulfillment_type: string | null;
+  usd_cost: number | null;
+};
+
+type SectionProps = {
+  title: string;
+  subtitle: string;
+  icon: React.ComponentType<{ className?: string }>;
+  items: Reward[];
+  renderCard: (r: Reward) => React.ReactNode;
+};
+
+const CatalogSection = ({ title, subtitle, icon: Icon, items, renderCard }: SectionProps) => (
+  <section className="space-y-3">
+    <div className="flex items-center gap-3">
+      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+        <Icon className="w-5 h-5 text-primary" />
+      </div>
+      <div>
+        <h2 className="font-bold tracking-tight uppercase text-sm">{title}</h2>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+    </div>
+    {items.length === 0 ? (
+      <Card className="p-6 bg-gradient-card border-border/50 text-center">
+        <p className="text-sm text-muted-foreground">Nothing in this vault yet — keep earning.</p>
+      </Card>
+    ) : (
+      <div className="space-y-3">{items.map(renderCard)}</div>
+    )}
+  </section>
+);
+
+type _RewardLegacyPlaceholder = {
+  id: string;
+  name: string;
+  description: string;
+  required_tokens: number;
+  partner: string;
+  category: 'coaching' | 'gear' | 'experience' | 'store_credit' | 'elite_skis';
+  tier: 'ENTRY' | 'MID' | 'PRO' | 'ELITE' | null;
+  sort_order: number;
   image_url: string | null;
   max_total: number | null;
   max_per_user: number | null;
@@ -62,7 +109,7 @@ const Rewards = () => {
         .from('rewards')
         .select('*')
         .eq('available', true)
-        .order('required_tokens', { ascending: true });
+        .order('sort_order', { ascending: true });
 
       if (error) throw error;
 
@@ -72,7 +119,9 @@ const Rewards = () => {
         description: r.description,
         required_tokens: r.required_tokens,
         partner: r.partner,
-        category: r.category as 'coaching' | 'gear' | 'experience',
+        category: r.category as Reward['category'],
+        tier: ((r as any).tier ?? null) as Reward['tier'],
+        sort_order: (r as any).sort_order ?? 0,
         image_url: r.image_url || null,
         max_total: r.max_total,
         max_per_user: r.max_per_user,
@@ -284,22 +333,30 @@ const Rewards = () => {
     }
   };
 
-  const categories = {
-    coaching: rewards.filter(r => r.category === 'coaching'),
+  const sections = {
     gear: rewards.filter(r => r.category === 'gear'),
-    experience: rewards.filter(r => r.category === 'experience'),
+    store_credit: rewards.filter(r => r.category === 'store_credit'),
+    elite_skis: rewards.filter(r => r.category === 'elite_skis'),
   };
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case 'coaching':
-        return Award;
-      case 'gear':
-        return ShoppingBag;
-      case 'experience':
-        return Sparkles;
-      default:
-        return Award;
+      case 'coaching': return Award;
+      case 'gear': return ShoppingBag;
+      case 'experience': return Sparkles;
+      case 'store_credit': return Gift;
+      case 'elite_skis': return Trophy;
+      default: return Award;
+    }
+  };
+
+  const tierLabel = (tier: Reward['tier']) => {
+    switch (tier) {
+      case 'ENTRY': return 'Entry Tier';
+      case 'MID': return 'Mid Tier';
+      case 'PRO': return 'Pro Tier';
+      case 'ELITE': return 'Elite Tier';
+      default: return null;
     }
   };
 
@@ -319,7 +376,9 @@ const Rewards = () => {
     let buttonText = 'Redeem';
     if (isSoldOut) buttonText = 'Sold Out';
     else if (isUserLimitReached) buttonText = 'Limit Reached';
-    else if (!canAfford) buttonText = 'Not Enough';
+    else if (!canAfford) buttonText = 'Locked';
+
+    const tLabel = tierLabel(reward.tier);
 
     return (
       <Card className="p-4 bg-gradient-card border-border/50">
@@ -341,9 +400,11 @@ const Rewards = () => {
               <div className="flex-1">
                 <h3 className="font-semibold mb-1">{reward.name}</h3>
                 <div className="flex flex-wrap gap-1 mb-2">
-                  <Badge variant="outline" className="text-xs capitalize">
-                    {reward.category}
-                  </Badge>
+                  {tLabel && (
+                    <Badge variant="outline" className="text-xs">
+                      {tLabel}
+                    </Badge>
+                  )}
                   {remainingStock !== null && (
                     <Badge 
                       variant={remainingStock === 0 ? "destructive" : "secondary"} 
@@ -445,49 +506,29 @@ const Rewards = () => {
             </div>
           </Card>
         ) : (
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList className="w-full grid grid-cols-4 mb-6">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="coaching">Coaching</TabsTrigger>
-              <TabsTrigger value="gear">Gear</TabsTrigger>
-              <TabsTrigger value="experience">VIP</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="all" className="space-y-4">
-              {rewards.map((reward) => (
-                <RewardCard key={reward.id} reward={reward} />
-              ))}
-            </TabsContent>
-
-            <TabsContent value="coaching" className="space-y-4">
-              {categories.coaching.map((reward) => (
-                <RewardCard key={reward.id} reward={reward} />
-              ))}
-            </TabsContent>
-
-            <TabsContent value="gear" className="space-y-4">
-              {categories.gear.map((reward) => (
-                <RewardCard key={reward.id} reward={reward} />
-              ))}
-            </TabsContent>
-
-            <TabsContent value="experience" className="space-y-4">
-              <Card className="p-8 bg-gradient-card border-border/50 text-center">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Sparkles className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2">VIP Experiences</h3>
-                    <Badge variant="secondary" className="mb-3">Coming Soon</Badge>
-                    <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-                      More rewards are coming soon. Keep earning tokens!
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          <div className="space-y-8">
+            <CatalogSection
+              title="Gear"
+              subtitle="PIGOSKI gloves — built for the line"
+              icon={ShoppingBag}
+              items={sections.gear}
+              renderCard={(r) => <RewardCard key={r.id} reward={r} />}
+            />
+            <CatalogSection
+              title="Store Credit"
+              subtitle="Spend anywhere in the PIGOSKI catalog"
+              icon={Gift}
+              items={sections.store_credit}
+              renderCard={(r) => <RewardCard key={r.id} reward={r} />}
+            />
+            <CatalogSection
+              title="Elite Tier · Skis"
+              subtitle="Shortline · Season-Long Grind"
+              icon={Trophy}
+              items={sections.elite_skis}
+              renderCard={(r) => <RewardCard key={r.id} reward={r} />}
+            />
+          </div>
         )}
       </div>
 
