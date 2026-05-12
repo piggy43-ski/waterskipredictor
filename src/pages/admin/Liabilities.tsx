@@ -30,6 +30,28 @@ type Liability = {
   created_at: string;
 };
 
+type RedemptionDetails = {
+  id: string;
+  fulfillment_status: string | null;
+  shipping_name: string | null;
+  shipping_address_line1: string | null;
+  shipping_address_line2: string | null;
+  shipping_city: string | null;
+  shipping_state: string | null;
+  shipping_zip: string | null;
+  shipping_phone: string | null;
+  glove_size: string | null;
+  gift_card_email: string | null;
+  shopify_order_id: string | null;
+  shopify_order_url: string | null;
+  shopify_gift_card_id: string | null;
+  tracking_number: string | null;
+  carrier: string | null;
+  supplier: string | null;
+  order_reference: string | null;
+  estimated_arrival_date: string | null;
+};
+
 type RewardInfo = {
   id: string;
   name: string;
@@ -74,6 +96,8 @@ export default function AdminLiabilities() {
   const [supplier, setSupplier] = useState('');
   const [orderReference, setOrderReference] = useState('');
   const [estimatedArrival, setEstimatedArrival] = useState('');
+  const [giftCardCode, setGiftCardCode] = useState('');
+  const [redemptionDetails, setRedemptionDetails] = useState<RedemptionDetails | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
