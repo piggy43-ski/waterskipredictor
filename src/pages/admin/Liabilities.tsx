@@ -255,6 +255,101 @@ export default function AdminLiabilities() {
     },
   });
 
+  // Status transition mutation (Mark Shipped / Mark Fulfilled)
+  const transitionMutation = useMutation({
+    mutationFn: async ({ liability, toStatus }: { liability: Liability; toStatus: 'shipped' | 'fulfilled' }) => {
+      // Persist any pending fulfillment fields first
+      const { error: redErr } = await supabase
+        .from('redemptions')
+        .update({
+          fulfillment_status: toStatus,
+          shopify_order_id: shopifyOrderId || null,
+          shopify_order_url: shopifyOrderUrl || null,
+          shopify_gift_card_id: shopifyGiftCardId || null,
+          tracking_number: trackingNumber || null,
+          carrier: carrier || null,
+          supplier: supplier || null,
+          order_reference: orderReference || null,
+          estimated_arrival_date: estimatedArrival || null,
+        })
+        .eq('id', liability.redemption_id);
+      if (redErr) throw redErr;
+
+      const liabilityStatus = toStatus === 'shipped' ? 'shipped' : 'delivered';
+      const liabilityUpdates: Record<string, any> = { status: liabilityStatus, notes: notesText };
+      if (toStatus === 'fulfilled') liabilityUpdates.fulfilled_at = new Date().toISOString();
+      await supabase.from('house_rewards_liability').update(liabilityUpdates).eq('id', liability.id);
+
+      // Look up user + reward for email
+      const userInfo = users?.find(u => u.id === liability.user_id);
+      const reward = rewards?.find(r => r.id === liability.reward_id);
+      if (userInfo?.email) {
+        const type = toStatus === 'shipped' ? 'redemption_shipped' : 'redemption_fulfilled';
+        await supabase.functions.invoke('send-email', {
+          body: {
+            type,
+            to: userInfo.email,
+            userId: liability.user_id,
+            data: {
+              username: userInfo.username || 'Champion',
+              rewardName: reward?.name || 'Reward',
+              redemptionId: liability.redemption_id,
+              trackingNumber: trackingNumber || null,
+              carrier: carrier || null,
+              giftCardCode: toStatus === 'fulfilled' ? (giftCardCode || null) : null,
+            },
+          },
+        }).catch(e => console.error('email send failed', e));
+      }
+    },
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-liabilities'] });
+      queryClient.invalidateQueries({ queryKey: ['liability-summary'] });
+      setFulfillDialogOpen(false);
+      setSelectedLiability(null);
+      toast({ title: vars.toStatus === 'shipped' ? 'Marked shipped' : 'Marked fulfilled' });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  // Cancel & Refund mutation
+  const refundMutation = useMutation({
+    mutationFn: async ({ liability, reason }: { liability: Liability; reason: string }) => {
+      const { error } = await supabase.rpc('refund_redemption', {
+        p_redemption_id: liability.redemption_id,
+        p_reason: reason,
+      });
+      if (error) throw error;
+
+      const userInfo = users?.find(u => u.id === liability.user_id);
+      const reward = rewards?.find(r => r.id === liability.reward_id);
+      if (userInfo?.email) {
+        await supabase.functions.invoke('send-email', {
+          body: {
+            type: 'redemption_cancelled',
+            to: userInfo.email,
+            userId: liability.user_id,
+            data: {
+              username: userInfo.username || 'Champion',
+              rewardName: reward?.name || 'Reward',
+              tokensRefunded: liability.token_cost,
+              reason,
+              redemptionId: liability.redemption_id,
+            },
+          },
+        }).catch(e => console.error('email send failed', e));
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-liabilities'] });
+      queryClient.invalidateQueries({ queryKey: ['liability-summary'] });
+      setFulfillDialogOpen(false);
+      setSelectedLiability(null);
+      toast({ title: 'Refunded', description: 'Tokens returned to user' });
+    },
+    onError: (e: Error) => toast({ title: 'Refund failed', description: e.message, variant: 'destructive' }),
+  });
+
   const getRewardName = (rewardId: string) => {
     return rewards?.find(r => r.id === rewardId)?.name || 'Unknown';
   };
@@ -279,14 +374,16 @@ export default function AdminLiabilities() {
     // Load existing redemption fields
     const { data } = await supabase
       .from('redemptions')
-      .select('shopify_order_id, shopify_order_url, shopify_gift_card_id, tracking_number, carrier, supplier, order_reference, estimated_arrival_date')
+      .select('shopify_order_id, shopify_order_url, shopify_gift_card_id, tracking_number, carrier, supplier, order_reference, estimated_arrival_date, shipping_name, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, shipping_phone, glove_size, gift_card_email, fulfillment_status')
       .eq('id', liability.redemption_id)
       .maybeSingle();
+    setRedemptionDetails(data as RedemptionDetails | null);
     setShopifyOrderId(data?.shopify_order_id || '');
     setShopifyOrderUrl(data?.shopify_order_url || '');
     setShopifyGiftCardId(data?.shopify_gift_card_id || '');
     setTrackingNumber(data?.tracking_number || '');
     setCarrier(data?.carrier || '');
+    setGiftCardCode('');
     // Auto-set supplier for elite_skis from reward partner if blank
     const reward = rewards?.find(r => r.id === liability.reward_id);
     setSupplier(data?.supplier || (reward?.category === 'elite_skis' ? (reward?.partner ?? '') : ''));
@@ -471,7 +568,11 @@ export default function AdminLiabilities() {
               const reward = rewards?.find(r => r.id === selectedLiability.reward_id);
               const isShopify = cat === 'gear' || cat === 'store_credit';
               const isManual = cat === 'elite_skis';
-              const customerPayload = `Name: ${userInfo?.username || '—'}\nEmail: ${userInfo?.email || '—'}\nUser ID: ${selectedLiability.user_id}`;
+              const r = redemptionDetails;
+              const shippingBlock = r?.shipping_name
+                ? `Name: ${r.shipping_name}\nAddress: ${r.shipping_address_line1}${r.shipping_address_line2 ? ', ' + r.shipping_address_line2 : ''}\n${r.shipping_city}, ${r.shipping_state} ${r.shipping_zip}\nPhone: ${r.shipping_phone}${r.glove_size ? '\nGlove size: ' + r.glove_size : ''}`
+                : (r?.gift_card_email ? `Gift card delivery email: ${r.gift_card_email}` : '');
+              const customerPayload = `Name: ${userInfo?.username || '—'}\nEmail: ${userInfo?.email || '—'}\nUser ID: ${selectedLiability.user_id}${shippingBlock ? '\n\n' + shippingBlock : ''}`;
               const orderPayload = `Product: ${reward?.name}\nPartner: ${reward?.partner}\nCustomer email: ${userInfo?.email || '—'}\nRedemption: ${selectedLiability.redemption_id}`;
               return (
                 <div className="space-y-5">
@@ -581,19 +682,77 @@ export default function AdminLiabilities() {
                       rows={3}
                     />
                   </div>
+
+                  {/* Customer-provided shipping */}
+                  {r?.shipping_name && (
+                    <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
+                      <p className="font-semibold uppercase tracking-wide text-muted-foreground">Customer ship-to</p>
+                      <p>{r.shipping_name}</p>
+                      <p>{r.shipping_address_line1}{r.shipping_address_line2 ? `, ${r.shipping_address_line2}` : ''}</p>
+                      <p>{r.shipping_city}, {r.shipping_state} {r.shipping_zip}</p>
+                      <p>📞 {r.shipping_phone}</p>
+                      {r.glove_size && <p>Glove size: <strong>{r.glove_size}</strong></p>}
+                    </div>
+                  )}
+                  {r?.gift_card_email && (
+                    <div className="rounded-lg border bg-muted/30 p-3 text-xs">
+                      <p className="font-semibold uppercase tracking-wide text-muted-foreground mb-1">Gift card recipient email</p>
+                      <p>{r.gift_card_email}</p>
+                    </div>
+                  )}
+
+                  {/* Gift card code (only for fulfillment of store_credit) */}
+                  {cat === 'store_credit' && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Gift Card Code (sent to user on Mark Fulfilled)</Label>
+                      <Input value={giftCardCode} onChange={(e) => setGiftCardCode(e.target.value)} placeholder="GIFT-XXXX-XXXX" />
+                    </div>
+                  )}
                 </div>
               );
             })()}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setFulfillDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => selectedLiability && saveFulfillmentMutation.mutate({ liability: selectedLiability })}
-                disabled={saveFulfillmentMutation.isPending}
-              >
-                Save Fulfillment
-              </Button>
+              <div className="flex flex-wrap gap-2 w-full justify-end">
+                <Button variant="outline" onClick={() => setFulfillDialogOpen(false)}>Close</Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => selectedLiability && saveFulfillmentMutation.mutate({ liability: selectedLiability })}
+                  disabled={saveFulfillmentMutation.isPending}
+                >
+                  Save
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    if (!selectedLiability) return;
+                    const reason = window.prompt('Cancellation reason (sent to user):');
+                    if (!reason || !reason.trim()) return;
+                    refundMutation.mutate({ liability: selectedLiability, reason: reason.trim() });
+                  }}
+                  disabled={refundMutation.isPending}
+                >
+                  <X className="h-4 w-4 mr-1" /> Cancel & Refund
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!selectedLiability) return;
+                    if (!trackingNumber || !carrier) {
+                      toast({ title: 'Tracking required', description: 'Enter tracking # and carrier first.', variant: 'destructive' });
+                      return;
+                    }
+                    transitionMutation.mutate({ liability: selectedLiability, toStatus: 'shipped' });
+                  }}
+                  disabled={transitionMutation.isPending}
+                >
+                  <Truck className="h-4 w-4 mr-1" /> Mark Shipped
+                </Button>
+                <Button
+                  onClick={() => selectedLiability && transitionMutation.mutate({ liability: selectedLiability, toStatus: 'fulfilled' })}
+                  disabled={transitionMutation.isPending}
+                >
+                  <Check className="h-4 w-4 mr-1" /> Mark Fulfilled
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
