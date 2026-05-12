@@ -195,23 +195,38 @@ export default function AdminLiabilities() {
   });
 
   // Update notes mutation
-  const updateNotesMutation = useMutation({
-    mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
-      const { error } = await supabase
+  // Save fulfillment workflow (notes on liability + Shopify/manual fields on redemption)
+  const saveFulfillmentMutation = useMutation({
+    mutationFn: async ({ liability }: { liability: Liability }) => {
+      const { error: notesErr } = await supabase
         .from('house_rewards_liability')
-        .update({ notes })
-        .eq('id', id);
+        .update({ notes: notesText })
+        .eq('id', liability.id);
+      if (notesErr) throw notesErr;
 
-      if (error) throw error;
+      const { error: redErr } = await supabase
+        .from('redemptions')
+        .update({
+          shopify_order_id: shopifyOrderId || null,
+          shopify_order_url: shopifyOrderUrl || null,
+          shopify_gift_card_id: shopifyGiftCardId || null,
+          tracking_number: trackingNumber || null,
+          carrier: carrier || null,
+          supplier: supplier || null,
+          order_reference: orderReference || null,
+          estimated_arrival_date: estimatedArrival || null,
+        })
+        .eq('id', liability.redemption_id);
+      if (redErr) throw redErr;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-liabilities'] });
-      setNotesDialogOpen(false);
+      setFulfillDialogOpen(false);
       setSelectedLiability(null);
-      toast({ title: 'Notes updated' });
+      toast({ title: 'Fulfillment saved' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error updating notes', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error saving fulfillment', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -233,11 +248,35 @@ export default function AdminLiabilities() {
     );
   };
 
-  const openNotesDialog = (liability: Liability) => {
+  const openFulfillDialog = async (liability: Liability) => {
     setSelectedLiability(liability);
     setNotesText(liability.notes || '');
-    setNotesDialogOpen(true);
+    // Load existing redemption fields
+    const { data } = await supabase
+      .from('redemptions')
+      .select('shopify_order_id, shopify_order_url, shopify_gift_card_id, tracking_number, carrier, supplier, order_reference, estimated_arrival_date')
+      .eq('id', liability.redemption_id)
+      .maybeSingle();
+    setShopifyOrderId(data?.shopify_order_id || '');
+    setShopifyOrderUrl(data?.shopify_order_url || '');
+    setShopifyGiftCardId(data?.shopify_gift_card_id || '');
+    setTrackingNumber(data?.tracking_number || '');
+    setCarrier(data?.carrier || '');
+    // Auto-set supplier for elite_skis from reward partner if blank
+    const reward = rewards?.find(r => r.id === liability.reward_id);
+    setSupplier(data?.supplier || (reward?.category === 'elite_skis' ? (reward?.partner ?? '') : ''));
+    setOrderReference(data?.order_reference || '');
+    setEstimatedArrival(data?.estimated_arrival_date || '');
+    setFulfillDialogOpen(true);
   };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: `${label} copied to clipboard` });
+  };
+
+  const getRewardCategory = (rewardId: string) =>
+    rewards?.find(r => r.id === rewardId)?.category || null;
 
   return (
     <AdminLayout>
