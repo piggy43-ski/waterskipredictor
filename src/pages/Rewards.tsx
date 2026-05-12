@@ -479,10 +479,6 @@ const Rewards = () => {
     );
   }
 
-  const balanceAfterRedeem = selectedReward 
-    ? walletBalance - selectedReward.required_tokens 
-    : walletBalance;
-
   return (
     <div className="min-h-screen bg-background pb-20">
       <PageHeader 
