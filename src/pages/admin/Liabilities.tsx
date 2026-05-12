@@ -415,9 +415,9 @@ export default function AdminLiabilities() {
                             variant="ghost" 
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => openNotesDialog(liability)}
+                            onClick={() => openFulfillDialog(liability)}
                           >
-                            <FileText className="h-4 w-4" />
+                            <Package className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -433,30 +433,142 @@ export default function AdminLiabilities() {
           </CardContent>
         </Card>
 
-        {/* Notes Dialog */}
-        <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
-          <DialogContent>
+        {/* Fulfillment Dialog */}
+        <Dialog open={fulfillDialogOpen} onOpenChange={setFulfillDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add/Edit Notes</DialogTitle>
+              <DialogTitle>
+                Fulfillment · {selectedLiability && getRewardName(selectedLiability.reward_id)}
+              </DialogTitle>
             </DialogHeader>
-            <Textarea
-              value={notesText}
-              onChange={(e) => setNotesText(e.target.value)}
-              placeholder="Add fulfillment notes, tracking numbers, etc."
-              rows={4}
-            />
+            {selectedLiability && (() => {
+              const cat = getRewardCategory(selectedLiability.reward_id);
+              const userInfo = users?.find(u => u.id === selectedLiability.user_id);
+              const reward = rewards?.find(r => r.id === selectedLiability.reward_id);
+              const isShopify = cat === 'gear' || cat === 'store_credit';
+              const isManual = cat === 'elite_skis';
+              const customerPayload = `Name: ${userInfo?.username || '—'}\nEmail: ${userInfo?.email || '—'}\nUser ID: ${selectedLiability.user_id}`;
+              const orderPayload = `Product: ${reward?.name}\nPartner: ${reward?.partner}\nCustomer email: ${userInfo?.email || '—'}\nRedemption: ${selectedLiability.redemption_id}`;
+              return (
+                <div className="space-y-5">
+                  {/* Handoff block */}
+                  {isShopify && (
+                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                      <div className="flex items-center gap-2 font-semibold text-sm uppercase tracking-wide">
+                        <ShoppingBag className="h-4 w-4 text-primary" />
+                        Fulfill in Shopify
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => copyToClipboard(customerPayload, 'Customer info')}>
+                          <Copy className="h-3 w-3 mr-1" /> Copy Customer Info
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => copyToClipboard(orderPayload, 'Order details')}>
+                          <Copy className="h-3 w-3 mr-1" /> Copy Order Details
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Request shipping address from the customer before creating the Shopify order.
+                      </p>
+                    </div>
+                  )}
+
+                  {isManual && (
+                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+                      <div className="flex items-center gap-2 font-semibold text-sm uppercase tracking-wide">
+                        <Factory className="h-4 w-4 text-primary" />
+                        Manual Order
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Place this order directly with the supplier; no Shopify integration.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Shopify fields */}
+                  {isShopify && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Shopify Order ID</Label>
+                        <Input value={shopifyOrderId} onChange={(e) => setShopifyOrderId(e.target.value)} placeholder="#1234" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Shopify Order URL</Label>
+                        <div className="flex gap-1">
+                          <Input value={shopifyOrderUrl} onChange={(e) => setShopifyOrderUrl(e.target.value)} placeholder="https://admin.shopify.com/..." />
+                          {shopifyOrderUrl && (
+                            <Button size="icon" variant="ghost" asChild>
+                              <a href={shopifyOrderUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a>
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {cat === 'store_credit' && (
+                        <div className="space-y-1.5 md:col-span-2">
+                          <Label className="text-xs">Shopify Gift Card ID</Label>
+                          <Input value={shopifyGiftCardId} onChange={(e) => setShopifyGiftCardId(e.target.value)} placeholder="gid://shopify/GiftCard/..." />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Manual order fields */}
+                  {isManual && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Supplier</Label>
+                        <Select value={supplier} onValueChange={setSupplier}>
+                          <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Goode">Goode</SelectItem>
+                            <SelectItem value="Radar">Radar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Order Reference (PO#)</Label>
+                        <Input value={orderReference} onChange={(e) => setOrderReference(e.target.value)} placeholder="PO-2026-001" />
+                      </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <Label className="text-xs">Estimated Arrival</Label>
+                        <Input type="date" value={estimatedArrival} onChange={(e) => setEstimatedArrival(e.target.value)} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tracking — always shown */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1"><Truck className="h-3 w-3" /> Tracking Number</Label>
+                      <Input value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="1Z..." />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Carrier</Label>
+                      <Input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="UPS / FedEx / USPS" />
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs flex items-center gap-1"><FileText className="h-3 w-3" /> Notes</Label>
+                    <Textarea
+                      value={notesText}
+                      onChange={(e) => setNotesText(e.target.value)}
+                      placeholder="Internal fulfillment notes"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setNotesDialogOpen(false)}>
+              <Button variant="outline" onClick={() => setFulfillDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button 
-                onClick={() => selectedLiability && updateNotesMutation.mutate({ 
-                  id: selectedLiability.id, 
-                  notes: notesText 
-                })}
-                disabled={updateNotesMutation.isPending}
+              <Button
+                onClick={() => selectedLiability && saveFulfillmentMutation.mutate({ liability: selectedLiability })}
+                disabled={saveFulfillmentMutation.isPending}
               >
-                Save Notes
+                Save Fulfillment
               </Button>
             </DialogFooter>
           </DialogContent>
