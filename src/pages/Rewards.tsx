@@ -551,100 +551,19 @@ const Rewards = () => {
         )}
       </div>
 
-      {/* Confirmation Modal */}
-      <Dialog open={!!selectedReward} onOpenChange={(open) => !open && !isRedeeming && setSelectedReward(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirm Reward Redemption</DialogTitle>
-            <DialogDescription>
-              Your reward request will be received. Fulfillment times vary by reward.
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedReward && (
-            <div className="space-y-4 py-4">
-              {/* Reward Info */}
-              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
-                  {selectedReward.image_url ? (
-                    <img 
-                      src={selectedReward.image_url} 
-                      alt={selectedReward.name} 
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    (() => {
-                      const Icon = getCategoryIcon(selectedReward.category);
-                      return <Icon className="w-6 h-6 text-primary" />;
-                    })()
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-semibold">{selectedReward.name}</h4>
-                  <Badge variant="outline" className="text-xs capitalize mt-1">
-                    {selectedReward.category}
-                  </Badge>
-                  <p className="text-sm text-muted-foreground">By {selectedReward.partner}</p>
-                </div>
-              </div>
-
-              {/* Token breakdown */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Cost</span>
-                  <div className="flex items-center gap-2">
-                    <Coins className="w-4 h-4 text-primary" />
-                    <span className="font-semibold text-red-600">
-                      -{selectedReward.required_tokens.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Current Balance</span>
-                  <div className="flex items-center gap-2">
-                    <Coins className="w-4 h-4 text-primary" />
-                    <span className="font-semibold">{walletBalance.toLocaleString()}</span>
-                  </div>
-                </div>
-                
-                <div className="border-t pt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Balance After</span>
-                    <div className="flex items-center gap-2">
-                      <Coins className="w-4 h-4 text-primary" />
-                      <span className="font-bold text-lg">{balanceAfterRedeem.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button 
-              variant="outline" 
-              onClick={() => setSelectedReward(null)}
-              disabled={isRedeeming}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleConfirmRedeem}
-              disabled={isRedeeming}
-            >
-              {isRedeeming ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Redeeming...
-                </>
-              ) : (
-                'Confirm Redeem'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {selectedReward && (
+        <RedemptionFormDialog
+          open={!!selectedReward}
+          onOpenChange={(open) => { if (!open) setSelectedReward(null); }}
+          rewardName={selectedReward.name}
+          rewardCategory={selectedReward.category}
+          requiredTokens={selectedReward.required_tokens}
+          walletBalance={walletBalance}
+          defaultEmail={user?.email || ''}
+          isSubmitting={isRedeeming}
+          onConfirm={handleConfirmRedeem}
+        />
+      )}
 
       <BottomNav />
     </div>
