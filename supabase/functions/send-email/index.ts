@@ -567,7 +567,15 @@ async function checkEmailPreferences(
   emailType: EmailType
 ): Promise<boolean> {
   // Transactional emails are always sent
-  const transactionalTypes: EmailType[] = ["welcome", "entry_confirmation", "redemption_receipt"];
+  const transactionalTypes: EmailType[] = [
+    "welcome",
+    "entry_confirmation",
+    "redemption_receipt",
+    "redemption_confirmation",
+    "redemption_shipped",
+    "redemption_fulfilled",
+    "redemption_cancelled",
+  ];
   if (transactionalTypes.includes(emailType)) {
     return true;
   }
