@@ -34,6 +34,7 @@ type RewardInfo = {
   id: string;
   name: string;
   category?: string | null;
+  partner?: string | null;
 };
 
 type UserInfo = {
@@ -105,7 +106,7 @@ export default function AdminLiabilities() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rewards')
-        .select('id, name, category');
+        .select('id, name, category, partner');
       if (error) throw error;
       return data as RewardInfo[];
     },
