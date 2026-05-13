@@ -3331,11 +3331,7 @@ export type Database = {
       rebuild_market_liability: { Args: never; Returns: undefined }
       refund_redemption: {
         Args: { p_reason: string; p_redemption_id: string }
-        Returns: {
-          new_status: string
-          refunded_tokens: number
-          success: boolean
-        }[]
+        Returns: Json
       }
       reverse_settlement: {
         Args: {
