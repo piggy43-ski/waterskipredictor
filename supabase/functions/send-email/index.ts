@@ -647,6 +647,7 @@ async function checkEmailPreferences(
     "redemption_shipped",
     "redemption_fulfilled",
     "redemption_cancelled",
+    "admin_redemption_new",
   ];
   if (transactionalTypes.includes(emailType)) {
     return true;
