@@ -24,6 +24,7 @@ import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SimulationDetails } from '@/components/SimulationDetails';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
+import { SEO } from '@/components/SEO';
 
 interface ValidationResult {
   allowed: boolean;
