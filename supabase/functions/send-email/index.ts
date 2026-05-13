@@ -15,7 +15,8 @@ type EmailType =
   | "redemption_confirmation"
   | "redemption_shipped"
   | "redemption_fulfilled"
-  | "redemption_cancelled";
+  | "redemption_cancelled"
+  | "admin_redemption_new";
 
 interface EmailRequest {
   type: EmailType;
