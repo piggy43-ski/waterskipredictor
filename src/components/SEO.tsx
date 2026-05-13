@@ -8,7 +8,7 @@ interface SEOProps {
 }
 
 const SITE_NAME = 'WaterSki Predictor';
-const BASE_URL = 'https://waterskipredictor.lovable.app';
+const BASE_URL = 'https://waterskipredictor.com';
 const DEFAULT_DESC = 'Free waterski prediction game powered by IWWF rankings. Pick winners for slalom, trick & jump at pro tour events, earn tokens, and compete with other fans.';
 
 export const SEO = ({

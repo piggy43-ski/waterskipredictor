@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { useWallet, broadcastWalletRefresh } from '@/hooks/useWallet';
 import { RedemptionFormDialog, RedemptionFormData } from '@/components/RedemptionFormDialog';
+import { SEO } from '@/components/SEO';
 
 type Reward = {
   id: string;
@@ -561,6 +562,7 @@ const Rewards = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="Rewards Store" description="Redeem earned tokens for PIGOSKI gear, gift cards, and elite-tier waterskis on WaterSki Predictor." path="/rewards" />
       <PageHeader 
         title="Rewards Store" 
       />

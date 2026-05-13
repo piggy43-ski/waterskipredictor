@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { SEO } from '@/components/SEO';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -64,6 +65,12 @@ export default function AthleteProfile() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title={`${athlete.full_name || athlete.name} — Waterski Athlete`}
+        description={`Stats, rankings, and recent results for ${athlete.full_name || athlete.name} (${athlete.country || 'IWWF pro tour'}). Slalom, trick, and jump performance on WaterSki Predictor.`}
+        path={`/athletes/${athlete.id}`}
+        type="profile"
+      />
       <div className="max-w-4xl mx-auto p-6 space-y-6">
         <Link to="/tournaments">
           <Button variant="outline" size="sm">

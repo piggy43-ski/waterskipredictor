@@ -77,6 +77,7 @@ const App = () => (
           <TutorialProvider>
             <TutorialOverlay />
             <TutorialBubble />
+            <main>
             <Routes>
               {/* Public routes */}
               <Route path="/auth" element={<Auth />} />
@@ -143,6 +144,7 @@ const App = () => (
               
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </main>
           </TutorialProvider>
         </AuthProvider>
       </BrowserRouter>

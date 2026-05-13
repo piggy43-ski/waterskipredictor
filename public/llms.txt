@@ -1,0 +1,20 @@
+# WaterSki Predictor
+
+> Free fantasy waterski prediction game powered by IWWF rankings. Pick winners for slalom, trick, and jump at pro tour events, earn tokens, and compete with other fans.
+
+WaterSki Predictor is a free, skill-based prediction platform for the international waterski pro tour. Fans pick athletes for slalom, trick, and jump events, build single picks, podium picks, and parlays, and earn tokens redeemable for real PIGOSKI gear and gift cards. Odds are derived from IWWF EMS rankings combined with a deterministic strength model.
+
+## Pages
+
+- [Home](/): Overview of upcoming tournaments and your active picks.
+- [Tournaments](/tournaments): Browse pro tour events and open prediction markets.
+- [Predictions](/predictions): Track your active and settled predictions.
+- [Fantasy](/fantasy): Season-long and tournament fantasy pots with budget-based team building.
+- [Rewards](/rewards): Redeem earned tokens for PIGOSKI gear and gift cards.
+- [Help Center](/help): How prediction windows, scoring, and payouts work.
+- [Sign in](/auth): Account access and registration.
+
+## Optional
+
+- [Terms of Service](/terms)
+- [Privacy Policy](/privacy)

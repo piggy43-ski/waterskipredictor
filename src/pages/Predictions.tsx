@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
+import { SEO } from '@/components/SEO';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -759,6 +760,7 @@ const Predictions = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="My Predictions" description="Track your active and settled waterski predictions, picks, and parlays on WaterSki Predictor." path="/predictions" />
       <PageHeader title="My Predictions" />
       
       <div className="max-w-lg mx-auto px-4 py-6">

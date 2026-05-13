@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://waterskipredictor.lovable.app/sitemap.xml
+Sitemap: https://waterskipredictor.com/sitemap.xml
