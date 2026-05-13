@@ -561,6 +561,7 @@ const Rewards = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="Rewards Store" description="Redeem earned tokens for PIGOSKI gear, gift cards, and elite-tier waterskis on WaterSki Predictor." path="/rewards" />
       <PageHeader 
         title="Rewards Store" 
       />
