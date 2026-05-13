@@ -760,6 +760,7 @@ const Predictions = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="My Predictions" description="Track your active and settled waterski predictions, picks, and parlays on WaterSki Predictor." path="/predictions" />
       <PageHeader title="My Predictions" />
       
       <div className="max-w-lg mx-auto px-4 py-6">
