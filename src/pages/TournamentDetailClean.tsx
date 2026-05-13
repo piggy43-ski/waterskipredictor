@@ -917,6 +917,12 @@ const TournamentDetail = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO
+        title={`${tournament.name} — Predictions & Picks`}
+        description={`Make slalom, trick, and jump predictions for ${tournament.name}${tournament.location ? ' in ' + tournament.location : ''}. Live odds, podium picks, and parlays on WaterSki Predictor.`}
+        path={`/tournaments/${tournament.id}`}
+        type="event"
+      />
       <PageHeader title={tournament.name} showBack />
 
       <div className="max-w-6xl mx-auto px-4 py-6">
