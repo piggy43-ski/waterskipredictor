@@ -2,6 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+const WALLET_REFRESH_EVENT = 'wallet:refresh';
+
+/** Trigger every active useWallet hook instance to refetch. */
+export const broadcastWalletRefresh = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(WALLET_REFRESH_EVENT));
+  }
+};
+
 interface WalletData {
   purchasedTokens: number;
   earnedTokens: number;
@@ -52,6 +61,14 @@ export const useWallet = () => {
 
   useEffect(() => {
     fetchWallet();
+  }, [fetchWallet]);
+
+  // Listen for global refresh events so badges update across components.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => { fetchWallet(); };
+    window.addEventListener(WALLET_REFRESH_EVENT, handler);
+    return () => window.removeEventListener(WALLET_REFRESH_EVENT, handler);
   }, [fetchWallet]);
 
   // Return loading true if auth is still loading OR wallet is loading

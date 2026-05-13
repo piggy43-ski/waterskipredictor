@@ -15,7 +15,8 @@ type EmailType =
   | "redemption_confirmation"
   | "redemption_shipped"
   | "redemption_fulfilled"
-  | "redemption_cancelled";
+  | "redemption_cancelled"
+  | "admin_redemption_new";
 
 interface EmailRequest {
   type: EmailType;
@@ -444,6 +445,58 @@ function generateRedemptionCancelledEmail(data: {
   `);
 }
 
+function generateAdminRedemptionNewEmail(data: {
+  userUsername: string; userEmail: string; rewardName: string; rewardCategory: string; partner: string;
+  tokensSpent: number; redemptionId: string; shipping: any; gloveSize: string | null; giftCardEmail: string | null; appUrl: string;
+}): string {
+  const isGear = data.rewardCategory === 'gear';
+  const isStoreCredit = data.rewardCategory === 'store_credit';
+  const isElite = data.rewardCategory === 'elite_skis';
+
+  let detailsBlock = '';
+  if (isGear && data.shipping) {
+    const s = data.shipping;
+    detailsBlock = `
+      <p style="color: #9ca3af; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0 8px;">Ship to</p>
+      <p style="color: #ffffff; font-size: 14px; line-height: 22px; margin: 0;">
+        ${s.shipping_name}<br/>
+        ${s.shipping_address_line1}${s.shipping_address_line2 ? '<br/>' + s.shipping_address_line2 : ''}<br/>
+        ${s.shipping_city}, ${s.shipping_state} ${s.shipping_zip}<br/>
+        ${s.shipping_phone}
+      </p>
+      ${data.gloveSize ? `<p style="color: #9ca3af; font-size: 14px; margin: 12px 0 0;">Glove size: <strong style="color:#fff">${data.gloveSize}</strong></p>` : ''}`;
+  } else if (isStoreCredit) {
+    detailsBlock = `
+      <p style="color: #9ca3af; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0 8px;">Deliver gift card to</p>
+      <p style="color: #ffffff; font-size: 14px; margin: 0;"><strong>${data.giftCardEmail}</strong></p>`;
+  } else if (isElite) {
+    detailsBlock = `
+      <p style="color: #fbbf24; font-size: 14px; line-height: 22px; margin: 16px 0 0;">
+        ⚠ Elite tier — concierge review required. Contact user within 48h.
+      </p>`;
+  }
+
+  return emailShell(`
+    <p style="font-size: 40px; text-align: center; margin: 0 0 8px;">📥</p>
+    <h1 style="color: #ffffff; font-size: 22px; font-weight: bold; text-align: center; margin: 0 0 8px;">New redemption to fulfill</h1>
+    <p style="color: #9ca3af; font-size: 13px; text-align: center; margin: 0 0 24px;">Admin notification</p>
+    <div style="background-color: #1f2937; border-radius: 12px; padding: 24px; margin: 24px 0;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">User</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.userUsername}<br/><span style="color:#9ca3af;font-size:12px">${data.userEmail}</span></td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Reward</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.rewardName}</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Category</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.rewardCategory}</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Partner</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.partner}</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Tokens</td><td style="color: #ffffff; font-size: 14px; text-align: right; padding: 4px 0;">${data.tokensSpent.toLocaleString()}</td></tr>
+        <tr><td style="color: #9ca3af; font-size: 14px; padding: 4px 0;">Redemption ID</td><td style="color: #ffffff; font-size: 12px; font-family: monospace; text-align: right; padding: 4px 0;">${data.redemptionId}</td></tr>
+      </table>
+      ${detailsBlock}
+    </div>
+    <div style="text-align: center; margin: 32px 0;">
+      <a href="${data.appUrl}/admin/liabilities" style="background-color: #3b82f6; border-radius: 8px; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none; padding: 12px 24px; display: inline-block;">Open Admin Queue</a>
+    </div>
+  `);
+}
+
 function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: string): { html: string; subject: string } {
   switch (type) {
     case "welcome":
@@ -557,6 +610,24 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
         subject: `[Waterski Predictor] Redemption cancelled — tokens refunded`,
       };
 
+    case "admin_redemption_new":
+      return {
+        html: generateAdminRedemptionNewEmail({
+          userUsername: data.userUsername || "user",
+          userEmail: data.userEmail || "",
+          rewardName: data.rewardName || "Reward",
+          rewardCategory: data.rewardCategory || "gear",
+          partner: data.partner || "—",
+          tokensSpent: data.tokensSpent || 0,
+          redemptionId: data.redemptionId || "unknown",
+          shipping: data.shipping || null,
+          gloveSize: data.gloveSize || null,
+          giftCardEmail: data.giftCardEmail || null,
+          appUrl,
+        }),
+        subject: `[Waterski Predictor Admin] New redemption — ${data.rewardName || 'Reward'} (${(data.tokensSpent || 0).toLocaleString()} tokens)`,
+      };
+
     default:
       throw new Error(`Unknown email type: ${type}`);
   }
@@ -576,6 +647,7 @@ async function checkEmailPreferences(
     "redemption_shipped",
     "redemption_fulfilled",
     "redemption_cancelled",
+    "admin_redemption_new",
   ];
   if (transactionalTypes.includes(emailType)) {
     return true;
