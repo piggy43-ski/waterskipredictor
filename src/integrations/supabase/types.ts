@@ -3320,6 +3320,14 @@ export type Database = {
         Returns: undefined
       }
       is_pot_public: { Args: { _pot_id: string }; Returns: boolean }
+      notify_admins_redemption_new: {
+        Args: {
+          p_redemption_id: string
+          p_reward_name: string
+          p_tokens: number
+        }
+        Returns: undefined
+      }
       rebuild_market_liability: { Args: never; Returns: undefined }
       refund_redemption: {
         Args: { p_reason: string; p_redemption_id: string }
