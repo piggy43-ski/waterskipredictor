@@ -360,22 +360,11 @@ const Rewards = () => {
 
       // In-app admin notification — insert one row per admin user
       try {
-        const { data: admins } = await supabase
-          .from('user_roles')
-          .select('user_id')
-          .eq('role', 'admin');
-        if (admins && admins.length > 0) {
-          const rows = admins.map(a => ({
-            user_id: a.user_id,
-            type: 'redemption_new',
-            title: 'New redemption',
-            message: `${selectedReward.name} — ${selectedReward.required_tokens.toLocaleString()} tokens`,
-            link: '/admin/liabilities',
-            read: false,
-            metadata: { redemption_id: redemptionData.id, reward_id: selectedReward.id },
-          }));
-          await supabase.from('notifications').insert(rows);
-        }
+        await supabase.rpc('notify_admins_redemption_new', {
+          p_redemption_id: redemptionData.id,
+          p_reward_name: selectedReward.name,
+          p_tokens: selectedReward.required_tokens,
+        });
       } catch (e) {
         console.error('Failed to insert admin in-app notification:', e);
       }
