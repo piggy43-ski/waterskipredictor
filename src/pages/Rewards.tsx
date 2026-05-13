@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { useWallet } from '@/hooks/useWallet';
+import { useWallet, broadcastWalletRefresh } from '@/hooks/useWallet';
 import { RedemptionFormDialog, RedemptionFormData } from '@/components/RedemptionFormDialog';
 
 type Reward = {
@@ -320,6 +320,66 @@ const Rewards = () => {
         console.error('Failed to send redemption confirmation email:', emailError);
       }
 
+      // Notify admins (email + in-app). Both are best-effort and respect dry_run.
+      const isDryRun = typeof window !== 'undefined' && (
+        window.localStorage.getItem('__EMAIL_DRY_RUN__') === 'true' ||
+        window.location.search.includes('dryrun=1')
+      );
+      const shippingPayload = formData.shipping_name ? {
+        shipping_name: formData.shipping_name,
+        shipping_address_line1: formData.shipping_address_line1,
+        shipping_address_line2: formData.shipping_address_line2 || '',
+        shipping_city: formData.shipping_city,
+        shipping_state: formData.shipping_state,
+        shipping_zip: formData.shipping_zip,
+        shipping_phone: formData.shipping_phone,
+      } : null;
+      try {
+        await supabase.functions.invoke('send-email', {
+          body: {
+            type: 'admin_redemption_new',
+            to: 'robert@waterskipredictor.com',
+            dry_run: isDryRun,
+            data: {
+              userUsername: (user.user_metadata as any)?.username || user.email?.split('@')[0] || 'user',
+              userEmail: user.email,
+              rewardName: selectedReward.name,
+              rewardCategory: selectedReward.category,
+              partner: selectedReward.partner,
+              tokensSpent: selectedReward.required_tokens,
+              redemptionId: redemptionData.id,
+              shipping: shippingPayload,
+              gloveSize: formData.glove_size || null,
+              giftCardEmail: formData.gift_card_email || null,
+            }
+          }
+        });
+      } catch (e) {
+        console.error('Failed to send admin redemption notification:', e);
+      }
+
+      // In-app admin notification — insert one row per admin user
+      try {
+        const { data: admins } = await supabase
+          .from('user_roles')
+          .select('user_id')
+          .eq('role', 'admin');
+        if (admins && admins.length > 0) {
+          const rows = admins.map(a => ({
+            user_id: a.user_id,
+            type: 'redemption_new',
+            title: 'New redemption',
+            message: `${selectedReward.name} — ${selectedReward.required_tokens.toLocaleString()} tokens`,
+            link: '/admin/liabilities',
+            read: false,
+            metadata: { redemption_id: redemptionData.id, reward_id: selectedReward.id },
+          }));
+          await supabase.from('notifications').insert(rows);
+        }
+      } catch (e) {
+        console.error('Failed to insert admin in-app notification:', e);
+      }
+
       toast({
         title: "Redemption confirmed",
         description: `${selectedReward.name} — ID ${redemptionData.id.slice(0,8).toUpperCase()}`,
@@ -336,6 +396,7 @@ const Rewards = () => {
       }));
 
       await refetchWallet();
+      broadcastWalletRefresh();
       setSelectedReward(null);
     } catch (error: any) {
       let errorMessage = "Failed to redeem reward. Please try again.";
