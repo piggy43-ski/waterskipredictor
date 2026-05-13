@@ -647,8 +647,12 @@ serve(async (req) => {
 
     console.log(`[send-email] Processing ${type} email to ${to}`);
 
-    // Dry-run: skip Resend if explicitly requested OR if recipient is the reserved test address.
-    const isDryRun = dry_run === true || to === "redemption-test@waterskipredictor.com";
+    // Dry-run: skip Resend if explicitly requested OR if recipient is the reserved
+    // test address OR if the global EMAIL_DRY_RUN env flag is set.
+    const globalDryRun = (Deno.env.get("EMAIL_DRY_RUN") ?? "").toLowerCase() === "true";
+    const isDryRun = dry_run === true
+      || to === "redemption-test@waterskipredictor.com"
+      || globalDryRun;
 
     // Check user preferences if userId provided
     if (userId) {
