@@ -291,7 +291,10 @@ const Rewards = () => {
             type: 'redemption_confirmation',
             to: user.email,
             userId: user.id,
-            dry_run: typeof window !== 'undefined' && window.localStorage.getItem('__EMAIL_DRY_RUN__') === 'true',
+            dry_run: typeof window !== 'undefined' && (
+              window.localStorage.getItem('__EMAIL_DRY_RUN__') === 'true' ||
+              window.location.search.includes('dryrun=1')
+            ),
             data: {
               username: (user.user_metadata as any)?.username || user.email?.split('@')[0] || 'Champion',
               rewardName: selectedReward.name,

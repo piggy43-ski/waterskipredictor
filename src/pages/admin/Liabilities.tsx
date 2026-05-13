@@ -290,7 +290,10 @@ export default function AdminLiabilities() {
             type,
             to: userInfo.email,
             userId: liability.user_id,
-            dry_run: typeof window !== 'undefined' && window.localStorage.getItem('__EMAIL_DRY_RUN__') === 'true',
+            dry_run: typeof window !== 'undefined' && (
+              window.localStorage.getItem('__EMAIL_DRY_RUN__') === 'true' ||
+              window.location.search.includes('dryrun=1')
+            ),
             data: {
               username: userInfo.username || 'Champion',
               rewardName: reward?.name || 'Reward',
@@ -330,7 +333,10 @@ export default function AdminLiabilities() {
             type: 'redemption_cancelled',
             to: userInfo.email,
             userId: liability.user_id,
-            dry_run: typeof window !== 'undefined' && window.localStorage.getItem('__EMAIL_DRY_RUN__') === 'true',
+            dry_run: typeof window !== 'undefined' && (
+              window.localStorage.getItem('__EMAIL_DRY_RUN__') === 'true' ||
+              window.location.search.includes('dryrun=1')
+            ),
             data: {
               username: userInfo.username || 'Champion',
               rewardName: reward?.name || 'Reward',
