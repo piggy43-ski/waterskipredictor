@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { useWallet, broadcastWalletRefresh } from '@/hooks/useWallet';
 import { RedemptionFormDialog, RedemptionFormData } from '@/components/RedemptionFormDialog';
+import { SEO } from '@/components/SEO';
 
 type Reward = {
   id: string;
