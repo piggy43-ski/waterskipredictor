@@ -22,6 +22,7 @@ interface EmailRequest {
   to: string;
   userId?: string;
   data: Record<string, any>;
+  dry_run?: boolean;
 }
 
 // Validate required environment variables upfront
@@ -642,9 +643,16 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { type, to, userId, data }: EmailRequest = await req.json();
+    const { type, to, userId, data, dry_run }: EmailRequest = await req.json();
 
     console.log(`[send-email] Processing ${type} email to ${to}`);
+
+    // Dry-run: skip Resend if explicitly requested OR if recipient is the reserved
+    // test address OR if the global EMAIL_DRY_RUN env flag is set.
+    const globalDryRun = (Deno.env.get("EMAIL_DRY_RUN") ?? "").toLowerCase() === "true";
+    const isDryRun = dry_run === true
+      || to === "redemption-test@waterskipredictor.com"
+      || globalDryRun;
 
     // Check user preferences if userId provided
     if (userId) {
@@ -662,7 +670,16 @@ serve(async (req) => {
     const { html, subject } = getEmailContent(type, data, appUrl);
 
     console.log(`[send-email] Sending ${type} email from ${fromEmail} to ${to}`);
-    
+
+    if (isDryRun) {
+      console.log(`[send-email] DRY_RUN: would send ${type} to ${to} subject="${subject}" html_len=${html.length}`);
+      await logEmail(supabase, userId, type, to, subject, "skipped", undefined, "dry_run");
+      return new Response(
+        JSON.stringify({ success: true, dry_run: true, subject, html_length: html.length }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     const { data: emailResult, error: emailError } = await resend.emails.send({
       from: fromEmail,
       to: [to],
