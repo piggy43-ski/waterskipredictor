@@ -216,6 +216,26 @@ const Rewards = () => {
     setIsRedeeming(true);
 
     try {
+      // Hard-enforce per-user limit at submit time (server-side count, ignores cancelled)
+      if (selectedReward.max_per_user) {
+        const { count, error: countError } = await supabase
+          .from('redemptions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('reward_id', selectedReward.id)
+          .neq('status', 'cancelled');
+        if (countError) throw countError;
+        if ((count ?? 0) >= selectedReward.max_per_user) {
+          toast({
+            title: "Limit reached",
+            description: "You've already redeemed this. Limits reset quarterly.",
+            variant: "destructive",
+          });
+          setIsRedeeming(false);
+          return;
+        }
+      }
+
       const fulfillmentStatus =
         selectedReward.category === 'elite_skis' ? 'concierge_review' : 'pending_fulfillment';
 
@@ -473,6 +493,12 @@ const Rewards = () => {
               <div className="flex-1">
                 <h3 className="font-semibold mb-1">{reward.name}</h3>
                 <div className="flex flex-wrap gap-1 mb-2">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] uppercase tracking-wide border-primary/30 text-primary/80 bg-primary/5"
+                  >
+                    Beta · Limited Inventory
+                  </Badge>
                   {tLabel && (
                     <Badge variant="outline" className="text-xs">
                       {tLabel}
