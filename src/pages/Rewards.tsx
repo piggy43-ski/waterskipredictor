@@ -260,7 +260,7 @@ const Rewards = () => {
       // Create token transaction record for the ledger
       await supabase.from('token_transactions').insert({
         user_id: user.id,
-        type: 'redeem',
+        type: 'redemption',
         amount: -selectedReward.required_tokens,
         balance_after: newBalance,
         source_id: selectedReward.id,
