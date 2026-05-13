@@ -558,6 +558,24 @@ function getEmailContent(type: EmailType, data: Record<string, any>, appUrl: str
         subject: `[Waterski Predictor] Redemption cancelled — tokens refunded`,
       };
 
+    case "admin_redemption_new":
+      return {
+        html: generateAdminRedemptionNewEmail({
+          userUsername: data.userUsername || "user",
+          userEmail: data.userEmail || "",
+          rewardName: data.rewardName || "Reward",
+          rewardCategory: data.rewardCategory || "gear",
+          partner: data.partner || "—",
+          tokensSpent: data.tokensSpent || 0,
+          redemptionId: data.redemptionId || "unknown",
+          shipping: data.shipping || null,
+          gloveSize: data.gloveSize || null,
+          giftCardEmail: data.giftCardEmail || null,
+          appUrl,
+        }),
+        subject: `[Waterski Predictor Admin] New redemption — ${data.rewardName || 'Reward'} (${(data.tokensSpent || 0).toLocaleString()} tokens)`,
+      };
+
     default:
       throw new Error(`Unknown email type: ${type}`);
   }
