@@ -134,7 +134,12 @@ export function EventHandleCapsCard() {
                 </div>
               ) : (
                 <>
-                  <Progress value={p} className="h-2" indicatorClassName={band.color} />
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className={`h-full transition-all ${band.color}`}
+                      style={{ width: `${p}%` }}
+                    />
+                  </div>
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>{cur.toLocaleString()} tokens</span>
                     <span>{max!.toLocaleString()} cap (warn at {Math.round(row.handle_warning_threshold * 100)}%)</span>
