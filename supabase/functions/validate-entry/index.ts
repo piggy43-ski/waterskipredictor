@@ -134,6 +134,35 @@ serve(async (req) => {
     }
 
     // === VALIDATION 4: GLOBAL SOLVENCY CHECK ===
+    // === VALIDATION 3.5: PER-ATHLETE CONCENTRATION CAP ===
+    // Soft-close entries on athletes who have reached their tiered cap.
+    // Tier 1 (mult ≤ 4) = 18%, Tier 2 (≤ 7) = 22%, others 25%.
+    // Skip for parlays — leg-level enforcement happens on the underlying single.
+    if (entryType !== 'parlay') {
+      const { data: capInfo, error: capErr } = await supabase.rpc('check_athlete_capacity', {
+        p_market_id: marketId,
+        p_athlete_id: athleteId,
+        p_added_tokens: stakeAmount,
+      });
+      if (capErr) {
+        console.error('[VALIDATE] capacity check error:', capErr);
+        result.warnings.push('Capacity check unavailable');
+      } else if (capInfo && (capInfo as any).at_cap) {
+        // Look up athlete name for neutral message
+        const { data: ath } = await supabase
+          .from('athletes')
+          .select('name')
+          .eq('id', athleteId)
+          .maybeSingle();
+        const athName = ath?.name || 'This athlete';
+        return new Response(JSON.stringify({
+          allowed: false,
+          reason: `${athName} is at predicted entry capacity for this division — try another pick.`,
+          warnings: [],
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // Fetch current bankroll status from the view
     const { data: bankrollStatus, error: bankrollError } = await supabase
       .from('house_bankroll_summary')
