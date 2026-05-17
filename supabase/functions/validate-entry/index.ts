@@ -102,6 +102,7 @@ serve(async (req) => {
           timeZoneName: 'short',
         });
         const formatted = formatter.format(openTime);
+        console.log(`[VALIDATE] BLOCKED event_not_open: tournament=${tournamentId}, opens_at=${formatted}`);
         return new Response(JSON.stringify({
           ok: false,
           reason: 'event_not_open',
