@@ -35,7 +35,7 @@ import { Plus, Edit, ThumbsUp, ThumbsDown } from "lucide-react";
 import { toast } from "sonner";
 
 const SECTIONS = [
-  "Contests & Rules",
+  "Predictions & Rules",
   "Tokens & Limits",
   "Rewards & Redemption",
   "Results & Finalization",

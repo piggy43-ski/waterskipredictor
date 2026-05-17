@@ -861,7 +861,7 @@ const Predictions = () => {
               <Card className="p-8 text-center">
                 <p className="text-muted-foreground mb-4">No active predictions</p>
                 <p className="text-sm text-muted-foreground">
-                  You haven't made any predictions yet. Start with a contest you understand.
+                  You haven't made any predictions yet. Start with a market you understand.
                 </p>
               </Card>
             ) : viewMode === 'tournament' ? (

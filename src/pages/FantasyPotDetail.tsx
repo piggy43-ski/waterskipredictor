@@ -495,7 +495,7 @@ const FantasyPotDetail = () => {
             <h3 className="font-semibold mb-2">No Athletes Available</h3>
             <p className="text-sm text-muted-foreground mb-4">
               Athletes haven't been entered for this tournament yet. 
-              The tournament organizer needs to add participants before you can build a team.
+              Participants need to be confirmed before you can build a team.
             </p>
             <Button variant="outline" onClick={() => navigate('/fantasy')}>
               Browse Other Leagues

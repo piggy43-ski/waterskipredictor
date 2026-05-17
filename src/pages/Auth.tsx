@@ -184,7 +184,7 @@ const Auth = () => {
   if (view === 'signin') {
     return (
       <div className="min-h-screen bg-background flex flex-col px-6 py-8 animate-fade-in">
-        <SEO title="Sign In" description="Sign in to WaterSki Predictor to continue making picks and tracking your contests." path="/auth" />
+        <SEO title="Sign In" description="Sign in to WaterSki Predictor to continue making picks and tracking your predictions." path="/auth" />
         {/* Back Button */}
         <button 
           onClick={handleBack} 
