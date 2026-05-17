@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { SEO } from '@/components/SEO';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -51,6 +52,7 @@ const Auth = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 animate-fade-in">
+        <SEO title="Sign In or Sign Up" description="Join WaterSki Predictor — make free picks on IWWF pro tour events, earn tokens, and compete with other waterski fans." path="/auth" />
         {/* Logo Skeleton */}
         <Skeleton className="w-20 h-20 rounded-full mb-12" />
 
