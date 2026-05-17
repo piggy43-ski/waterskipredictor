@@ -190,6 +190,7 @@ const Wallet = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="Token Wallet" description="Manage your WaterSki Predictor token balance and buy token packs to enter more contests." path="/wallet" />
       <PageHeader title="Token Balance" />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
