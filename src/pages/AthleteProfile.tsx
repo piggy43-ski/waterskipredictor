@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { Helmet } from 'react-helmet-async';
 import { SEO } from '@/components/SEO';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,20 @@ export default function AthleteProfile() {
         path={`/athletes/${athlete.id}`}
         type="profile"
       />
+      <Helmet>
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "ProfilePage",
+          mainEntity: {
+            "@type": "Person",
+            name: athlete.full_name || athlete.name,
+            nationality: athlete.country || athlete.country_code,
+            image: athlete.profile_image_url || undefined,
+            description: athlete.bio || `Professional waterski athlete competing on the IWWF pro tour.`,
+            url: `https://waterskipredictor.com/athletes/${athlete.id}`,
+          },
+        })}</script>
+      </Helmet>
       <div className="max-w-4xl mx-auto p-6 space-y-6">
         <Link to="/tournaments">
           <Button variant="outline" size="sm">
