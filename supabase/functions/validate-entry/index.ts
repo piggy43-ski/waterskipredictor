@@ -76,6 +76,40 @@ serve(async (req) => {
     const body: ValidateEntryRequest = await req.json();
     const { userId, tournamentId, marketId, athleteId, stakeAmount, currentOdds, marketType, entryType = 'single' } = body;
 
+    // === TOURNAMENT LOOKUP (shared for open-time + handle cap) ===
+    const { data: tournament, error: tournamentErr } = await supabase
+      .from('tournaments')
+      .select('betting_open_time, max_handle_tokens, current_handle_tokens')
+      .eq('id', tournamentId)
+      .maybeSingle();
+
+    if (tournamentErr) {
+      console.error('[VALIDATE] tournament lookup error:', tournamentErr);
+    }
+
+    // === VALIDATION -1: EVENT NOT OPEN ===
+    if (tournament && tournament.betting_open_time) {
+      const openTime = new Date(tournament.betting_open_time);
+      const now = new Date();
+      if (openTime > now) {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/New_York',
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        });
+        const formatted = formatter.format(openTime);
+        return new Response(JSON.stringify({
+          ok: false,
+          reason: 'event_not_open',
+          message: `Predictions for this event open ${formatted}.`,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     const result: ValidationResult = {
       allowed: true,
       warnings: [],
