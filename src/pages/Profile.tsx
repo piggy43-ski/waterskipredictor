@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SEO } from '@/components/SEO';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
@@ -336,6 +337,7 @@ const Profile = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="My Profile" description="Manage your WaterSki Predictor profile, avatar, and account preferences." path="/profile" />
       <PageHeader title="Profile" />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
