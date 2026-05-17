@@ -43,10 +43,10 @@ const Terms = () => {
             </section>
             
             <section>
-              <h2 className="font-bold mb-2">4. Predictions & Contests</h2>
+              <h2 className="font-bold mb-2">4. Predictions</h2>
               <p className="text-muted-foreground">
-                WaterSki Predictor offers skill-based prediction contests. Entry amounts and rewards 
-                are denominated in tokens only. All contest results are final once settled by our system.
+                WaterSki Predictor offers skill-based prediction markets. Entry amounts and rewards 
+                are denominated in tokens only. All prediction results are final once settled by our system.
               </p>
             </section>
             

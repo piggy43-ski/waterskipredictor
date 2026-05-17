@@ -59,7 +59,8 @@ const TournamentDetail = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [tournament, setTournament] = useState<Tournament | null>(null);
-  const [markets, setMarkets] = useState<Market[]>([]);
+  const [markets, setMarkets] = useState<Array<Market & { locked_at?: string | null; is_published?: boolean }>>([]);
+  const [predictionsOpenAt, setPredictionsOpenAt] = useState<string | null>(null);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [tournamentEntries, setTournamentEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,14 +121,17 @@ const TournamentDetail = () => {
     const updatePredictionWindow = () => {
       const startTime = tournament.start_datetime || tournament.start_date;
       const endTime = tournament.end_datetime || tournament.end_date;
-      setPredictionWindow(getPredictionWindowStatus(startTime, endTime, tournament.settled_at));
+      const lockTimes = markets.map((m) => m.locked_at).filter(Boolean) as string[];
+      setPredictionWindow(
+        getPredictionWindowStatus(startTime, endTime, tournament.settled_at, predictionsOpenAt, lockTimes)
+      );
     };
 
     updatePredictionWindow();
     const interval = setInterval(updatePredictionWindow, 1000);
 
     return () => clearInterval(interval);
-  }, [tournament]);
+  }, [tournament, markets, predictionsOpenAt]);
 
   const fetchTournamentData = async () => {
     try {
@@ -140,6 +144,7 @@ const TournamentDetail = () => {
       if (tournamentError) throw tournamentError;
 
       if (tournamentData) {
+        setPredictionsOpenAt((tournamentData as any).betting_open_time ?? null);
         setTournament({
           id: tournamentData.id,
           name: tournamentData.name,
@@ -963,14 +968,14 @@ const TournamentDetail = () => {
             <Alert className={
               predictionWindow.canPredict 
                 ? 'border-primary/50 bg-primary/10' 
-                : predictionWindow.status === 'upcoming'
+                : predictionWindow.status === 'preview'
                   ? 'border-border bg-muted/30'
                   : 'border-destructive/50 bg-destructive/10'
             }>
               <Clock className="h-4 w-4" />
               <AlertDescription className="flex items-center justify-between">
                 <span className="font-medium">{predictionWindow.message}</span>
-                {!predictionWindow.canPredict && predictionWindow.status !== 'upcoming' && (
+                {!predictionWindow.canPredict && predictionWindow.status !== 'preview' && (
                   <AlertCircle className="h-4 w-4 text-destructive" />
                 )}
               </AlertDescription>
@@ -980,11 +985,11 @@ const TournamentDetail = () => {
           {/* Help Link & Admin Quick Access */}
           <div className="flex items-center justify-between">
             <Link 
-              to="/help?section=Contests & Rules" 
+              to="/help?section=Predictions & Rules" 
               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
             >
               <HelpCircle className="w-3 h-3" />
-              Need help with contests?
+              How predictions work
             </Link>
             
             {isAdmin && (
@@ -1018,14 +1023,24 @@ const TournamentDetail = () => {
         )}
 
         {/* Parlay Builder Button */}
-        {tournament.status !== 'finished' && predictionWindow?.canPredict && (
+        {tournament.status !== 'finished' && (
           <div className="mb-6 flex items-center justify-center">
-            <Button 
-              onClick={() => setParlayBuilderOpen(true)}
+            <Button
+              onClick={() => {
+                if (predictionWindow?.canPredict) {
+                  setParlayBuilderOpen(true);
+                } else {
+                  toast({
+                    title: 'Predictions not open yet',
+                    description: predictionWindow?.message || 'Check back soon.',
+                  });
+                }
+              }}
               size="lg"
+              disabled={!predictionWindow?.canPredict}
               className="w-full max-w-md"
             >
-              Build Parlay Prediction
+              {predictionWindow?.canPredict ? 'Build Parlay Prediction' : '🔒 Build Parlay Prediction'}
             </Button>
           </div>
         )}
@@ -1051,10 +1066,9 @@ const TournamentDetail = () => {
         {selections.length === 0 ? (
           <Card className="p-6 text-center">
             <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <h3 className="font-semibold mb-2">Athletes Coming Soon</h3>
+            <h3 className="font-semibold mb-2">Markets configuring</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              We're waiting for the tournament organizer to confirm the athletes list. 
-              Check back closer to the event for prediction markets.
+              Prediction markets for this event will appear here once finalized.
             </p>
             <Button variant="outline" onClick={() => navigate('/tournaments')}>
               Browse Other Events

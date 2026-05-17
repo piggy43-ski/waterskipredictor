@@ -17,7 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TrustDisclaimer } from "@/components/TrustDisclaimer";
 
 const sectionIcons: Record<string, React.ReactNode> = {
-  "Contests & Rules": <BookOpen className="w-5 h-5" />,
+  "Predictions & Rules": <BookOpen className="w-5 h-5" />,
   "Tokens & Limits": <Coins className="w-5 h-5" />,
   "Rewards & Redemption": <Gift className="w-5 h-5" />,
   "Results & Finalization": <Trophy className="w-5 h-5" />,
@@ -26,7 +26,7 @@ const sectionIcons: Record<string, React.ReactNode> = {
 };
 
 const sectionOrder = [
-  "Contests & Rules",
+  "Predictions & Rules",
   "Tokens & Limits",
   "Rewards & Redemption",
   "Results & Finalization",
@@ -98,7 +98,7 @@ const HelpCenter = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <SEO title="Help Center" description="Find answers to questions about contests, tokens, rewards, and how WaterSki Predictor works." path="/help" />
+      <SEO title="Help Center" description="Find answers to questions about predictions, tokens, rewards, and how WaterSki Predictor works." path="/help" />
       <div className="sticky top-0 z-10 bg-background border-b border-border">
         <div className="container max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">

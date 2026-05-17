@@ -95,8 +95,11 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
             if (predictionWindow.status === 'finished') {
               return { badge: 'SETTLED', color: 'text-muted-foreground', bgColor: 'bg-muted/50' };
             }
-            if (predictionWindow.status === 'closed') {
+            if (predictionWindow.status === 'locked') {
               return { badge: '🔒 LOCKED', color: 'text-destructive', bgColor: 'bg-destructive/10' };
+            }
+            if (predictionWindow.status === 'preview') {
+              return { badge: 'PREVIEW', color: 'text-primary', bgColor: 'bg-primary/10' };
             }
             if (predictionWindow.canPredict) {
               return { badge: '✓ OPEN', color: 'text-green-600 dark:text-green-400', bgColor: 'bg-green-500/10' };

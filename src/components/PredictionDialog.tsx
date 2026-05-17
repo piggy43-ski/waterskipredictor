@@ -138,7 +138,7 @@ export const PredictionDialog = ({
           {/* Prediction Summary for single predictions */}
           {!isParlay && marketContext && (
             <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-              <div className="text-xs text-muted-foreground">Contest Type</div>
+              <div className="text-xs text-muted-foreground">Prediction Type</div>
               <div className="font-semibold">{marketContext.marketType}</div>
               {selection && (
                 <>

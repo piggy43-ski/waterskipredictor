@@ -20,7 +20,7 @@ export const TrustDisclaimer = ({ className = '', compact = false }: TrustDiscla
         <Shield className="w-3.5 h-3.5" />
         <span className="font-medium">Skill-Based Prediction Game</span>
       </div>
-      <p>Tokens are used to enter contests and redeem rewards.</p>
+      <p>Tokens are used to enter predictions and redeem rewards.</p>
       <p>Tokens have no cash value and cannot be withdrawn.</p>
       <p>Results are based on official competition outcomes.</p>
     </div>

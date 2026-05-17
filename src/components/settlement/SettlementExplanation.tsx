@@ -239,11 +239,11 @@ export function SettlementExplanation({ settlement, className }: Props) {
 
         {/* Help link */}
         <Link 
-          to="/help?section=Contests & Rules" 
+          to="/help?section=Predictions & Rules" 
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary mt-2 pt-2 border-t border-border/50"
         >
           <HelpCircle className="w-3 h-3" />
-          Learn how contests work
+          Learn how predictions work
         </Link>
       </div>
     </Card>
