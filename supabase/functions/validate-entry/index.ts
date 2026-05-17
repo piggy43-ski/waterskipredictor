@@ -111,6 +111,28 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // === VALIDATION 2.5: EVENT HANDLE CIRCUIT BREAKER ===
+    // Pre-check the per-tournament handle cap so users get a friendly message
+    // before the DB-level trigger would reject the insert. The trigger is the
+    // race-safe authority; this is UX only.
+    {
+      const { data: trn, error: trnErr } = await supabase
+        .from('tournaments')
+        .select('max_handle_tokens, current_handle_tokens')
+        .eq('id', tournamentId)
+        .maybeSingle();
+      if (!trnErr && trn && trn.max_handle_tokens != null) {
+        const projected = Number(trn.current_handle_tokens || 0) + stakeAmount;
+        if (projected > Number(trn.max_handle_tokens)) {
+          return new Response(JSON.stringify({
+            allowed: false,
+            reason: 'Predictions for this event have reached capacity. We pause new entries when an event hits its prediction limit to keep multipliers stable. Check back if entries reopen, or browse other events.',
+            warnings: [],
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+    }
+
     // === VALIDATION 3: Duplicate Athlete Check (same user, same market) ===
     // Skip duplicate check for parlays — parlays may reference markets where user already has singles
     if (entryType !== 'parlay') {
