@@ -76,6 +76,41 @@ serve(async (req) => {
     const body: ValidateEntryRequest = await req.json();
     const { userId, tournamentId, marketId, athleteId, stakeAmount, currentOdds, marketType, entryType = 'single' } = body;
 
+    // === TOURNAMENT LOOKUP (shared for open-time + handle cap) ===
+    const { data: tournament, error: tournamentErr } = await supabase
+      .from('tournaments')
+      .select('betting_open_time, max_handle_tokens, current_handle_tokens')
+      .eq('id', tournamentId)
+      .maybeSingle();
+
+    if (tournamentErr) {
+      console.error('[VALIDATE] tournament lookup error:', tournamentErr);
+    }
+
+    // === VALIDATION -1: EVENT NOT OPEN ===
+    if (tournament && tournament.betting_open_time) {
+      const openTime = new Date(tournament.betting_open_time);
+      const now = new Date();
+      if (openTime > now) {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/New_York',
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        });
+        const formatted = formatter.format(openTime);
+        console.log(`[VALIDATE] BLOCKED event_not_open: tournament=${tournamentId}, opens_at=${formatted}`);
+        return new Response(JSON.stringify({
+          ok: false,
+          reason: 'event_not_open',
+          message: `Predictions for this event open ${formatted}.`,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     const result: ValidationResult = {
       allowed: true,
       warnings: [],
@@ -115,21 +150,14 @@ serve(async (req) => {
     // Pre-check the per-tournament handle cap so users get a friendly message
     // before the DB-level trigger would reject the insert. The trigger is the
     // race-safe authority; this is UX only.
-    {
-      const { data: trn, error: trnErr } = await supabase
-        .from('tournaments')
-        .select('max_handle_tokens, current_handle_tokens')
-        .eq('id', tournamentId)
-        .maybeSingle();
-      if (!trnErr && trn && trn.max_handle_tokens != null) {
-        const projected = Number(trn.current_handle_tokens || 0) + stakeAmount;
-        if (projected > Number(trn.max_handle_tokens)) {
-          return new Response(JSON.stringify({
-            allowed: false,
-            reason: 'Predictions for this event have reached capacity. We pause new entries when an event hits its prediction limit to keep multipliers stable. Check back if entries reopen, or browse other events.',
-            warnings: [],
-          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
+    if (tournament && tournament.max_handle_tokens != null) {
+      const projected = Number(tournament.current_handle_tokens || 0) + stakeAmount;
+      if (projected > Number(tournament.max_handle_tokens)) {
+        return new Response(JSON.stringify({
+          allowed: false,
+          reason: 'Predictions for this event have reached capacity. We pause new entries when an event hits its prediction limit to keep multipliers stable. Check back if entries reopen, or browse other events.',
+          warnings: [],
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
 
