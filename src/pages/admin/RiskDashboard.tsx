@@ -19,6 +19,7 @@ import {
 import { format } from 'date-fns';
 import { RISK_CONFIG, getLiabilityCap, getMaxRiskRatio, MarketType } from '@/utils/riskConfig';
 import { toast } from 'sonner';
+import { EventHandleCapsCard } from '@/components/admin/EventHandleCapsCard';
 
 // Use risk config for bands
 const HOUSE_EDGE_BANDS = RISK_CONFIG.IMPLIED_SUM_BANDS;
@@ -997,6 +998,8 @@ const RiskDashboard = () => {
             </Button>
           </div>
         </div>
+
+        <EventHandleCapsCard />
 
         {/* PART 1: KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
