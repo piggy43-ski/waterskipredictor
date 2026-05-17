@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { SEO } from '@/components/SEO';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -51,6 +52,7 @@ const Auth = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 animate-fade-in">
+        <SEO title="Sign In or Sign Up" description="Join WaterSki Predictor — make free picks on IWWF pro tour events, earn tokens, and compete with other waterski fans." path="/auth" />
         {/* Logo Skeleton */}
         <Skeleton className="w-20 h-20 rounded-full mb-12" />
 
@@ -136,6 +138,7 @@ const Auth = () => {
   if (view === 'landing') {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 animate-fade-in">
+        <SEO title="Sign In or Sign Up" description="Join WaterSki Predictor — make free picks on IWWF pro tour events, earn tokens, and compete with other waterski fans." path="/auth" />
         {/* Logo */}
         <div className="w-64 h-64 mb-12 animate-scale-in">
           <img 
@@ -181,6 +184,7 @@ const Auth = () => {
   if (view === 'signin') {
     return (
       <div className="min-h-screen bg-background flex flex-col px-6 py-8 animate-fade-in">
+        <SEO title="Sign In" description="Sign in to WaterSki Predictor to continue making picks and tracking your contests." path="/auth" />
         {/* Back Button */}
         <button 
           onClick={handleBack} 
@@ -265,6 +269,7 @@ const Auth = () => {
   // Sign Up View
   return (
     <div className="min-h-screen bg-background flex flex-col px-6 py-8 animate-fade-in">
+      <SEO title="Create Account" description="Create your free WaterSki Predictor account to start picking winners on the IWWF pro tour." path="/auth" />
       {/* Back Button */}
       <button 
         onClick={handleBack} 

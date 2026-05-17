@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SEO } from '@/components/SEO';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { FantasyPotCard } from '@/components/fantasy/FantasyPotCard';
@@ -414,6 +415,7 @@ const Fantasy = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="Fantasy Leagues" description="Build your dream waterski team and compete in fantasy pots on WaterSki Predictor." path="/fantasy" />
       <PageHeader title="Fantasy" showBack />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">

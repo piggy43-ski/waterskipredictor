@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { SEO } from "@/components/SEO";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -187,6 +188,7 @@ const HelpArticle = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title={article.title} description={`${article.section} — read more about ${article.title} on WaterSki Predictor's Help Center.`} path={`/help/${article.id}`} type="article" />
       <div className="container max-w-2xl mx-auto px-4 py-6">
         <Button
           variant="ghost"

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { SEO } from "@/components/SEO";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -97,6 +98,7 @@ const HelpCenter = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="Help Center" description="Find answers to questions about contests, tokens, rewards, and how WaterSki Predictor works." path="/help" />
       <div className="sticky top-0 z-10 bg-background border-b border-border">
         <div className="container max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">

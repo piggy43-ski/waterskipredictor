@@ -1,3 +1,4 @@
+import { SEO } from '@/components/SEO';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
@@ -5,6 +6,7 @@ import { Card } from '@/components/ui/card';
 const Privacy = () => {
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title="Privacy Policy" description="How WaterSki Predictor collects, uses, and protects your personal information." path="/privacy" />
       <PageHeader title="Privacy Policy" showBalance={false} />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
