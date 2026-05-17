@@ -16,24 +16,16 @@ export const TutorialBubble: React.FC = () => {
   
   const [position, setPosition] = useState<BubblePosition | null>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
-
-  // Safety check - don't render if context isn't available  
-  if (!context) {
-    return null;
-  }
-
-  const {
-    isActive,
-    currentStep,
-    currentStepData,
-    totalSteps,
-    nextStep,
-    prevStep,
-    skipTutorial,
-    completeTutorial,
-  } = context;
-
   const [showAsFallbackModal, setShowAsFallbackModal] = useState(false);
+
+  const isActive = context?.isActive ?? false;
+  const currentStep = context?.currentStep ?? 0;
+  const currentStepData = context?.currentStepData;
+  const totalSteps = context?.totalSteps ?? 0;
+  const nextStep = context?.nextStep ?? (() => {});
+  const prevStep = context?.prevStep ?? (() => {});
+  const skipTutorial = context?.skipTutorial ?? (() => {});
+  const completeTutorial = context?.completeTutorial ?? (() => {});
 
   useEffect(() => {
     setShowAsFallbackModal(false);
@@ -122,7 +114,7 @@ export const TutorialBubble: React.FC = () => {
     };
   }, [isActive, currentStepData, currentStep]);
 
-  if (!isActive || !currentStepData) return null;
+  if (!context || !isActive || !currentStepData) return null;
 
   // Modal content for welcome/complete steps OR fallback when element not found
   if (currentStepData.isModal || showAsFallbackModal) {
