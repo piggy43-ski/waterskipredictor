@@ -2539,6 +2539,48 @@ export type Database = {
         }
         Relationships: []
       }
+      risk_alerts: {
+        Row: {
+          acknowledged: boolean
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          alert_type: string
+          created_at: string
+          id: string
+          market_id: string | null
+          message: string
+          metadata: Json
+          severity: string
+          tournament_id: string | null
+        }
+        Insert: {
+          acknowledged?: boolean
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type: string
+          created_at?: string
+          id?: string
+          market_id?: string | null
+          message: string
+          metadata?: Json
+          severity?: string
+          tournament_id?: string | null
+        }
+        Update: {
+          acknowledged?: boolean
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          created_at?: string
+          id?: string
+          market_id?: string | null
+          message?: string
+          metadata?: Json
+          severity?: string
+          tournament_id?: string | null
+        }
+        Relationships: []
+      }
       risk_config: {
         Row: {
           description: string | null
@@ -3037,14 +3079,17 @@ export type Database = {
           allow_bet_modification_until: string | null
           betting_open_time: string | null
           created_at: string
+          current_handle_tokens: number
           disciplines: string[]
           end_date: string | null
           end_datetime: string | null
+          handle_warning_threshold: number
           has_final: boolean | null
           has_qualifying: boolean | null
           has_semifinal: boolean | null
           id: string
           location: string
+          max_handle_tokens: number | null
           name: string
           notes: string | null
           settled_at: string | null
@@ -3058,14 +3103,17 @@ export type Database = {
           allow_bet_modification_until?: string | null
           betting_open_time?: string | null
           created_at?: string
+          current_handle_tokens?: number
           disciplines?: string[]
           end_date?: string | null
           end_datetime?: string | null
+          handle_warning_threshold?: number
           has_final?: boolean | null
           has_qualifying?: boolean | null
           has_semifinal?: boolean | null
           id?: string
           location: string
+          max_handle_tokens?: number | null
           name: string
           notes?: string | null
           settled_at?: string | null
@@ -3079,14 +3127,17 @@ export type Database = {
           allow_bet_modification_until?: string | null
           betting_open_time?: string | null
           created_at?: string
+          current_handle_tokens?: number
           disciplines?: string[]
           end_date?: string | null
           end_datetime?: string | null
+          handle_warning_threshold?: number
           has_final?: boolean | null
           has_qualifying?: boolean | null
           has_semifinal?: boolean | null
           id?: string
           location?: string
+          max_handle_tokens?: number | null
           name?: string
           notes?: string | null
           settled_at?: string | null
