@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { useParams, useNavigate, useLocation, Link, useSearchParams } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { SelectionCard } from '@/components/SelectionCard';
@@ -923,6 +924,24 @@ const TournamentDetail = () => {
         path={`/tournaments/${tournament.id}`}
         type="event"
       />
+      <Helmet>
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SportsEvent",
+          name: tournament.name,
+          startDate: tournament.start_datetime || tournament.start_date,
+          endDate: tournament.end_datetime || tournament.end_date,
+          eventStatus: tournament.status === 'finished' ? 'https://schema.org/EventCompleted' : 'https://schema.org/EventScheduled',
+          eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+          location: tournament.location ? {
+            "@type": "Place",
+            name: tournament.location,
+            address: tournament.location,
+          } : undefined,
+          sport: 'Water skiing',
+          url: `https://waterskipredictor.com/tournaments/${tournament.id}`,
+        })}</script>
+      </Helmet>
       <PageHeader title={tournament.name} showBack />
 
       <div className="max-w-6xl mx-auto px-4 py-6">
