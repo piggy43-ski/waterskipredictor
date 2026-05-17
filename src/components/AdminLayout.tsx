@@ -15,6 +15,7 @@ const navItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/admin/risk-dashboard', label: 'Risk Dashboard', icon: Shield },
   { path: '/admin/bankroll', label: 'Bankroll', icon: Wallet },
+  { path: '/admin/economics', label: 'Token Economics', icon: DollarSign },
   { path: '/admin/house-ledger', label: 'Platform Ledger', icon: DollarSign },
   { path: '/admin/market-liability', label: 'Market Liability', icon: TrendingUp },
   { path: '/admin/users', label: 'Users', icon: UserCog },

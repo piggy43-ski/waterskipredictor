@@ -2488,6 +2488,7 @@ export type Database = {
           category: string
           created_at: string
           description: string
+          fulfillment_overhead_usd: number | null
           fulfillment_type: string | null
           id: string
           image_url: string | null
@@ -2495,6 +2496,7 @@ export type Database = {
           max_total: number | null
           name: string
           partner: string
+          redemption_frequency_weight: number | null
           required_tokens: number
           sort_order: number
           tier: string | null
@@ -2506,6 +2508,7 @@ export type Database = {
           category: string
           created_at?: string
           description: string
+          fulfillment_overhead_usd?: number | null
           fulfillment_type?: string | null
           id?: string
           image_url?: string | null
@@ -2513,6 +2516,7 @@ export type Database = {
           max_total?: number | null
           name: string
           partner: string
+          redemption_frequency_weight?: number | null
           required_tokens: number
           sort_order?: number
           tier?: string | null
@@ -2524,6 +2528,7 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string
+          fulfillment_overhead_usd?: number | null
           fulfillment_type?: string | null
           id?: string
           image_url?: string | null
@@ -2531,6 +2536,7 @@ export type Database = {
           max_total?: number | null
           name?: string
           partner?: string
+          redemption_frequency_weight?: number | null
           required_tokens?: number
           sort_order?: number
           tier?: string | null
