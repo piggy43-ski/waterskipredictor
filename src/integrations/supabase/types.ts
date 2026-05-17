@@ -3295,6 +3295,19 @@ export type Database = {
       }
     }
     Functions: {
+      athlete_cap_pct: { Args: { p_multiplier: number }; Returns: number }
+      check_athlete_capacity: {
+        Args: {
+          p_added_tokens?: number
+          p_athlete_id: string
+          p_market_id: string
+        }
+        Returns: Json
+      }
+      compute_worst_case_liability: {
+        Args: { p_tournament_id: string }
+        Returns: Json
+      }
       deduct_tokens: {
         Args: { amount_param: number; user_id_param: string }
         Returns: {
