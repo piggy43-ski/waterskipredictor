@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SEO } from '@/components/SEO';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { FantasyPotCard } from '@/components/fantasy/FantasyPotCard';
