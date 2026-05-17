@@ -59,7 +59,8 @@ const TournamentDetail = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [tournament, setTournament] = useState<Tournament | null>(null);
-  const [markets, setMarkets] = useState<Market[]>([]);
+  const [markets, setMarkets] = useState<Array<Market & { locked_at?: string | null; is_published?: boolean }>>([]);
+  const [predictionsOpenAt, setPredictionsOpenAt] = useState<string | null>(null);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [tournamentEntries, setTournamentEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,14 +121,17 @@ const TournamentDetail = () => {
     const updatePredictionWindow = () => {
       const startTime = tournament.start_datetime || tournament.start_date;
       const endTime = tournament.end_datetime || tournament.end_date;
-      setPredictionWindow(getPredictionWindowStatus(startTime, endTime, tournament.settled_at));
+      const lockTimes = markets.map((m) => m.locked_at).filter(Boolean) as string[];
+      setPredictionWindow(
+        getPredictionWindowStatus(startTime, endTime, tournament.settled_at, predictionsOpenAt, lockTimes)
+      );
     };
 
     updatePredictionWindow();
     const interval = setInterval(updatePredictionWindow, 1000);
 
     return () => clearInterval(interval);
-  }, [tournament]);
+  }, [tournament, markets, predictionsOpenAt]);
 
   const fetchTournamentData = async () => {
     try {
@@ -140,6 +144,7 @@ const TournamentDetail = () => {
       if (tournamentError) throw tournamentError;
 
       if (tournamentData) {
+        setPredictionsOpenAt((tournamentData as any).betting_open_time ?? null);
         setTournament({
           id: tournamentData.id,
           name: tournamentData.name,
