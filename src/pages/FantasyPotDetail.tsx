@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { SEO } from '@/components/SEO';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { TeamBuilder } from '@/components/fantasy/TeamBuilder';
@@ -418,6 +419,7 @@ const FantasyPotDetail = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      <SEO title={pot.name} description={`Join the ${pot.name} fantasy waterski league on WaterSki Predictor.`} path={`/fantasy/${pot.id}`} />
       <PageHeader title={pot.name} showBack />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
