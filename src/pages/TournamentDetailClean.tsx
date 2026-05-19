@@ -1266,8 +1266,8 @@ const TournamentDetail = () => {
                     {/* Simulation Details Info Box */}
                     <SimulationDetails isAdmin={isAdmin} className="mb-4" />
                     
-                    <Tabs defaultValue="winner" className="w-full">
-                      <TabsList className="w-full grid grid-cols-3 mb-4">
+                    <Tabs defaultValue="winner" className="w-full tabs-underline">
+                      <TabsList className="mb-4">
                         <TabsTrigger value="winner">Winner</TabsTrigger>
                         <TabsTrigger value="podium">Podium</TabsTrigger>
                         <TabsTrigger value="highest">Highest</TabsTrigger>
