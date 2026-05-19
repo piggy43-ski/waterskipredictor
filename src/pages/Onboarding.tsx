@@ -212,7 +212,7 @@ const Onboarding = () => {
               className="absolute inset-0"
               style={{
                 background:
-                  'radial-gradient(circle at 50% 35%, hsl(186 78% 55% / 0.35), transparent 60%)',
+                  'radial-gradient(circle at 50% 35%, hsl(186 100% 50% / 0.35), transparent 60%)',
               }}
             />
             <div className="relative flex h-full flex-col items-center justify-center px-6 text-center">
