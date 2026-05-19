@@ -146,9 +146,9 @@ export const RISK_CONFIG = {
    * Do NOT diverge — update `src/utils/multiplierCaps.ts` instead.
    */
   MULTIPLIER_CAPS: {
-    WINNER: 8.0,
-    HIGHEST_SCORE: 7.0,
-    PODIUM: 6.0,
+    WINNER: 25.0,
+    HIGHEST_SCORE: 22.0,
+    PODIUM: 12.0,
   } as const,
 } as const;
 
