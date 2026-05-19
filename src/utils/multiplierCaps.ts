@@ -1,33 +1,43 @@
 // Multiplier caps and validation for manual overrides - AGGRESSIVE to prevent bankruptcy
 
 export const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.50, max: 8.0 },
-  PODIUM: { min: 1.25, max: 6.0 },
-  HIGHEST_SCORE: { min: 1.50, max: 7.0 },
-  HEAD_TO_HEAD: { min: 1.5, max: 5.0 },
-  OVER_UNDER: { min: 1.5, max: 5.0 },
+  // Rank-tiered structure (locked 2026-05-19): tail ranks (8+) need head-room
+  // so that the implied-sum band is reachable in large fields without the
+  // global cap acting as a floor. Favorite caps (ranks 1–3) stay tight via
+  // RANK_CAPS — the global max is only ever hit by deep longshots.
+  WINNER:        { min: 1.10, max: 25.0 },
+  PODIUM:        { min: 1.10, max: 12.0 },
+  HIGHEST_SCORE: { min: 1.10, max: 22.0 },
+  HEAD_TO_HEAD:  { min: 1.10, max: 5.0 },
+  OVER_UNDER:    { min: 1.10, max: 5.0 },
 } as const;
 
-// Rank-specific caps - favorites are capped VERY tight
-export const RANK_CAPS = {
-  WINNER: {
-    1: 1.50,   // Rank 1 (best athlete) max 1.5x
-    2: 2.25,
-    3: 3.00,
-    4: 4.00,
-    5: 5.00,
-  } as Record<number, number>,
-  PODIUM: {
-    1: 1.25,
-    2: 1.75,
-    3: 2.25,
-  } as Record<number, number>,
-  HIGHEST_SCORE: {
-    1: 1.80,
-    2: 2.50,
-    3: 3.50,
-  } as Record<number, number>,
+// Rank-tiered caps. Top-3 still capped tight individually; ranks 4–7 share
+// a mid-tier cap; ranks 8+ share a wide tail cap so big fields can satisfy
+// the implied-sum target without forcing a constant-multiplier tail.
+// Use `getRankCap(market, rank)` to resolve — do NOT read this object directly.
+export const RANK_CAPS: Record<string, Record<string | number, number>> = {
+  WINNER:        { 1: 1.50, 2: 2.25, 3: 3.00, '4-7': 5.00, '8+': 20.00 },
+  PODIUM:        { 1: 1.25, 2: 1.75, 3: 2.20, '4-7': 4.00, '8+': 10.00 },
+  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.40, '4-7': 5.50, '8+': 18.00 },
+  HEAD_TO_HEAD:  {},
 };
+
+/**
+ * Resolve the effective rank cap for a given market + rank. Resolution order:
+ *   1. exact rank key (e.g. RANK_CAPS.WINNER[1])
+ *   2. tier key '4-7' if rank ∈ [4,7]
+ *   3. tier key '8+'  if rank ≥ 8
+ *   4. fall through to MULTIPLIER_CAPS[market].max
+ */
+export function getRankCap(marketType: MarketTypeKey, rank: number): number {
+  const caps = RANK_CAPS[marketType] || {};
+  const globalMax = MULTIPLIER_CAPS[marketType]?.max ?? Infinity;
+  if (rank in caps) return caps[rank] as number;
+  if (rank >= 4 && rank <= 7 && caps['4-7'] != null) return caps['4-7'] as number;
+  if (rank >= 8 && caps['8+'] != null) return caps['8+'] as number;
+  return globalMax;
+}
 
 /**
  * Combined podium (exact-order) multiplier ceiling.
@@ -76,18 +86,15 @@ export function validateMultiplier(
     return { valid: false, error: 'Multiplier must be a positive number' };
   }
   
-  // Check rank-specific cap first (most restrictive)
-  if (fieldRank && fieldRank >= 1 && fieldRank <= 5) {
-    const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS];
-    if (rankCaps && rankCaps[fieldRank]) {
-      const rankMaxCap = rankCaps[fieldRank];
-      if (value > rankMaxCap) {
-        return { 
-          valid: false, 
-          error: `Rank #${fieldRank} max is ${rankMaxCap}x for ${marketType}`,
-          clamped: rankMaxCap 
-        };
-      }
+  // Check rank-tiered cap first (most restrictive). Resolves via tier bands.
+  if (fieldRank && fieldRank >= 1) {
+    const rankMaxCap = getRankCap(marketType, fieldRank);
+    if (rankMaxCap < caps.max && value > rankMaxCap) {
+      return {
+        valid: false,
+        error: `Rank #${fieldRank} max is ${rankMaxCap}x for ${marketType}`,
+        clamped: rankMaxCap,
+      };
     }
   }
   
