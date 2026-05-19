@@ -29,19 +29,31 @@ const TARGET_IMPLIED_SUM = {
 // SINGLE SOURCE OF TRUTH: mirrors src/utils/multiplierCaps.ts
 // Do NOT diverge — update src/utils/multiplierCaps.ts AND this block in lockstep.
 const MULTIPLIER_CAPS = {
-  WINNER: { min: 1.50, max: 8.0 },
-  PODIUM: { min: 1.25, max: 6.0 },
-  HIGHEST_SCORE: { min: 1.50, max: 7.0 },
-  HEAD_TO_HEAD: { min: 1.50, max: 5.0 },
+  WINNER:        { min: 1.10, max: 25.0 },
+  PODIUM:        { min: 1.10, max: 12.0 },
+  HIGHEST_SCORE: { min: 1.10, max: 22.0 },
+  HEAD_TO_HEAD:  { min: 1.10, max: 5.0 },
 };
 
-// Rank-specific caps — favorites are capped tight (mirrors multiplierCaps.RANK_CAPS).
-const RANK_CAPS: Record<string, Record<number, number>> = {
-  WINNER: { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 5.00 },
-  PODIUM: { 1: 1.25, 2: 1.75, 3: 2.25 },
-  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.50 },
-  HEAD_TO_HEAD: {},
+// Rank-tiered caps (mirrors multiplierCaps.RANK_CAPS).
+// Top-3 tight; ranks 4–7 mid; ranks 8+ wide tail so large fields can
+// satisfy the implied-sum band without the global cap acting as a floor.
+const RANK_CAPS: Record<string, Record<string | number, number>> = {
+  WINNER:        { 1: 1.50, 2: 2.25, 3: 3.00, '4-7': 5.00, '8+': 20.00 },
+  PODIUM:        { 1: 1.25, 2: 1.75, 3: 2.20, '4-7': 4.00, '8+': 10.00 },
+  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.40, '4-7': 5.50, '8+': 18.00 },
+  HEAD_TO_HEAD:  {},
 };
+
+function getRankCap(marketType: string, rank: number): number {
+  const caps = RANK_CAPS[marketType] || {};
+  const globalMax = (MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
+    || MULTIPLIER_CAPS.WINNER).max;
+  if (rank in caps) return caps[rank] as number;
+  if (rank >= 4 && rank <= 7 && caps['4-7'] != null) return caps['4-7'] as number;
+  if (rank >= 8 && caps['8+'] != null) return caps['8+'] as number;
+  return globalMax;
+}
 
 // Softmax temperature per market type (lower = sharper favorites)
 const TEMPERATURE = {
@@ -71,7 +83,7 @@ const ODDS_LADDER = [
   6.00, 6.25, 6.50, 6.75,
   7.00, 7.50, 8.00, 8.50, 9.00, 9.50,
   10.00, 10.50, 11.00, 11.50, 12.00, 12.50, 13.00, 13.50, 14.00, 14.50, 15.00,
-  16.00, 17.00, 18.00, 19.00, 20.00
+  16.00, 17.00, 18.00, 19.00, 20.00, 21.00, 22.00, 23.00, 24.00, 25.00
 ];
 
 // ============================================================
@@ -120,8 +132,7 @@ function finalizeMultiplier(
 ): number {
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
     || MULTIPLIER_CAPS.WINNER;
-  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
-  const rankCap = rankCaps[fieldRank] ?? caps.max;
+  const rankCap = getRankCap(marketType, fieldRank);
   const effectiveMax = Math.min(rankCap, caps.max);
 
   // Sanitize: NaN / Infinity / non-positive collapses to floor.
@@ -156,8 +167,6 @@ function assertMarketSane(
     || TARGET_IMPLIED_SUM.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
     || MULTIPLIER_CAPS.WINNER;
-  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
-
   const impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
 
   // (1) Implied sum within band ± 5% tolerance
@@ -175,8 +184,8 @@ function assertMarketSane(
   multipliers.forEach((m, i) => {
     const id = athleteIds[i];
     const rank = fieldRanks.get(id) ?? 99;
-    const rankCap = rankCaps[rank];
-    if (rankCap && m > rankCap + 1e-6) {
+    const rankCap = getRankCap(marketType, rank);
+    if (rankCap < caps.max && m > rankCap + 1e-6) {
       reasons.push(`athlete idx=${i} (rank ${rank}): multiplier ${m} exceeds rank cap ${rankCap}`);
     }
     if (m > caps.max + 1e-6) {
@@ -526,7 +535,7 @@ function deriveMultipliersCalibrated(
 
       clippedCount = multipliers.reduce((n, m, idx) => {
         const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
-        const rankCap = (RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {})[rank] ?? caps.max;
+        const rankCap = getRankCap(marketType, rank);
         const effMax = Math.min(rankCap, caps.max);
         return (m >= effMax - 1e-6 || m <= caps.min + 1e-6) ? n + 1 : n;
       }, 0);
@@ -560,10 +569,9 @@ function deriveMultipliersCalibrated(
       console.log(`[CALIBRATION] Final force-in at implied=${impliedSum.toFixed(4)}`);
       const adjustable: number[] = [];
       const capped: number[] = [];
-      const rankCapsTbl = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
       multipliers.forEach((m, idx) => {
         const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
-        const effMax = Math.min(rankCapsTbl[rank] ?? caps.max, caps.max);
+        const effMax = Math.min(getRankCap(marketType, rank), caps.max);
         if (m >= effMax - 0.01 || m <= caps.min + 0.01) capped.push(idx);
         else adjustable.push(idx);
       });

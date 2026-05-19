@@ -18,6 +18,7 @@ import {
   MULTIPLIER_CAPS as CANONICAL_CAPS,
   RANK_CAPS as CANONICAL_RANK_CAPS,
   TARGET_IMPLIED_SUM as CANONICAL_TARGET,
+  getRankCap as canonicalGetRankCap,
 } from './multiplierCaps';
 
 export const MULTIPLIER_CONFIG = {
@@ -34,6 +35,9 @@ export const MULTIPLIER_CONFIG = {
   },
 };
 
+// Re-export so callers in this module have a clean reference.
+export const getRankCap = canonicalGetRankCap;
+
 // Multiplier ladder for snapping to standard values
 export const MULTIPLIER_LADDER = [
   1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.50, 1.55, 1.60, 1.65, 1.70, 1.75, 1.80, 1.85, 1.90, 1.95,
@@ -44,7 +48,7 @@ export const MULTIPLIER_LADDER = [
   6.00, 6.25, 6.50, 6.75,
   7.00, 7.50, 8.00, 8.50, 9.00, 9.50,
   10.00, 10.50, 11.00, 11.50, 12.00, 12.50, 13.00, 13.50, 14.00, 14.50, 15.00,
-  16.00, 17.00, 18.00, 19.00, 20.00
+  16.00, 17.00, 18.00, 19.00, 20.00, 21.00, 22.00, 23.00, 24.00, 25.00
 ];
 
 // ============================================================
@@ -168,15 +172,11 @@ export function deriveMultipliers(
 
     let m = 1 / p_adj;
 
-    // Apply rank-specific caps (WINNER / PODIUM / HIGHEST_SCORE)
+    // Apply rank-tiered caps via the canonical resolver.
     if (fieldRanks && athleteIds) {
       const fieldRank = fieldRanks.get(athleteIds[idx]);
-      const rankCaps =
-        marketType === 'WINNER' ? MULTIPLIER_CONFIG.WINNER_RANK_CAPS :
-        marketType === 'PODIUM' ? MULTIPLIER_CONFIG.PODIUM_RANK_CAPS :
-        MULTIPLIER_CONFIG.HIGHEST_SCORE_RANK_CAPS;
-      if (fieldRank && rankCaps[fieldRank]) {
-        m = Math.min(m, rankCaps[fieldRank]);
+      if (fieldRank && fieldRank >= 1) {
+        m = Math.min(m, getRankCap(marketType, fieldRank));
       }
     }
 
@@ -296,14 +296,14 @@ export function validateMultiplier(
     return { valid: false, error: 'Multiplier must be a positive number' };
   }
   
-  // Check rank-specific cap for WINNER
-  if (marketType === 'WINNER' && fieldRank && MULTIPLIER_CONFIG.WINNER_RANK_CAPS[fieldRank]) {
-    const rankCap = MULTIPLIER_CONFIG.WINNER_RANK_CAPS[fieldRank];
-    if (value > rankCap) {
-      return { 
-        valid: false, 
+  // Check rank-tiered cap for any rank (resolves via tier bands).
+  if (fieldRank && fieldRank >= 1) {
+    const rankCap = getRankCap(marketType, fieldRank);
+    if (rankCap < caps.max && value > rankCap) {
+      return {
+        valid: false,
         error: `Rank #${fieldRank} max is ${rankCap}x`,
-        clamped: rankCap 
+        clamped: rankCap,
       };
     }
   }
