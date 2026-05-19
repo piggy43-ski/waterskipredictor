@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, Upload, History, Gift, TrendingUp, TrendingDown, ArrowRightLeft, Package, Clock, CheckCircle, Truck, XCircle, HelpCircle } from 'lucide-react';
+import { Coins, Upload, History, Gift, TrendingUp, TrendingDown, ArrowRightLeft, Package, Clock, CheckCircle, Truck, XCircle, HelpCircle, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { useWallet } from '@/hooks/useWallet';
@@ -660,6 +660,21 @@ const Profile = () => {
             >
               <HelpCircle className="w-4 h-4 mr-2" />
               Replay Tutorial
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={async () => {
+                if (!user) return;
+                await supabase
+                  .from('profiles')
+                  .update({ onboarding_completed: false, onboarding_completed_at: null })
+                  .eq('id', user.id);
+                navigate('/onboarding');
+              }}
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Replay Onboarding
             </Button>
           </div>
         </Card>
