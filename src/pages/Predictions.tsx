@@ -1063,8 +1063,73 @@ const Predictions = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {shareEntry && (
+        <ShareModal
+          open={!!shareEntry}
+          onOpenChange={(o) => !o && setShareEntry(null)}
+          username={username || 'player'}
+          shareUrl={`${window.location.origin}/tournaments/${shareEntry.tournament_id}`}
+          {...buildShareCardPropsFromEntry(shareEntry)}
+        />
+      )}
     </div>
   );
 };
 
 export default Predictions;
+
+function buildShareCardPropsFromEntry(
+  entry: PredictionEntry,
+): Omit<ShareCardProps, 'username'> {
+  const legs = entry.legs ?? [];
+  const isParlay = (legs.length || 0) > 1;
+
+  // Build selection rows. Podium leg expands into 3 rows.
+  const selections: ShareCardSelection[] = [];
+  for (const leg of legs) {
+    if (leg.market_type === 'PODIUM' && leg.podium_selections?.length) {
+      const sorted = [...leg.podium_selections].sort(
+        (a, b) => a.position_predicted - b.position_predicted,
+      );
+      sorted.forEach((p) => {
+        selections.push({
+          name: p.athletes.name,
+          multiplier: leg.decimal_odds,
+          positionLabel:
+            p.position_predicted === 1 ? '1ST' : p.position_predicted === 2 ? '2ND' : '3RD',
+        });
+      });
+    } else {
+      selections.push({
+        name: leg.athlete_name,
+        multiplier: leg.decimal_odds,
+      });
+    }
+  }
+
+  const status: ShareCardProps['status'] =
+    entry.status === 'WON' ? 'WIN' : entry.status === 'LOST' ? 'LOSS' : 'PREDICTION';
+  const type: ShareCardProps['type'] = entry.status === 'PENDING' ? 'prediction' : 'settled';
+
+  const dateLabel = entry.tournament_start_datetime
+    ? new Date(entry.tournament_start_datetime).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : undefined;
+
+  return {
+    type,
+    status,
+    tournamentName: entry.tournament_name || 'Tournament',
+    discipline: legs[0]?.discipline?.toUpperCase(),
+    dateLabel,
+    selections,
+    combinedMultiplier: isParlay ? entry.total_odds_decimal : null,
+    tokenEntry: entry.total_stake_tokens,
+    projectedReward: entry.potential_payout_tokens,
+    actualReward: entry.actual_payout_tokens ?? null,
+  };
+}
