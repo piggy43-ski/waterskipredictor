@@ -100,6 +100,109 @@ function normalize(arr: number[]): number[] {
   return sum > 0 ? arr.map(v => v / sum) : arr.map(() => 1 / arr.length);
 }
 
+// ============================================================
+// CAP-ENFORCEMENT CHOKEPOINT
+// ------------------------------------------------------------
+// EVERY multiplier emission inside deriveMultipliersCalibrated() MUST exit
+// through this function. It is structurally impossible to bypass caps if
+// nothing else writes raw values into the `multipliers` array.
+//
+// Order of operations (per Step 2.A contract):
+//   1. rank cap   (most specific)
+//   2. global market cap
+//   3. floor      (caps.min)
+//   4. ladder snap (nearest, then re-clamp so snap-up can never exceed cap)
+// ============================================================
+function finalizeMultiplier(
+  rawValue: number,
+  fieldRank: number,
+  marketType: string
+): number {
+  const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
+    || MULTIPLIER_CAPS.WINNER;
+  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
+  const rankCap = rankCaps[fieldRank] ?? caps.max;
+  const effectiveMax = Math.min(rankCap, caps.max);
+
+  // Sanitize: NaN / Infinity / non-positive collapses to floor.
+  let m = (Number.isFinite(rawValue) && rawValue > 0) ? rawValue : caps.min;
+
+  // 1+2: rank cap then global cap (both via effectiveMax)
+  // 3:   floor
+  m = Math.max(caps.min, Math.min(m, effectiveMax));
+
+  // 4: ladder snap, then re-clamp (snap-up across a ladder rung must not
+  // be allowed to escape the cap).
+  m = roundToLadder(m);
+  m = Math.max(caps.min, Math.min(m, effectiveMax));
+
+  return m;
+}
+
+// ============================================================
+// ASSERTION SAFETY NET (Step 2.B)
+// Verifies the final calibrated market before DB write. If ANY check fails,
+// the writer aborts, marks the market for manual review, and never emits
+// constant-multiplier / arbitrage / over-cap odds again.
+// ============================================================
+function assertMarketSane(
+  multipliers: number[],
+  marketType: string,
+  fieldRanks: Map<string, number>,
+  athleteIds: string[]
+): { sane: boolean; reasons: string[]; impliedSum: number } {
+  const reasons: string[] = [];
+  const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM]
+    || TARGET_IMPLIED_SUM.WINNER;
+  const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
+    || MULTIPLIER_CAPS.WINNER;
+  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
+
+  const impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
+
+  // (1) Implied sum within band ± 5% tolerance
+  const lowerTol = target.min * 0.95;
+  const upperTol = target.max * 1.05;
+  if (impliedSum < lowerTol || impliedSum > upperTol) {
+    reasons.push(
+      `implied_sum ${impliedSum.toFixed(4)} outside band ` +
+      `${target.min.toFixed(2)}–${target.max.toFixed(2)} ` +
+      `(±5% tolerance ${lowerTol.toFixed(4)}–${upperTol.toFixed(4)})`
+    );
+  }
+
+  // (2)+(3) Per-athlete cap checks (rank cap, global cap)
+  multipliers.forEach((m, i) => {
+    const id = athleteIds[i];
+    const rank = fieldRanks.get(id) ?? 99;
+    const rankCap = rankCaps[rank];
+    if (rankCap && m > rankCap + 1e-6) {
+      reasons.push(`athlete idx=${i} (rank ${rank}): multiplier ${m} exceeds rank cap ${rankCap}`);
+    }
+    if (m > caps.max + 1e-6) {
+      reasons.push(`athlete idx=${i} (rank ${rank}): multiplier ${m} exceeds global cap ${caps.max}`);
+    }
+    if (m < caps.min - 1e-6) {
+      reasons.push(`athlete idx=${i} (rank ${rank}): multiplier ${m} below floor ${caps.min}`);
+    }
+  });
+
+  // (4) Monotonicity: better rank ⇒ lower-or-equal multiplier
+  const sorted = athleteIds
+    .map((id, i) => ({ rank: fieldRanks.get(id) ?? 99, m: multipliers[i] }))
+    .sort((a, b) => a.rank - b.rank);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].m < sorted[i - 1].m - 1e-6) {
+      reasons.push(
+        `monotonicity violated: rank ${sorted[i].rank} (${sorted[i].m}x) ` +
+        `< rank ${sorted[i - 1].rank} (${sorted[i - 1].m}x)`
+      );
+    }
+  }
+
+  return { sane: reasons.length === 0, reasons, impliedSum };
+}
+
 // Deterministic seeded random - uses market_id hash for reproducibility
 function seededRandom(seed: number): () => number {
   let s = seed;
