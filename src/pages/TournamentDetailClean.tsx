@@ -947,68 +947,131 @@ const TournamentDetail = () => {
           url: `https://waterskipredictor.com/tournaments/${tournament.id}`,
         })}</script>
       </Helmet>
-      <PageHeader title={tournament.name} showBack />
+      <PageHeader title="Event" showBack showBalance={false} />
 
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* Tournament Info */}
-        <div className="mb-6 space-y-3">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <MapPin className="w-4 h-4" />
-            <span>{tournament.location}</span>
-          </div>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Calendar className="w-4 h-4" />
-            <span>
-              {formatDate(tournament.start_datetime || tournament.start_date)} - {formatDate(tournament.end_datetime || tournament.end_date)}
-            </span>
-          </div>
-          
-          {/* Prediction Window Status */}
-          {predictionWindow && (
-            <Alert className={
-              predictionWindow.canPredict 
-                ? 'border-primary/50 bg-primary/10' 
-                : predictionWindow.status === 'preview'
-                  ? 'border-border bg-muted/30'
-                  : 'border-destructive/50 bg-destructive/10'
-            }>
-              <Clock className="h-4 w-4" />
-              <AlertDescription className="flex items-center justify-between">
-                <span className="font-medium">{predictionWindow.message}</span>
-                {!predictionWindow.canPredict && predictionWindow.status !== 'preview' && (
-                  <AlertCircle className="h-4 w-4 text-destructive" />
+      {(() => {
+        const status = tournament.status;
+        const statusLabel = status === 'live' ? 'LIVE' : status === 'finished' ? 'FINAL' : 'UPCOMING';
+        const startIso = tournament.start_datetime || tournament.start_date;
+        const startMs = startIso ? new Date(startIso).getTime() : 0;
+        const diffMs = startMs - Date.now();
+        const fmtCountdown = () => {
+          if (status === 'live') return 'LIVE NOW';
+          if (status === 'finished') return 'CLOSED';
+          if (diffMs <= 0) return 'STARTING';
+          const totalMin = Math.floor(diffMs / 60000);
+          const days = Math.floor(totalMin / (60 * 24));
+          const hours = Math.floor((totalMin % (60 * 24)) / 60);
+          const mins = totalMin % 60;
+          if (days > 0) return `${days}D ${hours}H`;
+          if (hours > 0) return `${hours}H ${mins}M`;
+          return `${mins}M`;
+        };
+        const entrantCount = tournamentEntries.length
+          ? new Set(tournamentEntries.map((e) => e.athlete_id)).size
+          : selections.length
+          ? new Set(selections.map((s) => s.athlete_id)).size
+          : 0;
+
+        return (
+          <section className="border-b border-border bg-background">
+            <div className="mx-auto max-w-6xl px-4 pt-4 pb-5">
+              <div className="mb-4 flex items-center justify-between">
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em]',
+                    status === 'live'
+                      ? 'border-primary/40 bg-primary/10 text-primary'
+                      : status === 'finished'
+                      ? 'border-border bg-secondary text-muted-foreground'
+                      : 'border-primary/30 bg-primary/[0.06] text-primary',
+                  )}
+                >
+                  {status === 'live' && <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-primary" />}
+                  {statusLabel}
+                </span>
+                {isAdmin && (
+                  <Button variant="outline" size="sm" asChild className="gap-1.5 h-7 text-[10px]">
+                    <Link to={`/admin/odds-review?tournament=${id}`}>
+                      <Settings2 className="h-3 w-3" />
+                      Edit
+                    </Link>
+                  </Button>
                 )}
-              </AlertDescription>
-            </Alert>
-          )}
-          
-          {/* Help Link & Admin Quick Access */}
-          <div className="flex items-center justify-between">
-            <Link 
-              to="/help?section=Predictions & Rules" 
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
-            >
-              <HelpCircle className="w-3 h-3" />
-              How predictions work
-            </Link>
-            
-            {isAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-                className="gap-1.5 text-xs"
-              >
-                <Link to={`/admin/odds-review?tournament=${id}`}>
-                  <Settings2 className="h-3.5 w-3.5" />
-                  Edit Multipliers
-                </Link>
-              </Button>
-            )}
-          </div>
-        </div>
+              </div>
 
-        {/* My Picks Quick Link */}
+              <h1 className="font-display uppercase text-foreground leading-[0.92] tracking-[0.005em] text-[clamp(2.5rem,9vw,5rem)]">
+                {tournament.name}
+              </h1>
+
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                {tournament.location && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="h-3 w-3" />
+                    {tournament.location}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5">
+                  <Calendar className="h-3 w-3" />
+                  {formatDate(tournament.start_datetime || tournament.start_date)} – {formatDate(tournament.end_datetime || tournament.end_date)}
+                </span>
+              </div>
+
+              <div className="mt-5 grid grid-cols-3 divide-x divide-border rounded-lg border border-border bg-card">
+                <div className="px-4 py-3">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Entrants</div>
+                  <div className="mt-0.5 font-display text-3xl leading-none text-foreground tabular-nums">
+                    {entrantCount || '—'}
+                  </div>
+                </div>
+                <div className="px-4 py-3">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Disciplines</div>
+                  <div className="mt-0.5 font-display text-3xl leading-none text-foreground tabular-nums">
+                    {tournament.disciplines.length}
+                  </div>
+                </div>
+                <div className="px-4 py-3">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                    {status === 'finished' ? 'Status' : status === 'live' ? 'Status' : 'Closes In'}
+                  </div>
+                  <div className={cn(
+                    'mt-0.5 font-condensed text-3xl font-extrabold leading-none tabular-nums',
+                    status === 'live' ? 'text-primary live-dot' : status === 'finished' ? 'text-muted-foreground' : 'text-primary',
+                  )}>
+                    {fmtCountdown()}
+                  </div>
+                </div>
+              </div>
+
+              <Link
+                to="/help?section=Predictions & Rules"
+                className="mt-4 inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-primary"
+              >
+                <HelpCircle className="h-3 w-3" />
+                How predictions work
+              </Link>
+            </div>
+          </section>
+        );
+      })()}
+
+      <div className="max-w-6xl mx-auto px-4 py-5">
+        {predictionWindow && !predictionWindow.canPredict && predictionWindow.status !== 'preview' && (
+          <Alert className="mb-4 border-destructive/40 bg-destructive/5">
+            <Clock className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span className="text-sm font-medium">{predictionWindow.message}</span>
+              <AlertCircle className="h-4 w-4 text-destructive" />
+            </AlertDescription>
+          </Alert>
+        )}
+        {predictionWindow && predictionWindow.canPredict && (
+          <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/[0.06] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-primary">
+            <Zap className="h-3 w-3" />
+            {predictionWindow.message}
+          </div>
+        )}
+
         {userPredictions.length > 0 && (
           <div className="mb-4">
             <Button
@@ -1017,14 +1080,13 @@ const TournamentDetail = () => {
               className="w-full"
               onClick={() => navigate('/predictions')}
             >
-              📋 My Picks ({userPredictions.length}) — View All
+              My Picks ({userPredictions.length}) — View All
             </Button>
           </div>
         )}
 
-        {/* Parlay Builder Button */}
         {tournament.status !== 'finished' && (
-          <div className="mb-6 flex items-center justify-center">
+          <div className="mb-6">
             <Button
               onClick={() => {
                 if (predictionWindow?.canPredict) {
@@ -1038,9 +1100,9 @@ const TournamentDetail = () => {
               }}
               size="lg"
               disabled={!predictionWindow?.canPredict}
-              className="w-full max-w-md"
+              className="w-full"
             >
-              {predictionWindow?.canPredict ? 'Build Parlay Prediction' : '🔒 Build Parlay Prediction'}
+              Build Parlay Prediction
             </Button>
           </div>
         )}
