@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Selection, Tournament, Market, MarketType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, MapPin, Clock, AlertCircle, Users, HelpCircle, Settings2 } from 'lucide-react';
+import { Calendar, MapPin, Clock, AlertCircle, Users, HelpCircle, Settings2, Zap } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
