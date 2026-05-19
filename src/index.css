@@ -18,10 +18,10 @@ All colors MUST be HSL.
     --popover: 0 0% 6%;
     --popover-foreground: 0 0% 98%;
 
-    /* Single bold accent — electric orange */
-    --primary: 16 100% 56%;           /* #FF5A1F */
+    /* Single bold accent — electric cyan */
+    --primary: 186 100% 50%;           /* #00E5FF */
     --primary-foreground: 0 0% 8%;
-    --primary-glow: 22 100% 60%;
+    --primary-glow: 186 100% 65%;
 
     --secondary: 0 0% 8%;             /* #141414 */
     --secondary-foreground: 0 0% 98%;
