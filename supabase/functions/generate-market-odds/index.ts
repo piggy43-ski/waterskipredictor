@@ -12,12 +12,18 @@ const SIMS = 5000;
 const W_BASE = 0.80;  // 80% weight on rank-based ladder
 const W_MC = 0.20;    // 20% weight on Monte Carlo
 
-// TARGET_IMPLIED_SUM: The target for Σ(1/multiplier)
-// Lower = more house edge (e.g., 0.88 = 12% theoretical edge)
+// TARGET_IMPLIED_SUM: target for Σ(1/multiplier).
+// For N-winner markets the fair implied sum is ≈ N; house margin shaves it.
+//   WINNER:        1 winner  → 1 × 0.91  ≈ 0.90–0.92  (~10% edge)
+//   PODIUM:        3 winners → 3 × 1.05  ≈ 3.10–3.20  (~5% edge per slot)
+//   HIGHEST_SCORE: 1 winner  → 1 × 0.88  ≈ 0.87–0.89  (~12% edge)
+//   HEAD_TO_HEAD:  2 sides   → 2 × 0.965 ≈ 1.90–1.96  (~3.5% vig per side)
+// MUST match src/utils/multiplierCaps.ts TARGET_IMPLIED_SUM (single source of truth).
 const TARGET_IMPLIED_SUM = {
-  WINNER: { min: 0.90, max: 0.92 },
-  PODIUM: { min: 0.84, max: 0.86 },
+  WINNER:        { min: 0.90, max: 0.92 },
+  PODIUM:        { min: 3.10, max: 3.20 },
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
+  HEAD_TO_HEAD:  { min: 1.90, max: 1.96 },
 };
 
 // SINGLE SOURCE OF TRUTH: mirrors src/utils/multiplierCaps.ts
@@ -26,6 +32,7 @@ const MULTIPLIER_CAPS = {
   WINNER: { min: 1.50, max: 8.0 },
   PODIUM: { min: 1.25, max: 6.0 },
   HIGHEST_SCORE: { min: 1.50, max: 7.0 },
+  HEAD_TO_HEAD: { min: 1.50, max: 5.0 },
 };
 
 // Rank-specific caps — favorites are capped tight (mirrors multiplierCaps.RANK_CAPS).
@@ -33,6 +40,7 @@ const RANK_CAPS: Record<string, Record<number, number>> = {
   WINNER: { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 5.00 },
   PODIUM: { 1: 1.25, 2: 1.75, 3: 2.25 },
   HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.50 },
+  HEAD_TO_HEAD: {},
 };
 
 // Softmax temperature per market type (lower = sharper favorites)
