@@ -26,6 +26,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SimulationDetails } from '@/components/SimulationDetails';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { SEO } from '@/components/SEO';
+import { ShareModal } from '@/components/ShareModal';
+import { useUsername } from '@/hooks/useUsername';
+import { Share2 } from 'lucide-react';
 
 interface ValidationResult {
   allowed: boolean;
@@ -48,6 +51,8 @@ const TournamentDetail = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { isAdmin } = useIsAdmin();
+  const username = useUsername();
+  const [shareOpen, setShareOpen] = useState(false);
   
   // Determine initial discipline from URL query param
   const initialDiscipline = searchParams.get('discipline') || '';
@@ -1074,14 +1079,26 @@ const TournamentDetail = () => {
 
         {userPredictions.length > 0 && (
           <div className="mb-4">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => navigate('/predictions')}
-            >
-              My Picks ({userPredictions.length}) — View All
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => navigate('/predictions')}
+              >
+                My Picks ({userPredictions.length}) — View All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="press-scale"
+                onClick={() => setShareOpen(true)}
+                aria-label="Share latest pick"
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Share
+              </Button>
+            </div>
           </div>
         )}
 
