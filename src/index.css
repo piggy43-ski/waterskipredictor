@@ -8,52 +8,59 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 210 30% 8%;
-    --foreground: 180 20% 96%;
+    /* True black foundation — Oakley / Whoop / Nike Training Club */
+    --background: 0 0% 0%;            /* #000000 */
+    --foreground: 0 0% 98%;
 
-    --card: 210 25% 12%;
-    --card-foreground: 180 20% 96%;
+    --card: 0 0% 4%;                  /* #0A0A0A elevated */
+    --card-foreground: 0 0% 98%;
 
-    --popover: 210 30% 10%;
-    --popover-foreground: 180 20% 96%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 186 78% 55%;
-    --primary-foreground: 210 30% 8%;
+    /* Single bold accent — electric orange */
+    --primary: 16 100% 56%;           /* #FF5A1F */
+    --primary-foreground: 0 0% 8%;
+    --primary-glow: 22 100% 60%;
 
-    --secondary: 210 20% 18%;
-    --secondary-foreground: 180 20% 96%;
+    --secondary: 0 0% 8%;             /* #141414 */
+    --secondary-foreground: 0 0% 98%;
 
-    --muted: 210 20% 16%;
-    --muted-foreground: 180 10% 65%;
+    --muted: 0 0% 8%;
+    --muted-foreground: 0 0% 60%;
 
-    --accent: 186 78% 55%;
-    --accent-foreground: 210 30% 8%;
+    --accent: 16 100% 56%;
+    --accent-foreground: 0 0% 8%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 180 20% 96%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 180 20% 96%;
+    --success: 142 76% 45%;
+    --success-foreground: 0 0% 8%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 210 30% 8%;
+    --warning: 38 100% 55%;
+    --warning-foreground: 0 0% 8%;
 
-    --border: 210 20% 20%;
-    --input: 210 20% 18%;
-    --ring: 186 78% 55%;
+    --border: 0 0% 12%;               /* #1F1F1F hairline */
+    --input: 0 0% 10%;
+    --ring: 16 100% 56%;
 
-    --radius: 1rem;
+    --radius: 0.5rem;                 /* 8px standard */
+    --radius-hero: 1rem;              /* 16px on hero cards */
 
-    /* Premium gradients */
-    --gradient-ocean: linear-gradient(135deg, hsl(210, 30%, 8%) 0%, hsl(200, 40%, 12%) 100%);
-    --gradient-water: linear-gradient(135deg, hsl(186, 78%, 45%) 0%, hsl(186, 78%, 65%) 100%);
-    --gradient-card: linear-gradient(135deg, hsl(210, 25%, 12%) 0%, hsl(210, 25%, 14%) 100%);
-    
+    /* Gradients */
+    --gradient-ocean: linear-gradient(180deg, hsl(0 0% 0%) 0%, hsl(0 0% 4%) 100%);
+    --gradient-water: linear-gradient(135deg, hsl(16 100% 56%) 0%, hsl(22 100% 60%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 5%) 0%, hsl(0 0% 3%) 100%);
+    --gradient-hero: linear-gradient(180deg, transparent 0%, hsl(0 0% 0% / 0.4) 50%, hsl(0 0% 0% / 0.95) 100%);
+
     /* Shadows */
-    --shadow-premium: 0 20px 50px -12px hsl(210 30% 5% / 0.5);
-    --shadow-glow: 0 0 30px hsl(186 78% 55% / 0.15);
-    
-    /* Transitions */
+    --shadow-premium: 0 20px 50px -12px hsl(0 0% 0% / 0.8);
+    --shadow-glow: 0 0 28px hsl(16 100% 56% / 0.35);
+    --shadow-press: 0 2px 8px hsl(0 0% 0% / 0.4);
+
+    /* Motion — Apple-style easing */
+    --ease-apple: cubic-bezier(0.4, 0, 0.2, 1);
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
@@ -64,46 +71,118 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "ss01", "cv11";
   }
 }
 
-/* Apple-style glassmorphism */
 .glass-header {
-  background: hsl(var(--background) / 0.6);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-top: 1px solid hsl(var(--foreground) / 0.05);
-  box-shadow: 
-    0 1px 0 0 hsl(var(--foreground) / 0.03) inset,
-    0 -1px 0 0 hsl(var(--background) / 0.5) inset;
+  background: hsl(0 0% 0% / 0.75);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
 }
 
-/* Modern typography utilities */
+/* Sports-display utilities */
+.font-display {
+  font-family: 'Bebas Neue', 'Inter Tight', system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.font-condensed {
+  font-family: 'Inter Tight', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.headline-xl {
+  font-family: 'Bebas Neue', 'Inter Tight', sans-serif;
+  font-size: clamp(2.5rem, 8vw, 4rem);
+  line-height: 0.95;
+  letter-spacing: 0.005em;
+  text-transform: uppercase;
+}
+
+.headline-lg {
+  font-family: 'Bebas Neue', 'Inter Tight', sans-serif;
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.numeric-xl {
+  font-family: 'Inter Tight', system-ui, sans-serif;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
 .section-title {
-  @apply text-xs font-bold uppercase tracking-wider text-muted-foreground;
+  @apply text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground;
 }
 
 .heading-bold {
   @apply font-display font-bold tracking-tight;
 }
 
-/* Pill badge styles */
 .pill-badge {
-  @apply px-3 py-1.5 rounded-full text-sm font-semibold;
+  @apply px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider;
 }
 
-/* Card enhancements */
 .card-modern {
-  @apply rounded-2xl border-border/30 shadow-lg;
+  @apply rounded-lg border border-border/80 bg-card;
 }
 
-/* Horizontal scroll container */
+/* Press / tap interaction — Apple-style */
+.press-scale {
+  transition: transform 0.15s var(--ease-apple), box-shadow 0.2s var(--ease-apple);
+  will-change: transform;
+}
+.press-scale:active {
+  transform: scale(0.98);
+}
+
+/* Multiplier callout chip */
+.multiplier-chip {
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded font-condensed font-extrabold text-primary;
+  background: hsl(var(--primary) / 0.12);
+  border: 1px solid hsl(var(--primary) / 0.35);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, hsl(0 0% 8%) 0%, hsl(0 0% 14%) 50%, hsl(0 0% 8%) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* Hero image overlay */
+.hero-overlay {
+  background: var(--gradient-hero);
+}
+
 .scroll-horizontal {
   @apply flex gap-3 overflow-x-auto pb-2 -mx-4 px-4;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  scroll-snap-type: x mandatory;
 }
 .scroll-horizontal::-webkit-scrollbar {
   display: none;
+}
+.scroll-horizontal > * {
+  scroll-snap-align: start;
+}
+
+/* Live pulse */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.live-dot {
+  animation: live-pulse 1.4s ease-in-out infinite;
 }

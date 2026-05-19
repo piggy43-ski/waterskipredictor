@@ -193,27 +193,38 @@ const Wallet = () => {
       <SEO title="Token Wallet" description="Manage your WaterSki Predictor token balance and buy token packs to enter more predictions." path="/wallet" />
       <PageHeader title="Token Balance" />
       
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        {/* Balance Card */}
-        <Card className="p-6 bg-gradient-water text-primary-foreground shadow-premium">
-          <p className="text-sm opacity-90">Available Balance</p>
-          <div className="flex items-center gap-3 mt-2">
-            <div className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center">
-              <Coins className="w-6 h-6" />
-            </div>
-            <span className="text-4xl font-bold">{totalBalance.toLocaleString()}</span>
-          </div>
-          <div className="mt-4 pt-4 border-t border-primary-foreground/20 flex justify-between text-sm">
-            <div>
-              <p className="opacity-70">Purchased</p>
-              <p className="font-semibold">{(wallet?.purchasedTokens || 0).toLocaleString()}</p>
-            </div>
-            <div className="text-right">
-              <p className="opacity-70">Earned</p>
-              <p className="font-semibold">{(wallet?.earnedTokens || 0).toLocaleString()}</p>
-            </div>
+      <div className="max-w-lg mx-auto px-4 py-5 space-y-4">
+        {/* Total Balance — flagship */}
+        <Card className="relative overflow-hidden p-5 bg-gradient-card border-border rounded-hero">
+          <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-primary/10 blur-3xl" />
+          <p className="section-title">Total Balance</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="numeric-xl text-5xl text-foreground">{totalBalance.toLocaleString()}</span>
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-bold">tokens</span>
           </div>
         </Card>
+
+        {/* Split: Purchased / Earned */}
+        <div className="grid grid-cols-1 gap-3">
+          <Card className="p-4 bg-card border-border rounded-lg flex items-center justify-between">
+            <div>
+              <p className="section-title mb-1">Purchased</p>
+              <p className="numeric-xl text-2xl">{(wallet?.purchasedTokens || 0).toLocaleString()}</p>
+            </div>
+            <div className="w-9 h-9 rounded-md bg-primary/10 border border-primary/30 flex items-center justify-center">
+              <Coins className="w-4 h-4 text-primary" />
+            </div>
+          </Card>
+          <Card className="p-4 bg-card border-border rounded-lg flex items-center justify-between">
+            <div>
+              <p className="section-title mb-1">Earned</p>
+              <p className="numeric-xl text-2xl">{(wallet?.earnedTokens || 0).toLocaleString()}</p>
+            </div>
+            <div className="w-9 h-9 rounded-md bg-secondary border border-border flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-foreground" />
+            </div>
+          </Card>
+        </div>
 
         {/* Referral Code Banner (if active) */}
         {referralInfo && (
@@ -235,19 +246,19 @@ const Wallet = () => {
         )}
 
         {/* Token Packs */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">Buy Tokens</h2>
+        <div className="pt-2">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-display text-2xl uppercase leading-none">Buy Tokens</h2>
             <Link to="/help" className="text-muted-foreground hover:text-foreground">
               <HelpCircle className="w-5 h-5" />
             </Link>
           </div>
           
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             {tokenPacks.map((pack) => (
               <Card 
                 key={pack.name} 
-                className={`p-4 relative ${pack.popular ? 'ring-2 ring-primary' : ''}`}
+                className={`p-4 relative bg-card border-border rounded-lg press-scale ${pack.popular ? 'ring-1 ring-primary/60 border-primary/40' : ''}`}
               >
                 {pack.popular && (
                   <div className="absolute -top-3 left-4">
