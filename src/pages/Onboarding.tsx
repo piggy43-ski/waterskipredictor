@@ -72,7 +72,7 @@ const Onboarding = () => {
               className="absolute inset-0 opacity-40"
               style={{
                 background:
-                  'radial-gradient(circle at 20% 20%, hsl(186 78% 55% / 0.4), transparent 55%), radial-gradient(circle at 80% 70%, hsl(186 78% 55% / 0.25), transparent 60%)',
+                  'radial-gradient(circle at 20% 20%, hsl(186 100% 50% / 0.4), transparent 55%), radial-gradient(circle at 80% 70%, hsl(186 100% 50% / 0.25), transparent 60%)',
               }}
             />
             <div className="relative flex h-full flex-col items-center justify-center px-6 text-center">
