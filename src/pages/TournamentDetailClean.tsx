@@ -1470,6 +1470,43 @@ const TournamentDetail = () => {
       )}
 
       <BottomNav />
+
+      {shareOpen && tournament && userPredictions[0] && (
+        <ShareModal
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          username={username || 'player'}
+          shareUrl={`${window.location.origin}/tournaments/${tournament.id}`}
+          type={userPredictions[0].status === 'PENDING' ? 'prediction' : 'settled'}
+          status={
+            userPredictions[0].status === 'WON'
+              ? 'WIN'
+              : userPredictions[0].status === 'LOST'
+              ? 'LOSS'
+              : 'PREDICTION'
+          }
+          tournamentName={tournament.name}
+          discipline={userPredictions[0].discipline?.toUpperCase()}
+          dateLabel={
+            tournament.start_date
+              ? new Date(tournament.start_date).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : undefined
+          }
+          selections={[
+            {
+              name: userPredictions[0].athlete_name,
+              multiplier: parseFloat(String(userPredictions[0].decimal_odds)),
+            },
+          ]}
+          tokenEntry={userPredictions[0].staked_tokens}
+          projectedReward={userPredictions[0].potential_payout}
+          actualReward={userPredictions[0].payout_tokens ?? null}
+        />
+      )}
     </div>
   );
 };
