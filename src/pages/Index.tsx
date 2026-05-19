@@ -104,7 +104,7 @@ const Index = () => {
         // Fetch user's active predictions (only from non-cancelled bet slips)
         const { data: predictionsData } = await supabase
           .from('predictions')
-          .select('*, bet_slips!inner(status)')
+          .select('*, bet_slips!inner(status, tournament_id)')
           .eq('user_id', user.id)
           .eq('status', 'PENDING')
           .eq('bet_slips.status', 'PENDING')
@@ -121,7 +121,7 @@ const Index = () => {
             athlete_name: p.athlete_name,
             tournament_name: p.tournament_name,
             status: p.status,
-            tournament_id: p.tournament_id,
+            tournament_id: (p as any).bet_slips?.tournament_id,
           })));
         }
 
