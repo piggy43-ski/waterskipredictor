@@ -535,7 +535,7 @@ function deriveMultipliersCalibrated(
 
       clippedCount = multipliers.reduce((n, m, idx) => {
         const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
-        const rankCap = (RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {})[rank] ?? caps.max;
+        const rankCap = getRankCap(marketType, rank);
         const effMax = Math.min(rankCap, caps.max);
         return (m >= effMax - 1e-6 || m <= caps.min + 1e-6) ? n + 1 : n;
       }, 0);
@@ -569,10 +569,9 @@ function deriveMultipliersCalibrated(
       console.log(`[CALIBRATION] Final force-in at implied=${impliedSum.toFixed(4)}`);
       const adjustable: number[] = [];
       const capped: number[] = [];
-      const rankCapsTbl = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
       multipliers.forEach((m, idx) => {
         const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
-        const effMax = Math.min(rankCapsTbl[rank] ?? caps.max, caps.max);
+        const effMax = Math.min(getRankCap(marketType, rank), caps.max);
         if (m >= effMax - 0.01 || m <= caps.min + 0.01) capped.push(idx);
         else adjustable.push(idx);
       });
