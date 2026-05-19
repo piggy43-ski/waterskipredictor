@@ -18,6 +18,7 @@ import {
   MULTIPLIER_CAPS as CANONICAL_CAPS,
   RANK_CAPS as CANONICAL_RANK_CAPS,
   TARGET_IMPLIED_SUM as CANONICAL_TARGET,
+  getRankCap as canonicalGetRankCap,
 } from './multiplierCaps';
 
 export const MULTIPLIER_CONFIG = {
@@ -34,6 +35,9 @@ export const MULTIPLIER_CONFIG = {
   },
 };
 
+// Re-export so callers in this module have a clean reference.
+export const getRankCap = canonicalGetRankCap;
+
 // Multiplier ladder for snapping to standard values
 export const MULTIPLIER_LADDER = [
   1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.50, 1.55, 1.60, 1.65, 1.70, 1.75, 1.80, 1.85, 1.90, 1.95,
@@ -44,7 +48,7 @@ export const MULTIPLIER_LADDER = [
   6.00, 6.25, 6.50, 6.75,
   7.00, 7.50, 8.00, 8.50, 9.00, 9.50,
   10.00, 10.50, 11.00, 11.50, 12.00, 12.50, 13.00, 13.50, 14.00, 14.50, 15.00,
-  16.00, 17.00, 18.00, 19.00, 20.00
+  16.00, 17.00, 18.00, 19.00, 20.00, 21.00, 22.00, 23.00, 24.00, 25.00
 ];
 
 // ============================================================
