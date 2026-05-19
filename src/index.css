@@ -186,3 +186,31 @@ All colors MUST be HSL.
 .live-dot {
   animation: live-pulse 1.4s ease-in-out infinite;
 }
+
+/* Underline tabs — applied to a wrapper that contains shadcn Tabs */
+.tabs-underline [role="tablist"] {
+  background: transparent !important;
+  border-radius: 0 !important;
+  border-bottom: 1px solid hsl(var(--border));
+  height: auto !important;
+  padding: 0 !important;
+  gap: 1.25rem;
+  justify-content: flex-start;
+}
+.tabs-underline [role="tab"] {
+  background: transparent !important;
+  border-radius: 0 !important;
+  border-bottom: 2px solid transparent;
+  box-shadow: none !important;
+  padding: 0.5rem 0 0.625rem !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: hsl(var(--muted-foreground));
+  transition: color 0.2s var(--ease-apple), border-color 0.2s var(--ease-apple);
+}
+.tabs-underline [role="tab"][data-state="active"] {
+  color: hsl(var(--primary)) !important;
+  border-bottom-color: hsl(var(--primary));
+}
