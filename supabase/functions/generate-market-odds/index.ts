@@ -798,6 +798,10 @@ Deno.serve(async (req) => {
       console.log(`[ODDS] Warnings: ${validation.warnings.join('; ')}`);
     }
 
+    // Sort early so both the assertion failure reporter and downstream
+    // success-path diff use the same already-sorted array.
+    const sortedResults = [...results].sort((a, b) => a.fieldRank - b.fieldRank);
+
     // ============================================================
     // ASSERTION SAFETY NET — Step 2.B
     // If sanity fails, ABORT the write and flag the market for manual review.
@@ -846,8 +850,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Sort for logging
-    const sortedResults = [...results].sort((a, b) => a.fieldRank - b.fieldRank);
     console.log('[ODDS] Full debug table:');
     sortedResults.forEach(r => {
       console.log(`  #${r.fieldRank} ${r.name}: strength=${r.strength.toFixed(2)}, p_final=${(r.p_final*100).toFixed(1)}% → ${r.multiplier}x [${r.source}]`);
