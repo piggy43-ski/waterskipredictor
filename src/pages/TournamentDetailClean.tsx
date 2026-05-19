@@ -1137,11 +1137,8 @@ const TournamentDetail = () => {
             </Button>
           </Card>
         ) : (
-          <Tabs value={activeDiscipline} onValueChange={setActiveDiscipline} className="w-full">
-            <TabsList className={cn(
-              "mb-6",
-              tournament.disciplines.length === 1 ? "flex justify-center max-w-[200px] mx-auto" : `w-full grid grid-cols-${tournament.disciplines.length}`
-            )}>
+          <Tabs value={activeDiscipline} onValueChange={setActiveDiscipline} className="w-full tabs-underline">
+            <TabsList className="mb-6">
               {tournament.disciplines.map((disc) => (
                 <TabsTrigger key={disc} value={disc} className="capitalize">
                   {disc}
@@ -1157,9 +1154,9 @@ const TournamentDetail = () => {
                 <Tabs 
                   value={currentGender} 
                   onValueChange={(value) => setGenderByDiscipline(prev => ({ ...prev, [discipline]: value as 'men' | 'women' }))}
-                  className="w-full mb-4"
+                  className="w-full mb-4 tabs-underline"
                 >
-                  <TabsList className="w-full grid grid-cols-2 mb-4">
+                  <TabsList className="mb-4">
                     <TabsTrigger value="men">Men</TabsTrigger>
                     <TabsTrigger value="women">Women</TabsTrigger>
                   </TabsList>
@@ -1168,8 +1165,8 @@ const TournamentDetail = () => {
                     {/* Simulation Details Info Box */}
                     <SimulationDetails isAdmin={isAdmin} className="mb-4" />
                     
-                    <Tabs defaultValue="winner" className="w-full">
-                      <TabsList id="contest-types" className="w-full grid grid-cols-3 mb-4">
+                    <Tabs defaultValue="winner" className="w-full tabs-underline">
+                      <TabsList id="contest-types" className="mb-4">
                         <TabsTrigger value="winner">Winner</TabsTrigger>
                         <TabsTrigger value="podium">Podium</TabsTrigger>
                         <TabsTrigger value="highest">Highest</TabsTrigger>
