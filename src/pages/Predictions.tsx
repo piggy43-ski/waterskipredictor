@@ -12,13 +12,16 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info, RotateCcw, TrendingDown, Percent, CheckCircle } from 'lucide-react';
+import { Coins, TrendingUp, Calendar, ChevronDown, Trash2, Pencil, Info, RotateCcw, TrendingDown, Percent, CheckCircle, Share2 } from 'lucide-react';
 import { getPredictionWindowStatus } from '@/utils/predictionWindows';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 import { SettlementExplanation, type SettlementData } from '@/components/settlement/SettlementExplanation';
+import { ShareModal } from '@/components/ShareModal';
+import { useUsername } from '@/hooks/useUsername';
+import type { ShareCardProps, ShareCardSelection } from '@/components/ShareCard';
 
 // Prediction entry — stored in the `bet_slips` DB table (legacy name, treated as "entries" in code)
 interface PredictionEntry {
@@ -96,6 +99,8 @@ const Predictions = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [viewMode, setViewMode] = useState<'flat' | 'tournament'>('flat');
+  const username = useUsername();
+  const [shareEntry, setShareEntry] = useState<PredictionEntry | null>(null);
   
   // Confirmation from just-placed prediction
   const confirmation = location.state?.confirmation as {
@@ -575,7 +580,21 @@ const Predictions = () => {
                 </>
               )}
             </div>
-            {getStatusBadge(entry.status)}
+            <div className="flex items-center gap-2">
+              {getStatusBadge(entry.status)}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 press-scale"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShareEntry(entry);
+                }}
+                aria-label="Share prediction"
+              >
+                <Share2 className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Show picks for combos */}
@@ -1044,8 +1063,73 @@ const Predictions = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {shareEntry && (
+        <ShareModal
+          open={!!shareEntry}
+          onOpenChange={(o) => !o && setShareEntry(null)}
+          username={username || 'player'}
+          shareUrl={`${window.location.origin}/tournaments/${shareEntry.tournament_id}`}
+          {...buildShareCardPropsFromEntry(shareEntry)}
+        />
+      )}
     </div>
   );
 };
 
 export default Predictions;
+
+function buildShareCardPropsFromEntry(
+  entry: PredictionEntry,
+): Omit<ShareCardProps, 'username'> {
+  const legs = entry.legs ?? [];
+  const isParlay = (legs.length || 0) > 1;
+
+  // Build selection rows. Podium leg expands into 3 rows.
+  const selections: ShareCardSelection[] = [];
+  for (const leg of legs) {
+    if (leg.market_type === 'PODIUM' && leg.podium_selections?.length) {
+      const sorted = [...leg.podium_selections].sort(
+        (a, b) => a.position_predicted - b.position_predicted,
+      );
+      sorted.forEach((p) => {
+        selections.push({
+          name: p.athletes.name,
+          multiplier: leg.decimal_odds,
+          positionLabel:
+            p.position_predicted === 1 ? '1ST' : p.position_predicted === 2 ? '2ND' : '3RD',
+        });
+      });
+    } else {
+      selections.push({
+        name: leg.athlete_name,
+        multiplier: leg.decimal_odds,
+      });
+    }
+  }
+
+  const status: ShareCardProps['status'] =
+    entry.status === 'WON' ? 'WIN' : entry.status === 'LOST' ? 'LOSS' : 'PREDICTION';
+  const type: ShareCardProps['type'] = entry.status === 'PENDING' ? 'prediction' : 'settled';
+
+  const dateLabel = entry.tournament_start_datetime
+    ? new Date(entry.tournament_start_datetime).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : undefined;
+
+  return {
+    type,
+    status,
+    tournamentName: entry.tournament_name || 'Tournament',
+    discipline: legs[0]?.discipline?.toUpperCase(),
+    dateLabel,
+    selections,
+    combinedMultiplier: isParlay ? entry.total_odds_decimal : null,
+    tokenEntry: entry.total_stake_tokens,
+    projectedReward: entry.potential_payout_tokens,
+    actualReward: entry.actual_payout_tokens ?? null,
+  };
+}

@@ -5,13 +5,15 @@ import { BottomNav } from '@/components/BottomNav';
 import { TournamentCard } from '@/components/TournamentCard';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Coins, TrendingUp, Trophy, CheckCircle, XCircle, Calendar, ChevronRight } from 'lucide-react';
+import { Coins, TrendingUp, Trophy, CheckCircle, XCircle, Calendar, ChevronRight, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament } from '@/types';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { useWallet } from '@/hooks/useWallet';
+import { ShareModal } from '@/components/ShareModal';
+import { useUsername } from '@/hooks/useUsername';
 
 interface UserPrediction {
   id: string;
@@ -22,12 +24,15 @@ interface UserPrediction {
   athlete_name: string;
   tournament_name: string;
   status: string;
+  tournament_id?: string;
 }
 
 const Index = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { wallet } = useWallet();
+  const username = useUsername();
+  const [shareItem, setShareItem] = useState<UserPrediction | null>(null);
   const [featuredTournament, setFeaturedTournament] = useState<Tournament | null>(null);
   const [userPredictions, setUserPredictions] = useState<UserPrediction[]>([]);
   const [settledPredictions, setSettledPredictions] = useState<UserPrediction[]>([]);
@@ -99,7 +104,7 @@ const Index = () => {
         // Fetch user's active predictions (only from non-cancelled bet slips)
         const { data: predictionsData } = await supabase
           .from('predictions')
-          .select('*, bet_slips!inner(status)')
+          .select('*, bet_slips!inner(status, tournament_id)')
           .eq('user_id', user.id)
           .eq('status', 'PENDING')
           .eq('bet_slips.status', 'PENDING')
@@ -115,7 +120,8 @@ const Index = () => {
             payout_tokens: p.payout_tokens,
             athlete_name: p.athlete_name,
             tournament_name: p.tournament_name,
-            status: p.status
+            status: p.status,
+            tournament_id: (p as any).bet_slips?.tournament_id,
           })));
         }
 
@@ -237,13 +243,25 @@ const Index = () => {
                         {prediction.tournament_name}
                       </p>
                     </div>
-                    <div className="text-right ml-4">
+                    <div className="text-right ml-4 flex flex-col items-end">
                       <p className="numeric-xl text-xl text-primary">
                         {prediction.potential_payout.toLocaleString()}
                       </p>
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                         Entry: {prediction.staked_tokens}
                       </p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 mt-1 press-scale"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShareItem(prediction);
+                        }}
+                        aria-label="Share prediction"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
                   </div>
                 </Card>
@@ -326,6 +344,24 @@ const Index = () => {
       </div>
 
       <BottomNav />
+      {shareItem && (
+        <ShareModal
+          open={!!shareItem}
+          onOpenChange={(o) => !o && setShareItem(null)}
+          username={username || 'player'}
+          shareUrl={
+            shareItem.tournament_id
+              ? `${window.location.origin}/tournaments/${shareItem.tournament_id}`
+              : window.location.origin
+          }
+          type="prediction"
+          status="PREDICTION"
+          tournamentName={shareItem.tournament_name}
+          selections={[{ name: shareItem.athlete_name, multiplier: shareItem.decimal_odds }]}
+          tokenEntry={shareItem.staked_tokens}
+          projectedReward={shareItem.potential_payout}
+        />
+      )}
     </div>
   );
 };
