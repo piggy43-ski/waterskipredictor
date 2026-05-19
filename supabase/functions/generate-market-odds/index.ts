@@ -621,13 +621,22 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { market_id, force = false, debug = false } = await req.json();
+    const { market_id, force = false, debug = false, dry_run = false } = await req.json();
     if (!market_id) {
       return new Response(JSON.stringify({ error: "market_id required" }), 
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     console.log(`[ODDS] Processing market ${market_id}`);
+
+    // Snapshot existing (BEFORE) odds for dry-run diff comparison.
+    const { data: beforeOddsRows } = await supabase
+      .from('market_odds')
+      .select('athlete_id, final_decimal_odds, athlete_rank')
+      .eq('market_id', market_id);
+    const beforeByAthlete = new Map<string, number>(
+      (beforeOddsRows || []).map(r => [r.athlete_id as string, Number(r.final_decimal_odds)])
+    );
 
     // Fetch market
     const { data: market, error: mErr } = await supabase
@@ -789,6 +798,54 @@ Deno.serve(async (req) => {
       console.log(`[ODDS] Warnings: ${validation.warnings.join('; ')}`);
     }
 
+    // ============================================================
+    // ASSERTION SAFETY NET — Step 2.B
+    // If sanity fails, ABORT the write and flag the market for manual review.
+    // ============================================================
+    const sanity = assertMarketSane(calibration.multipliers, marketType, fieldRanks, athleteIds);
+    if (!sanity.sane) {
+      console.error(`[ODDS] 🚨 ASSERTION FAILED for market ${market_id}: ${sanity.reasons.join(' | ')}`);
+      if (!dry_run) {
+        await supabase.from('markets').update({
+          odds_validation_status: 'NEEDS_REVIEW',
+          odds_validation_error: `assertMarketSane failed: ${sanity.reasons.join('; ')}`,
+        }).eq('id', market_id);
+        await supabase.from('audit_logs').insert({
+          entity_type: 'market',
+          entity_id: market_id,
+          action_type: 'odds_assertion_failed',
+          actor_type: 'system',
+          metadata: {
+            market_type: marketType,
+            implied_sum: sanity.impliedSum,
+            reasons: sanity.reasons,
+            multipliers: calibration.multipliers,
+            athlete_ids: athleteIds,
+          },
+        });
+      }
+      // Build a diff table even on failure so the operator can see what was attempted.
+      const failTable = sortedResults.map(r => ({
+        rank: r.fieldRank, athlete: r.name,
+        before: beforeByAthlete.get(r.id) ?? null,
+        after_proposed: r.multiplier,
+      }));
+      return new Response(JSON.stringify({
+        success: false,
+        aborted_reason: 'ASSERTION_FAILED',
+        sanity_reasons: sanity.reasons,
+        implied_sum: sanity.impliedSum,
+        market_id,
+        market_type: marketType,
+        field_size: results.length,
+        dry_run,
+        proposed_table: failTable,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     // Sort for logging
     const sortedResults = [...results].sort((a, b) => a.fieldRank - b.fieldRank);
     console.log('[ODDS] Full debug table:');
@@ -796,8 +853,44 @@ Deno.serve(async (req) => {
       console.log(`  #${r.fieldRank} ${r.name}: strength=${r.strength.toFixed(2)}, p_final=${(r.p_final*100).toFixed(1)}% → ${r.multiplier}x [${r.source}]`);
     });
 
-    // Determine validation status - NEVER block play with NEEDS_REVIEW
-    const validationStatus = 'VALID'; // Always VALID - log warnings but don't block
+    // Determine validation status - assertion above is the gate; warnings here don't block.
+    const validationStatus = 'VALID';
+
+    // ============================================================
+    // DRY-RUN MODE — Step 2.C / Step 4 dry-run contract
+    // Computes what new odds WOULD be without writing. Returns a per-athlete
+    // before/after diff. Locked markets are still untouched by definition
+    // (caller filters by locked_at IS NULL).
+    // ============================================================
+    if (dry_run) {
+      const diffTable = sortedResults.map(r => ({
+        rank: r.fieldRank,
+        athlete: r.name,
+        before: beforeByAthlete.get(r.id) ?? null,
+        after: r.multiplier,
+        delta: beforeByAthlete.has(r.id) ? +(r.multiplier - (beforeByAthlete.get(r.id) as number)).toFixed(2) : null,
+      }));
+      const top3 = sortedResults.slice(0, 3);
+      const targetBandDry = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM];
+      const beforeImpliedSum = beforeOddsRows && beforeOddsRows.length > 0
+        ? beforeOddsRows.reduce((s, r) => s + (1 / Number(r.final_decimal_odds || 1)), 0)
+        : null;
+      return new Response(JSON.stringify({
+        success: true,
+        dry_run: true,
+        market_id,
+        market_type: marketType,
+        field_size: results.length,
+        before_implied_sum: beforeImpliedSum,
+        after_implied_sum: calibration.impliedSum,
+        target_band: targetBandDry,
+        in_band: calibration.impliedSum >= (targetBandDry?.min || 0) && calibration.impliedSum <= (targetBandDry?.max || 99),
+        assertion_passed: true,
+        diff_table: diffTable,
+        top3_before: top3.map(r => beforeByAthlete.get(r.id) ?? null),
+        top3_after: top3.map(r => r.multiplier),
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
     
     // Update database
     for (const r of results) {
