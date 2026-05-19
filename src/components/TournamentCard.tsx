@@ -36,36 +36,39 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
   const getStatusColor = (status: Tournament['status']) => {
     switch (status) {
       case 'live':
-        return 'bg-destructive/20 text-destructive border-destructive/30';
+        return 'bg-destructive text-destructive-foreground border-destructive uppercase tracking-wider text-[10px] font-bold';
       case 'upcoming':
-        return 'bg-primary/20 text-primary border-primary/30';
+        return 'bg-primary/15 text-primary border-primary/40 uppercase tracking-wider text-[10px] font-bold';
       case 'finished':
-        return 'bg-muted/20 text-muted-foreground border-muted/30';
+        return 'bg-secondary text-muted-foreground border-border uppercase tracking-wider text-[10px] font-bold';
     }
   };
 
   return (
     <Card 
-      className="p-4 cursor-pointer hover:shadow-glow transition-all duration-300 bg-gradient-card border-border/50"
+      className="relative overflow-hidden p-4 cursor-pointer transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] bg-gradient-card border-border hover:border-foreground/20 active:scale-[0.98] rounded-hero"
       onClick={() => navigate(`/tournaments/${tournament.id}`)}
     >
+      {/* Subtle accent bar */}
+      {tournament.status === 'live' && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-destructive" />
+      )}
       <div className="flex justify-between items-start mb-3">
         <div className="flex-1">
-          <h3 className="font-bold text-lg mb-1">{tournament.name}</h3>
-          <p className="text-xs text-muted-foreground mb-1">Make a skill-based prediction. Rewards only.</p>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <h3 className="font-display text-2xl uppercase leading-none mb-2 text-foreground">{tournament.name}</h3>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wider">
             <MapPin className="w-3.5 h-3.5" />
             <span>{tournament.location}</span>
           </div>
         </div>
         <Badge className={getStatusColor(tournament.status)}>
-          {tournament.status === 'live' && '● LIVE'}
+          {tournament.status === 'live' && (<><span className="live-dot mr-1">●</span> LIVE</>)}
           {tournament.status === 'upcoming' && 'Upcoming'}
           {tournament.status === 'finished' && 'Finished'}
         </Badge>
       </div>
       
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground font-condensed font-semibold uppercase tracking-wider">
         <Calendar className="w-3.5 h-3.5" />
         <span>
           {formatDate(startTime)} - {formatDate(endTime)}
@@ -77,7 +80,7 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
           <Badge 
             key={disc} 
             variant="outline" 
-            className="text-xs capitalize cursor-pointer hover:bg-primary/10"
+            className="text-[10px] uppercase tracking-wider font-bold cursor-pointer hover:bg-primary/10 hover:border-primary/40 border-border"
             onClick={(e) => {
               e.stopPropagation();
               navigate(`/tournaments/${tournament.id}?discipline=${disc}`);
@@ -89,7 +92,7 @@ export const TournamentCard = ({ tournament }: TournamentCardProps) => {
       </div>
 
       {/* Prediction Window Status */}
-      <div className="mt-4 pt-3 border-t border-border/50">
+      <div className="mt-4 pt-3 border-t border-border">
         {(() => {
           const getStatusDisplay = () => {
             if (predictionWindow.status === 'finished') {
