@@ -165,31 +165,32 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background pb-20">
       <SEO title="Home" path="/" description="Pick winners for IWWF pro tour waterski events — slalom, trick & jump. Free fantasy predictions game for the waterski community." />
-      <PageHeader title={<>WaterSki <span className="text-primary">Predictor</span></>} />
+      <PageHeader title={<>WSP<span className="text-primary">.</span></>} subtitle="Where every pass matters" />
       
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-lg mx-auto px-4 py-5 space-y-5 animate-fade-in">
         {/* Big Token Balance */}
         <Card 
           id="token-balance"
-          className="p-6 cursor-pointer hover:bg-accent/50 transition-colors rounded-2xl border-border/30 bg-gradient-card"
+          className="relative overflow-hidden p-5 cursor-pointer transition-all rounded-hero border-border bg-gradient-card press-scale"
           onClick={() => navigate('/wallet')}
         >
-          <div className="flex items-center justify-between">
+          <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full bg-primary/15 blur-3xl pointer-events-none" />
+          <div className="relative flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Your Balance</p>
-              <p className="text-4xl font-display font-bold">{displayedBalance.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">tokens</p>
+              <p className="section-title mb-1">Your Balance</p>
+              <p className="numeric-xl text-5xl text-foreground">{displayedBalance.toLocaleString()}</p>
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold mt-0.5">tokens</p>
             </div>
             <Button 
               id="buy-tokens-btn"
               size="icon"
-              className="w-14 h-14 rounded-full bg-gradient-water shadow-[0_0_20px_hsl(var(--primary)/0.5)] hover:shadow-[0_0_30px_hsl(var(--primary)/0.7)] hover:scale-105 transition-all duration-200"
+              className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-[0_0_24px_hsl(var(--primary)/0.5)] hover:shadow-[0_0_36px_hsl(var(--primary)/0.7)] hover:scale-105 transition-all duration-200"
               onClick={(e) => {
                 e.stopPropagation();
                 navigate('/wallet');
               }}
             >
-              <span className="text-2xl font-bold text-primary-foreground">+</span>
+              <span className="text-3xl font-bold leading-none">+</span>
             </Button>
           </div>
         </Card>
@@ -209,14 +210,14 @@ const Index = () => {
           </div>
 
           {/* Entries Summary */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <Card className="p-4 rounded-2xl border-border/30">
-              <p className="text-xs text-muted-foreground mb-1">Active</p>
-              <p className="text-2xl font-display font-bold">{activePredictions.length}</p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <Card className="p-3 rounded-lg border-border bg-card">
+              <p className="section-title mb-1">Active</p>
+              <p className="numeric-xl text-3xl">{activePredictions.length}</p>
             </Card>
-            <Card className="p-4 rounded-2xl border-border/30">
-              <p className="text-xs text-muted-foreground mb-1">Potential Rewards</p>
-              <p className="text-2xl font-display font-bold text-primary">
+            <Card className="p-3 rounded-lg border-border bg-card">
+              <p className="section-title mb-1">Projected</p>
+              <p className="numeric-xl text-3xl text-primary">
                 {activePredictions.reduce((sum, p) => sum + p.potential_payout, 0).toLocaleString()}
               </p>
             </Card>
@@ -226,21 +227,21 @@ const Index = () => {
           {activePredictions.length > 0 ? (
             <div className="scroll-horizontal">
               {activePredictions.map((prediction) => (
-                <Card key={prediction.id} className="p-4 bg-gradient-card border-border/30 rounded-2xl min-w-[280px] flex-shrink-0">
+                <Card key={prediction.id} className="p-4 bg-card border-border rounded-lg min-w-[280px] flex-shrink-0 press-scale">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <p className="font-display font-bold mb-1">
+                      <p className="font-display text-lg uppercase leading-none mb-1">
                         {prediction.athlete_name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                         {prediction.tournament_name}
                       </p>
                     </div>
                     <div className="text-right ml-4">
-                      <p className="font-display font-bold text-lg text-primary">
+                      <p className="numeric-xl text-xl text-primary">
                         {prediction.potential_payout.toLocaleString()}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                         Entry: {prediction.staked_tokens}
                       </p>
                     </div>
@@ -249,15 +250,13 @@ const Index = () => {
               ))}
             </div>
           ) : (
-            <Card className="p-6 text-center rounded-2xl border-border/30">
-              <p className="text-sm text-muted-foreground mb-3">No active entries yet</p>
+            <Card className="p-6 text-center rounded-lg border-border border-dashed bg-card">
+              <p className="font-display text-xl uppercase mb-1">No skin in the game.</p>
+              <p className="text-sm text-muted-foreground mb-4">Pick a winner. Earn the bragging rights.</p>
               <Button 
-                variant="outline" 
-                size="sm"
-                className="rounded-xl"
                 onClick={() => navigate('/tournaments')}
               >
-                Place Your First Entry
+                Find an Event
               </Button>
             </Card>
           )}
@@ -317,7 +316,7 @@ const Index = () => {
           <p className="section-title mb-3">BROWSE TOURNAMENTS</p>
           <Button 
             variant="outline" 
-            className="w-full rounded-xl h-12 font-bold"
+            className="w-full h-12"
             onClick={() => navigate('/tournaments')}
           >
             <Trophy className="w-4 h-4 mr-2" />
