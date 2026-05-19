@@ -172,15 +172,11 @@ export function deriveMultipliers(
 
     let m = 1 / p_adj;
 
-    // Apply rank-specific caps (WINNER / PODIUM / HIGHEST_SCORE)
+    // Apply rank-tiered caps via the canonical resolver.
     if (fieldRanks && athleteIds) {
       const fieldRank = fieldRanks.get(athleteIds[idx]);
-      const rankCaps =
-        marketType === 'WINNER' ? MULTIPLIER_CONFIG.WINNER_RANK_CAPS :
-        marketType === 'PODIUM' ? MULTIPLIER_CONFIG.PODIUM_RANK_CAPS :
-        MULTIPLIER_CONFIG.HIGHEST_SCORE_RANK_CAPS;
-      if (fieldRank && rankCaps[fieldRank]) {
-        m = Math.min(m, rankCaps[fieldRank]);
+      if (fieldRank && fieldRank >= 1) {
+        m = Math.min(m, getRankCap(marketType, fieldRank));
       }
     }
 
@@ -300,14 +296,14 @@ export function validateMultiplier(
     return { valid: false, error: 'Multiplier must be a positive number' };
   }
   
-  // Check rank-specific cap for WINNER
-  if (marketType === 'WINNER' && fieldRank && MULTIPLIER_CONFIG.WINNER_RANK_CAPS[fieldRank]) {
-    const rankCap = MULTIPLIER_CONFIG.WINNER_RANK_CAPS[fieldRank];
-    if (value > rankCap) {
-      return { 
-        valid: false, 
+  // Check rank-tiered cap for any rank (resolves via tier bands).
+  if (fieldRank && fieldRank >= 1) {
+    const rankCap = getRankCap(marketType, fieldRank);
+    if (rankCap < caps.max && value > rankCap) {
+      return {
+        valid: false,
         error: `Rank #${fieldRank} max is ${rankCap}x`,
-        clamped: rankCap 
+        clamped: rankCap,
       };
     }
   }
