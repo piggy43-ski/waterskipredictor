@@ -72,7 +72,7 @@ const Onboarding = () => {
               className="absolute inset-0 opacity-40"
               style={{
                 background:
-                  'radial-gradient(circle at 20% 20%, hsl(186 78% 55% / 0.4), transparent 55%), radial-gradient(circle at 80% 70%, hsl(186 78% 55% / 0.25), transparent 60%)',
+                  'radial-gradient(circle at 20% 20%, hsl(186 100% 50% / 0.4), transparent 55%), radial-gradient(circle at 80% 70%, hsl(186 100% 50% / 0.25), transparent 60%)',
               }}
             />
             <div className="relative flex h-full flex-col items-center justify-center px-6 text-center">
@@ -129,7 +129,7 @@ const Onboarding = () => {
                   Buy with Stripe. Use for entries.
                 </p>
               </div>
-              <div className="rounded-2xl border border-primary/40 bg-gradient-water/10 p-5 backdrop-blur" style={{ background: 'linear-gradient(135deg, hsl(186 78% 55% / 0.15), hsl(186 78% 55% / 0.05))' }}>
+              <div className="rounded-2xl border border-primary/40 bg-gradient-water/10 p-5 backdrop-blur" style={{ background: 'linear-gradient(135deg, hsl(186 100% 50% / 0.15), hsl(186 100% 50% / 0.05))' }}>
                 <Sparkles className="mb-3 h-7 w-7 text-primary" />
                 <h3 className="text-base font-bold text-foreground">Earned Tokens</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -212,7 +212,7 @@ const Onboarding = () => {
               className="absolute inset-0"
               style={{
                 background:
-                  'radial-gradient(circle at 50% 35%, hsl(186 78% 55% / 0.35), transparent 60%)',
+                  'radial-gradient(circle at 50% 35%, hsl(186 100% 50% / 0.35), transparent 60%)',
               }}
             />
             <div className="relative flex h-full flex-col items-center justify-center px-6 text-center">

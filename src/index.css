@@ -18,10 +18,10 @@ All colors MUST be HSL.
     --popover: 0 0% 6%;
     --popover-foreground: 0 0% 98%;
 
-    /* Single bold accent — electric orange */
-    --primary: 16 100% 56%;           /* #FF5A1F */
+    /* Single bold accent — electric cyan */
+    --primary: 186 100% 50%;           /* #00E5FF */
     --primary-foreground: 0 0% 8%;
-    --primary-glow: 22 100% 60%;
+    --primary-glow: 186 100% 65%;
 
     --secondary: 0 0% 8%;             /* #141414 */
     --secondary-foreground: 0 0% 98%;
@@ -29,7 +29,7 @@ All colors MUST be HSL.
     --muted: 0 0% 8%;
     --muted-foreground: 0 0% 60%;
 
-    --accent: 16 100% 56%;
+    --accent: 186 100% 50%;
     --accent-foreground: 0 0% 8%;
 
     --destructive: 0 84% 60%;
@@ -43,20 +43,20 @@ All colors MUST be HSL.
 
     --border: 0 0% 12%;               /* #1F1F1F hairline */
     --input: 0 0% 10%;
-    --ring: 16 100% 56%;
+    --ring: 186 100% 50%;
 
     --radius: 0.5rem;                 /* 8px standard */
     --radius-hero: 1rem;              /* 16px on hero cards */
 
     /* Gradients */
     --gradient-ocean: linear-gradient(180deg, hsl(0 0% 0%) 0%, hsl(0 0% 4%) 100%);
-    --gradient-water: linear-gradient(135deg, hsl(16 100% 56%) 0%, hsl(22 100% 60%) 100%);
+    --gradient-water: linear-gradient(135deg, hsl(186 100% 50%) 0%, hsl(186 100% 65%) 100%);
     --gradient-card: linear-gradient(180deg, hsl(0 0% 5%) 0%, hsl(0 0% 3%) 100%);
     --gradient-hero: linear-gradient(180deg, transparent 0%, hsl(0 0% 0% / 0.4) 50%, hsl(0 0% 0% / 0.95) 100%);
 
     /* Shadows */
     --shadow-premium: 0 20px 50px -12px hsl(0 0% 0% / 0.8);
-    --shadow-glow: 0 0 28px hsl(16 100% 56% / 0.35);
+    --shadow-glow: 0 0 28px hsl(186 100% 50% / 0.35);
     --shadow-press: 0 2px 8px hsl(0 0% 0% / 0.4);
 
     /* Motion — Apple-style easing */
