@@ -1,9 +1,6 @@
 import { Selection, Discipline } from '@/types';
-import { Card } from './ui/card';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { TrendingUp, Medal, Check } from 'lucide-react';
-import { getRiskTierFromMultiplier } from '@/utils/riskTiers';
+import { Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 interface SelectionCardProps {
   selection: Selection;
   onSelect: (selection: Selection) => void;
@@ -41,6 +38,15 @@ const getFlagEmoji = (countryCode: string): string => {
   return countryFlags[countryCode] || '🏴';
 };
 
+const getInitials = (name: string) =>
+  name
+    .split(' ')
+    .map((n) => n[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
 export const SelectionCard = ({ 
   selection, 
   onSelect, 
@@ -53,8 +59,7 @@ export const SelectionCard = ({
   remainingCapacity
 }: SelectionCardProps) => {
   const multiplierDisplay = `${selection.decimal_odds.toFixed(2)}×`;
-  const riskTier = getRiskTierFromMultiplier(selection.decimal_odds);
-  
+
   // Get the appropriate rank based on discipline
   const getRank = () => {
     if (!discipline) return null;
@@ -71,113 +76,97 @@ export const SelectionCard = ({
   };
 
   const rank = getRank();
-  
-  // Determine badge color based on rank
-  const getRankVariant = () => {
-    if (!rank) return 'secondary';
-    if (rank === 1) return 'default'; // Gold/primary for #1
-    if (rank <= 3) return 'default'; // Top 3
-    if (rank <= 10) return 'secondary'; // Top 10
-    return 'outline'; // Others
+  const isTopThree = !!rank && rank <= 3;
+  const isDefendingChamp = !!(discipline && selection.athlete.defending_champion_disciplines?.includes(discipline));
+  const isInjured = !!selection.athlete.injury_flag;
+
+  const handleClick = () => {
+    if (isAtCapacity && !(mode === 'parlay' && isInParlay)) return;
+    if (mode === 'parlay' && onAddToParlay) {
+      onAddToParlay(selection);
+    } else {
+      onSelect(selection);
+    }
   };
-  
+
+  const selected = mode === 'parlay' && isInParlay;
+
   return (
-    <Card className={`p-4 hover:shadow-glow transition-all ${isInParlay && mode === 'parlay' ? 'border-primary bg-primary/5' : 'hover:border-primary/50'} ${highlighted ? 'ring-2 ring-primary ring-offset-2 bg-primary/10' : ''}`}>
-      <div className="flex justify-between items-center">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-lg">{selection.athlete.name}</h3>
-            {discipline && selection.athlete.defending_champion_disciplines?.includes(discipline) && (
-              <Badge variant="outline" className="text-yellow-600 border-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-700 text-xs">
-                🏆 Defending Champ
-              </Badge>
-            )}
-            {selection.athlete.injury_flag && (
-              <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-700 text-xs">
-                🏥 Injured
-              </Badge>
-            )}
-            {rank && (
-              <Badge variant={getRankVariant()} className="flex items-center gap-1">
-                {rank <= 3 && <Medal className="w-3 h-3" />}
-                #{rank}
-              </Badge>
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground flex items-center gap-1">
-            <span className="text-xl">{getFlagEmoji(selection.athlete.country)}</span>
-            {selection.athlete.country}
-          </p>
-        </div>
-        <div className="text-right flex flex-col items-end gap-2">
-          
-          <div id="multiplier-display" className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-primary" />
-            <span className="text-2xl font-bold text-primary">
-              {multiplierDisplay}
-            </span>
-          </div>
-          
-          {/* Risk tier description for underdogs */}
-          {(riskTier.tier === 'bold_pick' || riskTier.tier === 'longshot') && (
-            <span className="text-xs text-muted-foreground max-w-[140px] text-right">
-              {riskTier.description}
-            </span>
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={isAtCapacity && !selected}
+      className={cn(
+        'group press-scale relative flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left transition-colors duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]',
+        'border-border hover:border-primary/40',
+        selected && 'border-primary/60 bg-primary/[0.06]',
+        highlighted && 'border-primary/60 ring-1 ring-primary/40',
+        isTopThree && 'border-l-2 border-l-primary',
+        isAtCapacity && !selected && 'opacity-50',
+      )}
+    >
+      {/* Rank chip */}
+      <div className="flex w-8 shrink-0 flex-col items-center">
+        <span
+          className={cn(
+            'font-condensed text-sm font-extrabold tabular-nums leading-none',
+            isTopThree ? 'text-primary' : 'text-muted-foreground',
           )}
-          
-          {/* Option A: Show capacity warning */}
-          {isAtCapacity && (
-            <Badge variant="outline" className="text-muted-foreground bg-muted text-xs">
-              Max entries reached
-            </Badge>
-          )}
-          
-          {/* Single Mode - Show only Enter Prediction */}
-          {mode === 'single' && (
-            <Button 
-              size="sm" 
-              variant={isAtCapacity ? "outline" : "default"}
-              className="min-w-[100px]"
-              disabled={isAtCapacity}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isAtCapacity) {
-                  onSelect(selection);
-                }
-              }}
-            >
-              {isAtCapacity ? 'Unavailable' : 'Enter Prediction'}
-            </Button>
-          )}
-          
-          {/* Parlay Mode - Show only Select/Selected */}
-          {mode === 'parlay' && onAddToParlay && (
-            <Button 
-              size="sm" 
-              variant={isInParlay ? "default" : "outline"}
-              className="min-w-[100px]"
-              disabled={isAtCapacity && !isInParlay}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isAtCapacity || isInParlay) {
-                  onAddToParlay(selection);
-                }
-              }}
-            >
-              {isInParlay ? (
-                <>
-                  <Check className="w-4 h-4 mr-1" />
-                  Selected
-                </>
-              ) : isAtCapacity ? (
-                'Unavailable'
-              ) : (
-                'Select'
-              )}
-            </Button>
-          )}
-        </div>
+        >
+          {rank ? `#${rank}` : '—'}
+        </span>
       </div>
-    </Card>
+
+      {/* Avatar */}
+      <div className="relative h-10 w-10 shrink-0">
+        <div
+          className={cn(
+            'flex h-10 w-10 items-center justify-center rounded-full border bg-secondary text-[11px] font-bold uppercase tracking-wider text-foreground/80',
+            isTopThree ? 'border-primary/40' : 'border-border',
+          )}
+        >
+          {getInitials(selection.athlete.name)}
+        </div>
+        <span className="absolute -bottom-0.5 -right-0.5 text-base leading-none">
+          {getFlagEmoji(selection.athlete.country)}
+        </span>
+      </div>
+
+      {/* Name + meta */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <h3 className="truncate text-sm font-semibold text-foreground">
+            {selection.athlete.name}
+          </h3>
+          {isDefendingChamp && (
+            <span title="Defending champion" className="text-[11px] leading-none">🏆</span>
+          )}
+          {isInjured && (
+            <span title="Injury flag" className="text-[11px] leading-none">🏥</span>
+          )}
+        </div>
+        <p className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+          {selection.athlete.country}
+          {isAtCapacity && !selected && <span className="ml-2 text-muted-foreground/70">· Unavailable</span>}
+        </p>
+      </div>
+
+      {/* Multiplier */}
+      <div className="flex shrink-0 items-center gap-2 pl-2">
+        {selected && (
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Check className="h-3 w-3" strokeWidth={3} />
+          </span>
+        )}
+        <span
+          className={cn(
+            'font-display text-2xl leading-none tabular-nums transition-colors',
+            isTopThree || selected ? 'text-primary' : 'text-foreground',
+          )}
+        >
+          {multiplierDisplay}
+        </span>
+      </div>
+    </button>
   );
 };
