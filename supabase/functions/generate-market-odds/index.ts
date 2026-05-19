@@ -12,12 +12,18 @@ const SIMS = 5000;
 const W_BASE = 0.80;  // 80% weight on rank-based ladder
 const W_MC = 0.20;    // 20% weight on Monte Carlo
 
-// TARGET_IMPLIED_SUM: The target for Σ(1/multiplier)
-// Lower = more house edge (e.g., 0.88 = 12% theoretical edge)
+// TARGET_IMPLIED_SUM: target for Σ(1/multiplier).
+// For N-winner markets the fair implied sum is ≈ N; house margin shaves it.
+//   WINNER:        1 winner  → 1 × 0.91  ≈ 0.90–0.92  (~10% edge)
+//   PODIUM:        3 winners → 3 × 1.05  ≈ 3.10–3.20  (~5% edge per slot)
+//   HIGHEST_SCORE: 1 winner  → 1 × 0.88  ≈ 0.87–0.89  (~12% edge)
+//   HEAD_TO_HEAD:  2 sides   → 2 × 0.965 ≈ 1.90–1.96  (~3.5% vig per side)
+// MUST match src/utils/multiplierCaps.ts TARGET_IMPLIED_SUM (single source of truth).
 const TARGET_IMPLIED_SUM = {
-  WINNER: { min: 0.90, max: 0.92 },
-  PODIUM: { min: 0.84, max: 0.86 },
+  WINNER:        { min: 0.90, max: 0.92 },
+  PODIUM:        { min: 3.10, max: 3.20 },
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
+  HEAD_TO_HEAD:  { min: 1.90, max: 1.96 },
 };
 
 // SINGLE SOURCE OF TRUTH: mirrors src/utils/multiplierCaps.ts
@@ -26,6 +32,7 @@ const MULTIPLIER_CAPS = {
   WINNER: { min: 1.50, max: 8.0 },
   PODIUM: { min: 1.25, max: 6.0 },
   HIGHEST_SCORE: { min: 1.50, max: 7.0 },
+  HEAD_TO_HEAD: { min: 1.50, max: 5.0 },
 };
 
 // Rank-specific caps — favorites are capped tight (mirrors multiplierCaps.RANK_CAPS).
@@ -33,6 +40,7 @@ const RANK_CAPS: Record<string, Record<number, number>> = {
   WINNER: { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 5.00 },
   PODIUM: { 1: 1.25, 2: 1.75, 3: 2.25 },
   HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.50 },
+  HEAD_TO_HEAD: {},
 };
 
 // Softmax temperature per market type (lower = sharper favorites)
@@ -90,6 +98,109 @@ function decimalToAmerican(d: number): number {
 function normalize(arr: number[]): number[] {
   const sum = arr.reduce((a, b) => a + b, 0);
   return sum > 0 ? arr.map(v => v / sum) : arr.map(() => 1 / arr.length);
+}
+
+// ============================================================
+// CAP-ENFORCEMENT CHOKEPOINT
+// ------------------------------------------------------------
+// EVERY multiplier emission inside deriveMultipliersCalibrated() MUST exit
+// through this function. It is structurally impossible to bypass caps if
+// nothing else writes raw values into the `multipliers` array.
+//
+// Order of operations (per Step 2.A contract):
+//   1. rank cap   (most specific)
+//   2. global market cap
+//   3. floor      (caps.min)
+//   4. ladder snap (nearest, then re-clamp so snap-up can never exceed cap)
+// ============================================================
+function finalizeMultiplier(
+  rawValue: number,
+  fieldRank: number,
+  marketType: string
+): number {
+  const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
+    || MULTIPLIER_CAPS.WINNER;
+  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
+  const rankCap = rankCaps[fieldRank] ?? caps.max;
+  const effectiveMax = Math.min(rankCap, caps.max);
+
+  // Sanitize: NaN / Infinity / non-positive collapses to floor.
+  let m = (Number.isFinite(rawValue) && rawValue > 0) ? rawValue : caps.min;
+
+  // 1+2: rank cap then global cap (both via effectiveMax)
+  // 3:   floor
+  m = Math.max(caps.min, Math.min(m, effectiveMax));
+
+  // 4: ladder snap, then re-clamp (snap-up across a ladder rung must not
+  // be allowed to escape the cap).
+  m = roundToLadder(m);
+  m = Math.max(caps.min, Math.min(m, effectiveMax));
+
+  return m;
+}
+
+// ============================================================
+// ASSERTION SAFETY NET (Step 2.B)
+// Verifies the final calibrated market before DB write. If ANY check fails,
+// the writer aborts, marks the market for manual review, and never emits
+// constant-multiplier / arbitrage / over-cap odds again.
+// ============================================================
+function assertMarketSane(
+  multipliers: number[],
+  marketType: string,
+  fieldRanks: Map<string, number>,
+  athleteIds: string[]
+): { sane: boolean; reasons: string[]; impliedSum: number } {
+  const reasons: string[] = [];
+  const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM]
+    || TARGET_IMPLIED_SUM.WINNER;
+  const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
+    || MULTIPLIER_CAPS.WINNER;
+  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
+
+  const impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
+
+  // (1) Implied sum within band ± 5% tolerance
+  const lowerTol = target.min * 0.95;
+  const upperTol = target.max * 1.05;
+  if (impliedSum < lowerTol || impliedSum > upperTol) {
+    reasons.push(
+      `implied_sum ${impliedSum.toFixed(4)} outside band ` +
+      `${target.min.toFixed(2)}–${target.max.toFixed(2)} ` +
+      `(±5% tolerance ${lowerTol.toFixed(4)}–${upperTol.toFixed(4)})`
+    );
+  }
+
+  // (2)+(3) Per-athlete cap checks (rank cap, global cap)
+  multipliers.forEach((m, i) => {
+    const id = athleteIds[i];
+    const rank = fieldRanks.get(id) ?? 99;
+    const rankCap = rankCaps[rank];
+    if (rankCap && m > rankCap + 1e-6) {
+      reasons.push(`athlete idx=${i} (rank ${rank}): multiplier ${m} exceeds rank cap ${rankCap}`);
+    }
+    if (m > caps.max + 1e-6) {
+      reasons.push(`athlete idx=${i} (rank ${rank}): multiplier ${m} exceeds global cap ${caps.max}`);
+    }
+    if (m < caps.min - 1e-6) {
+      reasons.push(`athlete idx=${i} (rank ${rank}): multiplier ${m} below floor ${caps.min}`);
+    }
+  });
+
+  // (4) Monotonicity: better rank ⇒ lower-or-equal multiplier
+  const sorted = athleteIds
+    .map((id, i) => ({ rank: fieldRanks.get(id) ?? 99, m: multipliers[i] }))
+    .sort((a, b) => a.rank - b.rank);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].m < sorted[i - 1].m - 1e-6) {
+      reasons.push(
+        `monotonicity violated: rank ${sorted[i].rank} (${sorted[i].m}x) ` +
+        `< rank ${sorted[i - 1].rank} (${sorted[i - 1].m}x)`
+      );
+    }
+  }
+
+  return { sane: reasons.length === 0, reasons, impliedSum };
 }
 
 // Deterministic seeded random - uses market_id hash for reproducibility
@@ -352,232 +463,148 @@ function deriveMultipliersCalibrated(
 ): CalibratedResult {
   const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] || MULTIPLIER_CAPS.WINNER;
-  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || RANK_CAPS.WINNER;
   const baseTemperature = TEMPERATURE[marketType as keyof typeof TEMPERATURE] || 1.0;
-  
   const targetMid = (target.min + target.max) / 2;
-  
-  // Probability floor to prevent near-zero probabilities
   const pFloor = fieldSize <= 15 ? 0.004 : 0.002;
-  
+
+  // Helper: emit a full multiplier vector through the chokepoint.
+  // Used everywhere a raw vector is computed.
+  const finalizeVector = (raw: number[]): number[] =>
+    raw.map((v, idx) => {
+      const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
+      return finalizeMultiplier(v, rank, marketType);
+    });
+
+  // Helper: enforce monotonicity by ascending field rank.
+  // Lower rank ⇒ lower-or-equal multiplier. Lifts violators UP to match prev,
+  // then re-routes through chokepoint so the lift cannot exceed any cap.
+  const enforceMonotonicByRank = (mults: number[]): number[] => {
+    const out = mults.slice();
+    const sorted = athleteIds
+      .map((id, i) => ({ id, idx: i, rank: fieldRanks.get(id) ?? 99 }))
+      .sort((a, b) => a.rank - b.rank);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      if (out[curr.idx] < out[prev.idx]) {
+        out[curr.idx] = finalizeMultiplier(out[prev.idx], curr.rank, marketType);
+      }
+    }
+    return out;
+  };
+
   let temperature = baseTemperature;
   let bestResult: CalibratedResult | null = null;
   let temperatureAttempts = 0;
   const maxTempAttempts = 5;
-  
-  // Strict cap: caps.max from multiplierCaps.ts is the absolute ceiling.
-  // No adaptive escalation — single source of truth wins, even if convergence
-  // misses the target band (calibration will scale within bounds).
-  const adaptiveMaxCap = caps.max;
-  const HARD_CAP_CEILING = caps.max;
-  
-  console.log(`[CALIBRATION] Field: ${fieldSize}, marketType: ${marketType}, globalCaps: ${caps.min}-${caps.max}`);
-  
-  // Outer loop: temperature adjustments if too many athletes hit caps
+
+  console.log(`[CALIBRATION] field=${fieldSize} type=${marketType} caps=${caps.min}-${caps.max} target=${target.min}-${target.max}`);
+
   while (temperatureAttempts < maxTempAttempts) {
-    // Apply temperature to probabilities using softmax-like rescaling
+    // Temperature-adjusted probability vector
     let p_adjusted: number[];
     if (strengths && temperatureAttempts > 0) {
       const expScores = strengths.map(s => Math.exp(s / temperature));
       const expSum = expScores.reduce((a, b) => a + b, 0);
-      p_adjusted = expScores.map(e => Math.max(e / expSum, pFloor));
-      p_adjusted = normalize(p_adjusted);
+      p_adjusted = normalize(expScores.map(e => Math.max(e / expSum, pFloor)));
     } else {
-      p_adjusted = p_final.map(p => Math.max(p, pFloor));
-      p_adjusted = normalize(p_adjusted);
+      p_adjusted = normalize(p_final.map(p => Math.max(p, pFloor)));
     }
-    
+
     let k = targetMid;
     let iterations = 0;
     const maxIterations = 25;
-    
     let multipliers: number[] = [];
     let impliedSum = 0;
     let clippedCount = 0;
-    
-    // Inner loop: iterative calibration to hit target implied sum
+
+    // -------- Inner calibration loop --------
     while (iterations < maxIterations) {
-      clippedCount = 0;
-      
-      multipliers = p_adjusted.map((p, idx) => {
-        const athleteId = athleteIds[idx];
-        const fieldRank = fieldRanks.get(athleteId) || 99;
-        const rankMaxCap = rankCaps[fieldRank] ?? adaptiveMaxCap;
-        
-        if (p <= 0) {
-          clippedCount++;
-          return rankMaxCap;
-        }
-        
-        let m = 1 / (p * k);
-        
-        if (m > rankMaxCap) {
-          clippedCount++;
-          m = rankMaxCap;
-        }
-        if (m < caps.min) {
-          clippedCount++;
-          m = caps.min;
-        }
-        
-        return roundToLadder(m);
-      });
-      
-      // ENFORCE MONOTONICITY
-      const sortedByRank = athleteIds
-        .map((id, i) => ({ id, idx: i, fieldRank: fieldRanks.get(id)!, multiplier: multipliers[i] }))
-        .sort((a, b) => a.fieldRank - b.fieldRank);
-      
-      for (let i = 1; i < sortedByRank.length; i++) {
-        const prev = sortedByRank[i - 1];
-        const curr = sortedByRank[i];
-        if (curr.multiplier < prev.multiplier) {
-          const newMultiplier = roundToLadder(prev.multiplier + 0.05);
-          multipliers[curr.idx] = Math.min(newMultiplier, adaptiveMaxCap);
-        }
-      }
-      
+      const raw = p_adjusted.map(p => p > 0 ? 1 / (p * k) : caps.max);
+      multipliers = finalizeVector(raw);
+      multipliers = enforceMonotonicByRank(multipliers);
+
+      clippedCount = multipliers.reduce((n, m, idx) => {
+        const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
+        const rankCap = (RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {})[rank] ?? caps.max;
+        const effMax = Math.min(rankCap, caps.max);
+        return (m >= effMax - 1e-6 || m <= caps.min + 1e-6) ? n + 1 : n;
+      }, 0);
+
       impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
-      
       if (impliedSum >= target.min && impliedSum <= target.max) {
         return { multipliers, impliedSum, iterations: iterations + 1, temperatureUsed: temperature, clippedCount, status: 'CALIBRATED' };
       }
-      
-      if (impliedSum > target.max) {
-        k *= 0.97;
-      } else {
-        k *= 1.03;
-      }
-      
+      // impliedSum too HIGH ⇒ multipliers too low ⇒ raise k? No: m = 1/(p*k) so larger k ⇒ smaller m ⇒ larger 1/m ⇒ larger impliedSum. We want the opposite. Larger impliedSum ⇒ need smaller k.
+      k *= impliedSum > target.max ? 1.03 : 0.97;
       iterations++;
     }
-    
-    // ========== FORCED SCALING PASS (NEW) ==========
-    // After initial calibration fails, force convergence
-    console.log(`[CALIBRATION] Initial loop exhausted. impliedSum=${impliedSum.toFixed(4)}, starting forced scaling...`);
-    
+
+    // -------- Forced-scaling pass --------
+    console.log(`[CALIBRATION] Inner loop exhausted at implied=${impliedSum.toFixed(4)}; entering forced scaling`);
     for (let forceIter = 0; forceIter < 12; forceIter++) {
       impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
-      
       if (impliedSum >= target.min && impliedSum <= target.max) {
-        console.log(`[CALIBRATION] Forced scaling converged after ${forceIter + 1} iterations`);
         return { multipliers, impliedSum, iterations: iterations + forceIter + 1, temperatureUsed: temperature, clippedCount, status: 'CALIBRATED' };
       }
-      
+      // impliedSum > target ⇒ multipliers too low ⇒ need to scale them UP (factor > 1).
+      // impliedSum < target ⇒ multipliers too high ⇒ scale DOWN.
       const scaleFactor = impliedSum / targetMid;
-      
-      // Scale ALL multipliers
-      multipliers = multipliers.map((m, idx) => {
-        const athleteId = athleteIds[idx];
-        const fieldRank = fieldRanks.get(athleteId) || 99;
-        const rankMaxCap = rankCaps[fieldRank] ?? adaptiveMaxCap;
-        
-        let scaled = m * scaleFactor;
-        scaled = clamp(scaled, caps.min, rankMaxCap);
-        return roundToLadder(scaled);
-      });
-      
-      // Re-check implied sum after clamping
-      const newImplied = multipliers.reduce((s, m) => s + (1 / m), 0);
-      
-      // Strict caps: do NOT escalate adaptiveMaxCap. If convergence stalls
-      // at the cap, we accept the residual implied-sum drift rather than
-      // letting multipliers exceed the canonical ceiling.
-      
-      impliedSum = newImplied;
+      multipliers = finalizeVector(multipliers.map(m => m * scaleFactor));
+      multipliers = enforceMonotonicByRank(multipliers);
     }
-    
-    // ========== FINAL FORCE-IN PASS ==========
-    // If still outside band, scale ONLY unclamped athletes to force convergence
+
+    // -------- Final force-in pass (the OLD bug site — now safe) --------
     impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
     if (impliedSum < target.min || impliedSum > target.max) {
-      console.log(`[CALIBRATION] Final force-in pass. Current implied=${impliedSum.toFixed(4)}`);
-      
-      // Identify which athletes are NOT at their caps (can be adjusted)
+      console.log(`[CALIBRATION] Final force-in at implied=${impliedSum.toFixed(4)}`);
       const adjustable: number[] = [];
       const capped: number[] = [];
-      
+      const rankCapsTbl = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
       multipliers.forEach((m, idx) => {
-        const athleteId = athleteIds[idx];
-        const fieldRank = fieldRanks.get(athleteId) || 99;
-        const rankMaxCap = rankCaps[fieldRank] ?? adaptiveMaxCap;
-        
-        if (m >= rankMaxCap - 0.01 || m <= caps.min + 0.01) {
-          capped.push(idx);
-        } else {
-          adjustable.push(idx);
-        }
+        const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
+        const effMax = Math.min(rankCapsTbl[rank] ?? caps.max, caps.max);
+        if (m >= effMax - 0.01 || m <= caps.min + 0.01) capped.push(idx);
+        else adjustable.push(idx);
       });
-      
       if (adjustable.length > 0) {
-        // Calculate how much implied sum the capped athletes contribute
         const cappedImplied = capped.reduce((s, idx) => s + (1 / multipliers[idx]), 0);
         const adjustableTargetImplied = targetMid - cappedImplied;
-        
         if (adjustableTargetImplied > 0) {
           const currentAdjustableImplied = adjustable.reduce((s, idx) => s + (1 / multipliers[idx]), 0);
           const adjustScale = currentAdjustableImplied / adjustableTargetImplied;
-          
-          for (const idx of adjustable) {
-            multipliers[idx] = roundToLadder(multipliers[idx] * adjustScale);
-          }
+          const raw = multipliers.slice();
+          for (const idx of adjustable) raw[idx] = multipliers[idx] * adjustScale;
+          // CRITICAL: route through chokepoint. Old code wrote raw values here.
+          multipliers = finalizeVector(raw);
+          multipliers = enforceMonotonicByRank(multipliers);
         }
       }
-      
       impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
     }
-    
-    // Check if we should try temperature adjustment
-    const clippedRatio = clippedCount / p_adjusted.length;
-    
-    // Store best result so far - NEVER use NEEDS_REVIEW, always CALIBRATED or WARNING
+
     if (!bestResult || Math.abs(impliedSum - targetMid) < Math.abs(bestResult.impliedSum - targetMid)) {
-      const status = impliedSum >= target.min && impliedSum <= target.max ? 'CALIBRATED' : 'WARNING';
+      const status: 'CALIBRATED' | 'WARNING' = (impliedSum >= target.min && impliedSum <= target.max) ? 'CALIBRATED' : 'WARNING';
       bestResult = { multipliers, impliedSum, iterations, temperatureUsed: temperature, clippedCount, status };
     }
-    
-    // If converged after forced scaling, return
-    if (impliedSum >= target.min && impliedSum <= target.max) {
-      return bestResult!;
-    }
-    
+    if (impliedSum >= target.min && impliedSum <= target.max) return bestResult!;
+
+    const clippedRatio = clippedCount / p_adjusted.length;
     if (clippedRatio > 0.5 && temperatureAttempts < maxTempAttempts - 1) {
-      console.log(`[CALIBRATION] ${(clippedRatio * 100).toFixed(0)}% clipped at caps, increasing temperature from ${temperature.toFixed(2)} to ${(temperature * 1.2).toFixed(2)}`);
+      console.log(`[CALIBRATION] ${(clippedRatio * 100).toFixed(0)}% clipped → temp ${temperature.toFixed(2)} → ${(temperature * 1.2).toFixed(2)}`);
       temperature *= 1.2;
       temperatureAttempts++;
     } else {
       break;
     }
   }
-  
-  // Final fallback - ensure bestResult never has NEEDS_REVIEW
+
   if (bestResult) {
-    if (bestResult.status === 'NEEDS_REVIEW') {
-      bestResult.status = 'WARNING';
-    }
-    
-    // Final monotonic enforcement - after ALL calibration and scaling
-    // Ensures rank 1 always has highest probability (lowest multiplier)
-    const sorted = athleteIds
-      .map((id, i) => ({ id, idx: i, fieldRank: fieldRanks.get(id) || 99, mult: bestResult!.multipliers[i] }))
-      .sort((a, b) => a.fieldRank - b.fieldRank);
-    
-    let monotonicFixed = 0;
-    for (let i = 1; i < sorted.length; i++) {
-      if (sorted[i].mult < sorted[i - 1].mult) {
-        sorted[i - 1].mult = sorted[i].mult; // Pull higher-rank down to match
-        monotonicFixed++;
-      }
-    }
-    if (monotonicFixed > 0) {
-      sorted.forEach(s => { bestResult!.multipliers[s.idx] = s.mult; });
-      bestResult.impliedSum = bestResult.multipliers.reduce((s, m) => s + (1 / m), 0);
-      console.log(`[CALIBRATION] Monotonic enforcement fixed ${monotonicFixed} inversions, new implied_sum=${bestResult.impliedSum.toFixed(4)}`);
-    }
-    
-    console.log(`[CALIBRATION] Final: implied_sum=${bestResult.impliedSum.toFixed(4)}, Target: ${target.min.toFixed(2)}-${target.max.toFixed(2)}, Status: ${bestResult.status}`);
+    // One last monotonic pass — still chokepointed.
+    bestResult.multipliers = enforceMonotonicByRank(bestResult.multipliers);
+    bestResult.impliedSum = bestResult.multipliers.reduce((s, m) => s + (1 / m), 0);
+    console.log(`[CALIBRATION] Final: implied=${bestResult.impliedSum.toFixed(4)} status=${bestResult.status}`);
   }
-  
   return bestResult!;
 }
 
@@ -594,13 +621,22 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { market_id, force = false, debug = false } = await req.json();
+    const { market_id, force = false, debug = false, dry_run = false } = await req.json();
     if (!market_id) {
       return new Response(JSON.stringify({ error: "market_id required" }), 
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     console.log(`[ODDS] Processing market ${market_id}`);
+
+    // Snapshot existing (BEFORE) odds for dry-run diff comparison.
+    const { data: beforeOddsRows } = await supabase
+      .from('market_odds')
+      .select('athlete_id, final_decimal_odds, athlete_rank')
+      .eq('market_id', market_id);
+    const beforeByAthlete = new Map<string, number>(
+      (beforeOddsRows || []).map(r => [r.athlete_id as string, Number(r.final_decimal_odds)])
+    );
 
     // Fetch market
     const { data: market, error: mErr } = await supabase
@@ -762,6 +798,54 @@ Deno.serve(async (req) => {
       console.log(`[ODDS] Warnings: ${validation.warnings.join('; ')}`);
     }
 
+    // ============================================================
+    // ASSERTION SAFETY NET — Step 2.B
+    // If sanity fails, ABORT the write and flag the market for manual review.
+    // ============================================================
+    const sanity = assertMarketSane(calibration.multipliers, marketType, fieldRanks, athleteIds);
+    if (!sanity.sane) {
+      console.error(`[ODDS] 🚨 ASSERTION FAILED for market ${market_id}: ${sanity.reasons.join(' | ')}`);
+      if (!dry_run) {
+        await supabase.from('markets').update({
+          odds_validation_status: 'NEEDS_REVIEW',
+          odds_validation_error: `assertMarketSane failed: ${sanity.reasons.join('; ')}`,
+        }).eq('id', market_id);
+        await supabase.from('audit_logs').insert({
+          entity_type: 'market',
+          entity_id: market_id,
+          action_type: 'odds_assertion_failed',
+          actor_type: 'system',
+          metadata: {
+            market_type: marketType,
+            implied_sum: sanity.impliedSum,
+            reasons: sanity.reasons,
+            multipliers: calibration.multipliers,
+            athlete_ids: athleteIds,
+          },
+        });
+      }
+      // Build a diff table even on failure so the operator can see what was attempted.
+      const failTable = sortedResults.map(r => ({
+        rank: r.fieldRank, athlete: r.name,
+        before: beforeByAthlete.get(r.id) ?? null,
+        after_proposed: r.multiplier,
+      }));
+      return new Response(JSON.stringify({
+        success: false,
+        aborted_reason: 'ASSERTION_FAILED',
+        sanity_reasons: sanity.reasons,
+        implied_sum: sanity.impliedSum,
+        market_id,
+        market_type: marketType,
+        field_size: results.length,
+        dry_run,
+        proposed_table: failTable,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     // Sort for logging
     const sortedResults = [...results].sort((a, b) => a.fieldRank - b.fieldRank);
     console.log('[ODDS] Full debug table:');
@@ -769,8 +853,44 @@ Deno.serve(async (req) => {
       console.log(`  #${r.fieldRank} ${r.name}: strength=${r.strength.toFixed(2)}, p_final=${(r.p_final*100).toFixed(1)}% → ${r.multiplier}x [${r.source}]`);
     });
 
-    // Determine validation status - NEVER block play with NEEDS_REVIEW
-    const validationStatus = 'VALID'; // Always VALID - log warnings but don't block
+    // Determine validation status - assertion above is the gate; warnings here don't block.
+    const validationStatus = 'VALID';
+
+    // ============================================================
+    // DRY-RUN MODE — Step 2.C / Step 4 dry-run contract
+    // Computes what new odds WOULD be without writing. Returns a per-athlete
+    // before/after diff. Locked markets are still untouched by definition
+    // (caller filters by locked_at IS NULL).
+    // ============================================================
+    if (dry_run) {
+      const diffTable = sortedResults.map(r => ({
+        rank: r.fieldRank,
+        athlete: r.name,
+        before: beforeByAthlete.get(r.id) ?? null,
+        after: r.multiplier,
+        delta: beforeByAthlete.has(r.id) ? +(r.multiplier - (beforeByAthlete.get(r.id) as number)).toFixed(2) : null,
+      }));
+      const top3 = sortedResults.slice(0, 3);
+      const targetBandDry = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM];
+      const beforeImpliedSum = beforeOddsRows && beforeOddsRows.length > 0
+        ? beforeOddsRows.reduce((s, r) => s + (1 / Number(r.final_decimal_odds || 1)), 0)
+        : null;
+      return new Response(JSON.stringify({
+        success: true,
+        dry_run: true,
+        market_id,
+        market_type: marketType,
+        field_size: results.length,
+        before_implied_sum: beforeImpliedSum,
+        after_implied_sum: calibration.impliedSum,
+        target_band: targetBandDry,
+        in_band: calibration.impliedSum >= (targetBandDry?.min || 0) && calibration.impliedSum <= (targetBandDry?.max || 99),
+        assertion_passed: true,
+        diff_table: diffTable,
+        top3_before: top3.map(r => beforeByAthlete.get(r.id) ?? null),
+        top3_after: top3.map(r => r.multiplier),
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
     
     // Update database
     for (const r of results) {

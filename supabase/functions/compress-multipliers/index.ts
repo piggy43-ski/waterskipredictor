@@ -12,10 +12,13 @@ const MAX_RISK_RATIO: Record<string, number> = {
   HIGHEST_SCORE: 1.12,
 };
 
+// Implied-sum bands MUST mirror src/utils/multiplierCaps.ts TARGET_IMPLIED_SUM.
+// PODIUM is a 3-winner market: target ≈ 3 × (1 + house margin) ≈ 3.15.
 const IMPLIED_SUM_BANDS: Record<string, { target: number; min: number; max: number }> = {
-  WINNER: { target: 0.909, min: 0.90, max: 0.915 },
-  PODIUM: { target: 0.847, min: 0.84, max: 0.86 },
-  HIGHEST_SCORE: { target: 0.877, min: 0.87, max: 0.89 },
+  WINNER:        { target: 0.910, min: 0.90, max: 0.92 },
+  PODIUM:        { target: 3.150, min: 3.10, max: 3.20 },
+  HIGHEST_SCORE: { target: 0.880, min: 0.87, max: 0.89 },
+  HEAD_TO_HEAD:  { target: 1.930, min: 1.90, max: 1.96 },
 };
 
 const COMPRESSION_CONFIG = {

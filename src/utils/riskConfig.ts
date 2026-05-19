@@ -92,9 +92,11 @@ export const RISK_CONFIG = {
   
   /** Target implied sum bands by market type (house edge enforcement) */
   IMPLIED_SUM_BANDS: {
-    WINNER: { target: 0.909, min: 0.90, max: 0.915 },
-    PODIUM: { target: 0.847, min: 0.84, max: 0.86 },
-    HIGHEST_SCORE: { target: 0.877, min: 0.87, max: 0.89 },
+    // Mirror of src/utils/multiplierCaps.ts TARGET_IMPLIED_SUM.
+    // PODIUM is a 3-winner market: target ≈ 3 × (1 + house margin) ≈ 3.15.
+    WINNER:        { target: 0.910, min: 0.90, max: 0.92 },
+    PODIUM:        { target: 3.150, min: 3.10, max: 3.20 },
+    HIGHEST_SCORE: { target: 0.880, min: 0.87, max: 0.89 },
   } as const,
   
   /** Maximum risk ratio by market type (caps house downside at 10-15%) */

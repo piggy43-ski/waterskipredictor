@@ -40,10 +40,15 @@ export const MAX_PODIUM_COMBINED_MULTIPLIER = 25; // was 18 (= PODIUM.max × 3)
 
 export const TARGET_IMPLIED_SUM = {
   WINNER: { min: 0.90, max: 0.92 },
-  PODIUM: { min: 0.84, max: 0.86 },
+  // PODIUM is a TOP-3 market: 3 winners per event → target ≈ 3 × (1 + house margin).
+  // 3 × 1.05 ≈ 3.15. Previous 0.84–0.86 band was mathematically wrong — it treated
+  // PODIUM as a single-winner market and caused the calibrator to silently emit
+  // multipliers above caps (Swiss Pro Slalom women's at 5.04 implied sum bug).
+  PODIUM: { min: 3.10, max: 3.20 },
   HIGHEST_SCORE: { min: 0.87, max: 0.89 },
-  HEAD_TO_HEAD: { min: 0.95, max: 1.0 },
-  OVER_UNDER: { min: 0.95, max: 1.0 },
+  // HEAD_TO_HEAD: 2 sides per event → target ≈ 2 × (1 + house margin). 2 × 0.965 ≈ 1.93.
+  HEAD_TO_HEAD: { min: 1.90, max: 1.96 },
+  OVER_UNDER: { min: 1.90, max: 1.96 },
 } as const;
 
 export type MarketTypeKey = keyof typeof MULTIPLIER_CAPS;
