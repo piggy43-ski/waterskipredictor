@@ -463,232 +463,148 @@ function deriveMultipliersCalibrated(
 ): CalibratedResult {
   const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] || MULTIPLIER_CAPS.WINNER;
-  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || RANK_CAPS.WINNER;
   const baseTemperature = TEMPERATURE[marketType as keyof typeof TEMPERATURE] || 1.0;
-  
   const targetMid = (target.min + target.max) / 2;
-  
-  // Probability floor to prevent near-zero probabilities
   const pFloor = fieldSize <= 15 ? 0.004 : 0.002;
-  
+
+  // Helper: emit a full multiplier vector through the chokepoint.
+  // Used everywhere a raw vector is computed.
+  const finalizeVector = (raw: number[]): number[] =>
+    raw.map((v, idx) => {
+      const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
+      return finalizeMultiplier(v, rank, marketType);
+    });
+
+  // Helper: enforce monotonicity by ascending field rank.
+  // Lower rank ⇒ lower-or-equal multiplier. Lifts violators UP to match prev,
+  // then re-routes through chokepoint so the lift cannot exceed any cap.
+  const enforceMonotonicByRank = (mults: number[]): number[] => {
+    const out = mults.slice();
+    const sorted = athleteIds
+      .map((id, i) => ({ id, idx: i, rank: fieldRanks.get(id) ?? 99 }))
+      .sort((a, b) => a.rank - b.rank);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      if (out[curr.idx] < out[prev.idx]) {
+        out[curr.idx] = finalizeMultiplier(out[prev.idx], curr.rank, marketType);
+      }
+    }
+    return out;
+  };
+
   let temperature = baseTemperature;
   let bestResult: CalibratedResult | null = null;
   let temperatureAttempts = 0;
   const maxTempAttempts = 5;
-  
-  // Strict cap: caps.max from multiplierCaps.ts is the absolute ceiling.
-  // No adaptive escalation — single source of truth wins, even if convergence
-  // misses the target band (calibration will scale within bounds).
-  const adaptiveMaxCap = caps.max;
-  const HARD_CAP_CEILING = caps.max;
-  
-  console.log(`[CALIBRATION] Field: ${fieldSize}, marketType: ${marketType}, globalCaps: ${caps.min}-${caps.max}`);
-  
-  // Outer loop: temperature adjustments if too many athletes hit caps
+
+  console.log(`[CALIBRATION] field=${fieldSize} type=${marketType} caps=${caps.min}-${caps.max} target=${target.min}-${target.max}`);
+
   while (temperatureAttempts < maxTempAttempts) {
-    // Apply temperature to probabilities using softmax-like rescaling
+    // Temperature-adjusted probability vector
     let p_adjusted: number[];
     if (strengths && temperatureAttempts > 0) {
       const expScores = strengths.map(s => Math.exp(s / temperature));
       const expSum = expScores.reduce((a, b) => a + b, 0);
-      p_adjusted = expScores.map(e => Math.max(e / expSum, pFloor));
-      p_adjusted = normalize(p_adjusted);
+      p_adjusted = normalize(expScores.map(e => Math.max(e / expSum, pFloor)));
     } else {
-      p_adjusted = p_final.map(p => Math.max(p, pFloor));
-      p_adjusted = normalize(p_adjusted);
+      p_adjusted = normalize(p_final.map(p => Math.max(p, pFloor)));
     }
-    
+
     let k = targetMid;
     let iterations = 0;
     const maxIterations = 25;
-    
     let multipliers: number[] = [];
     let impliedSum = 0;
     let clippedCount = 0;
-    
-    // Inner loop: iterative calibration to hit target implied sum
+
+    // -------- Inner calibration loop --------
     while (iterations < maxIterations) {
-      clippedCount = 0;
-      
-      multipliers = p_adjusted.map((p, idx) => {
-        const athleteId = athleteIds[idx];
-        const fieldRank = fieldRanks.get(athleteId) || 99;
-        const rankMaxCap = rankCaps[fieldRank] ?? adaptiveMaxCap;
-        
-        if (p <= 0) {
-          clippedCount++;
-          return rankMaxCap;
-        }
-        
-        let m = 1 / (p * k);
-        
-        if (m > rankMaxCap) {
-          clippedCount++;
-          m = rankMaxCap;
-        }
-        if (m < caps.min) {
-          clippedCount++;
-          m = caps.min;
-        }
-        
-        return roundToLadder(m);
-      });
-      
-      // ENFORCE MONOTONICITY
-      const sortedByRank = athleteIds
-        .map((id, i) => ({ id, idx: i, fieldRank: fieldRanks.get(id)!, multiplier: multipliers[i] }))
-        .sort((a, b) => a.fieldRank - b.fieldRank);
-      
-      for (let i = 1; i < sortedByRank.length; i++) {
-        const prev = sortedByRank[i - 1];
-        const curr = sortedByRank[i];
-        if (curr.multiplier < prev.multiplier) {
-          const newMultiplier = roundToLadder(prev.multiplier + 0.05);
-          multipliers[curr.idx] = Math.min(newMultiplier, adaptiveMaxCap);
-        }
-      }
-      
+      const raw = p_adjusted.map(p => p > 0 ? 1 / (p * k) : caps.max);
+      multipliers = finalizeVector(raw);
+      multipliers = enforceMonotonicByRank(multipliers);
+
+      clippedCount = multipliers.reduce((n, m, idx) => {
+        const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
+        const rankCap = (RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {})[rank] ?? caps.max;
+        const effMax = Math.min(rankCap, caps.max);
+        return (m >= effMax - 1e-6 || m <= caps.min + 1e-6) ? n + 1 : n;
+      }, 0);
+
       impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
-      
       if (impliedSum >= target.min && impliedSum <= target.max) {
         return { multipliers, impliedSum, iterations: iterations + 1, temperatureUsed: temperature, clippedCount, status: 'CALIBRATED' };
       }
-      
-      if (impliedSum > target.max) {
-        k *= 0.97;
-      } else {
-        k *= 1.03;
-      }
-      
+      // impliedSum too HIGH ⇒ multipliers too low ⇒ raise k? No: m = 1/(p*k) so larger k ⇒ smaller m ⇒ larger 1/m ⇒ larger impliedSum. We want the opposite. Larger impliedSum ⇒ need smaller k.
+      k *= impliedSum > target.max ? 1.03 : 0.97;
       iterations++;
     }
-    
-    // ========== FORCED SCALING PASS (NEW) ==========
-    // After initial calibration fails, force convergence
-    console.log(`[CALIBRATION] Initial loop exhausted. impliedSum=${impliedSum.toFixed(4)}, starting forced scaling...`);
-    
+
+    // -------- Forced-scaling pass --------
+    console.log(`[CALIBRATION] Inner loop exhausted at implied=${impliedSum.toFixed(4)}; entering forced scaling`);
     for (let forceIter = 0; forceIter < 12; forceIter++) {
       impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
-      
       if (impliedSum >= target.min && impliedSum <= target.max) {
-        console.log(`[CALIBRATION] Forced scaling converged after ${forceIter + 1} iterations`);
         return { multipliers, impliedSum, iterations: iterations + forceIter + 1, temperatureUsed: temperature, clippedCount, status: 'CALIBRATED' };
       }
-      
+      // impliedSum > target ⇒ multipliers too low ⇒ need to scale them UP (factor > 1).
+      // impliedSum < target ⇒ multipliers too high ⇒ scale DOWN.
       const scaleFactor = impliedSum / targetMid;
-      
-      // Scale ALL multipliers
-      multipliers = multipliers.map((m, idx) => {
-        const athleteId = athleteIds[idx];
-        const fieldRank = fieldRanks.get(athleteId) || 99;
-        const rankMaxCap = rankCaps[fieldRank] ?? adaptiveMaxCap;
-        
-        let scaled = m * scaleFactor;
-        scaled = clamp(scaled, caps.min, rankMaxCap);
-        return roundToLadder(scaled);
-      });
-      
-      // Re-check implied sum after clamping
-      const newImplied = multipliers.reduce((s, m) => s + (1 / m), 0);
-      
-      // Strict caps: do NOT escalate adaptiveMaxCap. If convergence stalls
-      // at the cap, we accept the residual implied-sum drift rather than
-      // letting multipliers exceed the canonical ceiling.
-      
-      impliedSum = newImplied;
+      multipliers = finalizeVector(multipliers.map(m => m * scaleFactor));
+      multipliers = enforceMonotonicByRank(multipliers);
     }
-    
-    // ========== FINAL FORCE-IN PASS ==========
-    // If still outside band, scale ONLY unclamped athletes to force convergence
+
+    // -------- Final force-in pass (the OLD bug site — now safe) --------
     impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
     if (impliedSum < target.min || impliedSum > target.max) {
-      console.log(`[CALIBRATION] Final force-in pass. Current implied=${impliedSum.toFixed(4)}`);
-      
-      // Identify which athletes are NOT at their caps (can be adjusted)
+      console.log(`[CALIBRATION] Final force-in at implied=${impliedSum.toFixed(4)}`);
       const adjustable: number[] = [];
       const capped: number[] = [];
-      
+      const rankCapsTbl = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
       multipliers.forEach((m, idx) => {
-        const athleteId = athleteIds[idx];
-        const fieldRank = fieldRanks.get(athleteId) || 99;
-        const rankMaxCap = rankCaps[fieldRank] ?? adaptiveMaxCap;
-        
-        if (m >= rankMaxCap - 0.01 || m <= caps.min + 0.01) {
-          capped.push(idx);
-        } else {
-          adjustable.push(idx);
-        }
+        const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
+        const effMax = Math.min(rankCapsTbl[rank] ?? caps.max, caps.max);
+        if (m >= effMax - 0.01 || m <= caps.min + 0.01) capped.push(idx);
+        else adjustable.push(idx);
       });
-      
       if (adjustable.length > 0) {
-        // Calculate how much implied sum the capped athletes contribute
         const cappedImplied = capped.reduce((s, idx) => s + (1 / multipliers[idx]), 0);
         const adjustableTargetImplied = targetMid - cappedImplied;
-        
         if (adjustableTargetImplied > 0) {
           const currentAdjustableImplied = adjustable.reduce((s, idx) => s + (1 / multipliers[idx]), 0);
           const adjustScale = currentAdjustableImplied / adjustableTargetImplied;
-          
-          for (const idx of adjustable) {
-            multipliers[idx] = roundToLadder(multipliers[idx] * adjustScale);
-          }
+          const raw = multipliers.slice();
+          for (const idx of adjustable) raw[idx] = multipliers[idx] * adjustScale;
+          // CRITICAL: route through chokepoint. Old code wrote raw values here.
+          multipliers = finalizeVector(raw);
+          multipliers = enforceMonotonicByRank(multipliers);
         }
       }
-      
       impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
     }
-    
-    // Check if we should try temperature adjustment
-    const clippedRatio = clippedCount / p_adjusted.length;
-    
-    // Store best result so far - NEVER use NEEDS_REVIEW, always CALIBRATED or WARNING
+
     if (!bestResult || Math.abs(impliedSum - targetMid) < Math.abs(bestResult.impliedSum - targetMid)) {
-      const status = impliedSum >= target.min && impliedSum <= target.max ? 'CALIBRATED' : 'WARNING';
+      const status: 'CALIBRATED' | 'WARNING' = (impliedSum >= target.min && impliedSum <= target.max) ? 'CALIBRATED' : 'WARNING';
       bestResult = { multipliers, impliedSum, iterations, temperatureUsed: temperature, clippedCount, status };
     }
-    
-    // If converged after forced scaling, return
-    if (impliedSum >= target.min && impliedSum <= target.max) {
-      return bestResult!;
-    }
-    
+    if (impliedSum >= target.min && impliedSum <= target.max) return bestResult!;
+
+    const clippedRatio = clippedCount / p_adjusted.length;
     if (clippedRatio > 0.5 && temperatureAttempts < maxTempAttempts - 1) {
-      console.log(`[CALIBRATION] ${(clippedRatio * 100).toFixed(0)}% clipped at caps, increasing temperature from ${temperature.toFixed(2)} to ${(temperature * 1.2).toFixed(2)}`);
+      console.log(`[CALIBRATION] ${(clippedRatio * 100).toFixed(0)}% clipped → temp ${temperature.toFixed(2)} → ${(temperature * 1.2).toFixed(2)}`);
       temperature *= 1.2;
       temperatureAttempts++;
     } else {
       break;
     }
   }
-  
-  // Final fallback - ensure bestResult never has NEEDS_REVIEW
+
   if (bestResult) {
-    if (bestResult.status === 'NEEDS_REVIEW') {
-      bestResult.status = 'WARNING';
-    }
-    
-    // Final monotonic enforcement - after ALL calibration and scaling
-    // Ensures rank 1 always has highest probability (lowest multiplier)
-    const sorted = athleteIds
-      .map((id, i) => ({ id, idx: i, fieldRank: fieldRanks.get(id) || 99, mult: bestResult!.multipliers[i] }))
-      .sort((a, b) => a.fieldRank - b.fieldRank);
-    
-    let monotonicFixed = 0;
-    for (let i = 1; i < sorted.length; i++) {
-      if (sorted[i].mult < sorted[i - 1].mult) {
-        sorted[i - 1].mult = sorted[i].mult; // Pull higher-rank down to match
-        monotonicFixed++;
-      }
-    }
-    if (monotonicFixed > 0) {
-      sorted.forEach(s => { bestResult!.multipliers[s.idx] = s.mult; });
-      bestResult.impliedSum = bestResult.multipliers.reduce((s, m) => s + (1 / m), 0);
-      console.log(`[CALIBRATION] Monotonic enforcement fixed ${monotonicFixed} inversions, new implied_sum=${bestResult.impliedSum.toFixed(4)}`);
-    }
-    
-    console.log(`[CALIBRATION] Final: implied_sum=${bestResult.impliedSum.toFixed(4)}, Target: ${target.min.toFixed(2)}-${target.max.toFixed(2)}, Status: ${bestResult.status}`);
+    // One last monotonic pass — still chokepointed.
+    bestResult.multipliers = enforceMonotonicByRank(bestResult.multipliers);
+    bestResult.impliedSum = bestResult.multipliers.reduce((s, m) => s + (1 / m), 0);
+    console.log(`[CALIBRATION] Final: implied=${bestResult.impliedSum.toFixed(4)} status=${bestResult.status}`);
   }
-  
   return bestResult!;
 }
 
