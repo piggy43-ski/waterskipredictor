@@ -132,8 +132,7 @@ function finalizeMultiplier(
 ): number {
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
     || MULTIPLIER_CAPS.WINNER;
-  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
-  const rankCap = rankCaps[fieldRank] ?? caps.max;
+  const rankCap = getRankCap(marketType, fieldRank);
   const effectiveMax = Math.min(rankCap, caps.max);
 
   // Sanitize: NaN / Infinity / non-positive collapses to floor.
@@ -168,8 +167,6 @@ function assertMarketSane(
     || TARGET_IMPLIED_SUM.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
     || MULTIPLIER_CAPS.WINNER;
-  const rankCaps = RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {};
-
   const impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
 
   // (1) Implied sum within band ± 5% tolerance
@@ -187,8 +184,8 @@ function assertMarketSane(
   multipliers.forEach((m, i) => {
     const id = athleteIds[i];
     const rank = fieldRanks.get(id) ?? 99;
-    const rankCap = rankCaps[rank];
-    if (rankCap && m > rankCap + 1e-6) {
+    const rankCap = getRankCap(marketType, rank);
+    if (rankCap < caps.max && m > rankCap + 1e-6) {
       reasons.push(`athlete idx=${i} (rank ${rank}): multiplier ${m} exceeds rank cap ${rankCap}`);
     }
     if (m > caps.max + 1e-6) {
