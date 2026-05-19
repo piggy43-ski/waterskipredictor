@@ -2011,6 +2011,8 @@ export type Database = {
           lifetime_losses: number | null
           lifetime_winnings: number | null
           notification_preferences: Json | null
+          onboarding_completed: boolean
+          onboarding_completed_at: string | null
           privacy_version: string | null
           referred_by_code_id: string | null
           tos_accepted: boolean | null
@@ -2034,6 +2036,8 @@ export type Database = {
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
           notification_preferences?: Json | null
+          onboarding_completed?: boolean
+          onboarding_completed_at?: string | null
           privacy_version?: string | null
           referred_by_code_id?: string | null
           tos_accepted?: boolean | null
@@ -2057,6 +2061,8 @@ export type Database = {
           lifetime_losses?: number | null
           lifetime_winnings?: number | null
           notification_preferences?: Json | null
+          onboarding_completed?: boolean
+          onboarding_completed_at?: string | null
           privacy_version?: string | null
           referred_by_code_id?: string | null
           tos_accepted?: boolean | null
