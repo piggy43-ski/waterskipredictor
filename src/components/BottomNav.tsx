@@ -2,8 +2,8 @@ import { Home, Trophy, Wallet, Gift, Crown } from 'lucide-react';
 import { NavLink } from './NavLink';
 
 const navItemClass =
-  "group relative flex flex-col items-center gap-1 py-2 px-3 rounded-md transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] text-muted-foreground active:scale-95";
-const activeClass = "!text-primary";
+  "group/nav relative flex flex-col items-center gap-1 py-2 px-3 rounded-md transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] text-muted-foreground active:scale-95";
+const activeClass = "is-active !text-primary";
 
 export const BottomNav = () => {
   return (
