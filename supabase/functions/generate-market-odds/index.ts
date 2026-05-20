@@ -12,20 +12,17 @@ const SIMS = 5000;
 const W_BASE = 0.80;  // 80% weight on rank-based ladder
 const W_MC = 0.20;    // 20% weight on Monte Carlo
 
-// TARGET_IMPLIED_SUM: target for Σ(1/multiplier).
-// For N-winner markets the fair implied sum is ≈ N; house margin shaves it.
-// Recalibrated 2026-05-20: WINNER/HIGHEST_SCORE bands moved up to be reachable
-// under tight favorite rank caps (top-3 alone implies ≈1.44 for WINNER).
-//   WINNER:        1.40–1.50  (favorites fair, longshots moonshot)
-//   PODIUM:        3 winners → 3 × 1.05  ≈ 3.10–3.20  (~5% edge per slot)
-//   HIGHEST_SCORE: 1.22–1.32  (same shape as WINNER)
-//   HEAD_TO_HEAD:  2 sides   → 2 × 0.965 ≈ 1.90–1.96  (~3.5% vig per side)
-// MUST match src/utils/multiplierCaps.ts TARGET_IMPLIED_SUM (single source of truth).
-const TARGET_IMPLIED_SUM = {
-  WINNER:        { min: 1.40, max: 1.50 },
-  PODIUM:        { min: 3.10, max: 3.20 },
-  HIGHEST_SCORE: { min: 1.22, max: 1.32 },
-  HEAD_TO_HEAD:  { min: 1.90, max: 1.96 },
+// IMPLIED_SUM_FLOOR: one-sided anti-arbitrage floor for Σ(1/multiplier).
+// Book is valid when implied_sum ≥ floor. NO upper bound — whatever the
+// rank caps + probabilities produce above the floor is fine. We do NOT
+// squeeze toward a band; that was the source of the original cap-bypass
+// bug and is incompatible with tight favorite caps in large fields.
+// MUST match src/utils/multiplierCaps.ts IMPLIED_SUM_FLOOR (canonical).
+const IMPLIED_SUM_FLOOR: Record<string, number> = {
+  WINNER:        1.05,
+  PODIUM:        3.10,
+  HIGHEST_SCORE: 1.05,
+  HEAD_TO_HEAD:  2.00,
 };
 
 // SINGLE SOURCE OF TRUTH: mirrors src/utils/multiplierCaps.ts
@@ -165,20 +162,17 @@ function assertMarketSane(
   athleteIds: string[]
 ): { sane: boolean; reasons: string[]; impliedSum: number } {
   const reasons: string[] = [];
-  const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM]
-    || TARGET_IMPLIED_SUM.WINNER;
+  const floor = IMPLIED_SUM_FLOOR[marketType] ?? IMPLIED_SUM_FLOOR.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS]
     || MULTIPLIER_CAPS.WINNER;
   const impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
 
-  // (1) Implied sum within band ± 5% tolerance
-  const lowerTol = target.min * 0.95;
-  const upperTol = target.max * 1.05;
-  if (impliedSum < lowerTol || impliedSum > upperTol) {
+  // (1) Anti-arbitrage check: implied sum MUST be at or above the floor.
+  // No upper bound. Below floor = arbitrageable book = abort.
+  if (impliedSum < floor - 1e-6) {
     reasons.push(
-      `implied_sum ${impliedSum.toFixed(4)} outside band ` +
-      `${target.min.toFixed(2)}–${target.max.toFixed(2)} ` +
-      `(±5% tolerance ${lowerTol.toFixed(4)}–${upperTol.toFixed(4)})`
+      `implied_sum ${impliedSum.toFixed(4)} below anti-arbitrage floor ` +
+      `${floor.toFixed(2)} (book would be arbitrageable)`
     );
   }
 
