@@ -633,12 +633,44 @@ Deno.serve(async (req) => {
       .eq('discipline', market.discipline);
 
     const genderFilter = market.category === 'open_men' ? 'male' : 'female';
+
+    // Fallback path: if this tournament has no rows in tournament_entries for
+    // this discipline, read athletes from market_entries on this market row.
+    // Some tournaments (e.g. Masters, pre-2026-05) were populated via
+    // market_entries only. Shape parity is preserved by joining to athletes
+    // and synthesising the same columns the calibrator reads
+    // (discipline_rank/seed_rank/rating_0_100 default to null — the calibrator
+    // already tolerates this and falls back to the athlete's world rank/rating).
+    let entriesSource: 'tournament_entries' | 'market_entries' = 'tournament_entries';
+    let effectiveEntries: any[] = entries || [];
+    if (!entries || entries.length === 0) {
+      console.warn(`[ODDS] Fallback: no tournament_entries for tournament=${market.tournament_id} discipline=${market.discipline}. Reading from market_entries on market=${market_id}.`);
+      const { data: meRows, error: meErr } = await supabase
+        .from('market_entries')
+        .select(`id, athlete_id, is_active,
+          athletes!inner(id, name, gender, current_rank_slalom, current_rank_trick, current_rank_jump,
+            current_rating_slalom, current_rating_trick, current_rating_jump)`)
+        .eq('market_id', market_id)
+        .eq('is_active', true);
+      if (meErr) {
+        console.error('[ODDS] market_entries fallback query failed:', meErr);
+      }
+      effectiveEntries = (meRows || []).map(r => ({
+        id: r.id,
+        athlete_id: r.athlete_id,
+        discipline_rank: null,
+        seed_rank: null,
+        rating_0_100: null,
+        athletes: r.athletes,
+      }));
+      entriesSource = 'market_entries';
+    }
     
     const rankKey = `current_rank_${market.discipline}`;
     const ratingKey = `current_rating_${market.discipline}`;
     
     // Filter by gender AND discipline specialization
-    const filtered = entries?.filter(e => {
+    const filtered = effectiveEntries.filter(e => {
       const a = e.athletes as any;
       if (a?.gender !== genderFilter) return false;
       
@@ -653,11 +685,20 @@ Deno.serve(async (req) => {
       const hasMeaningfulRating = (entryRating && entryRating >= 70) || (disciplineRating && disciplineRating >= 70);
       
       return hasWorldRank || hasEntryDisciplineRank || hasSeedRank || hasMeaningfulRating;
-    }) || [];
+    });
     
-    console.log(`[ODDS] Filtered: ${filtered.length} specialists from ${entries?.length || 0} entries`);
+    console.log(`[ODDS] Filtered: ${filtered.length} specialists from ${effectiveEntries.length} entries (source=${entriesSource})`);
     
     if (filtered.length < 2) {
+      if (effectiveEntries.length === 0) {
+        const msg = `No entries found for tournament ${market.tournament_id} discipline ${market.discipline} in either tournament_entries or market_entries`;
+        await supabase.from('markets').update({
+          odds_validation_status: 'INVALID',
+          odds_validation_error: msg
+        }).eq('id', market_id);
+        return new Response(JSON.stringify({ error: msg }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
       await supabase.from('markets').update({
         odds_validation_status: 'INVALID',
         odds_validation_error: 'Insufficient specialists for this discipline'
