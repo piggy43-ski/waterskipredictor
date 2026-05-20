@@ -6,7 +6,7 @@ export const MULTIPLIER_CAPS = {
   // global cap acting as a floor. Favorite caps (ranks 1–3) stay tight via
   // RANK_CAPS — the global max is only ever hit by deep longshots.
   WINNER:        { min: 1.10, max: 25.0 },
-  PODIUM:        { min: 1.10, max: 12.0 },
+  PODIUM:        { min: 1.25, max: 12.0 },
   HIGHEST_SCORE: { min: 1.10, max: 22.0 },
   HEAD_TO_HEAD:  { min: 1.10, max: 5.0 },
   OVER_UNDER:    { min: 1.10, max: 5.0 },
