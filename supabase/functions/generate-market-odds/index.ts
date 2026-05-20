@@ -29,7 +29,7 @@ const IMPLIED_SUM_FLOOR: Record<string, number> = {
 // Do NOT diverge — update src/utils/multiplierCaps.ts AND this block in lockstep.
 const MULTIPLIER_CAPS = {
   WINNER:        { min: 1.10, max: 25.0 },
-  PODIUM:        { min: 1.10, max: 12.0 },
+  PODIUM:        { min: 1.25, max: 12.0 },
   HIGHEST_SCORE: { min: 1.10, max: 22.0 },
   HEAD_TO_HEAD:  { min: 1.10, max: 5.0 },
 };
