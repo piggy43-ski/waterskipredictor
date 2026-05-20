@@ -68,6 +68,10 @@ export interface Selection {
   athlete: Athlete;
   description: string;
   decimal_odds: number;
+  /** Field/engine rank from market_odds.athlete_rank — preferred for display so UI matches pricing. */
+  field_rank?: number | null;
+  /** Source of the displayed multiplier ('auto' | 'manual'). */
+  multiplier_source?: 'auto' | 'manual';
 }
 
 export interface Prediction {
