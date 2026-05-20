@@ -354,6 +354,12 @@ export default function MarketOddsReview() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Multiplier Review</h1>
           <p className="text-muted-foreground">Manage multiplier values and calibrate markets to target implied sum</p>
+          {metrics && metrics.manual_count > 0 && (
+            <Badge className="mt-2 bg-blue-500/15 text-blue-400 border-blue-500/30">
+              <Lock className="h-3 w-3 mr-1" />
+              Manual pricing — automated regenerator will skip overridden athletes
+            </Badge>
+          )}
         </div>
 
         <Card>

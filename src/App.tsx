@@ -137,6 +137,7 @@ const App = () => (
               <Route path="/admin/liabilities" element={<ProtectedRoute><AdminLiabilities /></ProtectedRoute>} />
               <Route path="/admin/market-results" element={<ProtectedRoute><AdminMarketResults /></ProtectedRoute>} />
               <Route path="/admin/odds-review" element={<ProtectedRoute><AdminMarketOddsReview /></ProtectedRoute>} />
+              <Route path="/admin/multiplier-overrides" element={<ProtectedRoute><AdminMarketOddsReview /></ProtectedRoute>} />
               <Route path="/admin/contest-entries" element={<ProtectedRoute><AdminContestEntries /></ProtectedRoute>} />
               <Route path="/admin/tournament-simulator" element={<ProtectedRoute><AdminTournamentSimulator /></ProtectedRoute>} />
               <Route path="/admin/market-liability" element={<ProtectedRoute><AdminMarketLiability /></ProtectedRoute>} />

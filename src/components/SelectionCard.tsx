@@ -60,8 +60,10 @@ export const SelectionCard = ({
 }: SelectionCardProps) => {
   const multiplierDisplay = `${selection.decimal_odds.toFixed(2)}×`;
 
-  // Get the appropriate rank based on discipline
+  // Prefer field/engine rank (market_odds.athlete_rank) — this is the rank the engine
+  // actually used to price the multiplier. Falls back to world rank only if engine rank missing.
   const getRank = () => {
+    if (selection.field_rank != null) return selection.field_rank;
     if (!discipline) return null;
     switch (discipline) {
       case 'slalom':
@@ -77,7 +79,6 @@ export const SelectionCard = ({
 
   const rank = getRank();
   const isTopThree = !!rank && rank <= 3;
-  const isDefendingChamp = !!(discipline && selection.athlete.defending_champion_disciplines?.includes(discipline));
   const isInjured = !!selection.athlete.injury_flag;
 
   const handleClick = () => {
@@ -138,9 +139,6 @@ export const SelectionCard = ({
           <h3 className="truncate text-sm font-semibold text-foreground">
             {selection.athlete.name}
           </h3>
-          {isDefendingChamp && (
-            <span title="Defending champion" className="text-[11px] leading-none">🏆</span>
-          )}
           {isInjured && (
             <span title="Injury flag" className="text-[11px] leading-none">🏥</span>
           )}

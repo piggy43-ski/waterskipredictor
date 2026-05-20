@@ -188,18 +188,29 @@ const TournamentDetail = () => {
           .select('market_id, athlete_id, manual_multiplier, is_enabled')
           .in('market_id', marketIds)
           .eq('is_enabled', true);
-        
-        // Merge overrides into selections client-side
+
+        // Fetch market_odds for engine/field rank (athlete_rank) — this is the rank
+        // the pricing engine actually used. UI must display this so cards match the math.
+        const { data: marketOddsData } = await supabase
+          .from('market_odds')
+          .select('market_id, athlete_id, athlete_rank')
+          .in('market_id', marketIds);
+
+        // Merge overrides + engine rank into selections client-side
         if (selectionsData) {
           const processedSelections = selectionsData.map((sel: any) => {
             const override = overridesData?.find(
               o => o.market_id === sel.market_id && o.athlete_id === sel.athlete_id
             );
-            
+            const odds = marketOddsData?.find(
+              o => o.market_id === sel.market_id && o.athlete_id === sel.athlete_id
+            );
+
             return {
               ...sel,
               decimal_odds: override?.manual_multiplier ?? sel.decimal_odds,
-              multiplier_source: override ? 'manual' : 'auto'
+              multiplier_source: override ? 'manual' : 'auto',
+              field_rank: odds?.athlete_rank ?? null,
             };
           });
           setSelections(processedSelections as any);

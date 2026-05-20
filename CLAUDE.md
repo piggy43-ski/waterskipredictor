@@ -4,6 +4,19 @@ Project notes for Claude / Lovable agents.
 
 ## Known Issues / Backlog
 
+## V2 Priority #1 — Strength model rebuild from tournament results (logged 2026-05-20)
+Current `base_strength_*` and `form_boost_*` fields on athletes are stale and don't reflect 2025-26 finishes (Worlds, Pro Tour, regional). This causes engine misprices like Gonzalez Matias being ranked field-#4 in trick when he's world-#1.
+
+Rebuild plan:
+- Nightly cron pulling from `athlete_results`, per discipline
+- Weighted by tournament tier: Worlds 1.0 / Pro Tour 0.7 / Regional 0.4
+- Trailing 90-day form boost with decay
+- Write to `athletes.base_strength_{discipline}` and `athletes.form_boost_{discipline}`
+
+Until rebuilt, use admin multiplier overrides at `/admin/multiplier-overrides` for known misprices (Gonzalez Matias in trick is the immediate example).
+
+Architecture note: manual multiplier overrides live in the separate `market_multiplier_overrides` table and are layered on top of `market_odds` at read time. The auto regenerator writes to `market_odds` only, so manual overrides survive any regenerate sweep by design — no `is_manual_override` flag on `market_odds` is needed.
+
 ## Known Issue — Shadow analysis script PODIUM handling (logged 2026-05-06)
 The synthetic shadow analysis script joins predictions.selection_id → selections.id → market_odds.athlete_rank, which silently fails for PODIUM exact-order predictions whose selection_id is a synthetic composite (e.g. "<uuid>-podium"). These predictions use calculatePodiumCombinedMultiplier instead and are correctly priced in production. The shadow script underrepresents PODIUM in delta reports.
 
