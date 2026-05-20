@@ -844,10 +844,19 @@ Deno.serve(async (req) => {
         delta: beforeByAthlete.has(r.id) ? +(r.multiplier - (beforeByAthlete.get(r.id) as number)).toFixed(2) : null,
       }));
       const top3 = sortedResults.slice(0, 3);
-      const targetBandDry = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM];
+      const floorDry = IMPLIED_SUM_FLOOR[marketType] ?? IMPLIED_SUM_FLOOR.WINNER;
       const beforeImpliedSum = beforeOddsRows && beforeOddsRows.length > 0
         ? beforeOddsRows.reduce((s, r) => s + (1 / Number(r.final_decimal_odds || 1)), 0)
         : null;
+      // Realized house edge per rank: implied_prob / (1/N_winners).
+      // For 1-winner markets the "fair" implied prob per athlete is
+      // 1/field_size; we report (multiplier_implied_prob / fair_prob - 1).
+      const houseEdgeAt = (idx: number): number | null => {
+        const r = sortedResults[idx];
+        if (!r) return null;
+        return +(((1 / r.multiplier) - (1 / sortedResults.length)) /
+                 (1 / sortedResults.length) * 100).toFixed(1);
+      };
       return new Response(JSON.stringify({
         success: true,
         dry_run: true,
@@ -856,12 +865,17 @@ Deno.serve(async (req) => {
         field_size: results.length,
         before_implied_sum: beforeImpliedSum,
         after_implied_sum: calibration.impliedSum,
-        target_band: targetBandDry,
-        in_band: calibration.impliedSum >= (targetBandDry?.min || 0) && calibration.impliedSum <= (targetBandDry?.max || 99),
+        floor: floorDry,
+        above_floor: calibration.impliedSum >= floorDry - 1e-6,
         assertion_passed: true,
         diff_table: diffTable,
         top3_before: top3.map(r => beforeByAthlete.get(r.id) ?? null),
         top3_after: top3.map(r => r.multiplier),
+        house_edge_pct_at: {
+          rank1: houseEdgeAt(0),
+          rank5: houseEdgeAt(4),
+          rank10: houseEdgeAt(9),
+        },
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     
@@ -899,8 +913,7 @@ Deno.serve(async (req) => {
         strength_score: r.strength,
         temperature_used: calibration.temperatureUsed,
         calibration_iterations: calibration.iterations,
-        target_implied_sum: (TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM]?.min + 
-                            TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM]?.max) / 2,
+        target_implied_sum: IMPLIED_SUM_FLOOR[marketType] ?? IMPLIED_SUM_FLOOR.WINNER,
       // Convergence metadata for debugging
         scaling_factor: calibration.impliedSum,
         overround: calibration.impliedSum,
@@ -962,7 +975,7 @@ Deno.serve(async (req) => {
       source: r.source
     }));
 
-    const targetBand = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM];
+    const floorVal = IMPLIED_SUM_FLOOR[marketType] ?? IMPLIED_SUM_FLOOR.WINNER;
     const finalImpliedSum = calibration.impliedSum;
 
     return new Response(JSON.stringify({
@@ -973,9 +986,8 @@ Deno.serve(async (req) => {
       implied_sum: finalImpliedSum,
       finalImpliedSum,
       implied_sum_pct: `${(finalImpliedSum * 100).toFixed(1)}%`,
-      target_min: targetBand?.min,
-      target_max: targetBand?.max,
-      in_band: finalImpliedSum >= (targetBand?.min || 0) && finalImpliedSum <= (targetBand?.max || 1),
+      floor: floorVal,
+      above_floor: finalImpliedSum >= floorVal - 1e-6,
       calibration_status: calibration.status,
       calibration_iterations: calibration.iterations,
       temperature_used: calibration.temperatureUsed,
@@ -984,7 +996,7 @@ Deno.serve(async (req) => {
       validation_errors: validation.errors,
       validation_warnings: validation.warnings,
       model_version: 'calibrated-v3-forced-convergence',
-      target_band: targetBand,
+      target_floor: floorVal,
       rank_caps_applied: RANK_CAPS[marketType as keyof typeof RANK_CAPS] || {},
       debug_table: debug ? debugTable : undefined,
       top_athletes: sortedResults.slice(0, 5).map(r => ({
