@@ -466,10 +466,9 @@ function deriveMultipliersCalibrated(
   athleteIds: string[],
   strengths?: number[]
 ): CalibratedResult {
-  const target = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
+  const floor = IMPLIED_SUM_FLOOR[marketType] ?? IMPLIED_SUM_FLOOR.WINNER;
   const caps = MULTIPLIER_CAPS[marketType as keyof typeof MULTIPLIER_CAPS] || MULTIPLIER_CAPS.WINNER;
   const baseTemperature = TEMPERATURE[marketType as keyof typeof TEMPERATURE] || 1.0;
-  const targetMid = (target.min + target.max) / 2;
   const pFloor = fieldSize <= 15 ? 0.004 : 0.002;
 
   // Helper: emit a full multiplier vector through the chokepoint.
@@ -503,7 +502,7 @@ function deriveMultipliersCalibrated(
   let temperatureAttempts = 0;
   const maxTempAttempts = 5;
 
-  console.log(`[CALIBRATION] field=${fieldSize} type=${marketType} caps=${caps.min}-${caps.max} target=${target.min}-${target.max}`);
+  console.log(`[CALIBRATION] field=${fieldSize} type=${marketType} caps=${caps.min}-${caps.max} floor=${floor}`);
 
   while (temperatureAttempts < maxTempAttempts) {
     // Temperature-adjusted probability vector
@@ -516,14 +515,21 @@ function deriveMultipliersCalibrated(
       p_adjusted = normalize(p_final.map(p => Math.max(p, pFloor)));
     }
 
-    let k = targetMid;
+    // k controls the implied-sum: m = 1/(p*k). Larger k ⇒ smaller m ⇒
+    // larger implied sum. Start at the floor so the very first sweep
+    // already targets a valid book.
+    let k = floor;
     let iterations = 0;
     const maxIterations = 25;
     let multipliers: number[] = [];
     let impliedSum = 0;
     let clippedCount = 0;
 
-    // -------- Inner calibration loop --------
+    // -------- Inner calibration loop (FLOOR-ONLY) --------
+    // One-sided convergence: shrink multipliers (raise k) until implied
+    // sum is ≥ floor, then stop. No upper squeeze, no forced-scaling,
+    // no force-in pass. With only one constraint this typically
+    // converges in 1–3 iterations.
     while (iterations < maxIterations) {
       const raw = p_adjusted.map(p => p > 0 ? 1 / (p * k) : caps.max);
       multipliers = finalizeVector(raw);
@@ -537,77 +543,38 @@ function deriveMultipliersCalibrated(
       }, 0);
 
       impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
-      if (impliedSum >= target.min && impliedSum <= target.max) {
+      if (impliedSum >= floor - 1e-6) {
         return { multipliers, impliedSum, iterations: iterations + 1, temperatureUsed: temperature, clippedCount, status: 'CALIBRATED' };
       }
-      // impliedSum too HIGH ⇒ multipliers too low ⇒ raise k? No: m = 1/(p*k) so larger k ⇒ smaller m ⇒ larger 1/m ⇒ larger impliedSum. We want the opposite. Larger impliedSum ⇒ need smaller k.
-      k *= impliedSum > target.max ? 1.03 : 0.97;
+      // Below floor: shrink multipliers to add probability mass.
+      // m = 1/(p*k); larger k ⇒ smaller m ⇒ larger Σ(1/m).
+      k *= 1.05;
       iterations++;
     }
 
-    // -------- Forced-scaling pass --------
-    console.log(`[CALIBRATION] Inner loop exhausted at implied=${impliedSum.toFixed(4)}; entering forced scaling`);
-    for (let forceIter = 0; forceIter < 12; forceIter++) {
-      impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
-      if (impliedSum >= target.min && impliedSum <= target.max) {
-        return { multipliers, impliedSum, iterations: iterations + forceIter + 1, temperatureUsed: temperature, clippedCount, status: 'CALIBRATED' };
-      }
-      // impliedSum > target ⇒ multipliers too low ⇒ need to scale them UP (factor > 1).
-      // impliedSum < target ⇒ multipliers too high ⇒ scale DOWN.
-      const scaleFactor = impliedSum / targetMid;
-      multipliers = finalizeVector(multipliers.map(m => m * scaleFactor));
-      multipliers = enforceMonotonicByRank(multipliers);
-    }
-
-    // -------- Final force-in pass (the OLD bug site — now safe) --------
-    impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
-    if (impliedSum < target.min || impliedSum > target.max) {
-      console.log(`[CALIBRATION] Final force-in at implied=${impliedSum.toFixed(4)}`);
-      const adjustable: number[] = [];
-      const capped: number[] = [];
-      multipliers.forEach((m, idx) => {
-        const rank = fieldRanks.get(athleteIds[idx]) ?? 99;
-        const effMax = Math.min(getRankCap(marketType, rank), caps.max);
-        if (m >= effMax - 0.01 || m <= caps.min + 0.01) capped.push(idx);
-        else adjustable.push(idx);
-      });
-      if (adjustable.length > 0) {
-        const cappedImplied = capped.reduce((s, idx) => s + (1 / multipliers[idx]), 0);
-        const adjustableTargetImplied = targetMid - cappedImplied;
-        if (adjustableTargetImplied > 0) {
-          const currentAdjustableImplied = adjustable.reduce((s, idx) => s + (1 / multipliers[idx]), 0);
-          const adjustScale = currentAdjustableImplied / adjustableTargetImplied;
-          const raw = multipliers.slice();
-          for (const idx of adjustable) raw[idx] = multipliers[idx] * adjustScale;
-          // CRITICAL: route through chokepoint. Old code wrote raw values here.
-          multipliers = finalizeVector(raw);
-          multipliers = enforceMonotonicByRank(multipliers);
-        }
-      }
-      impliedSum = multipliers.reduce((s, m) => s + (1 / m), 0);
-    }
-
-    if (!bestResult || Math.abs(impliedSum - targetMid) < Math.abs(bestResult.impliedSum - targetMid)) {
-      const status: 'CALIBRATED' | 'WARNING' = (impliedSum >= target.min && impliedSum <= target.max) ? 'CALIBRATED' : 'WARNING';
+    // Failed to reach floor at this temperature. Track best attempt.
+    if (!bestResult || impliedSum > bestResult.impliedSum) {
+      const status: 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW' =
+        (impliedSum >= floor - 1e-6) ? 'CALIBRATED' : 'NEEDS_REVIEW';
       bestResult = { multipliers, impliedSum, iterations, temperatureUsed: temperature, clippedCount, status };
     }
-    if (impliedSum >= target.min && impliedSum <= target.max) return bestResult!;
 
+    // If most athletes are pinned at their rank cap and we STILL can't
+    // reach the floor, the market is structurally broken — flattening
+    // probabilities won't help. Otherwise widen the distribution.
     const clippedRatio = clippedCount / p_adjusted.length;
-    if (clippedRatio > 0.5 && temperatureAttempts < maxTempAttempts - 1) {
-      console.log(`[CALIBRATION] ${(clippedRatio * 100).toFixed(0)}% clipped → temp ${temperature.toFixed(2)} → ${(temperature * 1.2).toFixed(2)}`);
-      temperature *= 1.2;
-      temperatureAttempts++;
-    } else {
+    if (clippedRatio > 0.8 || temperatureAttempts >= maxTempAttempts - 1) {
       break;
     }
+    console.log(`[CALIBRATION] floor unreached at implied=${impliedSum.toFixed(4)} (${(clippedRatio*100).toFixed(0)}% clipped) → temp ${temperature.toFixed(2)} → ${(temperature*1.2).toFixed(2)}`);
+    temperature *= 1.2;
+    temperatureAttempts++;
   }
 
   if (bestResult) {
-    // One last monotonic pass — still chokepointed.
     bestResult.multipliers = enforceMonotonicByRank(bestResult.multipliers);
     bestResult.impliedSum = bestResult.multipliers.reduce((s, m) => s + (1 / m), 0);
-    console.log(`[CALIBRATION] Final: implied=${bestResult.impliedSum.toFixed(4)} status=${bestResult.status}`);
+    console.log(`[CALIBRATION] Final: implied=${bestResult.impliedSum.toFixed(4)} floor=${floor} status=${bestResult.status}`);
   }
   return bestResult!;
 }
