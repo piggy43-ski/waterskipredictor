@@ -13,10 +13,9 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Alert, AlertDescription } from './ui/alert';
 import { Badge } from './ui/badge';
-import { Coins, TrendingUp, AlertCircle, AlertTriangle, Flame, Rocket } from 'lucide-react';
+import { Coins, TrendingUp, AlertCircle, Flame, Rocket } from 'lucide-react';
 import { calculateCombinedMultiplier, formatMultiplier } from '@/utils/multiplierUtils';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
-import { RISK_CONFIG, isPayoutOverMax } from '@/utils/riskConfig';
 import { getRiskTierFromMultiplier, isUnderdog, getUnderdogMotivation, getRewardFraming } from '@/utils/riskTiers';
 
 interface PredictionDialogProps {
@@ -62,11 +61,10 @@ export const PredictionDialog = ({
   const projectedRewards = Math.floor(stake * combinedMultiplier);
   const potentialProfit = projectedRewards - stake;
   
-  // Validation
+  // Validation — only minimum stake and wallet balance gate entries.
+  // Per-pick stake/payout caps removed for beta launch.
   const belowMinStake = stake < 100;
-  const exceedsMaxStake = stake > PARLAY_CONFIG.MAX_STAKE;
-  const exceedsMaxPayout = isPayoutOverMax(stake, combinedMultiplier);
-  const isValidStake = stake >= 100 && stake <= walletBalance && !exceedsMaxStake && !exceedsMaxPayout;
+  const isValidStake = stake >= 100 && stake <= walletBalance;
 
   const handleConfirm = () => {
     if (isValidStake) {
@@ -206,7 +204,7 @@ export const PredictionDialog = ({
               onChange={(e) => setStakeAmount(e.target.value)}
               placeholder="Enter entry amount"
               min="1"
-              max={Math.min(walletBalance, PARLAY_CONFIG.MAX_STAKE)}
+              max={walletBalance}
             />
             <p className="text-xs text-muted-foreground">
               Entry amount × multiplier = projected rewards (if correct)
@@ -216,22 +214,6 @@ export const PredictionDialog = ({
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
                   Minimum entry is 100 tokens.
-                </AlertDescription>
-              </Alert>
-            )}
-            {exceedsMaxStake && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Max entry per pick: {PARLAY_CONFIG.MAX_STAKE.toLocaleString()} tokens. For fairness and safety, limits are in place for all users.
-                </AlertDescription>
-              </Alert>
-            )}
-            {exceedsMaxPayout && !exceedsMaxStake && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  Maximum projected rewards exceeded. Please reduce entry amount or select different picks.
                 </AlertDescription>
               </Alert>
             )}

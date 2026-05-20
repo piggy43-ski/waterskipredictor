@@ -230,8 +230,8 @@ export function ParlayBuilder({
 
   const handleSubmit = async () => {
     const stakeAmount = parseInt(stake);
-    if (!stakeAmount || stakeAmount < 100 || stakeAmount > PARLAY_CONFIG.MAX_STAKE) {
-      toast.error(`Stake must be between 100 and ${PARLAY_CONFIG.MAX_STAKE} tokens`);
+    if (!stakeAmount || stakeAmount < 100) {
+      toast.error(`Minimum stake is 100 tokens`);
       return;
     }
 
