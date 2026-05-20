@@ -1280,6 +1280,51 @@ export type Database = {
           },
         ]
       }
+      market_health_log: {
+        Row: {
+          calibration: Json
+          created_at: string
+          field_size: number | null
+          floor_value: number | null
+          generator_version: string | null
+          id: string
+          implied_sum: number | null
+          market_id: string
+          market_type: string
+          status: string
+          tournament_id: string | null
+          warnings: Json
+        }
+        Insert: {
+          calibration?: Json
+          created_at?: string
+          field_size?: number | null
+          floor_value?: number | null
+          generator_version?: string | null
+          id?: string
+          implied_sum?: number | null
+          market_id: string
+          market_type: string
+          status: string
+          tournament_id?: string | null
+          warnings?: Json
+        }
+        Update: {
+          calibration?: Json
+          created_at?: string
+          field_size?: number | null
+          floor_value?: number | null
+          generator_version?: string | null
+          id?: string
+          implied_sum?: number | null
+          market_id?: string
+          market_type?: string
+          status?: string
+          tournament_id?: string | null
+          warnings?: Json
+        }
+        Relationships: []
+      }
       market_liability: {
         Row: {
           athlete_id: string
