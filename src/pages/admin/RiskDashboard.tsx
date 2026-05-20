@@ -21,8 +21,16 @@ import { RISK_CONFIG, getLiabilityCap, getMaxRiskRatio, MarketType } from '@/uti
 import { toast } from 'sonner';
 import { EventHandleCapsCard } from '@/components/admin/EventHandleCapsCard';
 
-// Use risk config for bands
-const HOUSE_EDGE_BANDS = RISK_CONFIG.IMPLIED_SUM_BANDS;
+// Anti-arbitrage floor per market type. The book is healthy when
+// Σ(1/m) ≥ floor; no upper bound. Display shape preserved
+// ({target, min, max}) so downstream UI helpers still work — `max` is
+// Infinity so "above target" is always OK.
+const HOUSE_EDGE_BANDS = Object.fromEntries(
+  Object.entries(RISK_CONFIG.IMPLIED_SUM_FLOOR).map(([k, v]) => [
+    k,
+    { target: v as number, min: v as number, max: Number.POSITIVE_INFINITY },
+  ])
+) as Record<MarketType, { target: number; min: number; max: number }>;
 const MAX_RISK_RATIOS = RISK_CONFIG.MAX_RISK_RATIO;
 
 // Bankroll summary interface
