@@ -90,14 +90,15 @@ export const RISK_CONFIG = {
   /** Pre-publish safety margin (max payout must be ≤ 95% of possible pool) */
   PUBLISH_SAFETY_MARGIN: 0.95,
   
-  /** Target implied sum bands by market type (house edge enforcement) */
-  IMPLIED_SUM_BANDS: {
-    // Mirror of src/utils/multiplierCaps.ts TARGET_IMPLIED_SUM.
-    // PODIUM is a 3-winner market: target ≈ 3 × (1 + house margin) ≈ 3.15.
-    // WINNER/HIGHEST_SCORE recalibrated 2026-05-20 to match tight favorite caps.
-    WINNER:        { target: 1.450, min: 1.40, max: 1.50 },
-    PODIUM:        { target: 3.150, min: 3.10, max: 3.20 },
-    HIGHEST_SCORE: { target: 1.270, min: 1.22, max: 1.32 },
+  /**
+   * Anti-arbitrage implied-sum FLOORS by market type.
+   * Mirror of src/utils/multiplierCaps.ts IMPLIED_SUM_FLOOR.
+   * One-sided: market is valid when Σ(1/m) ≥ floor. No upper bound.
+   */
+  IMPLIED_SUM_FLOOR: {
+    WINNER:        1.05,
+    PODIUM:        3.10,
+    HIGHEST_SCORE: 1.05,
   } as const,
   
   /** Maximum risk ratio by market type (caps house downside at 10-15%) */
@@ -205,10 +206,10 @@ export const getMaxRiskRatio = (marketType: MarketType): number => {
 };
 
 /**
- * Get implied sum band for a market type
+ * Get implied-sum floor (anti-arbitrage minimum) for a market type.
  */
-export const getImpliedSumBand = (marketType: MarketType): { target: number; min: number; max: number } => {
-  return RISK_CONFIG.IMPLIED_SUM_BANDS[marketType] || RISK_CONFIG.IMPLIED_SUM_BANDS.WINNER;
+export const getImpliedSumFloor = (marketType: MarketType): number => {
+  return RISK_CONFIG.IMPLIED_SUM_FLOOR[marketType] ?? RISK_CONFIG.IMPLIED_SUM_FLOOR.WINNER;
 };
 
 /**
