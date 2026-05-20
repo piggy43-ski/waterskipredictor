@@ -16,11 +16,18 @@ const MULTIPLIER_CAPS: Record<string, { min: number; max: number }> = {
 };
 
 // Rank-specific caps — applied on top of market-type caps for manual overrides.
-const RANK_CAPS: Record<string, Record<number, number>> = {
-  WINNER: { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 5.00 },
-  PODIUM: { 1: 1.25, 2: 1.75, 3: 2.25 },
-  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.50 },
+const RANK_CAPS: Record<string, Record<string | number, number>> = {
+  WINNER:        { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 4.75, 6: 5.50, 7: 6.50, '8+': 20.00 },
+  PODIUM:        { 1: 1.25, 2: 1.75, 3: 2.20, 4: 3.25, 5: 3.75, 6: 4.25, 7: 5.00, '8+': 10.00 },
+  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.40, 4: 4.50, 5: 5.25, 6: 6.00, 7: 7.00, '8+': 18.00 },
 };
+
+function getRankCap(marketType: string, rank: number): number {
+  const caps = RANK_CAPS[marketType] || {};
+  if (rank in caps) return caps[rank] as number;
+  if (rank >= 8 && caps['8+'] != null) return caps['8+'] as number;
+  return Infinity;
+}
 
 // Mirror of src/utils/multiplierCaps.ts IMPLIED_SUM_FLOOR.
 // One-sided anti-arbitrage floor; no upper bound.
@@ -277,11 +284,10 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Validate against market-type caps AND rank-specific caps.
-        const rankCaps = RANK_CAPS[marketType] || {};
+        // Validate against market-type caps AND rank-tiered caps.
         const athleteRank = rankMap.get(athlete_id) || 999;
-        const rankMaxCap = rankCaps[athleteRank];
-        const effectiveMax = rankMaxCap !== undefined ? Math.min(caps.max, rankMaxCap) : caps.max;
+        const rankMaxCap = getRankCap(marketType, athleteRank);
+        const effectiveMax = Math.min(caps.max, rankMaxCap);
 
         const clampedMultiplier = Math.max(caps.min, Math.min(effectiveMax, manual_multiplier));
         const roundedMultiplier = roundToStep(clampedMultiplier);
