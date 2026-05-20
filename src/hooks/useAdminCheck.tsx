@@ -11,7 +11,7 @@ export const useAdminCheck = () => {
     user ? adminStatusCache.get(user.id) ?? null : null
   );
   const [isLoading, setIsLoading] = useState(() =>
-    user ? adminStatusCache.get(user.id) !== true : true
+    user ? !adminStatusCache.has(user.id) : true
   );
   const navigate = useNavigate();
 
@@ -32,7 +32,7 @@ export const useAdminCheck = () => {
       if (cached !== undefined) {
         if (!cancelled) {
           setIsAdmin(cached);
-          setIsLoading(!cached);
+          setIsLoading(false);
         }
         if (!cached) navigate('/');
         return;
