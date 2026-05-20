@@ -14,15 +14,17 @@ const W_MC = 0.20;    // 20% weight on Monte Carlo
 
 // TARGET_IMPLIED_SUM: target for Σ(1/multiplier).
 // For N-winner markets the fair implied sum is ≈ N; house margin shaves it.
-//   WINNER:        1 winner  → 1 × 0.91  ≈ 0.90–0.92  (~10% edge)
+// Recalibrated 2026-05-20: WINNER/HIGHEST_SCORE bands moved up to be reachable
+// under tight favorite rank caps (top-3 alone implies ≈1.44 for WINNER).
+//   WINNER:        1.40–1.50  (favorites fair, longshots moonshot)
 //   PODIUM:        3 winners → 3 × 1.05  ≈ 3.10–3.20  (~5% edge per slot)
-//   HIGHEST_SCORE: 1 winner  → 1 × 0.88  ≈ 0.87–0.89  (~12% edge)
+//   HIGHEST_SCORE: 1.22–1.32  (same shape as WINNER)
 //   HEAD_TO_HEAD:  2 sides   → 2 × 0.965 ≈ 1.90–1.96  (~3.5% vig per side)
 // MUST match src/utils/multiplierCaps.ts TARGET_IMPLIED_SUM (single source of truth).
 const TARGET_IMPLIED_SUM = {
-  WINNER:        { min: 0.90, max: 0.92 },
+  WINNER:        { min: 1.40, max: 1.50 },
   PODIUM:        { min: 3.10, max: 3.20 },
-  HIGHEST_SCORE: { min: 0.87, max: 0.89 },
+  HIGHEST_SCORE: { min: 1.22, max: 1.32 },
   HEAD_TO_HEAD:  { min: 1.90, max: 1.96 },
 };
 

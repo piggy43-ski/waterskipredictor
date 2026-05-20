@@ -94,9 +94,10 @@ export const RISK_CONFIG = {
   IMPLIED_SUM_BANDS: {
     // Mirror of src/utils/multiplierCaps.ts TARGET_IMPLIED_SUM.
     // PODIUM is a 3-winner market: target ≈ 3 × (1 + house margin) ≈ 3.15.
-    WINNER:        { target: 0.910, min: 0.90, max: 0.92 },
+    // WINNER/HIGHEST_SCORE recalibrated 2026-05-20 to match tight favorite caps.
+    WINNER:        { target: 1.450, min: 1.40, max: 1.50 },
     PODIUM:        { target: 3.150, min: 3.10, max: 3.20 },
-    HIGHEST_SCORE: { target: 0.880, min: 0.87, max: 0.89 },
+    HIGHEST_SCORE: { target: 1.270, min: 1.22, max: 1.32 },
   } as const,
   
   /** Maximum risk ratio by market type (caps house downside at 10-15%) */
