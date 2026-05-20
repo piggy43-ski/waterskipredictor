@@ -12,13 +12,15 @@ const MAX_RISK_RATIO: Record<string, number> = {
   HIGHEST_SCORE: 1.12,
 };
 
-// Implied-sum bands MUST mirror src/utils/multiplierCaps.ts TARGET_IMPLIED_SUM.
-// PODIUM is a 3-winner market: target ≈ 3 × (1 + house margin) ≈ 3.15.
-const IMPLIED_SUM_BANDS: Record<string, { target: number; min: number; max: number }> = {
-  WINNER:        { target: 1.450, min: 1.40, max: 1.50 },
-  PODIUM:        { target: 3.150, min: 3.10, max: 3.20 },
-  HIGHEST_SCORE: { target: 1.270, min: 1.22, max: 1.32 },
-  HEAD_TO_HEAD:  { target: 1.930, min: 1.90, max: 1.96 },
+// One-sided anti-arbitrage floor. Mirror of
+// src/utils/multiplierCaps.ts IMPLIED_SUM_FLOOR.
+// Compression must never drive Σ(1/m) below floor (would create
+// an arbitrageable book). No upper bound.
+const IMPLIED_SUM_FLOOR: Record<string, number> = {
+  WINNER:        1.05,
+  PODIUM:        3.10,
+  HIGHEST_SCORE: 1.05,
+  HEAD_TO_HEAD:  2.00,
 };
 
 const COMPRESSION_CONFIG = {
@@ -156,7 +158,7 @@ Deno.serve(async (req) => {
     }
 
     const maxRiskRatio = MAX_RISK_RATIO[market.market_type] || MAX_RISK_RATIO.WINNER;
-    const impliedSumBand = IMPLIED_SUM_BANDS[market.market_type] || IMPLIED_SUM_BANDS.WINNER;
+    const impliedSumFloor = IMPLIED_SUM_FLOOR[market.market_type] ?? IMPLIED_SUM_FLOOR.WINNER;
 
     // Get current selections with odds
     const { data: selections, error: selectionsError } = await supabase
@@ -320,14 +322,11 @@ Deno.serve(async (req) => {
       newImpliedSum += 1 / odds;
     });
 
-    // Check if implied sum is within band after compression
-    const impliedSumWithinBand = newImpliedSum >= impliedSumBand.min && newImpliedSum <= impliedSumBand.max;
-
-    // If implied sum drifted outside band, we may need to normalize
-    // Priority: implied sum correctness over payout generosity
-    if (!impliedSumWithinBand && newImpliedSum > impliedSumBand.max) {
-      console.log(`Implied sum ${newImpliedSum} above max ${impliedSumBand.max} - further adjustment needed`);
-      // Additional normalization could be applied here if needed
+    // Floor-only check: compression must keep implied sum ≥ floor
+    // (anti-arbitrage). No upper bound — over-juice is fine.
+    const impliedSumAboveFloor = newImpliedSum >= impliedSumFloor - 1e-6;
+    if (!impliedSumAboveFloor) {
+      console.log(`Implied sum ${newImpliedSum} below floor ${impliedSumFloor} - book would be arbitrageable`);
     }
 
     // Calculate new risk ratio after compression
@@ -418,7 +417,7 @@ Deno.serve(async (req) => {
         risk_ratio_after: Math.round(newRiskRatio * 1000) / 1000,
         max_risk_ratio: maxRiskRatio,
         implied_sum_after: Math.round(newImpliedSum * 1000) / 1000,
-        implied_sum_band: impliedSumBand,
+        implied_sum_floor: impliedSumFloor,
         implied_sum_within_band: impliedSumWithinBand,
         compression_factor: Math.round(compressionFactor * 1000) / 1000,
         cumulative_compression_pct: Math.round(cumulativeCompressionPct * 100) / 100,

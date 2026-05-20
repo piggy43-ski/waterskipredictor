@@ -160,17 +160,17 @@ function simulateMarket(
   };
 }
 
-// Get implied sum status
+// Get implied sum status — mirror of IMPLIED_SUM_FLOOR (one-sided).
 function getImpliedSumStatus(impliedSum: number, marketType: string): 'OK' | 'WARNING' | 'BLOCKED' {
-  const bands: Record<string, { min: number; max: number }> = {
-    WINNER: { min: 0.90, max: 0.915 },
-    PODIUM: { min: 0.88, max: 0.92 },
-    HIGHEST_SCORE: { min: 0.90, max: 0.915 },
+  const floors: Record<string, number> = {
+    WINNER:        1.05,
+    PODIUM:        3.10,
+    HIGHEST_SCORE: 1.05,
+    HEAD_TO_HEAD:  2.00,
   };
-  const band = bands[marketType] || bands.WINNER;
-  
-  if (impliedSum >= band.min && impliedSum <= band.max) return 'OK';
-  if (impliedSum >= band.min - 0.02 && impliedSum <= band.max + 0.02) return 'WARNING';
+  const floor = floors[marketType] ?? floors.WINNER;
+  if (impliedSum >= floor) return 'OK';
+  if (impliedSum >= floor * 0.95) return 'WARNING';
   return 'BLOCKED';
 }
 

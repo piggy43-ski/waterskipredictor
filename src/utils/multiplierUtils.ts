@@ -17,12 +17,12 @@
 import {
   MULTIPLIER_CAPS as CANONICAL_CAPS,
   RANK_CAPS as CANONICAL_RANK_CAPS,
-  TARGET_IMPLIED_SUM as CANONICAL_TARGET,
+  IMPLIED_SUM_FLOOR as CANONICAL_FLOOR,
   getRankCap as canonicalGetRankCap,
 } from './multiplierCaps';
 
 export const MULTIPLIER_CONFIG = {
-  TARGET_IMPLIED_SUM: CANONICAL_TARGET,
+  IMPLIED_SUM_FLOOR: CANONICAL_FLOOR,
   MULTIPLIER_CAPS: CANONICAL_CAPS,
   WINNER_RANK_CAPS: CANONICAL_RANK_CAPS.WINNER,
   PODIUM_RANK_CAPS: CANONICAL_RANK_CAPS.PODIUM,
@@ -112,36 +112,15 @@ export function getImpliedSumStatus(
   impliedSum: number,
   marketType: MarketType
 ): { status: 'OK' | 'WARNING' | 'BLOCKED'; target: { min: number; max: number }; message: string } {
-  const band = MULTIPLIER_CONFIG.TARGET_IMPLIED_SUM[marketType];
-  const percentage = (impliedSum * 100).toFixed(1);
-  const targetRange = `${(band.min * 100).toFixed(1)}%–${(band.max * 100).toFixed(1)}%`;
-  
-  if (impliedSum >= band.min && impliedSum <= band.max) {
-    return {
-      status: 'OK',
-      target: band,
-      message: `${percentage}% within target (${targetRange})`
-    };
+  const floor = MULTIPLIER_CONFIG.IMPLIED_SUM_FLOOR[marketType];
+  const target = { min: floor, max: Number.POSITIVE_INFINITY };
+  if (impliedSum >= floor) {
+    return { status: 'OK', target, message: `${impliedSum.toFixed(3)} ≥ floor ${floor.toFixed(2)}` };
   }
-  
-  // 10% tolerance for WARNING vs BLOCKED
-  const tolerance = 0.10;
-  const lowerBound = band.min * (1 - tolerance);
-  const upperBound = band.max * (1 + tolerance);
-  
-  if (impliedSum >= lowerBound && impliedSum <= upperBound) {
-    return {
-      status: 'WARNING',
-      target: band,
-      message: `${percentage}% outside target (${targetRange}) but within tolerance`
-    };
+  if (impliedSum >= floor * 0.95) {
+    return { status: 'WARNING', target, message: `${impliedSum.toFixed(3)} below floor ${floor.toFixed(2)} (within 5% tolerance)` };
   }
-  
-  return {
-    status: 'BLOCKED',
-    target: band,
-    message: `${percentage}% dangerously outside target (${targetRange})`
-  };
+  return { status: 'BLOCKED', target, message: `${impliedSum.toFixed(3)} below anti-arbitrage floor ${floor.toFixed(2)}` };
 }
 
 /**
@@ -154,16 +133,17 @@ export function deriveMultipliers(
   fieldRanks?: Map<string, number>,
   athleteIds?: string[]
 ): MultiplierResult {
-  const target = MULTIPLIER_CONFIG.TARGET_IMPLIED_SUM[marketType];
+  const floor = MULTIPLIER_CONFIG.IMPLIED_SUM_FLOOR[marketType];
   const caps = MULTIPLIER_CONFIG.MULTIPLIER_CAPS[marketType];
-  const targetMid = (target.min + target.max) / 2;
 
   // Strict cap: caps.max from `multiplierCaps.ts` is the absolute ceiling.
   // No field-size scaling — single source of truth wins.
   const hardMax = caps.max;
 
-  // Calculate edge factor to hit target implied sum
-  const edgeFactor = targetMid;
+  // Edge factor: scale probabilities so Σ(1/m) targets the floor.
+  // Final implied sum is clamped UPWARD only via rank caps; we never
+  // squeeze toward a band ceiling.
+  const edgeFactor = floor;
 
   // Apply edge and derive multipliers
   const multipliers = probabilities.map((p, idx) => {
