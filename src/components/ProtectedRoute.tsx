@@ -8,15 +8,26 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
+// Module-level cache so navigating between protected routes doesn't
+// re-trigger a full-page skeleton flash while we re-check onboarding.
+const onboardingCache = new Map<string, boolean>();
+
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
+  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(
+    user ? onboardingCache.get(user.id) ?? null : null
+  );
 
   useEffect(() => {
     let cancelled = false;
     if (!user) {
       setNeedsOnboarding(null);
+      return;
+    }
+    const cached = onboardingCache.get(user.id);
+    if (cached !== undefined) {
+      setNeedsOnboarding(cached);
       return;
     }
     (async () => {
@@ -25,7 +36,9 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
         .select('onboarding_completed')
         .eq('id', user.id)
         .maybeSingle();
-      if (!cancelled) setNeedsOnboarding(data ? !data.onboarding_completed : false);
+      const value = data ? !data.onboarding_completed : false;
+      onboardingCache.set(user.id, value);
+      if (!cancelled) setNeedsOnboarding(value);
     })();
     return () => {
       cancelled = true;
