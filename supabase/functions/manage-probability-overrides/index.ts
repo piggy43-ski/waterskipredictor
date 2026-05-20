@@ -13,10 +13,13 @@ const MULTIPLIER_CAPS = {
   HIGHEST_SCORE: { min: 1.50, max: 7.0 },
 };
 
-const TARGET_IMPLIED_SUM = {
-  WINNER: { min: 0.90, max: 0.92 },
-  PODIUM: { min: 0.84, max: 0.86 },
-  HIGHEST_SCORE: { min: 0.87, max: 0.89 },
+// Mirror of src/utils/multiplierCaps.ts IMPLIED_SUM_FLOOR.
+// One-sided anti-arbitrage floor; no upper bound.
+const IMPLIED_SUM_FLOOR: Record<string, number> = {
+  WINNER:        1.05,
+  PODIUM:        3.10,
+  HIGHEST_SCORE: 1.05,
+  HEAD_TO_HEAD:  2.00,
 };
 
 interface ProbabilityOverride {
@@ -48,15 +51,9 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 function getImpliedSumStatus(impliedSum: number, marketType: string): 'OK' | 'WARNING' | 'BLOCKED' {
-  const band = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
-  const tolerance = 0.02;
-  
-  if (impliedSum >= band.min && impliedSum <= band.max) {
-    return 'OK';
-  }
-  if (impliedSum >= band.min - tolerance && impliedSum <= band.max + tolerance) {
-    return 'WARNING';
-  }
+  const floor = IMPLIED_SUM_FLOOR[marketType] ?? IMPLIED_SUM_FLOOR.WINNER;
+  if (impliedSum >= floor) return 'OK';
+  if (impliedSum >= floor * 0.95) return 'WARNING';
   return 'BLOCKED';
 }
 
@@ -233,8 +230,10 @@ Deno.serve(async (req) => {
     }
 
     const marketType = (market.market_type || 'WINNER').toUpperCase();
-    const targetBand = TARGET_IMPLIED_SUM[marketType as keyof typeof TARGET_IMPLIED_SUM] || TARGET_IMPLIED_SUM.WINNER;
-    const edgeFactor = (targetBand.min + targetBand.max) / 2;
+    const floor = IMPLIED_SUM_FLOOR[marketType] ?? IMPLIED_SUM_FLOOR.WINNER;
+    // Edge factor seeds multiplier preview; using the floor is conservative.
+    const edgeFactor = floor;
+    const targetBand = { min: floor, max: Number.POSITIVE_INFINITY };
 
     // ===== ACTION: LIST =====
     if (action === 'list') {
