@@ -22,13 +22,14 @@ const RANK_CAPS: Record<string, Record<number, number>> = {
   HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.50 },
 };
 
-// Target implied sum bands per market type
-const TARGET_IMPLIED_SUM: Record<string, { min: number; max: number }> = {
-  WINNER: { min: 0.90, max: 0.92 },
-  PODIUM: { min: 0.84, max: 0.86 },
-  HIGHEST_SCORE: { min: 0.87, max: 0.89 },
-  HEAD_TO_HEAD: { min: 0.95, max: 1.0 },
-  OVER_UNDER: { min: 0.95, max: 1.0 },
+// Mirror of src/utils/multiplierCaps.ts IMPLIED_SUM_FLOOR.
+// One-sided anti-arbitrage floor; no upper bound.
+const IMPLIED_SUM_FLOOR: Record<string, number> = {
+  WINNER:        1.05,
+  PODIUM:        3.10,
+  HIGHEST_SCORE: 1.05,
+  HEAD_TO_HEAD:  2.00,
+  OVER_UNDER:    2.00,
 };
 
 interface RequestBody {
@@ -48,19 +49,10 @@ function calculateImpliedSum(multipliers: number[]): number {
 }
 
 function getImpliedSumStatus(impliedSum: number, marketType: string): 'OK' | 'CALIBRATED' | 'WARNING' | 'NEEDS_REVIEW' {
-  const band = TARGET_IMPLIED_SUM[marketType];
-  if (!band) return 'WARNING';
-  
-  // Within target band = CALIBRATED (success)
-  if (impliedSum >= band.min && impliedSum <= band.max) return 'CALIBRATED';
-  
-  // Within 5% tolerance = WARNING (close enough)
-  const tolerance = 0.05;
-  if (impliedSum >= band.min * (1 - tolerance) && impliedSum <= band.max * (1 + tolerance)) {
-    return 'WARNING';
-  }
-  
-  // Outside tolerance = NEEDS_REVIEW
+  const floor = IMPLIED_SUM_FLOOR[marketType];
+  if (floor == null) return 'WARNING';
+  if (impliedSum >= floor) return 'CALIBRATED';
+  if (impliedSum >= floor * 0.95) return 'WARNING';
   return 'NEEDS_REVIEW';
 }
 
@@ -213,7 +205,8 @@ Deno.serve(async (req) => {
       const multipliers = athletes.map(a => a.final_multiplier);
       const impliedSum = calculateImpliedSum(multipliers);
       const status = getImpliedSumStatus(impliedSum, marketType);
-      const band = TARGET_IMPLIED_SUM[marketType] || { min: 0.9, max: 1.0 };
+      const floor = IMPLIED_SUM_FLOOR[marketType] ?? IMPLIED_SUM_FLOOR.WINNER;
+      const band = { min: floor, max: Number.POSITIVE_INFINITY };
       
       // Also calculate auto implied sum (if we disabled all overrides)
       const autoMultipliers = athletes.map(a => a.auto_multiplier);
@@ -225,7 +218,7 @@ Deno.serve(async (req) => {
         implied_sum_pct: (impliedSum * 100).toFixed(2),
         status,
         target_band: band,
-        target_band_pct: `${(band.min * 100).toFixed(1)}%–${(band.max * 100).toFixed(1)}%`,
+        target_band_pct: `≥ ${(floor * 100).toFixed(1)}%`,
         total_athletes: athletes.length,
         manual_count: athletes.filter(a => a.source === 'manual').length,
         // NEW: auto-only metrics
