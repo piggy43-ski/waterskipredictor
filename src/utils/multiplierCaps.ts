@@ -48,23 +48,23 @@ export function getRankCap(marketType: MarketTypeKey, rank: number): number {
  */
 export const MAX_PODIUM_COMBINED_MULTIPLIER = 25; // was 18 (= PODIUM.max × 3)
 
-export const TARGET_IMPLIED_SUM = {
-  // Recalibrated 2026-05-20: tight favorite rank caps (1.5/2.25/3.0) make the
-  // old 0.90–0.92 band mathematically unreachable. Top-3 alone implies ≈1.44.
-  // New band reflects "favorites priced fair, longshots priced as moonshots".
-  WINNER: { min: 1.40, max: 1.50 },
-  // PODIUM is a TOP-3 market: 3 winners per event → target ≈ 3 × (1 + house margin).
-  // 3 × 1.05 ≈ 3.15. Previous 0.84–0.86 band was mathematically wrong — it treated
-  // PODIUM as a single-winner market and caused the calibrator to silently emit
-  // multipliers above caps (Swiss Pro Slalom women's at 5.04 implied sum bug).
-  PODIUM: { min: 3.10, max: 3.20 },
-  // Recalibrated 2026-05-20: same reason as WINNER. Top-3 caps (1.8/2.5/3.4)
-  // imply ≈1.25 floor — band moved to 1.22–1.32.
-  HIGHEST_SCORE: { min: 1.22, max: 1.32 },
-  // HEAD_TO_HEAD: 2 sides per event → target ≈ 2 × (1 + house margin). 2 × 0.965 ≈ 1.93.
-  HEAD_TO_HEAD: { min: 1.90, max: 1.96 },
-  OVER_UNDER: { min: 1.90, max: 1.96 },
-} as const;
+// IMPLIED_SUM_FLOOR (locked 2026-05-20): one-sided anti-arbitrage floor.
+// The book is "fair or better" for the house when Σ(1/m) ≥ floor.
+// No upper bound — whatever the rank caps + probabilities produce above
+// the floor is valid. The old narrow "band" was abandoned because it was
+// mathematically incompatible with tight favorite caps at large field
+// sizes, and was the source of the original cap-bypass bug.
+//   WINNER:        1 winner  → 1.05   (≥ 5% margin on a 1-winner market)
+//   PODIUM:        3 winners → 3.10   (3 × ~1.033 margin)
+//   HIGHEST_SCORE: 1 winner  → 1.05
+//   HEAD_TO_HEAD:  2 sides   → 2.00   (fair two-sided book)
+export const IMPLIED_SUM_FLOOR: Record<MarketTypeKey, number> = {
+  WINNER:        1.05,
+  PODIUM:        3.10,
+  HIGHEST_SCORE: 1.05,
+  HEAD_TO_HEAD:  2.00,
+  OVER_UNDER:    2.00,
+};
 
 export type MarketTypeKey = keyof typeof MULTIPLIER_CAPS;
 
@@ -165,47 +165,41 @@ export function getImpliedSumStatus(
   impliedSum: number,
   marketType: MarketTypeKey
 ): ImpliedSumResult {
-  const band = TARGET_IMPLIED_SUM[marketType];
-  if (!band) {
+  const floor = IMPLIED_SUM_FLOOR[marketType];
+  const target = { min: floor ?? 1.0, max: Number.POSITIVE_INFINITY };
+  if (floor == null) {
     return {
       value: impliedSum,
       status: 'WARNING',
-      target: { min: 0.9, max: 1.0 },
-      message: 'Unknown market type'
+      target,
+      message: 'Unknown market type',
     };
   }
-  
-  const percentage = (impliedSum * 100).toFixed(1);
-  const targetRange = `${(band.min * 100).toFixed(1)}%–${(band.max * 100).toFixed(1)}%`;
-  
-  if (impliedSum >= band.min && impliedSum <= band.max) {
+
+  if (impliedSum >= floor) {
     return {
       value: impliedSum,
       status: 'OK',
-      target: band,
-      message: `${percentage}% is within target range (${targetRange})`
+      target,
+      message: `${impliedSum.toFixed(3)} ≥ floor ${floor.toFixed(2)}`,
     };
   }
-  
-  // Allow 10% tolerance for WARNING vs BLOCKED
-  const tolerance = 0.10;
-  const lowerBound = band.min * (1 - tolerance);
-  const upperBound = band.max * (1 + tolerance);
-  
-  if (impliedSum >= lowerBound && impliedSum <= upperBound) {
+
+  // Below floor = arbitrage. 5% tolerance for WARNING vs BLOCKED.
+  if (impliedSum >= floor * 0.95) {
     return {
       value: impliedSum,
       status: 'WARNING',
-      target: band,
-      message: `${percentage}% is outside target (${targetRange}) but within tolerance`
+      target,
+      message: `${impliedSum.toFixed(3)} below floor ${floor.toFixed(2)} (within 5% tolerance)`,
     };
   }
-  
+
   return {
     value: impliedSum,
     status: 'BLOCKED',
-    target: band,
-    message: `${percentage}% is dangerously outside target range (${targetRange})`
+    target,
+    message: `${impliedSum.toFixed(3)} is below anti-arbitrage floor ${floor.toFixed(2)}`,
   };
 }
 
