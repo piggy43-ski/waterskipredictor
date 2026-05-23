@@ -139,7 +139,7 @@ const Leaderboard = () => {
   return (
     <div className="min-h-screen bg-background pb-24">
       <SEO title="2026 Season Leaderboard" description="Ranked by net token P&L across 2026 events." />
-      <PageHeader title="Leaderboard" onBack={() => navigate(-1)} />
+      <PageHeader title="Leaderboard" showBack />
 
       <div className="max-w-2xl mx-auto px-4 pt-4 space-y-6">
         <div>
