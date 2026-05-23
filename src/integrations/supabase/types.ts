@@ -3283,6 +3283,29 @@ export type Database = {
         }
         Relationships: []
       }
+      leaderboard_season_2026: {
+        Row: {
+          accuracy_pct: number | null
+          avatar_url: string | null
+          net_pnl: number | null
+          rank: number | null
+          total_predictions: number | null
+          total_staked: number | null
+          total_won: number | null
+          user_id: string | null
+          username: string | null
+          win_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bet_slips_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_odds_audit: {
         Row: {
           athlete_name: string | null
@@ -3458,6 +3481,17 @@ export type Database = {
       emit_event: {
         Args: { p_event_type: string; p_payload?: Json; p_user_id: string }
         Returns: string
+      }
+      get_user_leaderboard_position: {
+        Args: { p_user_id: string }
+        Returns: {
+          accuracy_pct: number
+          avatar_url: string
+          net_pnl: number
+          rank: number
+          total_predictions: number
+          username: string
+        }[]
       }
       has_role: {
         Args: {
