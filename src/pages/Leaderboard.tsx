@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { SEO } from '@/components/SEO';
 import { PageHeader } from '@/components/PageHeader';
 import { BottomNav } from '@/components/BottomNav';
@@ -115,7 +115,6 @@ const DenseRow = ({
 );
 
 const Leaderboard = () => {
-  const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const { data: rows, isLoading } = useLeaderboardTop(10);
