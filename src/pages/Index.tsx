@@ -341,6 +341,7 @@ const Index = () => {
             <Trophy className="w-4 h-4 mr-2" />
             View All Tournaments
           </Button>
+          <HomeLeaderboardPreview />
         </div>
       </div>
 
