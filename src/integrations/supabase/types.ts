@@ -3540,6 +3540,7 @@ export type Database = {
         Args: { _pot_id: string; _user_id: string }
         Returns: boolean
       }
+      validate_referral_code: { Args: { p_code: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
