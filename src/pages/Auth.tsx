@@ -111,23 +111,13 @@ const Auth = () => {
     
     try {
       const { data, error } = await supabase
-        .from('referral_codes')
-        .select('id, uses_count, max_uses_total')
-        .eq('code', code.toUpperCase().trim())
-        .eq('is_active', true)
-        .single();
-      
-      if (error || !data) {
+        .rpc('validate_referral_code', { p_code: code });
+
+      if (error || data !== true) {
         setReferralCodeStatus('invalid');
         return;
       }
-      
-      // Check max uses
-      if (data.max_uses_total && data.uses_count >= data.max_uses_total) {
-        setReferralCodeStatus('invalid');
-        return;
-      }
-      
+
       setReferralCodeStatus('valid');
     } catch {
       setReferralCodeStatus('invalid');
