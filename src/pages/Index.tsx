@@ -14,6 +14,7 @@ import { applyDynamicStatus } from '@/utils/tournamentStatus';
 import { useWallet } from '@/hooks/useWallet';
 import { ShareModal } from '@/components/ShareModal';
 import { useUsername } from '@/hooks/useUsername';
+import { HomeLeaderboardPreview } from '@/components/HomeLeaderboardPreview';
 
 interface UserPrediction {
   id: string;
@@ -340,6 +341,7 @@ const Index = () => {
             <Trophy className="w-4 h-4 mr-2" />
             View All Tournaments
           </Button>
+          <HomeLeaderboardPreview />
         </div>
       </div>
 

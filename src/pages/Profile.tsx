@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { useWallet } from '@/hooks/useWallet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTutorial } from '@/components/tutorial';
+import { SeasonRankCard } from '@/components/SeasonRankCard';
 
 type Redemption = {
   id: string;
@@ -341,6 +342,8 @@ const Profile = () => {
       <PageHeader title="Profile" />
       
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        <SeasonRankCard />
+
         {/* Avatar Section */}
         <Card className="p-6">
           <div className="flex flex-col items-center space-y-4">
