@@ -1,8 +1,8 @@
-import { Home, Trophy, Wallet, Gift, Crown } from 'lucide-react';
+import { Home, Trophy, Wallet, Gift, Crown, Medal } from 'lucide-react';
 import { NavLink } from './NavLink';
 
 const navItemClass =
-  "group/nav relative flex flex-col items-center gap-1 py-2 px-3 rounded-md transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] text-muted-foreground active:scale-95";
+  "group/nav relative flex flex-col items-center gap-1 py-2 px-2 rounded-md transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] text-muted-foreground active:scale-95";
 const activeClass = "is-active !text-primary";
 
 export const BottomNav = () => {
@@ -25,6 +25,12 @@ export const BottomNav = () => {
           <NavLink to="/fantasy" className={navItemClass} activeClassName={activeClass}>
             <Crown className="w-5 h-5 transition-[stroke-width] group-[.active]:[stroke-width:2.5]" />
             <span className="text-[10px] font-bold uppercase tracking-wider">Fantasy</span>
+            <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary opacity-0 transition-opacity group-[.active]:opacity-100" />
+          </NavLink>
+
+          <NavLink to="/leaderboard" className={navItemClass} activeClassName={activeClass}>
+            <Medal className="w-5 h-5 transition-[stroke-width] group-[.active]:[stroke-width:2.5]" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Ranks</span>
             <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary opacity-0 transition-opacity group-[.active]:opacity-100" />
           </NavLink>
 
