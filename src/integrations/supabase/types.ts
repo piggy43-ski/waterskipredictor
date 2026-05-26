@@ -3482,6 +3482,21 @@ export type Database = {
         Args: { p_event_type: string; p_payload?: Json; p_user_id: string }
         Returns: string
       }
+      get_leaderboard_top: {
+        Args: { p_limit?: number }
+        Returns: {
+          accuracy_pct: number
+          avatar_url: string
+          net_pnl: number
+          rank: number
+          total_predictions: number
+          total_staked: number
+          total_won: number
+          user_id: string
+          username: string
+          win_count: number
+        }[]
+      }
       get_user_leaderboard_position: {
         Args: { p_user_id: string }
         Returns: {
