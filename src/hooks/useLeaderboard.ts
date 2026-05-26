@@ -18,11 +18,9 @@ export const useLeaderboardTop = (limit = 10) => {
   return useQuery({
     queryKey: ['leaderboard-2026', limit],
     queryFn: async (): Promise<LeaderboardRow[]> => {
-      const { data, error } = await supabase
-        .from('leaderboard_season_2026')
-        .select('*')
-        .order('rank', { ascending: true })
-        .limit(limit);
+      const { data, error } = await supabase.rpc('get_leaderboard_top', {
+        p_limit: limit,
+      });
       if (error) throw error;
       return (data ?? []) as LeaderboardRow[];
     },
