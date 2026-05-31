@@ -110,6 +110,17 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Admin-only guard
+    {
+      const _t = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+      if (!_t) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data: { user: _u } } = await supabase.auth.getUser(_t);
+      if (!_u) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data: _r } = await supabase.from("user_roles").select("role").eq("user_id", _u.id).eq("role", "admin").maybeSingle();
+      if (!_r) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+
     const { market_id, dry_run = false } = await req.json();
 
     if (!market_id) {
