@@ -40,8 +40,23 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Require valid auth and derive userId from the JWT, ignoring any body value.
+    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      return new Response(JSON.stringify({ allowed: false, reason: 'Unauthorized', warnings: [] }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { data: { user: authUser } } = await supabase.auth.getUser(token);
+    if (!authUser) {
+      return new Response(JSON.stringify({ allowed: false, reason: 'Unauthorized', warnings: [] }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body: ValidateEntryRequest = await req.json();
-    const { userId, tournamentId, marketId, athleteId, stakeAmount, entryType = 'single' } = body;
+    const { tournamentId, marketId, athleteId, stakeAmount, entryType = 'single' } = body;
+    const userId = authUser.id; // override any caller-supplied value
 
     // === VALIDATION 1: EVENT NOT OPEN ===
     const { data: tournament } = await supabase

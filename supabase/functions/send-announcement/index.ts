@@ -92,17 +92,43 @@ serve(async (req) => {
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const batchSize = body.batchSize ?? 100;
-    const tournamentPath = body.tournamentPath ?? "/tournaments/76329f1b-a36d-4232-b1f8-5ced4484fd4d";
-    const sendToAll = body.sendToAll === true;
-    const campaignId = body.campaignId ?? "swiss-pro-slalom-2026";
-
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
+
+    // Admin-only guard
+    const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+    const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+    if (!user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+    const { data: role } = await supabaseAdmin
+      .from("user_roles").select("role")
+      .eq("user_id", user.id).eq("role", "admin").maybeSingle();
+    if (!role) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const batchSize = body.batchSize ?? 100;
+    const rawPath = body.tournamentPath ?? "/tournaments/76329f1b-a36d-4232-b1f8-5ced4484fd4d";
+    // Restrict tournamentPath to safe internal paths only.
+    const tournamentPath = /^\/tournaments\/[a-zA-Z0-9-]+$/.test(rawPath)
+      ? rawPath
+      : "/tournaments";
+    const sendToAll = body.sendToAll === true;
+    const campaignId = body.campaignId ?? "swiss-pro-slalom-2026";
 
     // Fetch profiles with email preferences - respect marketing opt-in
     const { data: users, error: usersError } = await supabaseAdmin
