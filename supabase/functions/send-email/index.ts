@@ -7,6 +7,30 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Escape user-controlled strings before interpolation into HTML email templates.
+function escHtml(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Recursively escape all string fields in the template data payload.
+function sanitizeData(input: any): any {
+  if (input == null) return input;
+  if (typeof input === "string") return escHtml(input);
+  if (Array.isArray(input)) return input.map(sanitizeData);
+  if (typeof input === "object") {
+    const out: Record<string, any> = {};
+    for (const k of Object.keys(input)) out[k] = sanitizeData(input[k]);
+    return out;
+  }
+  return input;
+}
+
 type EmailType =
   | "welcome"
   | "entry_confirmation"
@@ -715,7 +739,33 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { type, to, userId, data, dry_run }: EmailRequest = await req.json();
+    // Auth: accept either the service-role key (internal callers) or an admin JWT.
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    let authorized = token.length > 0 && token === serviceKey;
+    if (!authorized && token) {
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) {
+        const { data: role } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("role", "admin")
+          .maybeSingle();
+        authorized = !!role;
+      }
+    }
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const body: EmailRequest = await req.json();
+    const { type, to, userId, dry_run } = body;
+    const data = sanitizeData(body.data ?? {});
 
     console.log(`[send-email] Processing ${type} email to ${to}`);
 
