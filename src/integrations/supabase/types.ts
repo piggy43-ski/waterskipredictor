@@ -1380,6 +1380,7 @@ export type Database = {
           created_by: string | null
           id: string
           is_enabled: boolean
+          is_protected: boolean
           manual_multiplier: number
           market_id: string
           reason: string | null
@@ -1391,6 +1392,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           is_enabled?: boolean
+          is_protected?: boolean
           manual_multiplier: number
           market_id: string
           reason?: string | null
@@ -1402,6 +1404,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           is_enabled?: boolean
+          is_protected?: boolean
           manual_multiplier?: number
           market_id?: string
           reason?: string | null
