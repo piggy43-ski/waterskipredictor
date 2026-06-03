@@ -47,6 +47,14 @@ export function getRankCap(marketType: MarketTypeKey, rank: number): number {
  */
 export const MAX_PODIUM_COMBINED_MULTIPLIER = 25; // was 18 (= PODIUM.max × 3)
 
+/**
+ * Cap for podium EXACT-ORDER (1-2-3) multipliers resolved through the
+ * `market_podium_ordering_overrides` table or the formula fallback.
+ * Sized to give admins headroom to price specific orderings without
+ * piggy-backing on the order-blind sum method (which is correlation-unsafe).
+ */
+export const MAX_PODIUM_EXACT_ORDER_MULTIPLIER = 150;
+
 // IMPLIED_SUM_FLOOR (locked 2026-05-20): one-sided anti-arbitrage floor.
 // The book is "fair or better" for the house when Σ(1/m) ≥ floor.
 // No upper bound — whatever the rank caps + probabilities produce above
