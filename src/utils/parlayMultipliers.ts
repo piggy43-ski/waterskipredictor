@@ -2,28 +2,23 @@ import { ParlayLeg } from '@/types/parlay';
 import { PARLAY_CONFIG } from './parlayConfig';
 
 /**
- * Parlay pricing with house safety
- * - Raw product multiplied by 0.75 haircut
- * - Hard caps by leg count
- * - Combined multiplier floored at 1.0 (a winning parlay can never pay below stake)
- * - 5+ legs DISABLED  (legacy comment — see PARLAY_CAPS / MAX_PARLAY_LEGS)
+ * Parlay pricing (operator-tuned, 2026-06):
+ * - Each leg contributes a SINGLE leg-multiplier:
+ *     • Winner / Highest Score  → that selection's decimal_odds
+ *     • Podium 1-2-3            → leg.podiumMultiplier (override-aware
+ *                                  combined value resolved at pick time)
+ * - Raw product × 0.75 haircut
+ * - Floored at 1.0 (a winning parlay can never pay below stake)
+ * - No leg-count cap and no progressive multiplier cap
+ *   (operator dropped these explicitly; 1000-token podium stake cap and
+ *    chalk-concentration trigger still apply)
  */
 
 const PARLAY_HAIRCUT = 0.75;
 const PARLAY_FLOOR = 1.0;
 
-const PARLAY_CAPS: Record<number, number> = {
-  1: 15,    // Single leg capped at 15x
-  2: 20,    // 2-leg max 20x
-  3: 35,    // 3-leg max 35x
-  4: 50,    // 4-leg max 50x
-  5: 60,    // 5-leg max 60x  (bankroll-conservative; was 75)
-  6: 80,    // 6-leg max 80x  (was 100)
-  7: 105,   // 7-leg max 105x (was 130)
-  8: 130,   // 8-leg max 130x (was 160)
-};
-
-const MAX_PARLAY_LEGS = 8;
+// Effectively unbounded leg count — keep a sanity ceiling so UI never spins.
+const MAX_PARLAY_LEGS = 64;
 
 /**
  * Convert American odds to decimal odds
@@ -50,18 +45,19 @@ export function calculateRawParlayMultiplier(legs: ParlayLeg[]): number {
     if (leg.winner?.decimal_odds) {
       totalDecimalOdds *= leg.winner.decimal_odds;
     }
-    
-    // Podium odds (3 selections)
-    if (leg.podium.first?.decimal_odds) {
-      totalDecimalOdds *= leg.podium.first.decimal_odds;
+
+    // Podium: ONE combined multiplier per leg (override-aware), NOT
+    // first×second×third. This prevents order-blind correlation mispricing.
+    if (
+      leg.podium.first &&
+      leg.podium.second &&
+      leg.podium.third &&
+      typeof leg.podiumMultiplier === 'number' &&
+      leg.podiumMultiplier > 0
+    ) {
+      totalDecimalOdds *= leg.podiumMultiplier;
     }
-    if (leg.podium.second?.decimal_odds) {
-      totalDecimalOdds *= leg.podium.second.decimal_odds;
-    }
-    if (leg.podium.third?.decimal_odds) {
-      totalDecimalOdds *= leg.podium.third.decimal_odds;
-    }
-    
+
     // Highest score odds
     if (leg.highestScore?.decimal_odds) {
       totalDecimalOdds *= leg.highestScore.decimal_odds;
@@ -72,19 +68,13 @@ export function calculateRawParlayMultiplier(legs: ParlayLeg[]): number {
 }
 
 /**
- * Calculate the progressive cap based on number of legs
- * 5+ legs are DISABLED
+ * Progressive cap is intentionally disabled. Returns Infinity so the
+ * `Math.min(..., cap)` call in calculateParlayMultiplier is a no-op.
+ * Kept as a named export so downstream callers don't break.
  */
 export function calculateProgressiveCap(legCount: number): number {
-  if (legCount > MAX_PARLAY_LEGS) {
-    return 0; // DISABLED
-  }
-  
-  if (legCount <= 0) {
-    return 0;
-  }
-  
-  return PARLAY_CAPS[legCount] || PARLAY_CAPS[MAX_PARLAY_LEGS];
+  if (legCount <= 0) return 0;
+  return Number.POSITIVE_INFINITY;
 }
 
 /**
@@ -93,7 +83,7 @@ export function calculateProgressiveCap(legCount: number): number {
  */
 export function calculateParlayMultiplier(legs: ParlayLeg[]): number {
   if (legs.length === 0) return 0;
-  if (legs.length > MAX_PARLAY_LEGS) return 0; // DISABLED for 5+ legs
+  if (legs.length > MAX_PARLAY_LEGS) return 0;
   
   const completedLegs = legs.filter(l => l.isComplete);
   if (completedLegs.length === 0) return 0;
@@ -103,11 +93,8 @@ export function calculateParlayMultiplier(legs: ParlayLeg[]): number {
   // Apply 25% haircut for house safety
   const withHaircut = rawMultiplier * PARLAY_HAIRCUT;
   
-  // Apply progressive cap
-  const cap = calculateProgressiveCap(completedLegs.length);
-  
-  // FIX 3a: floor at 1.0 so a winning parlay never pays below stake.
-  return Math.min(Math.max(withHaircut, PARLAY_FLOOR), cap);
+  // No progressive cap — only the floor applies.
+  return Math.max(withHaircut, PARLAY_FLOOR);
 }
 
 /**
@@ -139,16 +126,14 @@ export function getParlayMultiplierDetails(legs: ParlayLeg[]): {
   
   const rawMultiplier = calculateRawParlayMultiplier(completedLegs);
   const withHaircut = rawMultiplier * PARLAY_HAIRCUT;
-  const progressiveCap = calculateProgressiveCap(legCount);
-  // FIX 3a: floor at 1.0
-  const finalMultiplier = Math.min(Math.max(withHaircut, PARLAY_FLOOR), progressiveCap);
+  const finalMultiplier = Math.max(withHaircut, PARLAY_FLOOR);
   
   return {
     rawMultiplier: Math.round(rawMultiplier * 100) / 100,
     withHaircut: Math.round(withHaircut * 100) / 100,
-    progressiveCap: Math.round(progressiveCap * 100) / 100,
+    progressiveCap: 0,
     finalMultiplier: Math.round(finalMultiplier * 100) / 100,
-    isCapped: withHaircut > progressiveCap,
+    isCapped: false,
     isDisabled: false,
     legCount
   };
@@ -158,27 +143,8 @@ export function getParlayMultiplierDetails(legs: ParlayLeg[]): {
  * Get suggestions for increasing the multiplier
  */
 export function getMultiplierSuggestions(legs: ParlayLeg[], availableDisciplines: string[]): string[] {
-  const { legCount, isDisabled, isCapped, progressiveCap } = getParlayMultiplierDetails(legs);
-  const suggestions: string[] = [];
-  
-  if (isDisabled) {
-    suggestions.push(`Maximum ${MAX_PARLAY_LEGS} legs allowed. Remove a leg to continue.`);
-    return suggestions;
-  }
-  
-  // Calculate what cap would be with one more leg
-  if (legCount < MAX_PARLAY_LEGS) {
-    const nextCap = calculateProgressiveCap(legCount + 1);
-    suggestions.push(`Add another leg to increase max cap from ${progressiveCap}x to ${nextCap}x`);
-  }
-  
-  // If currently capped, show max legs info
-  if (isCapped && legCount < MAX_PARLAY_LEGS) {
-    const legsNeeded = MAX_PARLAY_LEGS - legCount;
-    suggestions.push(`Add ${legsNeeded} more leg${legsNeeded > 1 ? 's' : ''} to unlock full ${PARLAY_CAPS[MAX_PARLAY_LEGS]}x potential`);
-  }
-  
-  return suggestions;
+  // Caps removed; no suggestions to surface.
+  return [];
 }
 
 /**
