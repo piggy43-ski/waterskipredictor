@@ -55,7 +55,7 @@ describe("parlayMultipliers — uncapped product × haircut", () => {
     expect(calculateParlayMultiplier(legs)).toBeCloseTo(1024 * 0.75, 3);
   });
 
-  it("sums sub-picks within a leg, then multiplies across legs", () => {
+  it("Model A: drops Winner when Podium is picked in the same leg", () => {
     const sel = (odds: number) =>
       ({ decimal_odds: odds, athlete_id: "a", athlete: { name: "x" }, market_id: "m" } as any);
     const leg1: ParlayLeg = {
@@ -78,8 +78,26 @@ describe("parlayMultipliers — uncapped product × haircut", () => {
       highestScore: sel(1.4),
       isComplete: true,
     };
-    // leg1 sum = 11.75 ; leg2 sum = 14.05 ; raw = 165.0875 ; * 0.75 ≈ 123.82
-    expect(calculateRawParlayMultiplier([leg1, leg2])).toBeCloseTo(165.0875, 3);
-    expect(calculateParlayMultiplier([leg1, leg2])).toBeCloseTo(123.815625, 3);
+    // Winner dropped (implied by Podium):
+    // leg1 = 7.25 + 3.00 = 10.25 ; leg2 = 11.45 + 1.40 = 12.85
+    // raw = 131.7125 ; * 0.75 ≈ 98.78
+    expect(calculateRawParlayMultiplier([leg1, leg2])).toBeCloseTo(131.7125, 3);
+    expect(calculateParlayMultiplier([leg1, leg2])).toBeCloseTo(98.784375, 3);
+  });
+
+  it("Model A: keeps Winner when Podium is NOT picked (Winner + Highest)", () => {
+    const sel = (odds: number) =>
+      ({ decimal_odds: odds, athlete_id: "a", athlete: { name: "x" }, market_id: "m" } as any);
+    const leg: ParlayLeg = {
+      discipline: "slalom" as any,
+      gender: "men",
+      category: "open_men" as any,
+      winner: sel(2.0),
+      podium: { first: null, second: null, third: null },
+      highestScore: sel(3.0),
+      isComplete: true,
+    };
+    // sum 2 + 3 = 5
+    expect(calculateRawParlayMultiplier([leg])).toBeCloseTo(5, 5);
   });
 });
