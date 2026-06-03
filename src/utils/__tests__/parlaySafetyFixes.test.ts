@@ -110,3 +110,91 @@ describe('FIX 3b — settlement floor logic (pure)', () => {
     expect(payout).toBe(100);
   });
 });
+
+describe('FIX 3b — Option 3: per-leg refund + win on surviving stake', () => {
+  const leg = (id: string, status: 'WON' | 'VOID', odds: number | null) =>
+    ({ id, status, decimal_odds: odds });
+
+  it('shares always sum to exactly totalStakeTokens (100/3 remainder)', () => {
+    const plan = planParlaySettlementPayout({
+      totalStakeTokens: 100,
+      potentialPayoutTokens: 300,
+      legs: [leg('a', 'WON', 2), leg('b', 'WON', 2), leg('c', 'WON', 2)],
+    });
+    expect(plan.shares).toEqual([33, 33, 34]);
+    expect(plan.shares.reduce((s, n) => s + n, 0)).toBe(100);
+  });
+
+  it('NO-REGRESSION: all legs WON → single win credit equal to today\'s actualPayout (no voids)', () => {
+    const plan = planParlaySettlementPayout({
+      totalStakeTokens: 100,
+      potentialPayoutTokens: 500,
+      legs: [leg('a', 'WON', 2.5), leg('b', 'WON', 2)],
+    });
+    expect(plan.refunds).toEqual([]);
+    // surviving = 100, multiplier = 500/100 = 5 → winCredit = 500
+    expect(plan.winCredit).toBe(500);
+    expect(plan.walletDelta).toBe(500);
+  });
+
+  it('ALL legs VOID → full stake refunded across per-leg rows, no win credit, net 0 loss', () => {
+    const plan = planParlaySettlementPayout({
+      totalStakeTokens: 100,
+      potentialPayoutTokens: 600,
+      legs: [leg('a', 'VOID', 2), leg('b', 'VOID', 2), leg('c', 'VOID', 2)],
+    });
+    expect(plan.refunds.map((r) => r.amount)).toEqual([33, 33, 34]);
+    expect(plan.refunds.reduce((s, r) => s + r.amount, 0)).toBe(100);
+    expect(plan.winCredit).toBe(0);
+    expect(plan.walletDelta).toBe(100); // user gets back exactly their stake
+  });
+
+  it('1 of 3 VOID, 2 WIN → refund row + win on 2/3 stake; sum reconciles', () => {
+    // stake=100, each leg priced 2.0x, raw=8.0, haircut*=0.75 → 6.0; potential = 600.
+    const plan = planParlaySettlementPayout({
+      totalStakeTokens: 100,
+      potentialPayoutTokens: 600,
+      legs: [leg('a', 'VOID', 2), leg('b', 'WON', 2), leg('c', 'WON', 2)],
+    });
+    expect(plan.refunds).toEqual([{ leg_id: 'a', amount: 33 }]);
+    expect(plan.survivingStake).toBe(67); // 33 + 34
+    // multiplier 6.0 / 2.0 = 3.0 on surviving stake
+    expect(plan.survivingMultiplier).toBe(3);
+    expect(plan.winCredit).toBe(Math.floor(67 * 3)); // 201
+    expect(plan.walletDelta).toBe(33 + 201); // 234
+  });
+
+  it('reconciliation invariant: walletDelta === refundTotal + winCredit, for many odds/configs', () => {
+    const cases = [
+      { stake: 100, pot: 600, legs: [leg('a', 'VOID', 2), leg('b', 'WON', 2), leg('c', 'WON', 2)] },
+      { stake: 250, pot: 1800, legs: [leg('a', 'WON', 2.5), leg('b', 'VOID', 3.0)] },
+      { stake: 500, pot: 450, legs: [leg('a', 'WON', 1.1), leg('b', 'VOID', 1.1), leg('c', 'VOID', 1.1)] },
+      { stake: 7, pot: 42, legs: [leg('a', 'WON', 2), leg('b', 'WON', 2), leg('c', 'WON', 2)] },
+    ];
+    for (const c of cases) {
+      const plan = planParlaySettlementPayout({
+        totalStakeTokens: c.stake,
+        potentialPayoutTokens: c.pot,
+        legs: c.legs,
+      });
+      const refundTotal = plan.refunds.reduce((s, r) => s + r.amount, 0);
+      expect(refundTotal + plan.winCredit).toBe(plan.walletDelta);
+      expect(plan.shares.reduce((s, n) => s + n, 0)).toBe(c.stake);
+      expect(plan.survivingMultiplier).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('surviving multiplier floor at 1.0 protects against under-pay even when only one weak leg survives', () => {
+    // baseMultiplier = 0.825/1 = 0.825 (degenerate), one VOID leg @ 1.1 strips: 0.825/1.1 = 0.75 → floored to 1
+    const plan = planParlaySettlementPayout({
+      totalStakeTokens: 100,
+      potentialPayoutTokens: 82,
+      legs: [leg('a', 'VOID', 1.1), leg('b', 'WON', 1.1)],
+    });
+    expect(plan.survivingMultiplier).toBe(1);
+    // surviving stake = 50, winCredit = 50, refund = 50 → 100 (stake returned intact)
+    expect(plan.refunds[0].amount).toBe(50);
+    expect(plan.winCredit).toBe(50);
+    expect(plan.walletDelta).toBe(100);
+  });
+});
