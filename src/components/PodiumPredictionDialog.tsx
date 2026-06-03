@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Selection } from '@/types';
 import { Coins, Medal } from 'lucide-react';
-import { calculatePodiumCombinedMultiplier } from '@/utils/podiumMultipliers';
+import {
+  resolvePodiumOrderedMultiplier,
+  calculatePodiumCombinedMultiplier,
+} from '@/utils/podiumMultipliers';
 
 interface PodiumPredictionDialogProps {
   selections: Selection[];
@@ -22,6 +25,7 @@ interface PodiumPredictionDialogProps {
   tournamentName: string;
   discipline: string;
   gender: string;
+  marketId?: string;
 }
 
 export const PodiumPredictionDialog = ({
@@ -33,19 +37,45 @@ export const PodiumPredictionDialog = ({
   tournamentName,
   discipline,
   gender,
+  marketId,
 }: PodiumPredictionDialogProps) => {
   const [stakeAmount, setStakeAmount] = useState<string>('10');
+  const [resolvedMultiplier, setResolvedMultiplier] = useState<number | null>(null);
 
   if (selections.length !== 3) return null;
 
-  // Calculate combined multiplier using Sum × 2 formula for podium difficulty bonus
-  const combinedOdds = calculatePodiumCombinedMultiplier(
+  const formulaOdds = calculatePodiumCombinedMultiplier(
     selections[0].decimal_odds,
     selections[1].decimal_odds,
     selections[2].decimal_odds
   );
+  const combinedOdds = resolvedMultiplier ?? formulaOdds;
   const potentialPayout = Math.floor(Number(stakeAmount) * combinedOdds);
   const multiplierDisplay = `${combinedOdds.toFixed(2)}x`;
+
+  useEffect(() => {
+    if (!open || !marketId) {
+      setResolvedMultiplier(null);
+      return;
+    }
+    let cancelled = false;
+    void resolvePodiumOrderedMultiplier({
+      marketId,
+      firstAthleteId: selections[0].athlete_id,
+      secondAthleteId: selections[1].athlete_id,
+      thirdAthleteId: selections[2].athlete_id,
+      decimalOdds: [
+        selections[0].decimal_odds,
+        selections[1].decimal_odds,
+        selections[2].decimal_odds,
+      ],
+    }).then((res) => {
+      if (!cancelled) setResolvedMultiplier(res.multiplier);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, marketId, selections]);
 
   const handleConfirm = () => {
     const amount = Number(stakeAmount);
