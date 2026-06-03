@@ -10,11 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SelectionCard } from '@/components/SelectionCard';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
-import { calculateParlayMultiplier, getParlayMultiplierDetails, getMultiplierSuggestions, isDuplicateLeg, findDuplicateAthleteSlot } from '@/utils/parlayMultipliers';
+import { getParlayMultiplierDetails, isDuplicateLeg } from '@/utils/parlayMultipliers';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 import { resolvePodiumOrderedMultiplier } from '@/utils/podiumMultipliers';
 import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { formatMultiplier } from '@/utils/multiplierUtils';
 import { toast } from 'sonner';
@@ -66,7 +65,6 @@ export function ParlayBuilder({
   const currentLeg = legs[currentLegIndex] || null;
   const multiplierDetails = getParlayMultiplierDetails(legs.filter(l => l.isComplete));
   const multiplier = multiplierDetails.finalMultiplier;
-  const suggestions = getMultiplierSuggestions(legs.filter(l => l.isComplete), tournament.disciplines);
 
   // Get available discipline+gender combinations
   const getAvailableCombinations = () => {
