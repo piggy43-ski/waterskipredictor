@@ -331,18 +331,19 @@ export function ParlayBuilder({
 
       if (slipError) throw slipError;
 
-      // Create predictions for each selection in each leg
-      // IMPORTANT: For parlays, individual predictions store their individual odds.
-      // Payouts are handled at the entry level, not individual predictions.
-      const predictions = [];
-      const selectionsPerLeg = 5; // winner + 3 podium + highest score
-      const totalSelections = completeLegs.length * selectionsPerLeg;
-      
+      // Build one row per "selection unit" in each leg. Podium is a SINGLE
+      // row with selection_id='<marketId>-podium' priced at the combined
+      // override-aware multiplier — settlement (settle-predictions) already
+      // handles the -podium suffix shape for exact-order payouts.
+      const predictions: any[] = [];
       for (const leg of completeLegs) {
-        // Each prediction in a parlay stores its own odds but payout is 0
-        // (parlay payout happens at entry level, not individual predictions)
+        const unitsInLeg =
+          (leg.winner ? 1 : 0) +
+          (leg.podium.first && leg.podium.second && leg.podium.third ? 1 : 0) +
+          (leg.highestScore ? 1 : 0);
         const perLegStake = Math.floor(stakeAmount / completeLegs.length);
-        
+        const perUnitStake = unitsInLeg > 0 ? Math.floor(perLegStake / unitsInLeg) : 0;
+
         if (leg.winner) {
           predictions.push({
             user_id: userId,
@@ -353,31 +354,40 @@ export function ParlayBuilder({
             discipline: leg.discipline,
             category: leg.category,
             market_type: 'WINNER',
-            staked_tokens: Math.floor(perLegStake / selectionsPerLeg),
-            decimal_odds: leg.winner.decimal_odds, // Use individual selection odds
-            potential_payout: 0, // Parlay payouts are at bet_slip level
+            staked_tokens: perUnitStake,
+            decimal_odds: leg.winner.decimal_odds,
+            potential_payout: 0,
             parlay_leg_count: completeLegs.length,
-            status: 'PENDING'
+            status: 'PENDING',
           });
         }
 
         if (leg.podium.first && leg.podium.second && leg.podium.third) {
-          [leg.podium.first, leg.podium.second, leg.podium.third].forEach((sel, idx) => {
-            predictions.push({
-              user_id: userId,
-              bet_slip_id: entryRecord.id,
-              selection_id: sel.id,
-              athlete_name: sel.athlete.name,
-              tournament_name: tournament.name,
-              discipline: leg.discipline,
-              category: leg.category,
-              market_type: 'PODIUM',
-              staked_tokens: Math.floor(perLegStake / selectionsPerLeg),
-              decimal_odds: sel.decimal_odds, // Use individual selection odds
-              potential_payout: 0, // Parlay payouts are at bet_slip level
-              parlay_leg_count: completeLegs.length,
-              status: 'PENDING'
-            });
+          const marketId = leg.podiumMarketId ?? leg.podium.first.market_id;
+          predictions.push({
+            user_id: userId,
+            bet_slip_id: entryRecord.id,
+            // Synthetic composite — matches standalone podium predictions and
+            // is allowed by the updated enforce_parlay_leg_rules trigger.
+            selection_id: `${marketId}-podium`,
+            athlete_name: `${leg.podium.first.athlete.name}, ${leg.podium.second.athlete.name}, ${leg.podium.third.athlete.name}`,
+            tournament_name: tournament.name,
+            discipline: leg.discipline,
+            category: leg.category,
+            market_type: 'PODIUM',
+            staked_tokens: perUnitStake,
+            decimal_odds: leg.podiumMultiplier ?? 1,
+            potential_payout: 0,
+            parlay_leg_count: completeLegs.length,
+            status: 'PENDING',
+            settlement_metadata: {
+              podium_picks: {
+                first: { athlete_id: leg.podium.first.athlete_id, name: leg.podium.first.athlete.name },
+                second: { athlete_id: leg.podium.second.athlete_id, name: leg.podium.second.athlete.name },
+                third: { athlete_id: leg.podium.third.athlete_id, name: leg.podium.third.athlete.name },
+              },
+              combined_multiplier: leg.podiumMultiplier ?? 1,
+            },
           });
         }
 
@@ -391,11 +401,11 @@ export function ParlayBuilder({
             discipline: leg.discipline,
             category: leg.category,
             market_type: 'HIGHEST_SCORE',
-            staked_tokens: Math.floor(perLegStake / selectionsPerLeg),
-            decimal_odds: leg.highestScore.decimal_odds, // Use individual selection odds
-            potential_payout: 0, // Parlay payouts are at bet_slip level
+            staked_tokens: perUnitStake,
+            decimal_odds: leg.highestScore.decimal_odds,
+            potential_payout: 0,
             parlay_leg_count: completeLegs.length,
-            status: 'PENDING'
+            status: 'PENDING',
           });
         }
       }
