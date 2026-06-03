@@ -511,12 +511,12 @@ export function ParlayBuilder({
       { key: 'highestScore', label: 'Highest', icon: Target },
       { key: 'summary', label: 'Summary', icon: Plus }
     ];
-    // Filter out steps for market types that don't exist
-    const steps = allSteps.filter(step => {
-      if (step.key === 'podium') return hasMarketType('PODIUM');
-      if (step.key === 'highestScore') return hasMarketType('HIGHEST_SCORE');
-      return true;
-    });
+    // Only render steps that are actually enabled in the parlay flow.
+    // PODIUM and HIGHEST_SCORE are parlay-ineligible (see getAvailableSteps
+    // + DB trigger enforce_parlay_leg_rules), so they must not appear in the
+    // progress indicator even when the markets exist on the tournament.
+    const enabledKeys = new Set<string>(['context', 'summary', ...getAvailableSteps()]);
+    const steps = allSteps.filter(step => enabledKeys.has(step.key));
 
     return (
       <div className="flex items-center justify-between mb-6">
@@ -660,7 +660,7 @@ export function ParlayBuilder({
             disabled={!currentLeg?.winner}
             className="flex-1"
           >
-            Continue to {hasMarketType('PODIUM') ? 'Podium' : hasMarketType('HIGHEST_SCORE') ? 'Highest Score' : 'Summary'} <ArrowRight className="ml-2 w-4 h-4" />
+            Continue to {getNextStep('winner') === 'podium' ? 'Podium' : getNextStep('winner') === 'highestScore' ? 'Highest Score' : 'Summary'} <ArrowRight className="ml-2 w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -851,6 +851,7 @@ export function ParlayBuilder({
                               {formatMultiplier(leg.winner?.decimal_odds || 1)}
                             </Badge>
                           </div>
+                          {(leg.podium.first || leg.podium.second || leg.podium.third) && (
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <Medal className="w-3 h-3 text-orange-600 dark:text-orange-500" />
@@ -867,6 +868,8 @@ export function ParlayBuilder({
                               )}
                             </Badge>
                           </div>
+                          )}
+                          {leg.highestScore && (
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <Target className="w-3 h-3 text-blue-600 dark:text-blue-500" />
@@ -876,6 +879,7 @@ export function ParlayBuilder({
                               {formatMultiplier(leg.highestScore?.decimal_odds || 1)}
                             </Badge>
                           </div>
+                          )}
                         </div>
                       </div>
                       
