@@ -3531,10 +3531,22 @@ export type Database = {
         }
         Returns: undefined
       }
+      populate_highest_score_results: {
+        Args: { p_tournament_id: string }
+        Returns: Json
+      }
       rebuild_market_liability: { Args: never; Returns: undefined }
       refund_redemption: {
         Args: { p_reason: string; p_redemption_id: string }
         Returns: Json
+      }
+      resolve_highest_score_winner: {
+        Args: {
+          p_discipline: string
+          p_gender: string
+          p_tournament_id: string
+        }
+        Returns: string
       }
       reverse_settlement: {
         Args: {
