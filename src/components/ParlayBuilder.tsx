@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SelectionCard } from '@/components/SelectionCard';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
-import { getParlayMultiplierDetails, isDuplicateLeg } from '@/utils/parlayMultipliers';
+import { getParlayMultiplierDetails, isDuplicateLeg, getLegBreakdown } from '@/utils/parlayMultipliers';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 import { resolvePodiumOrderedMultiplier } from '@/utils/podiumMultipliers';
 import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
