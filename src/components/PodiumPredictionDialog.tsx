@@ -42,19 +42,20 @@ export const PodiumPredictionDialog = ({
   const [stakeAmount, setStakeAmount] = useState<string>('10');
   const [resolvedMultiplier, setResolvedMultiplier] = useState<number | null>(null);
 
-  if (selections.length !== 3) return null;
-
-  const formulaOdds = calculatePodiumCombinedMultiplier(
-    selections[0].decimal_odds,
-    selections[1].decimal_odds,
-    selections[2].decimal_odds
-  );
+  const hasThree = selections.length === 3;
+  const formulaOdds = hasThree
+    ? calculatePodiumCombinedMultiplier(
+        selections[0].decimal_odds,
+        selections[1].decimal_odds,
+        selections[2].decimal_odds,
+      )
+    : 0;
   const combinedOdds = resolvedMultiplier ?? formulaOdds;
   const potentialPayout = Math.floor(Number(stakeAmount) * combinedOdds);
   const multiplierDisplay = `${combinedOdds.toFixed(2)}x`;
 
   useEffect(() => {
-    if (!open || !marketId) {
+    if (!open || !marketId || !hasThree) {
       setResolvedMultiplier(null);
       return;
     }
@@ -75,7 +76,9 @@ export const PodiumPredictionDialog = ({
     return () => {
       cancelled = true;
     };
-  }, [open, marketId, selections]);
+  }, [open, marketId, selections, hasThree]);
+
+  if (!hasThree) return null;
 
   const handleConfirm = () => {
     const amount = Number(stakeAmount);
