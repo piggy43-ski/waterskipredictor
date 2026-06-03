@@ -246,6 +246,14 @@ export function ParlayBuilder({
       return;
     }
 
+    // FIX 1 (build-time): block same-athlete in multiple sub-selections of one slot.
+    // Server-side trigger enforce_parlay_leg_rules_trigger is the authoritative check.
+    const dupSlot = findDuplicateAthleteSlot(completeLegs);
+    if (dupSlot) {
+      toast.error('athlete_already_in_entry');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
