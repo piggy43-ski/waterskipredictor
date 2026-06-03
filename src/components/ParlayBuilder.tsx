@@ -517,8 +517,6 @@ export function ParlayBuilder({
 
   const renderProgressIndicator = () => {
     const completedLegs = legs.filter(l => l.isComplete).length;
-    const progressPercentage = (completedLegs / PARLAY_CONFIG.MAX_LEGS) * 100;
-    
     return (
       <div className="mb-6 p-4 bg-muted/50 rounded-lg border border-border">
         <div className="flex items-center justify-between mb-2">
@@ -527,15 +525,9 @@ export function ParlayBuilder({
             <span className="text-sm font-medium">Parlay Progress</span>
           </div>
           <span className="text-sm font-bold">
-            {completedLegs}/{PARLAY_CONFIG.MAX_LEGS} Legs
+            {completedLegs} Leg{completedLegs === 1 ? '' : 's'}
           </span>
         </div>
-        <Progress value={progressPercentage} className="h-2" />
-        {completedLegs === PARLAY_CONFIG.MAX_LEGS && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 text-center">
-            ✨ All legs complete! Maximum multiplier unlocked!
-          </p>
-        )}
       </div>
     );
   };
