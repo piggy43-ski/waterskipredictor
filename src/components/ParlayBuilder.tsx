@@ -851,6 +851,7 @@ export function ParlayBuilder({
                               {formatMultiplier(leg.winner?.decimal_odds || 1)}
                             </Badge>
                           </div>
+                          {(leg.podium.first || leg.podium.second || leg.podium.third) && (
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <Medal className="w-3 h-3 text-orange-600 dark:text-orange-500" />
@@ -867,6 +868,8 @@ export function ParlayBuilder({
                               )}
                             </Badge>
                           </div>
+                          )}
+                          {leg.highestScore && (
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <Target className="w-3 h-3 text-blue-600 dark:text-blue-500" />
@@ -876,6 +879,7 @@ export function ParlayBuilder({
                               {formatMultiplier(leg.highestScore?.decimal_odds || 1)}
                             </Badge>
                           </div>
+                          )}
                         </div>
                       </div>
                       
