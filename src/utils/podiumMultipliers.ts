@@ -13,7 +13,6 @@
  * encodes ordering as a primary key, so chalk orderings can be priced
  * explicitly and everything else falls back to a conservative formula.
  */
-import { supabase } from '@/integrations/supabase/client';
 import {
   MAX_PODIUM_COMBINED_MULTIPLIER,
   MAX_PODIUM_EXACT_ORDER_MULTIPLIER,
@@ -74,6 +73,9 @@ export async function resolvePodiumOrderedMultiplier(
   const { marketId, firstAthleteId, secondAthleteId, thirdAthleteId, decimalOdds } = input;
 
   try {
+    // Lazy-import the supabase client so this module stays unit-test friendly
+    // (the client touches `localStorage` at import time).
+    const { supabase } = await import('@/integrations/supabase/client');
     const { data, error } = await supabase
       .from('market_podium_ordering_overrides' as any)
       .select('manual_multiplier, is_protected, is_enabled')
