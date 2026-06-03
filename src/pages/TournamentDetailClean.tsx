@@ -488,13 +488,22 @@ const TournamentDetail = () => {
     try {
       const podiumMarket = currentPodiumContext.market;
       
-      // Calculate combined multiplier using Sum × 2 formula
-      const { calculatePodiumCombinedMultiplier } = await import('@/utils/podiumMultipliers');
-      const combinedOdds = calculatePodiumCombinedMultiplier(
-        podiumState.assignedPositions.first.decimal_odds,
-        podiumState.assignedPositions.second.decimal_odds,
-        podiumState.assignedPositions.third.decimal_odds
-      );
+      // Resolve combined multiplier through the safe ordering-override path.
+      // Falls back to the formula (PODIUM_BONUS_FACTOR=1, cap 150x) when no
+      // override row matches the chosen (1st, 2nd, 3rd) triple.
+      const { resolvePodiumOrderedMultiplier } = await import('@/utils/podiumMultipliers');
+      const podiumResolution = await resolvePodiumOrderedMultiplier({
+        marketId: podiumMarket.id,
+        firstAthleteId: podiumState.assignedPositions.first.athlete_id,
+        secondAthleteId: podiumState.assignedPositions.second.athlete_id,
+        thirdAthleteId: podiumState.assignedPositions.third.athlete_id,
+        decimalOdds: [
+          podiumState.assignedPositions.first.decimal_odds,
+          podiumState.assignedPositions.second.decimal_odds,
+          podiumState.assignedPositions.third.decimal_odds,
+        ],
+      });
+      const combinedOdds = podiumResolution.multiplier;
       
       // Validate entry before placing
       setIsValidating(true);
