@@ -5,6 +5,7 @@ import {
   isUniqueViolation,
 } from './_shared/idempotency.ts';
 import { resolveParlay, type ParlayLeg } from './_shared/parlay.ts';
+import { planParlaySettlementPayout } from './_shared/parlayPayout.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
