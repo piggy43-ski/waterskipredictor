@@ -3,11 +3,11 @@ import { PARLAY_CONFIG } from './parlayConfig';
 
 /**
  * Parlay pricing (operator-tuned, 2026-06):
- * - Each leg contributes a SINGLE leg-multiplier:
- *     • Winner / Highest Score  → that selection's decimal_odds
- *     • Podium 1-2-3            → leg.podiumMultiplier (override-aware
- *                                  combined value resolved at pick time)
- * - Raw product × 0.75 haircut
+ * - Within a single leg, sub-picks (Winner, Podium 1-2-3, Highest Score)
+ *   are SUMMED, not multiplied. This kills the correlation overpay that
+ *   product-within-leg produces (e.g. Ross as Winner + Ross #1 on Podium).
+ * - Leg factors are then multiplied across legs (cross-leg stacking).
+ * - Raw product × 0.75 haircut.
  * - Floored at 1.0 (a winning parlay can never pay below stake)
  * - No leg-count cap and no progressive multiplier cap
  *   (operator dropped these explicitly; 1000-token podium stake cap and
@@ -37,17 +37,16 @@ export function americanToDecimal(americanOdds: number): number {
  */
 export function calculateRawParlayMultiplier(legs: ParlayLeg[]): number {
   if (legs.length === 0) return 0;
-  
-  let totalDecimalOdds = 1;
-  
+
+  let product = 1;
+
   for (const leg of legs) {
-    // Winner odds
-    if (leg.winner?.decimal_odds) {
-      totalDecimalOdds *= leg.winner.decimal_odds;
+    let legFactor = 0;
+
+    if (leg.winner?.decimal_odds && leg.winner.decimal_odds > 0) {
+      legFactor += leg.winner.decimal_odds;
     }
 
-    // Podium: ONE combined multiplier per leg (override-aware), NOT
-    // first×second×third. This prevents order-blind correlation mispricing.
     if (
       leg.podium.first &&
       leg.podium.second &&
@@ -55,16 +54,20 @@ export function calculateRawParlayMultiplier(legs: ParlayLeg[]): number {
       typeof leg.podiumMultiplier === 'number' &&
       leg.podiumMultiplier > 0
     ) {
-      totalDecimalOdds *= leg.podiumMultiplier;
+      legFactor += leg.podiumMultiplier;
     }
 
-    // Highest score odds
-    if (leg.highestScore?.decimal_odds) {
-      totalDecimalOdds *= leg.highestScore.decimal_odds;
+    if (leg.highestScore?.decimal_odds && leg.highestScore.decimal_odds > 0) {
+      legFactor += leg.highestScore.decimal_odds;
     }
+
+    // Leg with no sub-picks contributes nothing (neutral 1x).
+    if (legFactor <= 0) legFactor = 1;
+
+    product *= legFactor;
   }
-  
-  return totalDecimalOdds;
+
+  return product;
 }
 
 /**
