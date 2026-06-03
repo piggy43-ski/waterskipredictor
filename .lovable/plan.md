@@ -1,50 +1,70 @@
-## Problem
+## Model A: drop implied-by picks within each leg
 
-Current parlay math multiplies every sub-pick within a leg AND across legs:
+### Rule
 
-`1.5 × 7.25 × 3.0 × 1.2 × 11.45 × 1.4 × 0.75 = 470.68x`
+Within one leg, if **Podium 1-2-3** is picked, the **Winner** pick is mathematically implied (Podium #1 = Winner). It contributes no new information, so drop it from the leg's factor.
 
-This overpays on correlated outcomes (Ross as Winner + Ross #1 on Podium are not independent events).
-
-## Fix
-
-Switch intra-leg combination from **product** to **sum**. Cross-leg combination stays multiplicative. Haircut and floor unchanged.
-
-### New formula
+**Highest Score is kept always.** It's only weakly correlated with finishing order (a skier can win and not post the top score, or post the top score and finish 2nd).
 
 ```text
-legFactor(leg) = (winner?.decimal_odds ?? 0)
-               + (leg.podiumMultiplier ?? 0)
-               + (highestScore?.decimal_odds ?? 0)
-               // if a leg has only one sub-pick, the sum == that pick
+within a leg:
+  contributors = []
+  if podium picked:
+      contributors += [podiumMultiplier]                 // implies winner
+  else if winner picked:
+      contributors += [winner.decimal_odds]
+  if highestScore picked:
+      contributors += [highestScore.decimal_odds]
 
-parlayRaw     = Π legFactor(leg)   // product across legs
-final         = max(parlayRaw × 0.75, 1.0)
+  legFactor = sum(contributors)  // 1 if empty
+
+across legs:
+  raw   = Π legFactor
+  final = max(raw × 0.75, 1.0)
 ```
 
-### Recheck with the screenshot
+### Reproduce screenshot parlay
 
-- Leg 1 sum: `1.5 + 7.25 + 3.0 = 11.75`
-- Leg 2 sum: `1.2 + 11.45 + 1.4 = 14.05`
-- Raw: `11.75 × 14.05 = 165.09`
-- × 0.75 haircut = **123.82x**
+- L1: drop Winner (1.5), keep Podium (7.25) + Highest (3.00) = **10.25**
+- L2: drop Winner (1.2), keep Podium (11.45) + Highest (1.40) = **12.85**
+- Raw 131.71 × 0.75 = **~98.78x** (down from 123.82x)
 
-A single-pick leg (e.g. just a Winner at 1.5x) still contributes 1.5x — identical to today, so simple parlays are unaffected.
+### Files to change
 
-## Files to change
+**`src/utils/parlayMultipliers.ts`**
+- Rewrite `calculateRawParlayMultiplier` to apply the Model A rule above.
+- Add a new exported helper:
+  ```ts
+  getLegBreakdown(leg): {
+    rows: Array<{ kind: 'winner'|'podium'|'highest'; value: number; included: boolean; reason?: string }>;
+    legFactor: number;
+  }
+  ```
+  `included=false` rows carry `reason: 'Implied by Podium'` so the UI can render them struck-through with a tag.
 
-- `src/utils/parlayMultipliers.ts` — rewrite `calculateRawParlayMultiplier` to sum within a leg then multiply across legs. Guard: ignore zero/undefined sub-picks so a single-pick leg behaves as before.
-- `src/utils/__tests__/parlayMultipliers.test.ts` — update expected values (cross-leg-only tests with one sub-pick per leg stay the same; multi-sub-pick-in-one-leg tests get new expected sums).
+**`src/components/ParlayBuilder.tsx`** (Summary card around lines 863–897)
+- Read `getLegBreakdown(leg)` once per leg.
+- For each sub-pick row:
+  - included → render as today.
+  - not included → grey/strikethrough multiplier badge, append a small muted tag "Included in Podium".
+- Bottom total continues to use `getParlayMultiplierDetails(...).finalMultiplier`, which now reflects Model A.
+- No copy mentioning "risk", "cap", or "correlation" to the user — match the Risk UX neutral-language rule. Tag text: **"Included in Podium"**.
 
-## Out of scope
+**`src/utils/__tests__/parlayMultipliers.test.ts`**
+- Update the screenshot-reproduction test to expect ~98.78x.
+- Existing winner-only and podium-only tests unchanged (no Winner+Podium overlap in those).
+- Add a test that explicitly verifies Winner is dropped when Podium is also picked in the same leg, and is kept when Podium is not picked.
 
-- No DB/trigger changes.
-- No change to per-leg caps, 1000-token podium stake cap, chalk-concentration cap, settlement edge function, or override resolution.
-- Summary UI still shows each sub-multiplier on its row (unchanged); only the bottom total recomputes.
+### Out of scope
 
-## Verification
+- DB triggers, edge functions, settlement, podium combined-multiplier caps, override resolution — unchanged.
+- Cross-leg correlation — N/A, legs are different discipline+gender by construction.
+- Highest-vs-Winner correlation — explicitly not modeled in v1 (Model A only drops Winner-implied-by-Podium).
 
-1. Reproduce the screenshot's parlay → expect ~123.82x instead of 470.68x.
-2. Build a 3-leg parlay with one Winner each (e.g. 1.5 × 2.0 × 2.5 × 0.75) → expect 5.625x (unchanged from today).
-3. Run `bunx vitest run src/utils/__tests__/parlayMultipliers.test.ts`.
-4. Place a small test entry on tournament `dad9b595…`, confirm submitted multiplier matches UI.
+### Verification
+
+1. Reproduce the screenshot parlay → ~98.78x total; Leg 1 Winner row shows "1.50x · Included in Podium" struck through; Leg 2 same.
+2. Build a Winner-only parlay → multiplier identical to today.
+3. Build a Winner + Highest leg (no Podium) → Winner is kept, sum applies.
+4. Build a Podium-only leg → unchanged.
+5. `bunx vitest run src/utils/__tests__/parlayMultipliers.test.ts src/utils/__tests__/parlaySafetyFixes.test.ts` passes.
