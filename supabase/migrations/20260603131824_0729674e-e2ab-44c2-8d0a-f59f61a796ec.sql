@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.increment_earned_tokens(uuid, integer) TO authenticated;
