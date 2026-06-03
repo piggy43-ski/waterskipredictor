@@ -1,6 +1,7 @@
 import { Selection, Discipline } from '@/types';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getFlagEmoji } from '@/utils/countryFlag';
 interface SelectionCardProps {
   selection: Selection;
   onSelect: (selection: Selection) => void;
@@ -14,29 +15,6 @@ interface SelectionCardProps {
   /** Option A: Remaining tokens before cap is reached */
   remainingCapacity?: number;
 }
-
-const getFlagEmoji = (countryCode: string): string => {
-  // Map common country names to flag emojis
-  const countryFlags: { [key: string]: string } = {
-    'USA': '🇺🇸',
-    'CAN': '🇨🇦',
-    'FRA': '🇫🇷',
-    'GBR': '🇬🇧',
-    'AUS': '🇦🇺',
-    'ITA': '🇮🇹',
-    'ESP': '🇪🇸',
-    'GER': '🇩🇪',
-    'BRA': '🇧🇷',
-    'ARG': '🇦🇷',
-    'MEX': '🇲🇽',
-    'JPN': '🇯🇵',
-    'CHN': '🇨🇳',
-    'RUS': '🇷🇺',
-    'NZL': '🇳🇿',
-  };
-  
-  return countryFlags[countryCode] || '🏴';
-};
 
 const getInitials = (name: string) =>
   name

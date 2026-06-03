@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Minus, Search, User, Trophy } from 'lucide-react';
 import { FANTASY_ROSTER_LIMITS_BY_GENDER } from '@/utils/fantasyConfig';
+import { getFlagEmoji } from '@/utils/countryFlag';
 
 interface Athlete {
   id: string;
@@ -428,12 +429,3 @@ export const TeamBuilder = ({
     </div>
   );
 };
-
-// Helper function to convert country code to flag emoji
-function getFlagEmoji(countryCode: string): string {
-  const codePoints = countryCode
-    .toUpperCase()
-    .split('')
-    .map(char => 127397 + char.charCodeAt(0));
-  return String.fromCodePoint(...codePoints);
-}
