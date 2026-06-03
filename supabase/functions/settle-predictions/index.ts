@@ -5,6 +5,7 @@ import {
   isUniqueViolation,
 } from './_shared/idempotency.ts';
 import { resolveParlay, type ParlayLeg } from './_shared/parlay.ts';
+import { planParlaySettlementPayout } from './_shared/parlayPayout.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1005,25 +1006,25 @@ Deno.serve(async (req) => {
               }
 
               // All legs are WON or VOID - parlay wins.
-              // Use the slip's stored potential_payout_tokens as the source of truth
-              // (this is what the user agreed to at place-time, including the haircut).
-              // If any legs are VOID, scale the payout down by the lost odds factor
-              // so refunded legs don't inflate the win.
-              const voidOddsFactor = legs.reduce((acc, leg) => {
-                if (leg.status === 'VOID' && leg.decimal_odds && leg.decimal_odds > 1) {
-                  return acc / leg.decimal_odds;
-                }
-                return acc;
-              }, 1);
-              // FIX 3b: a WON parlay must never pay below its stake, even if VOID legs
-              // scale the payout down or if the snapshotted multiplier was sub-1.0.
-              const scaledPayout = Math.floor(
-                (slip.potential_payout_tokens || 0) * voidOddsFactor
-              );
-              const actualPayout = Math.max(scaledPayout, slip.total_stake_tokens || 0);
-              const finalOdds = slip.total_odds_decimal; // for logging
+              // FIX 3b (Option 3): per-leg refund + win on surviving stake.
+              // Each VOID leg emits its own prediction_void ledger row (affects_wallet=true)
+              // for its share of the stake. The surviving stake is paid at the snapshotted
+              // combined multiplier with void legs' odds stripped and the 1.0 floor preserved.
+              // walletDelta is re-derivable from the emitted ledger rows alone.
+              const payoutPlan = planParlaySettlementPayout({
+                totalStakeTokens: slip.total_stake_tokens || 0,
+                potentialPayoutTokens: slip.potential_payout_tokens || 0,
+                legs: legs.map((l: any) => ({
+                  id: l.id,
+                  status: l.status as 'WON' | 'VOID',
+                  decimal_odds: l.decimal_odds ?? null,
+                })),
+              });
+              const actualPayout = payoutPlan.walletDelta;
+              const finalOdds = slip.total_odds_decimal; // logging only
+              const athleteNames = legs.map((l: any) => l.athlete_name).join(', ');
 
-              // Update slip to WON
+              // Flip the slip first; downstream rows reference it.
               await supabaseClient
                 .from('bet_slips')
                 .update({
@@ -1034,74 +1035,130 @@ Deno.serve(async (req) => {
                 })
                 .eq('id', slip.id);
 
-              // Credit user wallet
-              const { error: walletError } = await supabaseClient.rpc('increment_earned_tokens', {
-                user_id_param: slip.user_id,
-                amount: actualPayout
-              });
-
-              if (walletError) {
-                console.error(`❌ Failed to credit wallet for slip ${slip.id}:`, walletError);
-                await supabaseClient
-                  .from('bet_slips')
-                  .update({
-                    status: 'PENDING',
-                    actual_payout_tokens: null,
-                    settled_at: null,
-                    settlement_run_id: null,
-                  })
-                  .eq('id', slip.id);
-                continue;
-              }
-
-              // Log transaction for parlay win
-              const { data: wonWallet } = await supabaseClient
-                .from('token_wallets')
-                .select('purchased_tokens, earned_tokens')
-                .eq('user_id', slip.user_id)
-                .single();
-              
-              if (wonWallet) {
-                const profit = actualPayout - slip.total_stake_tokens;
-                const athleteNames = legs.map(l => l.athlete_name).join(', ');
-                const parlayKey = buildCreditIdempotencyKey({
+              // Helper: insert a credit ledger row idempotently, then increment the
+              // user's earned_tokens iff the insert actually wrote a new row.
+              // Insert-then-credit ordering means a unique-violation skips the
+              // wallet bump, so re-running settlement on the same slip never
+              // double-credits. (See _shared/idempotency.ts for the unique key.)
+              const creditOnce = async (args: {
+                type: 'prediction_won' | 'prediction_void';
+                amount: number;
+                referenceType: 'entry' | 'prediction';
+                referenceId: string;
+                description: string;
+                metadata: Record<string, any>;
+              }): Promise<'wrote' | 'skipped' | 'error'> => {
+                if (args.amount <= 0) return 'skipped';
+                const key = buildCreditIdempotencyKey({
                   userId: slip.user_id,
-                  referenceType: 'entry',
-                  referenceId: slip.id,
-                  type: 'prediction_won',
+                  referenceType: args.referenceType,
+                  referenceId: args.referenceId,
+                  type: args.type,
                 });
-                if (!parlayKey) {
-                  console.warn(`⚠️ idempotency key null for parlay WON slip ${slip.id} — skipping ledger write`);
-                  result.errors?.push(`Idempotency key null for slip ${slip.id}`);
-                } else {
-                  const { error: txError } = await supabaseClient.from('token_transactions').insert({
-                    user_id: slip.user_id,
-                    type: 'prediction_won',
-                    amount: actualPayout,
-                    balance_after: wonWallet.purchased_tokens + wonWallet.earned_tokens,
-                    reference_type: 'entry',
-                    reference_id: slip.id,
-                    settlement_run_id: settlementRunId,
-                    description: `Won ${slip.leg_count}-leg parlay (${athleteNames}) - Staked ${slip.total_stake_tokens}, won ${actualPayout} (+${profit} profit)`,
+                if (!key) {
+                  console.warn(`⚠️ idempotency key null (${args.type}, ${args.referenceId}) — skipping ledger write`);
+                  result.errors?.push(`Idempotency key null for ${args.type} on ${args.referenceId}`);
+                  return 'error';
+                }
+                // Snapshot balance for the ledger row (informational; not used for math).
+                const { data: w } = await supabaseClient
+                  .from('token_wallets')
+                  .select('purchased_tokens, earned_tokens')
+                  .eq('user_id', slip.user_id)
+                  .single();
+                const balanceAfter = (w?.purchased_tokens ?? 0) + (w?.earned_tokens ?? 0) + args.amount;
+
+                const { error: txError } = await supabaseClient.from('token_transactions').insert({
+                  user_id: slip.user_id,
+                  type: args.type,
+                  amount: args.amount,
+                  balance_after: balanceAfter,
+                  reference_type: args.referenceType,
+                  reference_id: args.referenceId,
+                  settlement_run_id: settlementRunId,
+                  description: args.description,
+                  metadata: args.metadata,
+                });
+                if (txError) {
+                  if (isUniqueViolation(txError)) {
+                    console.log(`ℹ️ idempotent skip: ${args.type} for ${args.referenceId} already credited`);
+                    return 'skipped';
+                  }
+                  console.error(`❌ Failed to log ${args.type} for ${args.referenceId}:`, txError);
+                  result.errors?.push(`Transaction log failed (${args.type}, ${args.referenceId}): ${txError.message}`);
+                  return 'error';
+                }
+                // Insert succeeded → safe to credit the wallet.
+                const { error: rpcErr } = await supabaseClient.rpc('increment_earned_tokens', {
+                  user_id_param: slip.user_id,
+                  amount: args.amount,
+                });
+                if (rpcErr) {
+                  // The ledger row is in but the wallet did not move. Audit loudly;
+                  // a re-run will unique-violate and SKIP the credit, so manual repair is required.
+                  console.error(`🚨 Wallet credit failed AFTER ledger write (${args.type}, ${args.referenceId}):`, rpcErr);
+                  result.errors?.push(`Wallet credit failed after ledger write (${args.type}, ${args.referenceId}): ${rpcErr.message}`);
+                  await supabaseClient.from('audit_logs').insert({
+                    actor_type: 'system',
+                    action_type: 'WALLET_CREDIT_FAILED_AFTER_LEDGER',
+                    entity_type: args.referenceType === 'entry' ? 'bet_slip' : 'prediction',
+                    entity_id: args.referenceId,
                     metadata: {
-                      entry_type: 'parlay',
-                      leg_count: slip.leg_count,
-                      staked: slip.total_stake_tokens,
-                      odds: finalOdds,
-                      payout: actualPayout,
-                      profit: profit,
-                      athletes: legs.map(l => l.athlete_name),
+                      settlement_run_id: settlementRunId,
+                      type: args.type,
+                      amount: args.amount,
+                      rpc_error: rpcErr.message,
                     },
                   });
-                  if (txError) {
-                    if (isUniqueViolation(txError)) {
-                      console.log(`ℹ️ idempotent skip: parlay slip ${slip.id} already credited`);
-                    } else {
-                      console.error(`❌ Failed to log parlay WON transaction for slip ${slip.id}:`, txError);
-                      result.errors?.push(`Parlay transaction log failed for slip ${slip.id}: ${txError.message}`);
-                    }
-                  }
+                  return 'error';
                 }
+                return 'wrote';
+              };
+
+              // 1) Per-leg VOID refunds — one row per voided leg, keyed on prediction.id.
+              for (const r of payoutPlan.refunds) {
+                const voidLeg = legs.find((l: any) => l.id === r.leg_id);
+                await creditOnce({
+                  type: 'prediction_void',
+                  amount: r.amount,
+                  referenceType: 'prediction',
+                  referenceId: r.leg_id,
+                  description: `Voided parlay leg on ${voidLeg?.athlete_name ?? 'leg'} (${voidLeg?.discipline ?? ''}) — Refunded ${r.amount} tokens`,
+                  metadata: {
+                    entry_type: 'parlay_leg_void',
+                    parent_slip_id: slip.id,
+                    leg_count: slip.leg_count,
+                    leg_share: r.amount,
+                    refunded: r.amount,
+                    athlete_name: voidLeg?.athlete_name ?? null,
+                    discipline: voidLeg?.discipline ?? null,
+                  },
+                });
+              }
+
+              // 2) Single parlay-win credit on the surviving stake.
+              if (payoutPlan.winCredit > 0) {
+                const profit = payoutPlan.winCredit - payoutPlan.survivingStake;
+                await creditOnce({
+                  type: 'prediction_won',
+                  amount: payoutPlan.winCredit,
+                  referenceType: 'entry',
+                  referenceId: slip.id,
+                  description: `Won ${slip.leg_count}-leg parlay (${athleteNames}) — Surviving stake ${payoutPlan.survivingStake} @ ${payoutPlan.survivingMultiplier.toFixed(4)}x = ${payoutPlan.winCredit} (+${profit} profit)`,
+                  metadata: {
+                    entry_type: 'parlay',
+                    leg_count: slip.leg_count,
+                    staked: slip.total_stake_tokens,
+                    surviving_stake: payoutPlan.survivingStake,
+                    surviving_multiplier: payoutPlan.survivingMultiplier,
+                    odds: finalOdds,
+                    payout: payoutPlan.winCredit,
+                    profit,
+                    refund_total: payoutPlan.refunds.reduce((s, r) => s + r.amount, 0),
+                    wallet_delta_total: payoutPlan.walletDelta,
+                    athletes: legs.map((l: any) => l.athlete_name),
+                  },
+                });
               }
 
               // Update lifetime winnings
