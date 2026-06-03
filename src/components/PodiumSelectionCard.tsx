@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Check, Medal } from 'lucide-react';
 import { Selection, Discipline } from '@/types';
+import { getFlagEmoji } from '@/utils/countryFlag';
 
 interface PodiumSelectionCardProps {
   athletes: Selection[];
@@ -19,25 +20,6 @@ export const PodiumSelectionCard = ({
   maxSelections = 3,
   discipline 
 }: PodiumSelectionCardProps) => {
-  const getFlagEmoji = (countryCode: string): string => {
-    const countryFlags: { [key: string]: string } = {
-      'USA': '🇺🇸', 'United States': '🇺🇸',
-      'CAN': '🇨🇦', 'Canada': '🇨🇦',
-      'AUS': '🇦🇺', 'Australia': '🇦🇺',
-      'GBR': '🇬🇧', 'United Kingdom': '🇬🇧',
-      'FRA': '🇫🇷', 'France': '🇫🇷',
-      'GER': '🇩🇪', 'Germany': '🇩🇪',
-      'ITA': '🇮🇹', 'Italy': '🇮🇹',
-      'ESP': '🇪🇸', 'Spain': '🇪🇸',
-      'SWE': '🇸🇪', 'Sweden': '🇸🇪',
-      'NOR': '🇳🇴', 'Norway': '🇳🇴',
-      'DEN': '🇩🇰', 'Denmark': '🇩🇰',
-      'CHI': '🇨🇱', 'Chile': '🇨🇱',
-      'PRI': '🇵🇷', 'Puerto Rico': '🇵🇷',
-    };
-    return countryFlags[countryCode] || '🏳️';
-  };
-
   const isSelected = (athlete: Selection) => {
     return selectedAthletes.some(a => a.id === athlete.id);
   };
