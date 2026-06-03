@@ -240,29 +240,26 @@ const Rewards = () => {
       const fulfillmentStatus =
         selectedReward.category === 'elite_skis' ? 'concierge_review' : 'pending_fulfillment';
 
-      // Create redemption record
-      const { data: redemptionData, error: redemptionError } = await supabase
-        .from('redemptions')
-        .insert({
-          user_id: user.id,
-          reward_id: selectedReward.id,
-          tokens_spent: selectedReward.required_tokens,
-          status: 'pending',
-          fulfillment_status: fulfillmentStatus,
-          glove_size: formData.glove_size ?? null,
-          shipping_name: formData.shipping_name ?? null,
-          shipping_address_line1: formData.shipping_address_line1 ?? null,
-          shipping_address_line2: formData.shipping_address_line2 ?? null,
-          shipping_city: formData.shipping_city ?? null,
-          shipping_state: formData.shipping_state ?? null,
-          shipping_zip: formData.shipping_zip ?? null,
-          shipping_phone: formData.shipping_phone ?? null,
-          gift_card_email: formData.gift_card_email ?? null,
-        })
-        .select('id')
-        .single();
+      // Create redemption record via SECURITY DEFINER RPC. The RPC validates
+      // limits and PII formats server-side and prevents users from writing
+      // privileged fields (tracking_number, fulfillment_status, order_reference).
+      const { data: newRedemptionId, error: redemptionError } = await supabase
+        .rpc('create_redemption', {
+          p_reward_id: selectedReward.id,
+          p_glove_size: formData.glove_size ?? null,
+          p_shipping_name: formData.shipping_name ?? null,
+          p_shipping_address_line1: formData.shipping_address_line1 ?? null,
+          p_shipping_address_line2: formData.shipping_address_line2 ?? null,
+          p_shipping_city: formData.shipping_city ?? null,
+          p_shipping_state: formData.shipping_state ?? null,
+          p_shipping_zip: formData.shipping_zip ?? null,
+          p_shipping_phone: formData.shipping_phone ?? null,
+          p_gift_card_email: formData.gift_card_email ?? null,
+        });
 
       if (redemptionError) throw redemptionError;
+      if (!newRedemptionId) throw new Error('Failed to create redemption');
+      const redemptionData = { id: newRedemptionId as string };
 
       // Atomically deduct tokens using database function (prevents race conditions)
       const { data: deductResult, error: deductError } = await supabase
