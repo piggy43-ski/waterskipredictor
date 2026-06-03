@@ -1,0 +1,1 @@
+UPDATE public.markets SET is_published = false WHERE id = 'a02030d2-c07d-4916-9419-39ead22223e4';
