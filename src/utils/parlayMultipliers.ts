@@ -2,11 +2,12 @@ import { ParlayLeg } from '@/types/parlay';
 import { PARLAY_CONFIG } from './parlayConfig';
 
 /**
- * Parlay pricing (operator-tuned, 2026-06):
- * - Within a single leg, sub-picks (Winner, Podium 1-2-3, Highest Score)
- *   are SUMMED, not multiplied. This kills the correlation overpay that
- *   product-within-leg produces (e.g. Ross as Winner + Ross #1 on Podium).
- * - Leg factors are then multiplied across legs (cross-leg stacking).
+ * Parlay pricing (correlation-aware, Model A, 2026-06):
+ * - Within a single leg, sub-picks are combined as a SUM, but with an
+ *   implied-by rule: if a Podium 1-2-3 pick exists, the Winner pick is
+ *   dropped because Podium #1 == Winner (no new information).
+ *   Highest Score is always kept (only weakly correlated with finish order).
+ * - Leg factors are then multiplied across legs.
  * - Raw product × 0.75 haircut.
  * - Floored at 1.0 (a winning parlay can never pay below stake)
  * - No leg-count cap and no progressive multiplier cap
@@ -19,6 +20,58 @@ const PARLAY_FLOOR = 1.0;
 
 // Effectively unbounded leg count — keep a sanity ceiling so UI never spins.
 const MAX_PARLAY_LEGS = 64;
+
+/**
+ * Per-leg breakdown for UI display (which sub-picks are counted vs implied).
+ */
+export type LegBreakdownRow = {
+  kind: 'winner' | 'podium' | 'highest';
+  value: number;
+  included: boolean;
+  reason?: string;
+};
+
+export function getLegBreakdown(leg: ParlayLeg): {
+  rows: LegBreakdownRow[];
+  legFactor: number;
+} {
+  const rows: LegBreakdownRow[] = [];
+
+  const hasPodium =
+    !!leg.podium.first &&
+    !!leg.podium.second &&
+    !!leg.podium.third &&
+    typeof leg.podiumMultiplier === 'number' &&
+    leg.podiumMultiplier > 0;
+
+  const winnerOdds = leg.winner?.decimal_odds;
+  if (typeof winnerOdds === 'number' && winnerOdds > 0) {
+    rows.push({
+      kind: 'winner',
+      value: winnerOdds,
+      included: !hasPodium,
+      reason: hasPodium ? 'Included in Podium' : undefined,
+    });
+  }
+
+  if (hasPodium) {
+    rows.push({
+      kind: 'podium',
+      value: leg.podiumMultiplier as number,
+      included: true,
+    });
+  }
+
+  const highestOdds = leg.highestScore?.decimal_odds;
+  if (typeof highestOdds === 'number' && highestOdds > 0) {
+    rows.push({ kind: 'highest', value: highestOdds, included: true });
+  }
+
+  const sum = rows.filter((r) => r.included).reduce((s, r) => s + r.value, 0);
+  const legFactor = sum > 0 ? sum : 1;
+
+  return { rows, legFactor };
+}
 
 /**
  * Convert American odds to decimal odds
@@ -41,30 +94,7 @@ export function calculateRawParlayMultiplier(legs: ParlayLeg[]): number {
   let product = 1;
 
   for (const leg of legs) {
-    let legFactor = 0;
-
-    if (leg.winner?.decimal_odds && leg.winner.decimal_odds > 0) {
-      legFactor += leg.winner.decimal_odds;
-    }
-
-    if (
-      leg.podium.first &&
-      leg.podium.second &&
-      leg.podium.third &&
-      typeof leg.podiumMultiplier === 'number' &&
-      leg.podiumMultiplier > 0
-    ) {
-      legFactor += leg.podiumMultiplier;
-    }
-
-    if (leg.highestScore?.decimal_odds && leg.highestScore.decimal_odds > 0) {
-      legFactor += leg.highestScore.decimal_odds;
-    }
-
-    // Leg with no sub-picks contributes nothing (neutral 1x).
-    if (legFactor <= 0) legFactor = 1;
-
-    product *= legFactor;
+    product *= getLegBreakdown(leg).legFactor;
   }
 
   return product;
