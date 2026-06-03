@@ -1460,6 +1460,7 @@ const TournamentDetail = () => {
           tournamentName={tournament.name}
           discipline={currentPodiumContext.discipline}
           gender={currentPodiumContext.gender}
+          marketId={currentPodiumContext.market?.id}
         />
       )}
 
