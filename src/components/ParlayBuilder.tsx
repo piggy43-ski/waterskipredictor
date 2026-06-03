@@ -898,11 +898,7 @@ export function ParlayBuilder({
                               </span>
                             </div>
                             <Badge variant="secondary" className="text-xs h-5 px-1.5 whitespace-nowrap">
-                              {formatMultiplier(
-                                (leg.podium.first?.decimal_odds || 1) * 
-                                (leg.podium.second?.decimal_odds || 1) * 
-                                (leg.podium.third?.decimal_odds || 1)
-                              )}
+                              {formatMultiplier(leg.podiumMultiplier || 1)}
                             </Badge>
                           </div>
                           )}
