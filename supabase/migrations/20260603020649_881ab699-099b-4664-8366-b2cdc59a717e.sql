@@ -1,0 +1,1 @@
+DELETE FROM public.tournaments WHERE id = 'bcea1f10-2303-4681-b1ad-246d910313e6';
