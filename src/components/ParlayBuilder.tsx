@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SelectionCard } from '@/components/SelectionCard';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
-import { calculateParlayMultiplier, getParlayMultiplierDetails, getMultiplierSuggestions, isDuplicateLeg } from '@/utils/parlayMultipliers';
+import { calculateParlayMultiplier, getParlayMultiplierDetails, getMultiplierSuggestions, isDuplicateLeg, findDuplicateAthleteSlot } from '@/utils/parlayMultipliers';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
 import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
@@ -243,6 +243,14 @@ export function ParlayBuilder({
     const completeLegs = legs.filter(l => l.isComplete);
     if (completeLegs.length === 0) {
       toast.error('Complete at least one leg to place parlay');
+      return;
+    }
+
+    // FIX 1 (build-time): block same-athlete in multiple sub-selections of one slot.
+    // Server-side trigger enforce_parlay_leg_rules_trigger is the authoritative check.
+    const dupSlot = findDuplicateAthleteSlot(completeLegs);
+    if (dupSlot) {
+      toast.error('athlete_already_in_entry');
       return;
     }
 

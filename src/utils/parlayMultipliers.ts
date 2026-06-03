@@ -5,10 +5,12 @@ import { PARLAY_CONFIG } from './parlayConfig';
  * Parlay pricing with house safety
  * - Raw product multiplied by 0.75 haircut
  * - Hard caps by leg count
- * - 5+ legs DISABLED
+ * - Combined multiplier floored at 1.0 (a winning parlay can never pay below stake)
+ * - 5+ legs DISABLED  (legacy comment — see PARLAY_CAPS / MAX_PARLAY_LEGS)
  */
 
 const PARLAY_HAIRCUT = 0.75;
+const PARLAY_FLOOR = 1.0;
 
 const PARLAY_CAPS: Record<number, number> = {
   1: 15,    // Single leg capped at 15x
@@ -104,7 +106,8 @@ export function calculateParlayMultiplier(legs: ParlayLeg[]): number {
   // Apply progressive cap
   const cap = calculateProgressiveCap(completedLegs.length);
   
-  return Math.min(withHaircut, cap);
+  // FIX 3a: floor at 1.0 so a winning parlay never pays below stake.
+  return Math.min(Math.max(withHaircut, PARLAY_FLOOR), cap);
 }
 
 /**
@@ -137,7 +140,8 @@ export function getParlayMultiplierDetails(legs: ParlayLeg[]): {
   const rawMultiplier = calculateRawParlayMultiplier(completedLegs);
   const withHaircut = rawMultiplier * PARLAY_HAIRCUT;
   const progressiveCap = calculateProgressiveCap(legCount);
-  const finalMultiplier = Math.min(withHaircut, progressiveCap);
+  // FIX 3a: floor at 1.0
+  const finalMultiplier = Math.min(Math.max(withHaircut, PARLAY_FLOOR), progressiveCap);
   
   return {
     rawMultiplier: Math.round(rawMultiplier * 100) / 100,
@@ -182,6 +186,45 @@ export function getMultiplierSuggestions(legs: ParlayLeg[], availableDisciplines
  */
 export function isDuplicateLeg(legs: ParlayLeg[], discipline: string, gender: string): boolean {
   return legs.some(leg => leg.discipline === discipline && leg.gender === gender);
+}
+
+/**
+ * FIX 1: Same-athlete correlation block.
+ * Within a SINGLE discipline+gender slot (one ParlayLeg), an athlete may appear in
+ * AT MOST ONE sub-selection (winner OR a podium slot OR highest-score).
+ * Returns the offending athlete_id (or null if none).
+ * Cross-leg / cross-discipline reuse is allowed and intentionally not checked here.
+ */
+export function findDuplicateAthleteIdInLeg(leg: ParlayLeg): string | null {
+  const ids: string[] = [];
+  const pushIf = (sel: any) => {
+    const aid = sel?.athlete?.id;
+    if (typeof aid === 'string' && aid.length > 0) ids.push(aid);
+  };
+  pushIf(leg.winner);
+  pushIf(leg.podium?.first);
+  pushIf(leg.podium?.second);
+  pushIf(leg.podium?.third);
+  pushIf(leg.highestScore);
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) return id;
+    seen.add(id);
+  }
+  return null;
+}
+
+/**
+ * Convenience: returns the first slot that violates Fix 1 across an entire parlay, or null.
+ */
+export function findDuplicateAthleteSlot(
+  legs: ParlayLeg[]
+): { legIndex: number; athleteId: string } | null {
+  for (let i = 0; i < legs.length; i++) {
+    const dup = findDuplicateAthleteIdInLeg(legs[i]);
+    if (dup) return { legIndex: i, athleteId: dup };
+  }
+  return null;
 }
 
 /**
