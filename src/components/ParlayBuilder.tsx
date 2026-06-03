@@ -843,6 +843,12 @@ export function ParlayBuilder({
             <div className="grid gap-3">
               {completeLegs.map((leg, idx) => {
                 const actualIndex = legs.findIndex(l => l === leg);
+                const breakdown = getLegBreakdown(leg);
+                const rowFor = (kind: 'winner' | 'podium' | 'highest') =>
+                  breakdown.rows.find((r) => r.kind === kind);
+                const winnerRow = rowFor('winner');
+                const podiumRow = rowFor('podium');
+                const highestRow = rowFor('highest');
                 return (
                   <div 
                     key={idx} 
@@ -861,16 +867,29 @@ export function ParlayBuilder({
                         </div>
                         
                         <div className="space-y-1 text-xs">
+                          {winnerRow && (
                           <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1 text-muted-foreground">
+                            <div className={`flex items-center gap-1 ${winnerRow.included ? 'text-muted-foreground' : 'text-muted-foreground/60'}`}>
                               <Trophy className="w-3 h-3 text-yellow-600 dark:text-yellow-500" />
-                              <strong>Winner:</strong> {leg.winner?.athlete.name}
+                              <strong>Winner:</strong>{' '}
+                              <span className={winnerRow.included ? '' : 'line-through'}>
+                                {leg.winner?.athlete.name}
+                              </span>
+                              {!winnerRow.included && winnerRow.reason && (
+                                <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                  · {winnerRow.reason}
+                                </span>
+                              )}
                             </div>
-                            <Badge variant="secondary" className="text-xs h-5 px-1.5">
-                              {formatMultiplier(leg.winner?.decimal_odds || 1)}
+                            <Badge
+                              variant="secondary"
+                              className={`text-xs h-5 px-1.5 ${winnerRow.included ? '' : 'line-through opacity-60'}`}
+                            >
+                              {formatMultiplier(winnerRow.value)}
                             </Badge>
                           </div>
-                          {(leg.podium.first || leg.podium.second || leg.podium.third) && (
+                          )}
+                          {podiumRow && (
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <Medal className="w-3 h-3 text-orange-600 dark:text-orange-500" />
@@ -880,18 +899,18 @@ export function ParlayBuilder({
                               </span>
                             </div>
                             <Badge variant="secondary" className="text-xs h-5 px-1.5 whitespace-nowrap">
-                              {formatMultiplier(leg.podiumMultiplier || 1)}
+                              {formatMultiplier(podiumRow.value)}
                             </Badge>
                           </div>
                           )}
-                          {leg.highestScore && (
+                          {highestRow && (
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <Target className="w-3 h-3 text-blue-600 dark:text-blue-500" />
                               <strong>Highest:</strong> {leg.highestScore?.athlete.name}
                             </div>
                             <Badge variant="secondary" className="text-xs h-5 px-1.5">
-                              {formatMultiplier(leg.highestScore?.decimal_odds || 1)}
+                              {formatMultiplier(highestRow.value)}
                             </Badge>
                           </div>
                           )}
