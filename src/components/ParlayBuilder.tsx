@@ -12,6 +12,7 @@ import { SelectionCard } from '@/components/SelectionCard';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
 import { calculateParlayMultiplier, getParlayMultiplierDetails, getMultiplierSuggestions, isDuplicateLeg, findDuplicateAthleteSlot } from '@/utils/parlayMultipliers';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
+import { resolvePodiumOrderedMultiplier } from '@/utils/podiumMultipliers';
 import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
@@ -96,11 +97,10 @@ export function ParlayBuilder({
   // Get the ordered list of available steps for the current discipline/gender
   const getAvailableSteps = (): ParlayStep[] => {
     const steps: ParlayStep[] = ['winner'];
-    // PODIUM and HIGHEST_SCORE are not eligible as parlay legs (DB trigger
-    // enforce_parlay_leg_rules also rejects them as 'parlay_market_ineligible').
-    // Keep the steps code in place so re-enabling is a one-line change.
-    // if (hasMarketType('PODIUM')) steps.push('podium');
-    // if (hasMarketType('HIGHEST_SCORE')) steps.push('highestScore');
+    // Podium / Highest Score are now eligible as parlay legs.
+    // Podium is priced as ONE leg via the combined override-aware multiplier.
+    if (hasMarketType('PODIUM')) steps.push('podium');
+    if (hasMarketType('HIGHEST_SCORE')) steps.push('highestScore');
     return steps;
   };
 
