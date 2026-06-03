@@ -3543,6 +3543,21 @@ export type Database = {
         Args: { p_tournament_id: string }
         Returns: Json
       }
+      create_redemption: {
+        Args: {
+          p_gift_card_email?: string
+          p_glove_size?: string
+          p_reward_id: string
+          p_shipping_address_line1?: string
+          p_shipping_address_line2?: string
+          p_shipping_city?: string
+          p_shipping_name?: string
+          p_shipping_phone?: string
+          p_shipping_state?: string
+          p_shipping_zip?: string
+        }
+        Returns: string
+      }
       deduct_tokens: {
         Args: { amount_param: number; user_id_param: string }
         Returns: {
