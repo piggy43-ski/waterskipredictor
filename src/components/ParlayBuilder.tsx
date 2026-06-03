@@ -194,14 +194,41 @@ export function ParlayBuilder({
     setShowAssigner(false);
   };
 
-  const handlePodiumComplete = (positions: { first: Selection; second: Selection; third: Selection }) => {
+  const handlePodiumComplete = async (positions: { first: Selection; second: Selection; third: Selection }) => {
     if (!currentLeg) return;
-    
-    const updatedLeg = { 
-      ...currentLeg, 
-      podium: positions
+
+    const podiumMarket = getMarketForType('PODIUM');
+    const marketId = podiumMarket?.id ?? positions.first.market_id;
+
+    // Resolve combined podium multiplier (override-aware) so this counts as
+    // ONE leg factor in the parlay product.
+    let combined = 0;
+    try {
+      const res = await resolvePodiumOrderedMultiplier({
+        marketId,
+        firstAthleteId: positions.first.athlete_id,
+        secondAthleteId: positions.second.athlete_id,
+        thirdAthleteId: positions.third.athlete_id,
+        decimalOdds: [
+          positions.first.decimal_odds ?? 1,
+          positions.second.decimal_odds ?? 1,
+          positions.third.decimal_odds ?? 1,
+        ],
+      });
+      combined = res.multiplier;
+    } catch {
+      combined =
+        (positions.first.decimal_odds ?? 1) +
+        (positions.second.decimal_odds ?? 1) +
+        (positions.third.decimal_odds ?? 1);
+    }
+
+    const updatedLeg = {
+      ...currentLeg,
+      podium: positions,
+      podiumMarketId: marketId,
+      podiumMultiplier: combined,
     };
-    // Mark complete if podium is the last available step
     if (isLastMarketStep('podium')) {
       updatedLeg.isComplete = true;
     }
