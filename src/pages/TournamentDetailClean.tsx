@@ -167,7 +167,8 @@ const TournamentDetail = () => {
         const { data: marketsData, error: marketsError } = await supabase
           .from('markets')
           .select('*')
-          .eq('tournament_id', tournamentData.id);
+          .eq('tournament_id', tournamentData.id)
+          .eq('is_published', true);
 
         if (marketsError) throw marketsError;
         if (marketsData) setMarkets(marketsData as Market[]);
