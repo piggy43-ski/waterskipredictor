@@ -96,8 +96,11 @@ export function ParlayBuilder({
   // Get the ordered list of available steps for the current discipline/gender
   const getAvailableSteps = (): ParlayStep[] => {
     const steps: ParlayStep[] = ['winner'];
-    if (hasMarketType('PODIUM')) steps.push('podium');
-    if (hasMarketType('HIGHEST_SCORE')) steps.push('highestScore');
+    // PODIUM and HIGHEST_SCORE are not eligible as parlay legs (DB trigger
+    // enforce_parlay_leg_rules also rejects them as 'parlay_market_ineligible').
+    // Keep the steps code in place so re-enabling is a one-line change.
+    // if (hasMarketType('PODIUM')) steps.push('podium');
+    // if (hasMarketType('HIGHEST_SCORE')) steps.push('highestScore');
     return steps;
   };
 
