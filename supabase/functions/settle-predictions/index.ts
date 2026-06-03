@@ -1015,9 +1015,12 @@ Deno.serve(async (req) => {
                 }
                 return acc;
               }, 1);
-              const actualPayout = Math.floor(
+              // FIX 3b: a WON parlay must never pay below its stake, even if VOID legs
+              // scale the payout down or if the snapshotted multiplier was sub-1.0.
+              const scaledPayout = Math.floor(
                 (slip.potential_payout_tokens || 0) * voidOddsFactor
               );
+              const actualPayout = Math.max(scaledPayout, slip.total_stake_tokens || 0);
               const finalOdds = slip.total_odds_decimal; // for logging
 
               // Update slip to WON
