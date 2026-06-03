@@ -6,6 +6,7 @@ import {
   findDuplicateAthleteSlot,
 } from '../parlayMultipliers';
 import type { ParlayLeg } from '@/types/parlay';
+import { planParlaySettlementPayout } from '../parlaySettlement';
 
 const sel = (athleteId: string, odds: number) =>
   ({ id: `${athleteId}-sel`, athlete: { id: athleteId }, decimal_odds: odds } as any);
