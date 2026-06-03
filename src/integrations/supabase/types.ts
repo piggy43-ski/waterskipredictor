@@ -1548,6 +1548,77 @@ export type Database = {
           },
         ]
       }
+      market_podium_ordering_overrides: {
+        Row: {
+          created_at: string
+          first_athlete: string
+          id: string
+          is_enabled: boolean
+          is_protected: boolean
+          manual_multiplier: number
+          market_id: string
+          reason: string | null
+          second_athlete: string
+          third_athlete: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          first_athlete: string
+          id?: string
+          is_enabled?: boolean
+          is_protected?: boolean
+          manual_multiplier: number
+          market_id: string
+          reason?: string | null
+          second_athlete: string
+          third_athlete: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          first_athlete?: string
+          id?: string
+          is_enabled?: boolean
+          is_protected?: boolean
+          manual_multiplier?: number
+          market_id?: string
+          reason?: string | null
+          second_athlete?: string
+          third_athlete?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_podium_ordering_overrides_first_athlete_fkey"
+            columns: ["first_athlete"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_podium_ordering_overrides_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "markets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_podium_ordering_overrides_second_athlete_fkey"
+            columns: ["second_athlete"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_podium_ordering_overrides_third_athlete_fkey"
+            columns: ["third_athlete"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_probability_overrides: {
         Row: {
           athlete_id: string
