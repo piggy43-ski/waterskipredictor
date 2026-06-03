@@ -954,43 +954,18 @@ export function ParlayBuilder({
 
         <div className="bg-primary/10 rounded-lg p-4 space-y-2">
           <div className="text-2xl font-bold text-center">
-            {multiplierDetails.finalMultiplier.toFixed(0)}x Multiplier
+            {multiplierDetails.finalMultiplier.toFixed(2)}x Multiplier
           </div>
-          
-          {multiplierDetails.legCount < PARLAY_CONFIG.MAX_LEGS && (
-            <div className="text-xs text-muted-foreground text-center">
-              💡 Add more legs to unlock higher multipliers (up to 200x)
-            </div>
-          )}
-          
-          {multiplierDetails.legCount === PARLAY_CONFIG.MAX_LEGS && (
-            <div className="text-xs text-emerald-600 dark:text-emerald-400 text-center">
-              ✨ Maximum multiplier unlocked!
-            </div>
-          )}
-          
-          {suggestions.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
-              {suggestions.map((sug, idx) => (
-                <div key={idx} className="text-sm text-muted-foreground text-center">
-                  💡 {sug}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="text-xs text-muted-foreground text-center">
+            Add Winner, Podium and Highest Score legs across disciplines and genders to stack.
+          </div>
         </div>
 
         <div className="flex gap-2">
-          {availableCombinations.length > 0 && completeLegs.length < PARLAY_CONFIG.MAX_LEGS && (
+          {availableCombinations.length > 0 && (
             <Button variant="outline" onClick={() => setCurrentStep('context')} className="flex-1">
               <Plus className="mr-2 w-4 h-4" /> Add Another Leg
             </Button>
-          )}
-          {completeLegs.length >= PARLAY_CONFIG.MAX_LEGS && (
-            <Alert className="flex-1">
-              <AlertCircle className="w-4 h-4" />
-              <AlertDescription>Maximum legs reached (6/6)!</AlertDescription>
-            </Alert>
           )}
           <Button 
             onClick={() => setCurrentStep('stake')} 
