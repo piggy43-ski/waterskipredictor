@@ -10,10 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SelectionCard } from '@/components/SelectionCard';
 import { PodiumPositionAssigner } from '@/components/PodiumPositionAssigner';
-import { calculateParlayMultiplier, getParlayMultiplierDetails, getMultiplierSuggestions, isDuplicateLeg, findDuplicateAthleteSlot } from '@/utils/parlayMultipliers';
+import { getParlayMultiplierDetails, isDuplicateLeg } from '@/utils/parlayMultipliers';
 import { PARLAY_CONFIG } from '@/utils/parlayConfig';
+import { resolvePodiumOrderedMultiplier } from '@/utils/podiumMultipliers';
 import { Trophy, Target, Medal, ArrowRight, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { formatMultiplier } from '@/utils/multiplierUtils';
 import { toast } from 'sonner';
@@ -65,7 +65,6 @@ export function ParlayBuilder({
   const currentLeg = legs[currentLegIndex] || null;
   const multiplierDetails = getParlayMultiplierDetails(legs.filter(l => l.isComplete));
   const multiplier = multiplierDetails.finalMultiplier;
-  const suggestions = getMultiplierSuggestions(legs.filter(l => l.isComplete), tournament.disciplines);
 
   // Get available discipline+gender combinations
   const getAvailableCombinations = () => {
@@ -96,11 +95,10 @@ export function ParlayBuilder({
   // Get the ordered list of available steps for the current discipline/gender
   const getAvailableSteps = (): ParlayStep[] => {
     const steps: ParlayStep[] = ['winner'];
-    // PODIUM and HIGHEST_SCORE are not eligible as parlay legs (DB trigger
-    // enforce_parlay_leg_rules also rejects them as 'parlay_market_ineligible').
-    // Keep the steps code in place so re-enabling is a one-line change.
-    // if (hasMarketType('PODIUM')) steps.push('podium');
-    // if (hasMarketType('HIGHEST_SCORE')) steps.push('highestScore');
+    // Podium / Highest Score are now eligible as parlay legs.
+    // Podium is priced as ONE leg via the combined override-aware multiplier.
+    if (hasMarketType('PODIUM')) steps.push('podium');
+    if (hasMarketType('HIGHEST_SCORE')) steps.push('highestScore');
     return steps;
   };
 
@@ -194,14 +192,41 @@ export function ParlayBuilder({
     setShowAssigner(false);
   };
 
-  const handlePodiumComplete = (positions: { first: Selection; second: Selection; third: Selection }) => {
+  const handlePodiumComplete = async (positions: { first: Selection; second: Selection; third: Selection }) => {
     if (!currentLeg) return;
-    
-    const updatedLeg = { 
-      ...currentLeg, 
-      podium: positions
+
+    const podiumMarket = getMarketForType('PODIUM');
+    const marketId = podiumMarket?.id ?? positions.first.market_id;
+
+    // Resolve combined podium multiplier (override-aware) so this counts as
+    // ONE leg factor in the parlay product.
+    let combined = 0;
+    try {
+      const res = await resolvePodiumOrderedMultiplier({
+        marketId,
+        firstAthleteId: positions.first.athlete_id,
+        secondAthleteId: positions.second.athlete_id,
+        thirdAthleteId: positions.third.athlete_id,
+        decimalOdds: [
+          positions.first.decimal_odds ?? 1,
+          positions.second.decimal_odds ?? 1,
+          positions.third.decimal_odds ?? 1,
+        ],
+      });
+      combined = res.multiplier;
+    } catch {
+      combined =
+        (positions.first.decimal_odds ?? 1) +
+        (positions.second.decimal_odds ?? 1) +
+        (positions.third.decimal_odds ?? 1);
+    }
+
+    const updatedLeg = {
+      ...currentLeg,
+      podium: positions,
+      podiumMarketId: marketId,
+      podiumMultiplier: combined,
     };
-    // Mark complete if podium is the last available step
     if (isLastMarketStep('podium')) {
       updatedLeg.isComplete = true;
     }
@@ -246,14 +271,6 @@ export function ParlayBuilder({
     const completeLegs = legs.filter(l => l.isComplete);
     if (completeLegs.length === 0) {
       toast.error('Complete at least one leg to place parlay');
-      return;
-    }
-
-    // FIX 1 (build-time): block same-athlete in multiple sub-selections of one slot.
-    // Server-side trigger enforce_parlay_leg_rules_trigger is the authoritative check.
-    const dupSlot = findDuplicateAthleteSlot(completeLegs);
-    if (dupSlot) {
-      toast.error('athlete_already_in_entry');
       return;
     }
 
@@ -304,18 +321,19 @@ export function ParlayBuilder({
 
       if (slipError) throw slipError;
 
-      // Create predictions for each selection in each leg
-      // IMPORTANT: For parlays, individual predictions store their individual odds.
-      // Payouts are handled at the entry level, not individual predictions.
-      const predictions = [];
-      const selectionsPerLeg = 5; // winner + 3 podium + highest score
-      const totalSelections = completeLegs.length * selectionsPerLeg;
-      
+      // Build one row per "selection unit" in each leg. Podium is a SINGLE
+      // row with selection_id='<marketId>-podium' priced at the combined
+      // override-aware multiplier — settlement (settle-predictions) already
+      // handles the -podium suffix shape for exact-order payouts.
+      const predictions: any[] = [];
       for (const leg of completeLegs) {
-        // Each prediction in a parlay stores its own odds but payout is 0
-        // (parlay payout happens at entry level, not individual predictions)
+        const unitsInLeg =
+          (leg.winner ? 1 : 0) +
+          (leg.podium.first && leg.podium.second && leg.podium.third ? 1 : 0) +
+          (leg.highestScore ? 1 : 0);
         const perLegStake = Math.floor(stakeAmount / completeLegs.length);
-        
+        const perUnitStake = unitsInLeg > 0 ? Math.floor(perLegStake / unitsInLeg) : 0;
+
         if (leg.winner) {
           predictions.push({
             user_id: userId,
@@ -326,31 +344,40 @@ export function ParlayBuilder({
             discipline: leg.discipline,
             category: leg.category,
             market_type: 'WINNER',
-            staked_tokens: Math.floor(perLegStake / selectionsPerLeg),
-            decimal_odds: leg.winner.decimal_odds, // Use individual selection odds
-            potential_payout: 0, // Parlay payouts are at bet_slip level
+            staked_tokens: perUnitStake,
+            decimal_odds: leg.winner.decimal_odds,
+            potential_payout: 0,
             parlay_leg_count: completeLegs.length,
-            status: 'PENDING'
+            status: 'PENDING',
           });
         }
 
         if (leg.podium.first && leg.podium.second && leg.podium.third) {
-          [leg.podium.first, leg.podium.second, leg.podium.third].forEach((sel, idx) => {
-            predictions.push({
-              user_id: userId,
-              bet_slip_id: entryRecord.id,
-              selection_id: sel.id,
-              athlete_name: sel.athlete.name,
-              tournament_name: tournament.name,
-              discipline: leg.discipline,
-              category: leg.category,
-              market_type: 'PODIUM',
-              staked_tokens: Math.floor(perLegStake / selectionsPerLeg),
-              decimal_odds: sel.decimal_odds, // Use individual selection odds
-              potential_payout: 0, // Parlay payouts are at bet_slip level
-              parlay_leg_count: completeLegs.length,
-              status: 'PENDING'
-            });
+          const marketId = leg.podiumMarketId ?? leg.podium.first.market_id;
+          predictions.push({
+            user_id: userId,
+            bet_slip_id: entryRecord.id,
+            // Synthetic composite — matches standalone podium predictions and
+            // is allowed by the updated enforce_parlay_leg_rules trigger.
+            selection_id: `${marketId}-podium`,
+            athlete_name: `${leg.podium.first.athlete.name}, ${leg.podium.second.athlete.name}, ${leg.podium.third.athlete.name}`,
+            tournament_name: tournament.name,
+            discipline: leg.discipline,
+            category: leg.category,
+            market_type: 'PODIUM',
+            staked_tokens: perUnitStake,
+            decimal_odds: leg.podiumMultiplier ?? 1,
+            potential_payout: 0,
+            parlay_leg_count: completeLegs.length,
+            status: 'PENDING',
+            settlement_metadata: {
+              podium_picks: {
+                first: { athlete_id: leg.podium.first.athlete_id, name: leg.podium.first.athlete.name },
+                second: { athlete_id: leg.podium.second.athlete_id, name: leg.podium.second.athlete.name },
+                third: { athlete_id: leg.podium.third.athlete_id, name: leg.podium.third.athlete.name },
+              },
+              combined_multiplier: leg.podiumMultiplier ?? 1,
+            },
           });
         }
 
@@ -364,11 +391,11 @@ export function ParlayBuilder({
             discipline: leg.discipline,
             category: leg.category,
             market_type: 'HIGHEST_SCORE',
-            staked_tokens: Math.floor(perLegStake / selectionsPerLeg),
-            decimal_odds: leg.highestScore.decimal_odds, // Use individual selection odds
-            potential_payout: 0, // Parlay payouts are at bet_slip level
+            staked_tokens: perUnitStake,
+            decimal_odds: leg.highestScore.decimal_odds,
+            potential_payout: 0,
             parlay_leg_count: completeLegs.length,
-            status: 'PENDING'
+            status: 'PENDING',
           });
         }
       }
@@ -480,8 +507,6 @@ export function ParlayBuilder({
 
   const renderProgressIndicator = () => {
     const completedLegs = legs.filter(l => l.isComplete).length;
-    const progressPercentage = (completedLegs / PARLAY_CONFIG.MAX_LEGS) * 100;
-    
     return (
       <div className="mb-6 p-4 bg-muted/50 rounded-lg border border-border">
         <div className="flex items-center justify-between mb-2">
@@ -490,15 +515,9 @@ export function ParlayBuilder({
             <span className="text-sm font-medium">Parlay Progress</span>
           </div>
           <span className="text-sm font-bold">
-            {completedLegs}/{PARLAY_CONFIG.MAX_LEGS} Legs
+            {completedLegs} Leg{completedLegs === 1 ? '' : 's'}
           </span>
         </div>
-        <Progress value={progressPercentage} className="h-2" />
-        {completedLegs === PARLAY_CONFIG.MAX_LEGS && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 text-center">
-            ✨ All legs complete! Maximum multiplier unlocked!
-          </p>
-        )}
       </div>
     );
   };
@@ -861,11 +880,7 @@ export function ParlayBuilder({
                               </span>
                             </div>
                             <Badge variant="secondary" className="text-xs h-5 px-1.5 whitespace-nowrap">
-                              {formatMultiplier(
-                                (leg.podium.first?.decimal_odds || 1) * 
-                                (leg.podium.second?.decimal_odds || 1) * 
-                                (leg.podium.third?.decimal_odds || 1)
-                              )}
+                              {formatMultiplier(leg.podiumMultiplier || 1)}
                             </Badge>
                           </div>
                           )}
@@ -921,43 +936,18 @@ export function ParlayBuilder({
 
         <div className="bg-primary/10 rounded-lg p-4 space-y-2">
           <div className="text-2xl font-bold text-center">
-            {multiplierDetails.finalMultiplier.toFixed(0)}x Multiplier
+            {multiplierDetails.finalMultiplier.toFixed(2)}x Multiplier
           </div>
-          
-          {multiplierDetails.legCount < PARLAY_CONFIG.MAX_LEGS && (
-            <div className="text-xs text-muted-foreground text-center">
-              💡 Add more legs to unlock higher multipliers (up to 200x)
-            </div>
-          )}
-          
-          {multiplierDetails.legCount === PARLAY_CONFIG.MAX_LEGS && (
-            <div className="text-xs text-emerald-600 dark:text-emerald-400 text-center">
-              ✨ Maximum multiplier unlocked!
-            </div>
-          )}
-          
-          {suggestions.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
-              {suggestions.map((sug, idx) => (
-                <div key={idx} className="text-sm text-muted-foreground text-center">
-                  💡 {sug}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="text-xs text-muted-foreground text-center">
+            Add Winner, Podium and Highest Score legs across disciplines and genders to stack.
+          </div>
         </div>
 
         <div className="flex gap-2">
-          {availableCombinations.length > 0 && completeLegs.length < PARLAY_CONFIG.MAX_LEGS && (
+          {availableCombinations.length > 0 && (
             <Button variant="outline" onClick={() => setCurrentStep('context')} className="flex-1">
               <Plus className="mr-2 w-4 h-4" /> Add Another Leg
             </Button>
-          )}
-          {completeLegs.length >= PARLAY_CONFIG.MAX_LEGS && (
-            <Alert className="flex-1">
-              <AlertCircle className="w-4 h-4" />
-              <AlertDescription>Maximum legs reached (6/6)!</AlertDescription>
-            </Alert>
           )}
           <Button 
             onClick={() => setCurrentStep('stake')} 

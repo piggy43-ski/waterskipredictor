@@ -1,59 +1,82 @@
-## Scope
+# Goal
 
-Apply the locked design system (true black, electric cyan, Bebas Neue, hairline borders, Apple easing) to `/tournaments/:id` (the real route — `/events/:eventId` doesn't exist; it's `TournamentDetailClean.tsx`).
+Let a parlay contain any mix of WINNER, PODIUM (exact 1-2-3), and HIGHEST_SCORE legs across any discipline and any gender. Each added leg multiplies into the parlay product, so more legs → bigger payout.
 
-**Visual + layout only. No data fetching, no engine logic, no new tables.**
+# What already works (no change needed)
 
-## In scope (data already exists)
+- "Add Another Leg" is already wired. After completing a leg you go back to the Context step and can pick a different discipline + gender.
+- `isDuplicateLeg` only blocks repeating the **same discipline+gender** pair, which is the correct correlation block — you can have men's slalom + women's slalom + men's jump + women's trick all in one parlay.
+- The product math (`calculateRawParlayMultiplier` × 0.75 haircut) already multiplies every leg's `decimal_odds` together.
 
-1. **Typographic hero (no image)**
-   - True black, no card.
-   - Top-left status pill (UPCOMING / LIVE / FINAL) in cyan.
-   - Bebas Neue event name, uppercase, fills width, 2-line wrap.
-   - Location + dates underneath in small-caps muted gray.
-   - 3-column stat row (hairline vertical dividers): **Entrants / Disciplines / Closes In** — Bebas Neue numerics, countdown in tabular monospace cyan.
-   - (Prize Pool is not in our schema — swapped for **Disciplines** count, which we already render.)
-   - Hairline border underneath.
+What's blocking podium/highest from being parlay legs is two gates that were added by the earlier "parlay safety v2" work.
 
-2. **Discipline / gender / market-type tabs**
-   - Restyled as underline tabs (2px cyan underline on active, no pill background).
-   - Sticky under hero when scrolled.
+# Changes
 
-3. **Skier rows (the money screen)**
-   - Replace `SelectionCard` visuals with a dense row:
-     - Rank badge `#1` on the left.
-     - 40px circular athlete photo (placeholder initials if no photo — current schema doesn't store photos; uses initials).
-     - Name + country flag emoji + world rank.
-     - Bebas Neue multiplier right-aligned in cyan.
-   - Top 3 favorites: 2px cyan left-border accent.
-   - Press-scale 0.98 with Apple easing on tap.
-   - Shimmer skeletons on initial load.
+## 1. DB — `enforce_parlay_leg_rules` trigger (new migration)
 
-4. **Selected-state polish**
-   - When user opens prediction dialog, the row's multiplier briefly pulses cyan (subtle, 1 cycle).
+Remove the two unconditional rejections that currently throw `parlay_market_ineligible`:
 
-5. **Sticky parlay/prediction CTA**
-   - Existing Parlay Builder button restyled into a sticky bottom bar (above bottom nav) with cyan accent.
+- The `IF v_market_type IN ('PODIUM','HIGHEST_SCORE')` block
+- The `IF NEW.selection_id LIKE '%-podium'` block
 
-## Out of scope (need new data work — flag for separate prompt)
+Keep everything else in the trigger (chalk concentration cap, unresolved-selection guards for >2500 stake, etc.).
 
-The following items in your brief require new queries / endpoints I'd have to build:
+Also keep `enforce_podium_single_stake_cap` unchanged — that 1000-token podium cap will still apply when a parlay contains a podium leg (you confirmed: keep it).
 
-- **Sticky prediction-slip drawer with live "Projected Reward"** — current flow uses single-selection dialog (`PredictionDialog`) per row tap. A multi-select slip drawer is a UX/flow change, not visual polish. Existing `ParlayBuilder` modal already does this; converting it to a persistent drawer is a feature.
-- **Field Analysis tab (rating, recent finishes, win-prob bar)** — we have `rating_0_100` and `discipline_rank` per entry, so a bar viz is doable. But "recent finishes per athlete" requires querying `athlete_results` across past tournaments — new fetch.
-- **Recent Form chips (last 5 events per athlete)** — same: needs new historical query.
-- **Head-to-Head matrix** — no existing data or query.
-- **Live Leaderboard preview (top 5 predictors for this event)** — needs new aggregation query over `bet_slips` / `predictions`.
-- **Share button / result-card generator** — needs canvas/og-image renderer.
+Drop the same-athlete-in-same-slot check in this same trigger per your answer (you didn't tick "keep same-athlete block"). Removing the `v_dup_exists` IF/RAISE branch.
 
-If you want any of those, I'll do them as a separate prompt with the data work.
+## 2. Frontend — `src/components/ParlayBuilder.tsx`
 
-## Files
+- Re-enable the `podium` and `highestScore` steps in `getAvailableSteps()` so they appear in the Continue flow for any leg whose discipline+gender has those markets.
+- For **Podium**: when the user picks 1-2-3, store the result as a single synthetic selection on the leg whose `decimal_odds` = `resolvePodiumOrderedMultiplier(market, athleteIds)` (the override-aware combined multiplier already used outside parlays). This is what makes podium count as **one leg = combined multiplier** rather than three sub-multipliers stacked — directly per your answer.
+- For **Highest Score**: each picked athlete becomes one leg-multiplier as it does for WINNER today.
+- Per-leg the user can mix: e.g. one leg = just Winner, another leg = just Podium (combined), another leg = just Highest Score, another leg = Winner + Podium + Highest combined for the same discipline+gender (already supported).
+- Remove the "Continue to Podium / Continue to Highest" gating that I shipped last turn now that those steps are eligible.
 
-- `src/pages/TournamentDetailClean.tsx` — hero, status pill, stat strip, tabs restyle, sticky CTA.
-- `src/components/SelectionCard.tsx` — densified row layout, rank badge, cyan multiplier, top-3 accent, press-scale.
-- `src/components/ui/skeleton.tsx` is already shimmer-ready.
+## 3. Frontend — `src/utils/parlayMultipliers.ts`
 
-## Confirm
+Per your answers (you did **not** keep "8-leg max" or "progressive caps"):
 
-Reply "go" to proceed with the in-scope items above. If you want the out-of-scope features now, tell me which and I'll plumb the data first.
+- Remove `MAX_PARLAY_LEGS` rejection — accept any leg count.
+- Remove `PARLAY_CAPS` cap-by-leg-count — multiplier is `rawProduct × 0.75`, floored at 1.0, no ceiling.
+- Keep `PARLAY_HAIRCUT = 0.75` and `PARLAY_FLOOR = 1.0`.
+
+Adjust `calculateRawParlayMultiplier` so that when a leg has a `podium` populated, it uses the **combined podium multiplier** (single number from `podiumMultipliers.resolvePodiumOrderedMultiplier`) rather than multiplying first×second×third individually.
+
+Update `getParlayMultiplierDetails` and `getMultiplierSuggestions` to drop the cap/disabled language.
+
+## 4. Submission path — `src/components/ParlayBuilder.tsx` `handleSubmit`
+
+When building the rows inserted into `predictions` for a parlay slip:
+- Podium leg → insert with `selection_id = '<market_id>-podium'` and `market_type='PODIUM'`, the same shape as a standalone podium prediction. The new trigger lets it through; settlement code (`settle-predictions`) already handles the `-podium` selection_id for combined exact-order payouts.
+- Highest Score leg → standard `selection_id = <selection.id>` row, `market_type='HIGHEST_SCORE'`. Settlement already handles it.
+
+## 5. UI clean-up
+
+- Update Summary card to show a single combined multiplier per podium leg (e.g. "Podium 1-2-3: 7.0x") instead of three separate rows.
+- Drop the "max 8 legs / cap reached" copy from `getMultiplierSuggestions`.
+
+# What I will NOT touch
+
+- `enforce_podium_single_stake_cap` (kept — 1000-token cap still applies on parlays containing podium).
+- Edge function `settle-predictions` — it already knows how to settle each leg type.
+- Multiplier cap source of truth (`multiplierCaps.ts`) for WINNER / PODIUM / HIGHEST_SCORE per-market — unchanged.
+- The chalk concentration trigger on `bet_slips` (`enforce_chalk_concentration_cap`) — still active.
+
+# Risk acknowledgement (you should see this)
+
+You explicitly chose to drop the 8-leg cap, the progressive cap (15→130x), and the same-athlete-in-one-slot block. That means a 6-leg parlay mixing chalk podiums and chalk winners can produce very large multipliers; a single $100 entry can theoretically pay out hundreds of thousands of tokens. The 0.75 haircut, the 1000-token podium stake cap, and the existing chalk-concentration cap on the bet slip will still apply, but they are not equivalent to the progressive cap. If you want, I can leave the progressive cap in place at much higher numbers (e.g. 1000x) as a backstop — say the word and I'll add it back before merging.
+
+# Technical files touched
+
+- `supabase/migrations/<new>.sql` — alter `public.enforce_parlay_leg_rules`
+- `src/components/ParlayBuilder.tsx`
+- `src/utils/parlayMultipliers.ts`
+
+# Verification before stopping
+
+- Reload preview, build a parlay: men's slalom Winner + men's slalom Podium + women's slalom Highest Score + men's jump Winner. Confirm it submits, ledger row appears, Summary multiplier matches `winnerOdds × podiumCombined × highestOdds × winnerOdds × 0.75`.
+- Confirm a podium-only 1-leg parlay rejects if stake > 1000 (cap still bites).
+- Confirm settlement edge function still picks it up (read `predictions` rows; no schema change to that table).
+
+Stop after that — no email/push/notification triggered (no code path emits them on parlay placement).

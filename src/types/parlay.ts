@@ -12,6 +12,14 @@ export interface ParlayLeg {
     second: Selection | null;
     third: Selection | null;
   };
+  /**
+   * Combined podium multiplier (override-aware) resolved when the user finishes
+   * picking 1-2-3 inside a parlay leg. Used as a single leg factor in the
+   * parlay product so podium counts as ONE leg, not three.
+   */
+  podiumMultiplier?: number | null;
+  /** Market id of the podium market this leg's podium was picked on. */
+  podiumMarketId?: string | null;
   highestScore: Selection | null;
   isComplete: boolean;
 }

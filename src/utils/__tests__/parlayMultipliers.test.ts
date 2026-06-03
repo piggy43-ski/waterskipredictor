@@ -1,16 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   calculateParlayMultiplier,
-  calculateProgressiveCap,
-  getMaxParlayLegs,
+  calculateRawParlayMultiplier,
 } from "../parlayMultipliers";
 import type { ParlayLeg } from "@/types/parlay";
 
-const EXPECTED_CAPS: Record<number, number> = {
-  1: 15, 2: 20, 3: 35, 4: 50, 5: 60, 6: 80, 7: 105, 8: 130,
-};
-
-function makeLeg(odds: number): ParlayLeg {
+function winnerLeg(odds: number): ParlayLeg {
   const sel = { decimal_odds: odds } as any;
   return {
     discipline: "slalom" as any,
@@ -23,35 +18,40 @@ function makeLeg(odds: number): ParlayLeg {
   };
 }
 
-describe("parlayMultipliers — extended caps (5-8 legs)", () => {
-  it("MAX_PARLAY_LEGS is now 8", () => {
-    expect(getMaxParlayLegs()).toBe(8);
+function podiumLeg(combined: number): ParlayLeg {
+  const sel = { decimal_odds: 1, athlete_id: "a", athlete: { name: "x" }, market_id: "m" } as any;
+  return {
+    discipline: "slalom" as any,
+    gender: "men",
+    category: "open_men" as any,
+    winner: null,
+    podium: { first: sel, second: sel, third: sel },
+    podiumMultiplier: combined,
+    highestScore: null,
+    isComplete: true,
+  };
+}
+
+describe("parlayMultipliers — uncapped product × haircut", () => {
+  it("single winner leg: odds × 0.75 floored at 1", () => {
+    expect(calculateParlayMultiplier([winnerLeg(2)])).toBeCloseTo(1.5, 5);
+    expect(calculateParlayMultiplier([winnerLeg(1.1)])).toBe(1); // floor
   });
 
-  for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
-    it(`progressive cap for ${n} legs = ${EXPECTED_CAPS[n]}x`, () => {
-      expect(calculateProgressiveCap(n)).toBe(EXPECTED_CAPS[n]);
-    });
-  }
-
-  it("9+ legs are disabled (cap = 0)", () => {
-    expect(calculateProgressiveCap(9)).toBe(0);
+  it("stacks winners multiplicatively", () => {
+    const legs = [winnerLeg(2), winnerLeg(3), winnerLeg(4)];
+    expect(calculateRawParlayMultiplier(legs)).toBeCloseTo(24, 5);
+    expect(calculateParlayMultiplier(legs)).toBeCloseTo(18, 5);
   });
 
-  // Brute-force: final multiplier never exceeds the cap, even with max legitimate
-  // per-leg odds (8.0 = WINNER hard cap).
-  for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
-    it(`final multiplier never exceeds cap for ${n} legs (brute-force odds 1.0–8.0)`, () => {
-      for (let odds = 1.0; odds <= 8.0; odds += 0.5) {
-        const legs = Array.from({ length: n }, () => makeLeg(odds));
-        const mult = calculateParlayMultiplier(legs);
-        expect(mult).toBeLessThanOrEqual(EXPECTED_CAPS[n] + 1e-9);
-      }
-    });
-  }
+  it("podium contributes ONE combined factor, not first×second×third", () => {
+    const legs = [winnerLeg(2), podiumLeg(7)];
+    expect(calculateRawParlayMultiplier(legs)).toBeCloseTo(14, 5);
+    expect(calculateParlayMultiplier(legs)).toBeCloseTo(10.5, 5);
+  });
 
-  it("9-leg parlay returns 0 (disabled)", () => {
-    const legs = Array.from({ length: 9 }, () => makeLeg(2.0));
-    expect(calculateParlayMultiplier(legs)).toBe(0);
+  it("no progressive leg-count cap — 10 legs computes raw × 0.75", () => {
+    const legs = Array.from({ length: 10 }, () => winnerLeg(2));
+    expect(calculateParlayMultiplier(legs)).toBeCloseTo(1024 * 0.75, 3);
   });
 });
