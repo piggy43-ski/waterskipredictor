@@ -1,70 +1,81 @@
-## Model A: drop implied-by picks within each leg
 
-### Rule
+# Rabat Settlement Execution Plan
 
-Within one leg, if **Podium 1-2-3** is picked, the **Winner** pick is mathematically implied (Podium #1 = Winner). It contributes no new information, so drop it from the leg's factor.
+I'm in plan mode and need your approval to switch to build mode before I can fire the writes/POST. Approving this plan is the green-light.
 
-**Highest Score is kept always.** It's only weakly correlated with finishing order (a skier can win and not post the top score, or post the top score and finish 2nd).
+## Execution sequence
 
-```text
-within a leg:
-  contributors = []
-  if podium picked:
-      contributors += [podiumMultiplier]                 // implies winner
-  else if winner picked:
-      contributors += [winner.decimal_odds]
-  if highestScore picked:
-      contributors += [highestScore.decimal_odds]
+### Step 1 — Write `tournament_results` (all 35 athletes, 4 buckets)
 
-  legFactor = sum(contributors)  // 1 if empty
+Insert one row per athlete per discipline×gender bucket with Path A ranks:
+- M Slalom: Winter=1, Ross=2, Asher=3, then 4..N
+- M Tricks: Abelson=1, then official IWWF order
+- W Slalom: Bull=1, then official order
+- W Tricks: official order
 
-across legs:
-  raw   = Π legFactor
-  final = max(raw × 0.75, 1.0)
+`tournament_results_auto_flags` trigger handles `no_score`, `made_finals`, and discipline-specific column normalization. No `market_results` writes — engine doesn't read it for win/loss; this is purely for the post-settlement athlete stats learning at `settle-predictions/index.ts:1268`.
+
+### Step 2 — POST `settle-predictions` (single atomic run)
+
+One invocation, payload contains:
+- `tournament_id`: `dad9b595-...`
+- `tournament_name`: "Royal Nautique Pro - Rabat"
+- `selections`: 120 entries (one per market_entry, marked won/lost)
+- `prediction_overrides`: 22 PODIUM predictions force-marked LOST (no exact-order match)
+
+Capture returned `settlement_run_id`. Single run ID covers all 12 markets + all parlays — required for `reverse_settlement(p_run_id)` if anything goes sideways.
+
+### Step 3 — If POST fails or returns partial
+
+Immediately call `reverse_settlement(p_run_id := <captured>, p_reason := 'rabat_settle_failed_<detail>')` and ping you before any retry. Do not attempt re-fire.
+
+### Step 4 — Reconciliation report
+
+Run as a batch of read-only queries and return a single consolidated report:
+
+**A. Pattern A confirmation (idempotent re-check)**
+- 4 Travis slips still `CANCELLED`, predictions `VOID`
+- Travis wallet shows +1,850 refund txns intact, no double-refund
+
+**B. Per-market singles (12 markets)**
+For each market: `wins_count`, `losses_count`, `stake_total`, `payout_total`, `house_pnl = stake - payout` (singles only, exclude parlay legs by joining `bet_slips.type='single'`)
+
+**C. Per-parlay outcomes**
+All 18 PENDING parlays (excluding 4 Pattern A CANCELLED): confirm `status = 'LOST'`, list slip_id / user / stake / leg_count / which leg(s) lost. Expect: every parlay has ≥1 PODIUM leg, all lost.
+
+**D. Aggregate house P&L**
+`SUM(stake) - SUM(actual_payout)` across all Rabat slips settled in this run. Expect +8.5K to +10K.
+
+**E. Largest single payout**
+Top slip by `actual_payout_tokens` — confirm Boatntony, M Tricks WINNER, Abelson, stake 1000, mult 2.25, payout 2250.
+
+**F. Ledger sanity (the non-negotiable equality)**
 ```
+SUM(token_transactions.amount WHERE affects_wallet=true 
+    AND settlement_run_id = <captured>)
+  ==
+SUM(wallet delta for users touched by this run, 
+    computed from before/after via audit_logs on token_wallets)
+```
+If these don't match, STOP, do not send Travis email, call `reverse_settlement`, ping you.
 
-### Reproduce screenshot parlay
+**G. Specific call-outs you flagged**
+- W Slalom WINNER house P&L on Bull (1.2×) predictions — should be near-flat / slightly negative on Bull, offset by losers. Flag if strongly positive (would indicate Bull credits missing).
+- Confirm exactly ONE `settlement_run_id` stamps all 12 markets + 18 parlays.
 
-- L1: drop Winner (1.5), keep Podium (7.25) + Highest (3.00) = **10.25**
-- L2: drop Winner (1.2), keep Podium (11.45) + Highest (1.40) = **12.85**
-- Raw 131.71 × 0.75 = **~98.78x** (down from 123.82x)
+### Step 5 — Hold Travis Resend email
 
-### Files to change
+Do not fire any email. Wait for your green-light after you review the reconciliation report.
 
-**`src/utils/parlayMultipliers.ts`**
-- Rewrite `calculateRawParlayMultiplier` to apply the Model A rule above.
-- Add a new exported helper:
-  ```ts
-  getLegBreakdown(leg): {
-    rows: Array<{ kind: 'winner'|'podium'|'highest'; value: number; included: boolean; reason?: string }>;
-    legFactor: number;
-  }
-  ```
-  `included=false` rows carry `reason: 'Implied by Podium'` so the UI can render them struck-through with a tag.
+## Risk / reversibility
 
-**`src/components/ParlayBuilder.tsx`** (Summary card around lines 863–897)
-- Read `getLegBreakdown(leg)` once per leg.
-- For each sub-pick row:
-  - included → render as today.
-  - not included → grey/strikethrough multiplier badge, append a small muted tag "Included in Podium".
-- Bottom total continues to use `getParlayMultiplierDetails(...).finalMultiplier`, which now reflects Model A.
-- No copy mentioning "risk", "cap", or "correlation" to the user — match the Risk UX neutral-language rule. Tag text: **"Included in Podium"**.
+`reverse_settlement(p_run_id, p_reason)` is the single rollback lever. Works on the captured run ID, writes compensating `*_reversal` ledger rows with `affects_wallet` mirrored, clamps wallet to ≥0 with audit_logs `SETTLEMENT_REVERSAL_OVERDRAW` if applicable, flips slips back to PENDING.
 
-**`src/utils/__tests__/parlayMultipliers.test.ts`**
-- Update the screenshot-reproduction test to expect ~98.78x.
-- Existing winner-only and podium-only tests unchanged (no Winner+Podium overlap in those).
-- Add a test that explicitly verifies Winner is dropped when Podium is also picked in the same leg, and is kept when Podium is not picked.
+## What I will NOT do
 
-### Out of scope
+- No `market_results` writes (not read by engine).
+- No direct `token_wallets` UPDATEs — all wallet movement goes through `settle-predictions` atomic path. (May-3 rule respected.)
+- No Travis email.
+- No retry on failure without your ping.
 
-- DB triggers, edge functions, settlement, podium combined-multiplier caps, override resolution — unchanged.
-- Cross-leg correlation — N/A, legs are different discipline+gender by construction.
-- Highest-vs-Winner correlation — explicitly not modeled in v1 (Model A only drops Winner-implied-by-Podium).
-
-### Verification
-
-1. Reproduce the screenshot parlay → ~98.78x total; Leg 1 Winner row shows "1.50x · Included in Podium" struck through; Leg 2 same.
-2. Build a Winner-only parlay → multiplier identical to today.
-3. Build a Winner + Highest leg (no Podium) → Winner is kept, sum applies.
-4. Build a Podium-only leg → unchanged.
-5. `bunx vitest run src/utils/__tests__/parlayMultipliers.test.ts src/utils/__tests__/parlaySafetyFixes.test.ts` passes.
+Approve to switch to build mode and fire.
