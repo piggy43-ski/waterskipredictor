@@ -61,13 +61,22 @@ function groupActivities(activities: ActivityItem[]): GroupedActivity[] {
   // Convert parlays to grouped entries
   for (const [slipId, legs] of parlayMap) {
     const first = legs[0];
+    // Derive parlay status from all legs (any LOST → LOST; any PENDING → PENDING;
+    // all WON → WON; else VOID). Using first.status alone mislabels parlays
+    // where the first leg won but a later leg lost.
+    const legStatuses = legs.map(l => l.status);
+    let parlayStatus: string;
+    if (legStatuses.some(s => s === 'LOST')) parlayStatus = 'LOST';
+    else if (legStatuses.some(s => s === 'PENDING')) parlayStatus = 'PENDING';
+    else if (legStatuses.every(s => s === 'WON')) parlayStatus = 'WON';
+    else parlayStatus = 'VOID';
     groups.push({
       type: 'parlay',
       key: slipId,
       bet_slip_id: slipId,
       username: first.username,
       user_id: first.user_id,
-      status: first.status,
+      status: parlayStatus,
       total_stake_tokens: first.total_stake_tokens,
       combined_odds: first.combined_odds,
       leg_count: first.leg_count,
