@@ -259,7 +259,7 @@ export function ParlayBuilder({
   const handleSubmit = async () => {
     const stakeAmount = parseInt(stake);
     if (!stakeAmount || stakeAmount < 100) {
-      toast.error(`Minimum stake is 100 tokens`);
+      toast.error(`Minimum entry is 100 tokens`);
       return;
     }
 
@@ -326,6 +326,14 @@ export function ParlayBuilder({
       // override-aware multiplier — settlement (settle-predictions) already
       // handles the -podium suffix shape for exact-order payouts.
       const predictions: any[] = [];
+      // Exact-position picks per podium leg, keyed by the synthetic
+      // selection_id. After the predictions insert we write these to
+      // podium_selections so settlement evaluates parlay podium legs with
+      // the same exact-order matching as standalone podium entries.
+      const podiumPicksBySelectionId = new Map<
+        string,
+        { first: string; second: string; third: string }
+      >();
       for (const leg of completeLegs) {
         const unitsInLeg =
           (leg.winner ? 1 : 0) +
@@ -354,6 +362,11 @@ export function ParlayBuilder({
 
         if (leg.podium.first && leg.podium.second && leg.podium.third) {
           const marketId = leg.podiumMarketId ?? leg.podium.first.market_id;
+          podiumPicksBySelectionId.set(`${marketId}-podium`, {
+            first: leg.podium.first.athlete_id,
+            second: leg.podium.second.athlete_id,
+            third: leg.podium.third.athlete_id,
+          });
           predictions.push({
             user_id: userId,
             bet_slip_id: entryRecord.id,
@@ -400,11 +413,40 @@ export function ParlayBuilder({
         }
       }
 
-      const { error: predError } = await supabase
+      const { data: insertedPredictions, error: predError } = await supabase
         .from('predictions')
-        .insert(predictions);
+        .insert(predictions)
+        .select('id, selection_id, market_type');
 
       if (predError) throw predError;
+
+      // CRITICAL: write exact-position podium_selections for podium legs.
+      // Settlement matches parlay podium legs via podium_selections rows
+      // (same exact-order path as standalone podium entries). Without these
+      // rows the synthetic '<marketId>-podium' selection_id can never match
+      // a winning selection and the leg — and therefore the whole parlay —
+      // always grades LOST.
+      const podiumSelectionRows: Array<{
+        prediction_id: string;
+        athlete_id: string;
+        position_predicted: number;
+      }> = [];
+      for (const p of insertedPredictions ?? []) {
+        if (p.market_type !== 'PODIUM') continue;
+        const picks = podiumPicksBySelectionId.get(p.selection_id);
+        if (!picks) continue;
+        podiumSelectionRows.push(
+          { prediction_id: p.id, athlete_id: picks.first, position_predicted: 1 },
+          { prediction_id: p.id, athlete_id: picks.second, position_predicted: 2 },
+          { prediction_id: p.id, athlete_id: picks.third, position_predicted: 3 },
+        );
+      }
+      if (podiumSelectionRows.length > 0) {
+        const { error: podiumSelError } = await supabase
+          .from('podium_selections')
+          .insert(podiumSelectionRows);
+        if (podiumSelError) throw podiumSelError;
+      }
 
       // Fetch current wallet state
       const { data: walletData, error: walletFetchError } = await supabase
@@ -973,7 +1015,7 @@ export function ParlayBuilder({
             disabled={completeLegs.length === 0}
             className="flex-1"
           >
-            Set Stake & Confirm <ArrowRight className="ml-2 w-4 h-4" />
+            Set Entry & Confirm <ArrowRight className="ml-2 w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -991,7 +1033,7 @@ export function ParlayBuilder({
     return (
       <div className="space-y-6">
         <div>
-          <h3 className="text-lg font-semibold mb-4">Set Your Stake</h3>
+          <h3 className="text-lg font-semibold mb-4">Set Your Entry</h3>
           
           <div className="space-y-4">
             <div className="bg-muted/50 rounded-lg p-3 space-y-2">
@@ -1010,12 +1052,12 @@ export function ParlayBuilder({
             </div>
 
             <div className="space-y-2">
-              <Label>Stake Amount</Label>
+              <Label>Entry Amount</Label>
               <Input
                 type="number"
                 value={stake}
                 onChange={(e) => setStake(e.target.value)}
-                placeholder="Enter stake amount"
+                placeholder="Enter token amount"
                 max={PARLAY_CONFIG.MAX_STAKE}
               />
               <div className="flex gap-2">
@@ -1034,7 +1076,7 @@ export function ParlayBuilder({
 
             {stakeAmount > 0 && (
               <div className="bg-primary/10 rounded-lg p-4">
-                <div className="text-sm text-muted-foreground">Potential Payout</div>
+                <div className="text-sm text-muted-foreground">Projected Reward</div>
                 <div className="text-2xl font-bold">{potentialPayout.toLocaleString()} tokens</div>
               </div>
             )}

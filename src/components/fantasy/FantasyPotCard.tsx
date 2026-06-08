@@ -138,7 +138,7 @@ export const FantasyPotCard = ({ pot, onJoin, walletBalance }: FantasyPotCardPro
         </div>
         <div className="text-center p-2 bg-background/50 rounded-lg">
           <Trophy className="w-4 h-4 mx-auto mb-1 text-primary" />
-          <p className="text-xs text-muted-foreground">Payout</p>
+          <p className="text-xs text-muted-foreground">Projected Reward</p>
           <p className="font-bold text-xs">{getPayoutLabel(pot.payout_structure)}</p>
         </div>
       </div>

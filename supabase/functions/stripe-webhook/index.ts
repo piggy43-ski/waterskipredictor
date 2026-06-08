@@ -154,23 +154,17 @@ async function processReferralBonus(
     referrerRewardType: referralCode.reward_type
   });
 
-  // Credit bonus tokens to user's earned_tokens
+  // Credit bonus tokens to user's earned_tokens (atomic increment via RPC)
   if (bonusTokens > 0) {
-    const { data: wallet, error: walletError } = await supabaseClient
-      .from('token_wallets')
-      .select('earned_tokens')
-      .eq('user_id', userId)
-      .single();
+    const { data: bonusRows, error: bonusError } = await supabaseClient
+      .rpc('increment_wallet_tokens', {
+        p_user_id: userId,
+        p_purchased_delta: 0,
+        p_earned_delta: bonusTokens,
+      });
 
-    if (!walletError && wallet) {
-      const newEarned = (wallet.earned_tokens || 0) + bonusTokens;
-      await supabaseClient
-        .from('token_wallets')
-        .update({ 
-          earned_tokens: newEarned,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', userId);
+    if (!bonusError) {
+      const newEarned = bonusRows?.[0]?.earned_tokens ?? bonusTokens;
 
       // Log bonus transaction
       await supabaseClient
@@ -186,6 +180,8 @@ async function processReferralBonus(
         });
 
       logStep("Bonus tokens credited to user", { bonusTokens, newEarned });
+    } else {
+      logStep("Error crediting bonus tokens", { error: bonusError.message });
     }
   }
 
@@ -218,22 +214,17 @@ async function processReferralBonus(
   }
 
   // If reward type is tokens AND there's an owner, auto-credit tokens to referrer
+  // (atomic increment via RPC)
   if (referralCode.reward_type === 'tokens' && referralCode.owner_user_id && referrerRewardTokens > 0) {
-    const { data: referrerWallet } = await supabaseClient
-      .from('token_wallets')
-      .select('earned_tokens')
-      .eq('user_id', referralCode.owner_user_id)
-      .single();
+    const { data: referrerRows, error: referrerError } = await supabaseClient
+      .rpc('increment_wallet_tokens', {
+        p_user_id: referralCode.owner_user_id,
+        p_purchased_delta: 0,
+        p_earned_delta: referrerRewardTokens,
+      });
 
-    if (referrerWallet) {
-      const newReferrerEarned = (referrerWallet.earned_tokens || 0) + referrerRewardTokens;
-      await supabaseClient
-        .from('token_wallets')
-        .update({ 
-          earned_tokens: newReferrerEarned,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', referralCode.owner_user_id);
+    if (!referrerError) {
+      const newReferrerEarned = referrerRows?.[0]?.earned_tokens ?? referrerRewardTokens;
 
       // Log referrer reward transaction
       await supabaseClient
@@ -255,6 +246,8 @@ async function processReferralBonus(
         .eq('purchase_id', paymentIntentId);
 
       logStep("Referrer tokens credited", { referrerRewardTokens, referrerUserId: referralCode.owner_user_id });
+    } else {
+      logStep("Error crediting referrer tokens", { error: referrerError.message });
     }
   }
 
@@ -322,40 +315,51 @@ serve(async (req) => {
         { auth: { persistSession: false } }
       );
 
-      // Get current wallet balance
-      const { data: wallet, error: walletError } = await supabaseClient
-        .from("token_wallets")
-        .select("purchased_tokens, earned_tokens")
-        .eq("user_id", userId)
-        .maybeSingle();
+      // === IDEMPOTENCY CLAIM ===
+      // Stripe retries webhooks and can deliver the same event more than
+      // once. Claim event.id BEFORE any crediting; a duplicate insert hits
+      // the primary key and we acknowledge with 200 without re-crediting.
+      const { error: claimError } = await supabaseClient
+        .from("processed_stripe_events")
+        .insert({ event_id: event.id, event_type: event.type });
 
-      if (walletError) {
-        logStep("Error fetching wallet", { error: walletError.message });
-        throw new Error(`Failed to fetch wallet: ${walletError.message}`);
+      if (claimError) {
+        if (claimError.code === "23505") {
+          logStep("Duplicate event — already processed, skipping", { eventId: event.id });
+          return new Response(JSON.stringify({ received: true, duplicate: true }), {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          });
+        }
+        // Any other claim failure: fail the webhook so Stripe retries.
+        // (Crediting without a claim row would reopen the double-credit hole.)
+        logStep("Idempotency claim failed", { error: claimError.message });
+        throw new Error(`Idempotency claim failed: ${claimError.message}`);
       }
 
-      const currentPurchased = wallet?.purchased_tokens ?? 0;
-      const currentEarned = wallet?.earned_tokens ?? 0;
-      const newPurchased = currentPurchased + tokenAmount;
-      const newBalance = newPurchased + currentEarned;
+      // === ATOMIC WALLET CREDIT ===
+      // Single-statement UPSERT via RPC — no read-modify-write race.
+      const { data: creditRows, error: creditError } = await supabaseClient
+        .rpc("increment_wallet_tokens", {
+          p_user_id: userId,
+          p_purchased_delta: tokenAmount,
+          p_earned_delta: 0,
+        });
 
-      logStep("Wallet calculation", { currentPurchased, tokenAmount, newPurchased, newBalance });
-
-      // Update wallet
-      const { error: updateError } = await supabaseClient
-        .from("token_wallets")
-        .update({ 
-          purchased_tokens: newPurchased,
-          updated_at: new Date().toISOString()
-        })
-        .eq("user_id", userId);
-
-      if (updateError) {
-        logStep("Error updating wallet", { error: updateError.message });
-        throw new Error(`Failed to update wallet: ${updateError.message}`);
+      if (creditError) {
+        // Roll back the idempotency claim so a Stripe retry can re-attempt.
+        await supabaseClient.from("processed_stripe_events").delete().eq("event_id", event.id);
+        logStep("Error crediting wallet", { error: creditError.message });
+        throw new Error(`Failed to credit wallet: ${creditError.message}`);
       }
 
-      logStep("Wallet updated successfully", { newPurchased });
+      const newPurchased = creditRows?.[0]?.purchased_tokens ?? tokenAmount;
+      const newEarned = creditRows?.[0]?.earned_tokens ?? 0;
+      const currentPurchased = newPurchased - tokenAmount;
+      const currentEarned = newEarned;
+      const newBalance = newPurchased + newEarned;
+
+      logStep("Wallet credited atomically", { newPurchased, newBalance });
 
       // Create transaction record
       const { error: transactionError } = await supabaseClient
@@ -399,18 +403,16 @@ serve(async (req) => {
         logStep("Deposit logged to ledger", { amountUsd: depositAmountUsd });
       }
 
-      // Update profile lifetime_deposited
-      const { data: profile } = await supabaseClient
-        .from("profiles")
-        .select("lifetime_deposited")
-        .eq("id", userId)
-        .single();
-
-      const currentDeposited = profile?.lifetime_deposited ?? 0;
-      await supabaseClient
-        .from("profiles")
-        .update({ lifetime_deposited: currentDeposited + tokenAmount })
-        .eq("id", userId);
+      // Update profile lifetime_deposited (atomic increment via RPC)
+      const { error: depositedError } = await supabaseClient
+        .rpc("increment_lifetime_deposited", {
+          p_user_id: userId,
+          p_amount: tokenAmount,
+        });
+      if (depositedError) {
+        logStep("Error incrementing lifetime_deposited", { error: depositedError.message });
+        // Non-critical — don't throw
+      }
 
       // === PROCESS REFERRAL BONUS (first purchase only) ===
       const referralResult = await processReferralBonus(

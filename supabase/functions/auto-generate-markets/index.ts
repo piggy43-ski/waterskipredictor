@@ -244,7 +244,7 @@ Deno.serve(async (req) => {
         // Call generate-market-odds directly
         const { data: oddsData, error: oddsError } = await supabase.functions.invoke(
           'generate-market-odds',
-          { body: { market_id: marketId } }
+          { body: { market_id: marketId }, headers: { 'x-internal-secret': Deno.env.get('INTERNAL_FN_SECRET') ?? '' } }
         );
 
         if (oddsError) {

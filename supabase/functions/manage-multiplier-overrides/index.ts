@@ -671,7 +671,8 @@ Deno.serve(async (req) => {
 
         // 2. Call generate-market-odds to regenerate
         const { data: genData, error: genError } = await supabase.functions.invoke('generate-market-odds', {
-          body: { market_id, force: true, debug: true }
+          body: { market_id, force: true, debug: true },
+          headers: { 'x-internal-secret': Deno.env.get('INTERNAL_FN_SECRET') ?? '' }
         });
 
         if (genError) {

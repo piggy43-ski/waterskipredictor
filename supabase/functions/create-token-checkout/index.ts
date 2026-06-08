@@ -43,6 +43,59 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
+    // === PURCHASE CAPS ===
+    // Single purchase: 32,500 tokens (largest package).
+    // Daily total: 50,000 tokens, rolling per calendar day UTC.
+    // These were previously config rows only ("NOT wired into any logic yet")
+    // — enforced here so the advertised limits are real.
+    const SINGLE_PURCHASE_CAP_TOKENS = 32500;
+    const DAILY_PURCHASE_CAP_TOKENS = 50000;
+
+    const requestedTokens = parseInt(String(tokenAmount), 10);
+    if (!Number.isFinite(requestedTokens) || requestedTokens <= 0) {
+      throw new Error("Invalid token amount");
+    }
+    if (requestedTokens > SINGLE_PURCHASE_CAP_TOKENS) {
+      return new Response(JSON.stringify({
+        error: `Single purchase limit is ${SINGLE_PURCHASE_CAP_TOKENS.toLocaleString()} tokens.`,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 });
+    }
+
+    // Sum today's completed deposits (service role — deposit_ledger is not
+    // client-readable).
+    const serviceClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
+    );
+    const startOfDayUtc = new Date();
+    startOfDayUtc.setUTCHours(0, 0, 0, 0);
+    const { data: todayDeposits, error: depositsError } = await serviceClient
+      .from("deposit_ledger")
+      .select("tokens_amount")
+      .eq("user_id", user.id)
+      .eq("transaction_type", "deposit")
+      .gte("created_at", startOfDayUtc.toISOString());
+
+    if (depositsError) {
+      // Fail closed on cap-check errors: blocking a purchase is recoverable,
+      // an uncapped purchase is not.
+      logStep("Daily cap check failed", { error: depositsError.message });
+      throw new Error("Unable to verify purchase limits. Please try again.");
+    }
+
+    const purchasedToday = (todayDeposits ?? []).reduce(
+      (sum, row) => sum + (row.tokens_amount ?? 0), 0
+    );
+    if (purchasedToday + requestedTokens > DAILY_PURCHASE_CAP_TOKENS) {
+      const remaining = Math.max(0, DAILY_PURCHASE_CAP_TOKENS - purchasedToday);
+      logStep("Daily cap exceeded", { purchasedToday, requestedTokens, remaining });
+      return new Response(JSON.stringify({
+        error: `Daily purchase limit is ${DAILY_PURCHASE_CAP_TOKENS.toLocaleString()} tokens. You have ${remaining.toLocaleString()} remaining today.`,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 });
+    }
+    logStep("Purchase caps OK", { purchasedToday, requestedTokens });
+
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
 
