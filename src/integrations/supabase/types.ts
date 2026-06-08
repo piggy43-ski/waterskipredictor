@@ -2146,6 +2146,24 @@ export type Database = {
           },
         ]
       }
+      processed_stripe_events: {
+        Row: {
+          event_id: string
+          event_type: string | null
+          processed_at: string
+        }
+        Insert: {
+          event_id: string
+          event_type?: string | null
+          processed_at?: string
+        }
+        Update: {
+          event_id?: string
+          event_type?: string | null
+          processed_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           age_confirmed: boolean | null
@@ -3607,6 +3625,21 @@ export type Database = {
       increment_earned_tokens: {
         Args: { amount: number; user_id_param: string }
         Returns: undefined
+      }
+      increment_lifetime_deposited: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
+      increment_wallet_tokens: {
+        Args: {
+          p_earned_delta?: number
+          p_purchased_delta?: number
+          p_user_id: string
+        }
+        Returns: {
+          earned_tokens: number
+          purchased_tokens: number
+        }[]
       }
       is_pot_public: { Args: { _pot_id: string }; Returns: boolean }
       notify_admins_redemption_new: {
