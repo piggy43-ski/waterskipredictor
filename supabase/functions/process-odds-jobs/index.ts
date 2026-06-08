@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
         // 3. Run Monte Carlo via generate-market-odds function
         const { data: oddsData, error: oddsError } = await supabase.functions.invoke(
           'generate-market-odds',
-          { body: { market_id: job.market_id } }
+          { body: { market_id: job.market_id }, headers: { 'x-internal-secret': Deno.env.get('INTERNAL_FN_SECRET') ?? '' } }
         );
 
         if (oddsError) {

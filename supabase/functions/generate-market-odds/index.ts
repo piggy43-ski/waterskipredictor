@@ -274,15 +274,23 @@ function getWinnerWeight(fieldRank: number): number {
 }
 
 function calculateWinnerBaseProbabilities(athletes: Athlete[]): { probs: number[], fieldRanks: Map<string, number>, strengths: number[] } {
-  // Sort by rating first (higher = better), then world rank as tiebreaker
+  // Sort RANK-PRIMARY (lower = better), rating as tiebreaker.
+  // worldRank here is already the best available current rank
+  // (entry discipline_rank || athletes.current_rank_* || seed_rank).
+  // Rating (base_strength + form_boost) is stale for the 2026 season and
+  // previously demoted true favorites to field rank 8+ (priced up to 20x).
+  // This matches the rank-primary sort in src/utils/probabilityEngine.ts.
   const sorted = [...athletes].sort((a, b) => {
-    // Primary sort: rating (higher = better)
-    const ratingDiff = (b.rating ?? 70) - (a.rating ?? 70);
-    if (Math.abs(ratingDiff) >= 0.5) return ratingDiff;
-    // Tiebreaker: world rank (lower = better)
     const aRank = a.worldRank ?? Infinity;
     const bRank = b.worldRank ?? Infinity;
-    return aRank - bRank;
+    // Primary: current rank (lower = better); athletes with a known rank
+    // always sort ahead of athletes without one.
+    if (aRank !== bRank) return aRank - bRank;
+    // Tiebreaker: rating (higher = better)
+    const ratingDiff = (b.rating ?? 70) - (a.rating ?? 70);
+    if (ratingDiff !== 0) return ratingDiff;
+    // Deterministic final tiebreaker
+    return a.id.localeCompare(b.id);
   });
   
   // Calculate strength scores (rating-based z-scores + small rank influence)
@@ -594,14 +602,24 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Admin-only guard
+    // Admin-only guard — with internal-call bypass.
+    // Machine-to-machine callers (process-odds-jobs, auto-generate-markets,
+    // manage-probability-overrides, manage-multiplier-overrides) authenticate
+    // via the x-internal-secret header instead of a user JWT, because
+    // auth.getUser(service_role_key) resolves to no user and previously
+    // 401'd every automated odds refresh, leaving stale odds live.
     {
-      const _t = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-      if (!_t) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      const { data: { user: _u } } = await supabase.auth.getUser(_t);
-      if (!_u) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      const { data: _r } = await supabase.from("user_roles").select("role").eq("user_id", _u.id).eq("role", "admin").maybeSingle();
-      if (!_r) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const internalSecret = Deno.env.get("INTERNAL_FN_SECRET") ?? "";
+      const providedSecret = req.headers.get("x-internal-secret") ?? "";
+      const isInternalCall = internalSecret.length > 0 && providedSecret === internalSecret;
+      if (!isInternalCall) {
+        const _t = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+        if (!_t) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        const { data: { user: _u } } = await supabase.auth.getUser(_t);
+        if (!_u) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        const { data: _r } = await supabase.from("user_roles").select("role").eq("user_id", _u.id).eq("role", "admin").maybeSingle();
+        if (!_r) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
 

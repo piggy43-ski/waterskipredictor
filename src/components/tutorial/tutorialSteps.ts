@@ -77,7 +77,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'nav-rewards',
     target: '#nav-rewards',
     title: 'Redeem Rewards',
-    content: 'Redeem tokens for rewards like gear, lessons, or experiences. Rewards only — no cash out.',
+    content: 'Redeem tokens for rewards like gear, lessons, or experiences. Rewards only — tokens have no cash value.',
     placement: 'top',
     route: '/',
   },

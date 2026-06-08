@@ -94,7 +94,7 @@ const Onboarding = () => {
             <div className="space-y-4 text-left">
               {[
                 { n: '1', icon: Target, title: 'Pick an event', body: 'Browse upcoming pro tournaments.' },
-                { n: '2', icon: MousePointerClick, title: 'Enter your prediction', body: 'Stake tokens on who performs.' },
+                { n: '2', icon: MousePointerClick, title: 'Enter your prediction', body: 'Enter tokens on who performs.' },
                 { n: '3', icon: TrendingUp, title: 'Climb the leaderboard', body: 'Earn projected rewards on accurate calls.' },
               ].map(({ n, icon: Icon, title, body }) => (
                 <div

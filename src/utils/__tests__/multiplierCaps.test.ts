@@ -25,11 +25,13 @@ describe("multiplierCaps - rank caps", () => {
       expect(validateMultiplier("WINNER", 25.01, 99).valid).toBe(false);
       expect(MULTIPLIER_CAPS.WINNER.max).toBe(25.0);
     });
-    it("WINNER rank 4–7 tier cap = 5.0", () => {
-      expect(getRankCap("WINNER", 4)).toBe(5.0);
-      expect(getRankCap("WINNER", 7)).toBe(5.0);
-      expect(validateMultiplier("WINNER", 5.01, 4).valid).toBe(false);
-      expect(validateMultiplier("WINNER", 5.0, 7).valid).toBe(true);
+    it("WINNER per-rank mid-tier caps (4–7)", () => {
+      expect(getRankCap("WINNER", 4)).toBe(4.0);
+      expect(getRankCap("WINNER", 5)).toBe(4.75);
+      expect(getRankCap("WINNER", 6)).toBe(5.5);
+      expect(getRankCap("WINNER", 7)).toBe(6.5);
+      expect(validateMultiplier("WINNER", 4.01, 4).valid).toBe(false);
+      expect(validateMultiplier("WINNER", 6.5, 7).valid).toBe(true);
     });
     it("WINNER rank 8+ tier cap = 20.0", () => {
       expect(getRankCap("WINNER", 8)).toBe(20.0);
@@ -51,8 +53,11 @@ describe("multiplierCaps - rank caps", () => {
       expect(validateMultiplier("PODIUM", 2.21, 3).valid).toBe(false);
       expect(validateMultiplier("PODIUM", 2.2, 3).valid).toBe(true);
     });
-    it("PODIUM tier caps: 4-7 = 4.0, 8+ = 10.0", () => {
-      expect(getRankCap("PODIUM", 5)).toBe(4.0);
+    it("PODIUM per-rank mid-tier caps (4–7) and 8+ = 10.0", () => {
+      expect(getRankCap("PODIUM", 4)).toBe(3.25);
+      expect(getRankCap("PODIUM", 5)).toBe(3.75);
+      expect(getRankCap("PODIUM", 6)).toBe(4.25);
+      expect(getRankCap("PODIUM", 7)).toBe(5.0);
       expect(getRankCap("PODIUM", 10)).toBe(10.0);
     });
     it("hard cap PODIUM = 12.0x", () => {
@@ -73,8 +78,11 @@ describe("multiplierCaps - rank caps", () => {
       expect(validateMultiplier("HIGHEST_SCORE", 3.41, 3).valid).toBe(false);
       expect(validateMultiplier("HIGHEST_SCORE", 3.4, 3).valid).toBe(true);
     });
-    it("HIGHEST_SCORE tier caps: 4-7 = 5.5, 8+ = 18.0", () => {
-      expect(getRankCap("HIGHEST_SCORE", 6)).toBe(5.5);
+    it("HIGHEST_SCORE per-rank mid-tier caps (4–7) and 8+ = 18.0", () => {
+      expect(getRankCap("HIGHEST_SCORE", 4)).toBe(4.5);
+      expect(getRankCap("HIGHEST_SCORE", 5)).toBe(5.25);
+      expect(getRankCap("HIGHEST_SCORE", 6)).toBe(6.0);
+      expect(getRankCap("HIGHEST_SCORE", 7)).toBe(7.0);
       expect(getRankCap("HIGHEST_SCORE", 9)).toBe(18.0);
     });
     it("hard cap HIGHEST_SCORE = 22.0x", () => {
@@ -87,17 +95,20 @@ describe("multiplierCaps - rank caps", () => {
     expect(RANK_CAPS.WINNER[1]).toBe(1.5);
     expect(RANK_CAPS.WINNER[2]).toBe(2.25);
     expect(RANK_CAPS.WINNER[3]).toBe(3.0);
-    expect(RANK_CAPS.WINNER['4-7']).toBe(5.0);
+    expect(RANK_CAPS.WINNER[4]).toBe(4.0);
+    expect(RANK_CAPS.WINNER[7]).toBe(6.5);
     expect(RANK_CAPS.WINNER['8+']).toBe(20.0);
     expect(RANK_CAPS.PODIUM[1]).toBe(1.25);
     expect(RANK_CAPS.PODIUM[2]).toBe(1.75);
     expect(RANK_CAPS.PODIUM[3]).toBe(2.2);
-    expect(RANK_CAPS.PODIUM['4-7']).toBe(4.0);
+    expect(RANK_CAPS.PODIUM[4]).toBe(3.25);
+    expect(RANK_CAPS.PODIUM[7]).toBe(5.0);
     expect(RANK_CAPS.PODIUM['8+']).toBe(10.0);
     expect(RANK_CAPS.HIGHEST_SCORE[1]).toBe(1.8);
     expect(RANK_CAPS.HIGHEST_SCORE[2]).toBe(2.5);
     expect(RANK_CAPS.HIGHEST_SCORE[3]).toBe(3.4);
-    expect(RANK_CAPS.HIGHEST_SCORE['4-7']).toBe(5.5);
+    expect(RANK_CAPS.HIGHEST_SCORE[4]).toBe(4.5);
+    expect(RANK_CAPS.HIGHEST_SCORE[7]).toBe(7.0);
     expect(RANK_CAPS.HIGHEST_SCORE['8+']).toBe(18.0);
   });
 

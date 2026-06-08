@@ -493,7 +493,8 @@ Deno.serve(async (req) => {
     if (action === 'apply') {
       // Invoke generate-market-odds to recalculate multipliers from probabilities
       const { error: invokeError } = await supabase.functions.invoke('generate-market-odds', {
-        body: { market_id, force: true }
+        body: { market_id, force: true },
+        headers: { 'x-internal-secret': Deno.env.get('INTERNAL_FN_SECRET') ?? '' }
       });
 
       if (invokeError) {
