@@ -86,6 +86,34 @@ const generateAnnouncementHtml = (username: string, appUrl: string, tournamentPa
 </html>
 `;
 
+
+const generateCustomHtml = (username: string, appUrl: string, emoji: string, cardHtml: string) => {
+  const card = (cardHtml || "")
+    .replace(/\{\{username\}\}/g, username || "there")
+    .replace(/\{\{appUrl\}\}/g, appUrl);
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#000000;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#000000;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
+        <tr><td align="center" style="padding-bottom:28px;"><span style="font-size:44px;">${emoji || "🏆"}</span></td></tr>
+        <tr><td style="background:linear-gradient(135deg,#02141a 0%,#001920 100%);border-radius:16px;padding:40px;border:1px solid rgba(0,230,240,0.28);">
+          ${card}
+        </td></tr>
+        <tr><td style="padding-top:32px;text-align:center;">
+          <p style="color:#666;font-size:14px;margin:0;">WaterSki Predictor — Where Every Pass Matters</p>
+          <p style="color:#444;font-size:12px;margin:8px 0 0 0;">You're receiving this because you opted in to marketing emails.<br>To unsubscribe, update your email preferences in your profile settings.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -129,6 +157,12 @@ serve(async (req) => {
       : "/tournaments";
     const sendToAll = body.sendToAll === true;
     const campaignId = body.campaignId ?? "swiss-pro-slalom-2026";
+    // --- generic campaign overrides (backward compatible) ---
+    const customSubject: string | null = typeof body.subject === "string" ? body.subject : null;
+    const customEmoji: string = typeof body.emoji === "string" ? body.emoji : "🏆";
+    const customCardHtml: string | null = typeof body.cardHtml === "string" ? body.cardHtml : null;
+    const dedupeSubjectLike: string = typeof body.dedupeSubjectLike === "string" ? body.dedupeSubjectLike : "%Swiss Pro Slalom%";
+    const testEmail: string | null = typeof body.testEmail === "string" ? body.testEmail : null;
 
     // Fetch profiles with email preferences - respect marketing opt-in
     const { data: users, error: usersError } = await supabaseAdmin
@@ -147,7 +181,7 @@ serve(async (req) => {
       .select("recipient")
       .eq("email_type", "announcement")
       .in("status", ["sent", "failed"])
-      .like("subject", "%Swiss Pro Slalom%");
+      .like("subject", dedupeSubjectLike);
     
     const alreadySentSet = new Set((alreadySent || []).map((r: any) => r.recipient));
 
@@ -162,15 +196,18 @@ serve(async (req) => {
       return pref.marketing !== false;
     });
 
-    // Apply batch size (dedup handles resumption)
-    const batch = eligibleUsers.slice(0, batchSize);
-    const remaining = eligibleUsers.length - batch.length;
+    // TEST MODE: send only to testEmail (skip dedup + logging) for a visual check.
+    const isTest = !!testEmail;
+    const batch = isTest
+      ? [{ id: null, email: testEmail, username: "Rizzi" }]
+      : eligibleUsers.slice(0, batchSize);
+    const remaining = isTest ? 0 : (eligibleUsers.length - batch.length);
 
     console.log(`Announcement: ${eligibleUsers.length} eligible, sending batch of ${batch.length}`);
 
     const fromEmail = "noreply@waterskipredictor.com";
     const appUrl = Deno.env.get("APP_URL") || "https://waterskipredictor.lovable.app";
-    const subject = "🎿 Swiss Pro Slalom is Open for Predictions!";
+    const subject = customSubject ?? "🎿 Swiss Pro Slalom is Open for Predictions!";
 
     let sent = 0;
     const failures: string[] = [];
@@ -179,11 +216,9 @@ serve(async (req) => {
       try {
         await delay(800);
 
-        const html = generateAnnouncementHtml(
-          user.username || user.email.split("@")[0],
-          appUrl,
-          tournamentPath
-        );
+        const html = customCardHtml
+          ? generateCustomHtml(user.username || user.email.split("@")[0], appUrl, customEmoji, customCardHtml)
+          : generateAnnouncementHtml(user.username || user.email.split("@")[0], appUrl, tournamentPath);
 
         const { data: emailResult, error: emailError } = await resend.emails.send({
           from: `WaterSki Predictor <${fromEmail}>`,
@@ -196,7 +231,7 @@ serve(async (req) => {
           console.error(`Email failed for ${user.email}:`, emailError);
           failures.push(user.email);
 
-          await supabaseAdmin.from("email_logs").insert({
+          if (!isTest) await supabaseAdmin.from("email_logs").insert({
             user_id: user.id,
             recipient: user.email,
             email_type: "announcement",
@@ -208,7 +243,7 @@ serve(async (req) => {
           sent++;
           console.log(`Sent to ${user.email}`);
 
-          await supabaseAdmin.from("email_logs").insert({
+          if (!isTest) await supabaseAdmin.from("email_logs").insert({
             user_id: user.id,
             recipient: user.email,
             email_type: "announcement",
