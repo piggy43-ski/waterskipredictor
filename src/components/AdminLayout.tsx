@@ -22,6 +22,7 @@ const navItems = [
   { path: '/admin/all-transactions', label: 'All Transactions', icon: History },
   { path: '/admin/all-predictions', label: 'All Predictions', icon: Target },
   { path: '/admin/referrals', label: 'Referral Codes', icon: Share2 },
+  { path: '/admin/growth', label: 'Growth', icon: TrendingUp },
   { path: '/admin/athletes', label: 'Athletes', icon: Users },
   { path: '/admin/rankings-sync', label: 'Rankings Auto-Sync', icon: TrendingUp },
   { path: '/admin/rankings-import', label: 'Manual Import', icon: TrendingUp },
