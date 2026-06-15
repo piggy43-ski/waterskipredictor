@@ -126,11 +126,14 @@ export default function AdminDashboard() {
     },
   });
 
-  const { data: pendingPredictions } = useQuery({
-    queryKey: ['admin-pending-predictions'],
+  const { data: pendingSlips } = useQuery({
+    queryKey: ['admin-pending-slips'],
     queryFn: async () => {
+      // Real obligations live at the SLIP level (money is paid per slip).
+      // Child prediction rows can be stale 'PENDING' on already-settled slips
+      // (parlay/display bug), so we count unsettled slips here, not predictions.
       const { count, error } = await supabase
-        .from('predictions')
+        .from('bet_slips')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'PENDING');
       
@@ -216,7 +219,7 @@ export default function AdminDashboard() {
                 {housePL.pl >= 0 ? 'UP ' : 'DOWN '}{Math.abs(housePL.pl).toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Collected from lost entries {housePL.collected.toLocaleString()} &middot; paid to winners net {housePL.paidNet.toLocaleString()}. Tokens are play credit — real cost is only rewards that get redeemed.{pendingPredictions ? ` ${pendingPredictions} predictions still awaiting settlement (excluded from this figure).` : ''}
+                Collected from lost entries {housePL.collected.toLocaleString()} &middot; paid to winners net {housePL.paidNet.toLocaleString()}. Tokens are play credit — real cost is only rewards that get redeemed.{pendingSlips ? ` ${pendingSlips} slip(s) still awaiting settlement.` : ''}
               </p>
             </CardContent>
           </Card>
@@ -252,7 +255,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalPredictions}</div>
-              <p className="text-xs text-muted-foreground">{pendingPredictions} pending settlement</p>
+              <p className="text-xs text-muted-foreground">{pendingSlips} slips awaiting settlement</p>
             </CardContent>
           </Card>
 
