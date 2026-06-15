@@ -22,6 +22,8 @@ import { SettlementExplanation, type SettlementData } from '@/components/settlem
 import { ShareModal } from '@/components/ShareModal';
 import { useUsername } from '@/hooks/useUsername';
 import type { ShareCardProps, ShareCardSelection } from '@/components/ShareCard';
+import { EventShareModal } from '@/components/EventShareModal';
+import type { EventShareCardProps, EventShareRow } from '@/components/EventShareCard';
 
 // Prediction entry — stored in the `bet_slips` DB table (legacy name, treated as "entries" in code)
 interface PredictionEntry {
@@ -101,6 +103,7 @@ const Predictions = () => {
   const [viewMode, setViewMode] = useState<'flat' | 'tournament'>('flat');
   const username = useUsername();
   const [shareEntry, setShareEntry] = useState<PredictionEntry | null>(null);
+  const [shareTournament, setShareTournament] = useState<PredictionEntry[] | null>(null);
   
   // Confirmation from just-placed prediction
   const confirmation = location.state?.confirmation as {
@@ -903,6 +906,12 @@ const Predictions = () => {
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="space-y-3 pt-2">
+                        <button
+                          onClick={() => setShareTournament(entries)}
+                          className="w-full flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 text-primary py-2.5 text-sm font-semibold uppercase tracking-wide press-scale"
+                        >
+                          <Share2 className="w-4 h-4" /> Share my card
+                        </button>
                         {entries.map(entry => (
                           <EntryCard key={entry.id} entry={entry} isActive />
                         ))}
@@ -950,6 +959,12 @@ const Predictions = () => {
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="space-y-3 pt-2">
+                        <button
+                          onClick={() => setShareTournament(entries)}
+                          className="w-full flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 text-primary py-2.5 text-sm font-semibold uppercase tracking-wide press-scale"
+                        >
+                          <Share2 className="w-4 h-4" /> Share my card
+                        </button>
                         {entries.map(entry => (
                           <EntryCard key={entry.id} entry={entry} isActive={false} />
                         ))}
@@ -1073,11 +1088,68 @@ const Predictions = () => {
           {...buildShareCardPropsFromEntry(shareEntry)}
         />
       )}
+
+      {shareTournament && shareTournament.length > 0 && (
+        <EventShareModal
+          open={!!shareTournament}
+          onOpenChange={(o) => !o && setShareTournament(null)}
+          username={username || 'player'}
+          shareUrl={`${window.location.origin}/tournaments/${shareTournament[0]?.tournament_id}`}
+          {...buildEventShareProps(shareTournament)}
+        />
+      )}
     </div>
   );
 };
 
 export default Predictions;
+
+function buildEventShareProps(entries: PredictionEntry[]): Omit<EventShareCardProps, 'username'> {
+  const MARKET: Record<string, string> = { WINNER: 'WIN', PODIUM: 'POD', HIGHEST_SCORE: 'HIGH' };
+  const rowsAll: EventShareRow[] = [];
+  let parlayCount = 0, pickCount = 0, totalEntry = 0, totalReward = 0, anyPending = false;
+  for (const e of entries) {
+    const legs = e.legs ?? [];
+    totalEntry += e.total_stake_tokens || 0;
+    if (e.status === 'PENDING') { anyPending = true; totalReward += e.potential_payout_tokens || 0; }
+    else totalReward += e.actual_payout_tokens || 0;
+    pickCount += Math.max(1, legs.length);
+    if (legs.length > 1) {
+      parlayCount++;
+      const discs = [...new Set(legs.map((l) => (l.discipline || '').toUpperCase()).filter(Boolean))];
+      rowsAll.push({ chip: `PARLAY x${legs.length}`, text: discs.join(' + ') || 'MULTI', mult: e.total_odds_decimal });
+    } else {
+      const leg = legs[0];
+      if (!leg) { rowsAll.push({ chip: 'PICK', text: '-', mult: e.total_odds_decimal }); continue; }
+      const disc = (leg.discipline || '').toUpperCase();
+      let who = leg.athlete_name || '';
+      if (leg.market_type === 'PODIUM' && leg.podium_selections?.length) {
+        who = [...leg.podium_selections]
+          .sort((a, b) => a.position_predicted - b.position_predicted)
+          .map((pp) => (pp.athletes?.name || '').split(/\s+/)[0])
+          .join(' / ');
+      }
+      rowsAll.push({ chip: MARKET[leg.market_type] || 'PICK', text: `${who}${disc ? ` \u00b7 ${disc}` : ''}`, mult: leg.decimal_odds });
+    }
+  }
+  const CAP = 12;
+  const first = entries[0];
+  const dateLabel = first?.tournament_start_datetime
+    ? new Date(first.tournament_start_datetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : undefined;
+  return {
+    tournamentName: first?.tournament_name || 'My Card',
+    dateLabel,
+    pickCount,
+    entryCount: entries.length,
+    parlayCount,
+    totalEntryTokens: totalEntry,
+    totalProjectedReward: totalReward,
+    settled: !anyPending,
+    rows: rowsAll.slice(0, CAP),
+    moreCount: Math.max(0, rowsAll.length - CAP),
+  };
+}
 
 function buildShareCardPropsFromEntry(
   entry: PredictionEntry,
