@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trophy, Users, FileCheck, Gift, ArrowRight, Mail, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Trophy, Users, FileCheck, Gift, ArrowRight, Mail, CheckCircle2, XCircle, Loader2 , DollarSign} from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { applyDynamicStatus } from '@/utils/tournamentStatus';
@@ -92,6 +92,25 @@ export default function AdminDashboard() {
       
       if (error) throw error;
       return count || 0;
+    },
+  });
+
+  const { data: housePL } = useQuery({
+    queryKey: ['admin-house-pl'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bet_slips')
+        .select('status, total_stake_tokens, actual_payout_tokens');
+      if (error) throw error;
+      let collected = 0, paidNet = 0;
+      (data || []).forEach((s: any) => {
+        const st = (s.status || '').toUpperCase();
+        const stake = s.total_stake_tokens || 0;
+        const pay = s.actual_payout_tokens || 0;
+        if (st === 'LOST') collected += stake;
+        else if (st === 'WON') paidNet += (pay - stake);
+      });
+      return { pl: collected - paidNet, collected, paidNet };
     },
   });
 
@@ -186,6 +205,22 @@ export default function AdminDashboard() {
             Welcome to the admin panel. Manage tournaments, athletes, and predictions.
           </p>
         </div>
+
+        {housePL && (
+          <Card className={housePL.pl >= 0 ? 'border-emerald-500/40' : 'border-red-500/40'}>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                <DollarSign className="w-4 h-4" /> House P&amp;L &middot; settled (tokens)
+              </div>
+              <div className={housePL.pl >= 0 ? 'text-4xl font-bold tabular-nums text-emerald-400' : 'text-4xl font-bold tabular-nums text-red-400'}>
+                {housePL.pl >= 0 ? 'UP ' : 'DOWN '}{Math.abs(housePL.pl).toLocaleString()}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Collected from lost entries {housePL.collected.toLocaleString()} &middot; paid to winners net {housePL.paidNet.toLocaleString()}. Tokens are play credit — real cost is only rewards that get redeemed.{pendingPredictions ? ` ${pendingPredictions} predictions still awaiting settlement (excluded from this figure).` : ''}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
