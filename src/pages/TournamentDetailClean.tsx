@@ -26,7 +26,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SimulationDetails } from '@/components/SimulationDetails';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { SEO } from '@/components/SEO';
-import { ShareModal } from '@/components/ShareModal';
+import { EventShareModal } from '@/components/EventShareModal';
+import type { EventShareCardProps, EventShareRow } from '@/components/EventShareCard';
 import { useUsername } from '@/hooks/useUsername';
 import { Share2 } from 'lucide-react';
 
@@ -40,6 +41,42 @@ interface ValidationResult {
     maxExposurePct: number;
     remainingCapacity: number;
     isAtCapacity: boolean;
+  };
+}
+
+
+function buildEventShareFromPredictions(
+  rows: any[],
+  tournamentName: string,
+  dateLabel?: string,
+): Omit<EventShareCardProps, 'username'> {
+  const MARKET: Record<string, string> = { WINNER: 'WIN', PODIUM: 'POD', HIGHEST_SCORE: 'HIGH' };
+  const slipCounts: Record<string, number> = {};
+  rows.forEach((r) => { if (r.bet_slip_id) slipCounts[r.bet_slip_id] = (slipCounts[r.bet_slip_id] || 0) + 1; });
+  const entryCount = Object.keys(slipCounts).length || rows.length;
+  const parlayCount = Object.values(slipCounts).filter((c) => c > 1).length;
+  let totalEntry = 0, totalReward = 0, anyPending = false;
+  const rowsAll: EventShareRow[] = rows.map((r) => {
+    totalEntry += r.staked_tokens || 0;
+    if (r.status === 'PENDING') anyPending = true;
+    totalReward += (r.status === 'WON' ? (r.payout_tokens ?? r.potential_payout ?? 0) : (r.status === 'PENDING' ? (r.potential_payout || 0) : 0));
+    const disc = (r.discipline || '').toUpperCase();
+    const who = r.athlete_name || '-';
+    const mult = r.decimal_odds != null ? parseFloat(String(r.decimal_odds)) : undefined;
+    return { chip: MARKET[r.market_type] || 'PICK', text: `${who}${disc ? ` \u00b7 ${disc}` : ''}`, mult };
+  });
+  const CAP = 12;
+  return {
+    tournamentName,
+    dateLabel,
+    pickCount: rows.length,
+    entryCount,
+    parlayCount,
+    totalEntryTokens: totalEntry,
+    totalProjectedReward: totalReward,
+    settled: !anyPending,
+    rows: rowsAll.slice(0, CAP),
+    moreCount: Math.max(0, rowsAll.length - CAP),
   };
 }
 
@@ -1114,10 +1151,10 @@ const TournamentDetail = () => {
                 size="sm"
                 className="press-scale"
                 onClick={() => setShareOpen(true)}
-                aria-label="Share latest pick"
+                aria-label="Share my card"
               >
                 <Share2 className="w-4 h-4 mr-2" />
-                Share
+                Share my card
               </Button>
             </div>
           </div>
@@ -1493,40 +1530,19 @@ const TournamentDetail = () => {
 
       <BottomNav />
 
-      {shareOpen && tournament && userPredictions[0] && (
-        <ShareModal
+      {shareOpen && tournament && userPredictions.length > 0 && (
+        <EventShareModal
           open={shareOpen}
           onOpenChange={setShareOpen}
           username={username || 'player'}
           shareUrl={`${window.location.origin}/tournaments/${tournament.id}`}
-          type={userPredictions[0].status === 'PENDING' ? 'prediction' : 'settled'}
-          status={
-            userPredictions[0].status === 'WON'
-              ? 'WIN'
-              : userPredictions[0].status === 'LOST'
-              ? 'LOSS'
-              : 'PREDICTION'
-          }
-          tournamentName={tournament.name}
-          discipline={userPredictions[0].discipline?.toUpperCase()}
-          dateLabel={
+          {...buildEventShareFromPredictions(
+            userPredictions,
+            tournament.name,
             tournament.start_date
-              ? new Date(tournament.start_date).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
-              : undefined
-          }
-          selections={[
-            {
-              name: userPredictions[0].athlete_name,
-              multiplier: parseFloat(String(userPredictions[0].decimal_odds)),
-            },
-          ]}
-          tokenEntry={userPredictions[0].staked_tokens}
-          projectedReward={userPredictions[0].potential_payout}
-          actualReward={userPredictions[0].payout_tokens ?? null}
+              ? new Date(tournament.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : undefined,
+          )}
         />
       )}
     </div>
