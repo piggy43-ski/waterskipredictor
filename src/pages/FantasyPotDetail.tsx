@@ -25,6 +25,7 @@ interface FantasyPot {
   max_entrants: number | null;
   discipline_scope: string[];
   payout_structure: string;
+  payout_split?: any;
   team_budget: number;
   tournament?: {
     id: string;
@@ -59,6 +60,15 @@ interface RosterSelection {
   price: number;
 }
 
+
+function fantasyPrizeLadder(pot: any): string {
+  const s = pot?.payout_split;
+  if (s && typeof s === 'object') {
+    const vals = Object.keys(s).sort((a, b) => Number(a) - Number(b)).map((k) => Number(s[k])).filter((n) => n > 0);
+    if (vals.length) return vals.map((v) => v.toLocaleString()).join(' / ');
+  }
+  return 'Tokens';
+}
 const FantasyPotDetail = () => {
   const { potId } = useParams();
   const navigate = useNavigate();
@@ -440,8 +450,8 @@ const FantasyPotDetail = () => {
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center p-2 bg-background/50 rounded-lg">
               <Coins className="w-4 h-4 mx-auto mb-1 text-primary" />
-              <p className="text-xs text-muted-foreground">Entry Fee</p>
-              <p className="font-bold">{pot.entry_fee_tokens.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Entry</p>
+              <p className="font-bold">{pot.entry_fee_tokens === 0 ? 'FREE' : pot.entry_fee_tokens.toLocaleString()}</p>
             </div>
             <div className="text-center p-2 bg-background/50 rounded-lg">
               <Users className="w-4 h-4 mx-auto mb-1 text-primary" />
@@ -450,8 +460,8 @@ const FantasyPotDetail = () => {
             </div>
             <div className="text-center p-2 bg-background/50 rounded-lg">
               <Trophy className="w-4 h-4 mx-auto mb-1 text-primary" />
-              <p className="text-xs text-muted-foreground">Prize Pool</p>
-              <p className="font-bold">{(entrantCount * pot.entry_fee_tokens * 0.9).toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Prizes</p>
+              <p className="font-bold text-sm">{pot.entry_fee_tokens === 0 ? fantasyPrizeLadder(pot) : (entrantCount * pot.entry_fee_tokens * 0.9).toLocaleString()}</p>
             </div>
           </div>
         </Card>
@@ -516,8 +526,8 @@ const FantasyPotDetail = () => {
         <Card className="p-4 bg-primary/10 border-primary/30">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="font-medium">Entry Fee</p>
-              <p className="text-2xl font-bold">{pot.entry_fee_tokens.toLocaleString()} tokens</p>
+              <p className="font-medium">{pot.entry_fee_tokens === 0 ? 'Free to enter' : 'Entry Fee'}</p>
+              <p className="text-2xl font-bold">{pot.entry_fee_tokens === 0 ? 'FREE' : `${pot.entry_fee_tokens.toLocaleString()} tokens`}</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground">Your Balance</p>
