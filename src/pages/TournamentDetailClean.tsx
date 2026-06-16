@@ -65,7 +65,7 @@ function buildEventShareFromPredictions(
     const mult = r.decimal_odds != null ? parseFloat(String(r.decimal_odds)) : undefined;
     return { chip: MARKET[r.market_type] || 'PICK', text: `${who}${disc ? ` \u00b7 ${disc}` : ''}`, mult };
   });
-  const CAP = 9;
+  const CAP = 6;
   return {
     tournamentName,
     dateLabel,

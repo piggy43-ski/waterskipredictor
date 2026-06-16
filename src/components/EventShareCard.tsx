@@ -51,7 +51,7 @@ export const EventShareCard = forwardRef<HTMLDivElement, EventShareCardProps>(fu
 
         {/* HERO */}
         <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: 26, letterSpacing: '0.3em', color: CYAN, marginTop: 46, textTransform: 'uppercase' }}>{'★'}&nbsp;MY PICKS</div>
-        <div style={{ fontFamily: DISPLAY, fontSize: 110, lineHeight: 0.88, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.005em', marginTop: 14 }}>{tournamentName}</div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 92, lineHeight: 0.9, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.005em', marginTop: 14 }}>{tournamentName}</div>
 
         {/* stat strip */}
         <div style={{ display: 'flex', gap: 0, marginTop: 30, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10 }}>
@@ -69,7 +69,7 @@ export const EventShareCard = forwardRef<HTMLDivElement, EventShareCardProps>(fu
         {dateLabel && <div style={{ fontFamily: SANS, fontWeight: 500, fontSize: 24, letterSpacing: '0.14em', color: '#8A8A8A', marginTop: 22, textTransform: 'uppercase' }}>{dateLabel}</div>}
 
         {/* ROWS */}
-        <div style={{ flex: 1, marginTop: 28, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ marginTop: 26, display: 'flex', flexDirection: 'column' }}>
           {rows.map((r, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '13px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
               <div style={{ minWidth: 104, height: 44, borderRadius: 9, background: 'rgba(0,229,255,0.08)', border: '1.5px solid rgba(0,229,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SANS, fontWeight: 800, fontSize: 21, color: CYAN, letterSpacing: '0.06em', padding: '0 12px' }}>{r.chip}</div>
@@ -81,6 +81,8 @@ export const EventShareCard = forwardRef<HTMLDivElement, EventShareCardProps>(fu
             <div style={{ padding: '14px 0', fontFamily: SANS, fontWeight: 700, fontSize: 26, letterSpacing: '0.12em', color: '#8A8A8A' }}>+{moreCount} MORE {moreCount === 1 ? 'PICK' : 'PICKS'}</div>
           )}
         </div>
+
+        <div style={{ flex: 1, minHeight: 24 }} />
 
         {/* REWARD */}
         <div style={{ borderLeft: `10px solid ${CYAN}`, background: 'linear-gradient(90deg, rgba(0,229,255,0.16), rgba(0,229,255,0.02))', boxShadow: 'inset 0 0 60px rgba(0,229,255,0.08)', padding: '34px 44px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

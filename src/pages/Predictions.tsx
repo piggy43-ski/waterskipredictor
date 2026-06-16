@@ -1133,7 +1133,7 @@ function buildEventShareProps(entries: PredictionEntry[]): Omit<EventShareCardPr
       rowsAll.push({ chip: MARKET[leg.market_type] || 'PICK', text: `${who}${disc ? ` \u00b7 ${disc}` : ''}`, mult: leg.decimal_odds });
     }
   }
-  const CAP = 9;
+  const CAP = 6;
   const first = entries[0];
   const dateLabel = first?.tournament_start_datetime
     ? new Date(first.tournament_start_datetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
