@@ -1122,18 +1122,18 @@ function buildEventShareProps(entries: PredictionEntry[]): Omit<EventShareCardPr
       const leg = legs[0];
       if (!leg) { rowsAll.push({ chip: 'PICK', text: '-', mult: e.total_odds_decimal }); continue; }
       const disc = (leg.discipline || '').toUpperCase();
-      let who = leg.athlete_name || '';
+      let who = (leg.athlete_name || '').trim();
       if (leg.market_type === 'PODIUM' && leg.podium_selections?.length) {
         who = [...leg.podium_selections]
           .sort((a, b) => a.position_predicted - b.position_predicted)
           .map((pp) => (pp.athletes?.name || '').split(/\s+/)[0])
           .join(' / ');
       }
-      if (!who) who = ({ WINNER: 'WINNER', PODIUM: 'PODIUM PICK', HIGHEST_SCORE: 'TOP SCORE' } as Record<string, string>)[leg.market_type] || 'PICK';
+      if (!who || who === '-') who = ({ WINNER: 'WINNER', PODIUM: 'PODIUM PICK', HIGHEST_SCORE: 'TOP SCORE' } as Record<string, string>)[leg.market_type] || (disc ? `${disc} PICK` : 'PICK');
       rowsAll.push({ chip: MARKET[leg.market_type] || 'PICK', text: `${who}${disc ? ` \u00b7 ${disc}` : ''}`, mult: leg.decimal_odds });
     }
   }
-  const CAP = 6;
+  const CAP = 12;
   const first = entries[0];
   const dateLabel = first?.tournament_start_datetime
     ? new Date(first.tournament_start_datetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
