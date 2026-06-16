@@ -117,6 +117,27 @@ const TournamentDetail = () => {
     }
   }, [tournament, activeDiscipline]);
 
+  // Load the current user's picks for this tournament independently of the
+  // markets-loading pipeline (which can throw on finished events and abort the
+  // in-pipeline fetch, leaving "My Picks" / "Share my card" hidden).
+  useEffect(() => {
+    if (!user || !id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: slips } = await supabase
+          .from('bet_slips').select('id').eq('user_id', user.id).eq('tournament_id', id);
+        const slipIds = (slips || []).map((row: any) => row.id);
+        if (!slipIds.length) return;
+        const { data } = await supabase
+          .from('predictions').select('*').in('bet_slip_id', slipIds)
+          .order('created_at', { ascending: false });
+        if (!cancelled && data && data.length) setUserPredictions(data);
+      } catch (_e) { /* non-fatal: picks block just stays hidden */ }
+    })();
+    return () => { cancelled = true; };
+  }, [user, id]);
+
   
   const [podiumStateMap, setPodiumStateMap] = useState<Record<string, {
     selectedAthletes: Selection[];

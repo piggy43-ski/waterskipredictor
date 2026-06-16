@@ -100,7 +100,7 @@ const Predictions = () => {
   const [newStakeAmount, setNewStakeAmount] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
-  const [viewMode, setViewMode] = useState<'flat' | 'tournament'>('flat');
+  const [viewMode, setViewMode] = useState<'flat' | 'tournament'>('tournament');
   const username = useUsername();
   const [shareEntry, setShareEntry] = useState<PredictionEntry | null>(null);
   const [shareTournament, setShareTournament] = useState<PredictionEntry[] | null>(null);
