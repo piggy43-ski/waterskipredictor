@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Trophy, Users, Coins, CheckCircle } from 'lucide-react';
+import { Trophy, Users, Coins, CheckCircle, Check } from 'lucide-react';
+import { PigoskiMark } from '@/components/PigoskiMark';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -465,6 +466,20 @@ const FantasyPotDetail = () => {
             </div>
           </div>
         </Card>
+
+        {pot.entry_fee_tokens === 0 && (
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-display uppercase tracking-wide text-sm">Rules</span>
+              <PigoskiMark />
+            </div>
+            <div className="grid gap-1.5 text-sm text-muted-foreground">
+              {['Entry is free — no tokens needed', 'Salary-cap team, locks at first start', `Top 3 win: ${fantasyPrizeLadder(pot)} prediction tokens`].map((r) => (
+                <div key={r} className="flex items-center gap-2"><Check className="w-4 h-4 text-primary shrink-0" /> {r}</div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {/* Budget Tracker */}
         <Card className="p-4">

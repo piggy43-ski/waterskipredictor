@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
+import { PigoskiMark } from '@/components/PigoskiMark';
+import { Check } from 'lucide-react';
 
 interface FantasyPotRow {
   id: string;
@@ -63,6 +65,16 @@ const Fantasy = () => {
               </p>
             </div>
           </div>
+          <div className="mt-4 pt-4 border-t border-border/60 grid gap-1.5">
+            {['Entry is free — no tokens needed', 'Pick a salary-cap team, lock before first start', 'Top 3 win prediction tokens'].map((r) => (
+              <div key={r} className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Check className="w-4 h-4 text-primary shrink-0" /> {r}
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-center">
+            <PigoskiMark />
+          </div>
         </Card>
 
         {isLoading ? (
@@ -102,8 +114,11 @@ const Fantasy = () => {
                       <Gift className="w-4 h-4" /> {prizeLine(p)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-end mt-2 text-primary text-sm font-medium">
-                    Build your team <ArrowRight className="w-4 h-4 ml-1" />
+                  <div className="flex items-center justify-between mt-2">
+                    {p.entry_fee_tokens === 0 ? <PigoskiMark /> : <span />}
+                    <span className="flex items-center text-primary text-sm font-medium">
+                      Build your team <ArrowRight className="w-4 h-4 ml-1" />
+                    </span>
                   </div>
                 </Card>
               </Link>
