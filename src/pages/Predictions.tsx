@@ -1129,10 +1129,11 @@ function buildEventShareProps(entries: PredictionEntry[]): Omit<EventShareCardPr
           .map((pp) => (pp.athletes?.name || '').split(/\s+/)[0])
           .join(' / ');
       }
+      if (!who) who = ({ WINNER: 'WINNER', PODIUM: 'PODIUM PICK', HIGHEST_SCORE: 'TOP SCORE' } as Record<string, string>)[leg.market_type] || 'PICK';
       rowsAll.push({ chip: MARKET[leg.market_type] || 'PICK', text: `${who}${disc ? ` \u00b7 ${disc}` : ''}`, mult: leg.decimal_odds });
     }
   }
-  const CAP = 12;
+  const CAP = 9;
   const first = entries[0];
   const dateLabel = first?.tournament_start_datetime
     ? new Date(first.tournament_start_datetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
