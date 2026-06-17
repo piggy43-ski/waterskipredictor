@@ -143,6 +143,14 @@ serve(async (req) => {
     // Get payout structure
     const payoutStructure = PAYOUT_STRUCTURES[pot.payout_structure] || PAYOUT_STRUCTURES.top_3_split;
 
+    const isFreePot = Number(pot.entry_fee_tokens) === 0;
+    const fixedPrizes: Record<string, number> =
+      (isFreePot && pot.payout_split && typeof pot.payout_split === 'object') ? pot.payout_split : {};
+    const slotPrize = (slot: number): number => {
+      if (isFreePot) return Number(fixedPrizes[String(slot)] ?? 0);
+      return Math.floor(netPrizePool * ((payoutStructure[slot] || 0) / 100));
+    };
+
     // Assign competition ranks (ties share the same rank)
     // Example: scores [10, 8, 8, 5] → ranks [1, 2, 2, 4]
     const ranks: number[] = [];
@@ -175,16 +183,11 @@ serve(async (req) => {
     }
 
     for (const [rank, indices] of rankToIndices) {
-      // Sum the percentages of all positions occupied by this tied group.
-      // E.g. two-way tie for 1st absorbs both the 1st and 2nd payout slots.
-      let pooledPercent = 0;
+      let pooledAmount = 0;
       for (let offset = 0; offset < indices.length; offset++) {
-        const slotPosition = rank + offset;
-        pooledPercent += payoutStructure[slotPosition] || 0;
+        pooledAmount += slotPrize(rank + offset);
       }
-      if (pooledPercent <= 0) continue;
-
-      const pooledAmount = Math.floor(netPrizePool * (pooledPercent / 100));
+      if (pooledAmount <= 0) continue;
       const perEntry = Math.floor(pooledAmount / indices.length);
       if (perEntry <= 0) continue;
 
@@ -224,7 +227,7 @@ serve(async (req) => {
           type: 'fantasy_payout',
           amount: payout.amount,
           balance_after: newBalance,
-          description: `Fantasy payout: ${pot.name} - #${payout.rank} place`,
+          description: `${isFreePot ? 'Sponsored fantasy prize' : 'Fantasy payout'}: ${pot.name} - #${payout.rank} place`,
           reference_id: pot_id,
           reference_type: 'fantasy_pot'
         });
@@ -239,6 +242,45 @@ serve(async (req) => {
       .eq('id', pot_id);
 
     console.log(`Fantasy pot ${pot_id} settled successfully`);
+
+    // Season championship points (F1-style). Awarded once per tournament pot at settlement.
+    try {
+      const isTournamentPot = !!pot.tournament_id && pot.pot_type !== 'season';
+      if (isTournamentPot) {
+        const CHAMP_POINTS: Record<number, number> = { 1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4, 9: 2, 10: 1 };
+        const PARTICIPATION = 1;
+        const { data: tRow } = await supabase.from('tournaments').select('start_date').eq('id', pot.tournament_id).single();
+        const season = tRow?.start_date ? String(new Date(tRow.start_date).getFullYear()) : String(new Date().getFullYear());
+        const nowIso = new Date().toISOString();
+        for (const [rank, indices] of rankToIndices) {
+          let pooledChamp = 0;
+          for (let offset = 0; offset < indices.length; offset++) pooledChamp += CHAMP_POINTS[rank + offset] || 0;
+          const award = Math.round((pooledChamp / indices.length + PARTICIPATION) * 100) / 100;
+          const isWin = rank === 1 ? 1 : 0;
+          for (const idx of indices) {
+            const uid = entries[idx].user_id;
+            const { data: existing } = await supabase.from('fantasy_season_standings')
+              .select('id, championship_points, events_played, event_wins')
+              .eq('season', season).eq('user_id', uid).maybeSingle();
+            if (existing) {
+              await supabase.from('fantasy_season_standings').update({
+                championship_points: Number(existing.championship_points || 0) + award,
+                events_played: (existing.events_played || 0) + 1,
+                event_wins: (existing.event_wins || 0) + isWin,
+                last_event_at: nowIso, updated_at: nowIso,
+              }).eq('id', existing.id);
+            } else {
+              await supabase.from('fantasy_season_standings').insert({
+                season, user_id: uid, championship_points: award,
+                events_played: 1, event_wins: isWin, last_event_at: nowIso,
+              });
+            }
+          }
+        }
+      }
+    } catch (champErr) {
+      console.error('Season championship award failed (non-fatal):', champErr);
+    }
 
     // Write audit log for fantasy pot settlement
     await writeAuditLog(supabase, {

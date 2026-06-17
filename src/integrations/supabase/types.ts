@@ -1028,6 +1028,42 @@ export type Database = {
           },
         ]
       }
+      fantasy_season_standings: {
+        Row: {
+          championship_points: number
+          created_at: string
+          event_wins: number
+          events_played: number
+          id: string
+          last_event_at: string | null
+          season: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          championship_points?: number
+          created_at?: string
+          event_wins?: number
+          events_played?: number
+          id?: string
+          last_event_at?: string | null
+          season: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          championship_points?: number
+          created_at?: string
+          event_wins?: number
+          events_played?: number
+          id?: string
+          last_event_at?: string | null
+          season?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       fantasy_transfers: {
         Row: {
           athlete_id: string

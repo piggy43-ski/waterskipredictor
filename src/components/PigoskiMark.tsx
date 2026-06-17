@@ -13,13 +13,13 @@ export function PigoskiMark({ className, prefix = true }: { className?: string; 
       <img
         src="/pigoski-logo.png"
         alt="PIGOSKI"
-        className="h-4 w-auto"
+        className="h-5 w-auto"
         style={{ display: imgOk ? 'inline-block' : 'none' }}
         onLoad={() => setImgOk(true)}
         onError={() => setImgOk(false)}
       />
       {!imgOk && (
-        <span className="font-display tracking-[0.18em] text-primary text-sm">PIGOSKI</span>
+        <span className="font-display font-bold tracking-[0.22em] text-primary text-sm leading-none">PIGOSKI</span>
       )}
     </span>
   );
