@@ -17,8 +17,9 @@ const DEFAULT_FINALIST_POINTS = 1; // For positions >12
 const BONUSES = {
   made_finals: 3,           // Made it to finals
   highest_score_event: 5,   // Highest score across all rounds
-  podium_1st: 3,            // Extra for 1st place
-  podium_2nd_3rd: 2,        // Extra for 2nd or 3rd
+  podium_1st: 5,            // Extra for 1st place
+  podium_2nd: 3,            // Extra for 2nd place
+  podium_3rd: 1,            // Extra for 3rd place
 };
 
 // Penalty points
@@ -46,8 +47,16 @@ function getPositionPoints(position: number): number {
 
 function getPodiumBonus(position: number): number {
   if (position === 1) return BONUSES.podium_1st;
-  if (position === 2 || position === 3) return BONUSES.podium_2nd_3rd;
+  if (position === 2) return BONUSES.podium_2nd;
+  if (position === 3) return BONUSES.podium_3rd;
   return 0;
+}
+
+function avgOverSlots(start: number, count: number, fn: (p: number) => number): number {
+  const n = Math.max(1, count);
+  let sum = 0;
+  for (let p = start; p < start + n; p++) sum += fn(p);
+  return sum / n;
 }
 
 function getStreakMultiplier(consecutivePositiveEvents: number): number {
@@ -244,6 +253,17 @@ serve(async (req) => {
 
     console.log(`Finalist map has ${finalistMap.size} entries`);
 
+    // Count finishing ties per discipline+gender so tied athletes split slots evenly.
+    const tieCounts = new Map<string, Map<number, number>>();
+    for (const [k, fd] of finalistMap.entries()) {
+      if (!fd.position || fd.position <= 0) continue;
+      const disc = k.split('_').pop() as string;
+      const ck = `${disc}_${fd.gender}`;
+      let m = tieCounts.get(ck);
+      if (!m) { m = new Map(); tieCounts.set(ck, m); }
+      m.set(fd.position, (m.get(fd.position) || 0) + 1);
+    }
+
     // Get fantasy pots that include this tournament
     const { data: pots, error: potsError } = await supabase
       .from('fantasy_pots')
@@ -320,15 +340,16 @@ serve(async (req) => {
               const position = finalistData.position;
               breakdown.made_finals = true;
 
-              // Position points
               if (position && position > 0) {
-                const positionPts = getPositionPoints(position);
+                const tieCategoryKey = `${rosterAthlete.discipline}_${finalistData.gender}`;
+                const tieCount = tieCounts.get(tieCategoryKey)?.get(position) ?? 1;
+                const positionPts = Math.round(avgOverSlots(position, tieCount, getPositionPoints));
                 rawPoints += positionPts;
                 breakdown.position_points = positionPts;
                 breakdown.final_position = position;
+                if (tieCount > 1) breakdown.tie_count = tieCount;
 
-                // Podium bonus
-                const podiumBonus = getPodiumBonus(position);
+                const podiumBonus = Math.round(avgOverSlots(position, tieCount, getPodiumBonus));
                 if (podiumBonus > 0) {
                   rawPoints += podiumBonus;
                   breakdown.podium_bonus = podiumBonus;

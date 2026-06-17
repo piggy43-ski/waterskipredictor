@@ -41,6 +41,18 @@ export const SEASON_TIERS = {
   3: 25_000,   // Gold tier
 } as const;
 
+// Season championship points (F1-style) awarded by a manager's FINISH in each
+// tournament pot. Accumulate across the season; highest total wins the season grand prize.
+export const SEASON_CHAMPIONSHIP_POINTS: Record<number, number> = {
+  1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4, 9: 2, 10: 1,
+};
+// Flat points just for entering an event (rewards showing up every stop).
+export const SEASON_PARTICIPATION_POINTS = 1;
+
+export function getChampionshipPoints(rank: number): number {
+  return SEASON_CHAMPIONSHIP_POINTS[rank] ?? 0;
+}
+
 // Position points for athletes who make the final
 // Based on final_position (overall placing in that discipline+gender)
 export const POSITION_POINTS = {
@@ -64,8 +76,9 @@ export const POSITION_POINTS = {
 export const FANTASY_BONUSES = {
   made_finals: 3,           // Made it to finals round
   highest_score_event: 5,   // Highest score across all rounds in discipline+gender
-  podium_1st: 3,            // Extra bonus for 1st place
-  podium_2nd_3rd: 2,        // Extra bonus for 2nd or 3rd place
+  podium_1st: 5,            // Extra bonus for 1st place
+  podium_2nd: 3,            // Extra bonus for 2nd place
+  podium_3rd: 1,            // Extra bonus for 3rd place
 } as const;
 
 // Penalty points
@@ -170,13 +183,24 @@ export function getPositionPoints(position: number): number {
 
 export function getPodiumBonus(position: number): number {
   if (position === 1) return FANTASY_BONUSES.podium_1st;
-  if (position === 2 || position === 3) return FANTASY_BONUSES.podium_2nd_3rd;
+  if (position === 2) return FANTASY_BONUSES.podium_2nd;
+  if (position === 3) return FANTASY_BONUSES.podium_3rd;
   return 0;
 }
 
-export function getStreakMultiplier(consecutivePositiveEvents: number): number {
-  if (consecutivePositiveEvents >= 3) return STREAK_MULTIPLIERS.consecutive_3_plus;
-  if (consecutivePositiveEvents === 2) return STREAK_MULTIPLIERS.consecutive_2;
+export function averageOverTiedSlots(
+  startPosition: number,
+  tieCount: number,
+  pointsFor: (position: number) => number
+): number {
+  const n = Math.max(1, tieCount);
+  let sum = 0;
+  for (let p = startPosition; p < startPosition + n; p++) sum += pointsFor(p);
+  return sum / n;
+}
+
+// DEPRECATED: streak multipliers removed in favour of season championship points.
+export function getStreakMultiplier(_consecutivePositiveEvents: number): number {
   return 1.0;
 }
 
