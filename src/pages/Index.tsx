@@ -203,6 +203,9 @@ const Index = () => {
           </div>
         </Card>
 
+        {/* Fantasy Announcement Banner */}
+        <FantasyBanner />
+
         {/* Entries Section - Consolidated prediction info */}
         <div>
           <div className="flex items-center justify-between mb-3">
