@@ -11,6 +11,7 @@ import { PigoskiMark } from '@/components/PigoskiMark';
 import { Check } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 interface FantasyPotRow {
   id: string;
