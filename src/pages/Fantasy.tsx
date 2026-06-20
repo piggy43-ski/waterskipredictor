@@ -126,121 +126,141 @@ const Fantasy = () => {
           </div>
         </Card>
 
-        {/* Season championship standings */}
-        <Card className="p-5 mb-5">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="font-display text-xl uppercase tracking-wide flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-primary" /> Season Championship
-            </h2>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/30">
-              {season}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Earn championship points by your finish at every stop. Most points when the season ends wins the grand prize.
-          </p>
+        <Tabs defaultValue="leagues" className="mb-5">
+          <TabsList className="grid grid-cols-2 w-full bg-card border border-border rounded-xl p-1 mb-5">
+            <TabsTrigger
+              value="leagues"
+              className="w-full rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              Leagues
+            </TabsTrigger>
+            <TabsTrigger
+              value="season"
+              className="w-full rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              Season
+            </TabsTrigger>
+          </TabsList>
 
-          {standingsLoading ? (
-            <p className="text-muted-foreground text-sm mt-4">Loading standings…</p>
-          ) : standings.length === 0 ? (
-            <div className="mt-4 rounded-lg border border-dashed border-border/60 p-5 text-center">
-              <p className="text-sm text-muted-foreground">
-                Standings open after the first event. Win events to climb the championship.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-4 divide-y divide-border/50">
-              {standings.map((row) => (
-                <div
-                  key={row.user_id}
-                  className={cn(
-                    'flex items-center gap-3 py-2',
-                    row.user_id === user?.id && 'border-l-2 border-primary pl-2'
-                  )}
-                >
-                  <span className={cn('w-6 text-center font-display text-lg', row.rank <= 3 ? 'text-primary' : 'text-muted-foreground')}>
-                    {row.rank}
-                  </span>
-                  <Avatar className="w-8 h-8">
-                    <AvatarImage src={row.avatar_url ?? undefined} />
-                    <AvatarFallback className="text-xs">{initials(row.username)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">
-                      {row.username}
-                      {row.user_id === user?.id && <span className="text-xs text-muted-foreground"> (you)</span>}
-                    </p>
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                      {row.events} event{row.events === 1 ? '' : 's'}
-                      {row.wins > 0 ? ` · ${row.wins} win${row.wins === 1 ? '' : 's'}` : ''}
-                    </p>
-                  </div>
-                  <span className="font-display text-lg text-primary">
-                    {row.points % 1 === 0 ? row.points : row.points.toFixed(1)}
-                  </span>
+          <TabsContent value="leagues">
+            {isLoading ? (
+              <p className="text-muted-foreground text-sm px-1">Loading leagues…</p>
+            ) : pots.length === 0 ? (
+              <Card className="p-8 text-center">
+                <div className="mx-auto w-14 h-14 rounded-full border border-primary/30 flex items-center justify-center mb-4">
+                  <Trophy className="w-7 h-7 text-primary" />
                 </div>
-              ))}
-            </div>
-          )}
+                <h3 className="font-display text-2xl uppercase tracking-wide">No leagues open yet</h3>
+                <p className="text-sm text-muted-foreground mt-2 max-w-sm mx-auto">
+                  The first free league drops for the next pro stop. Build your team, climb the standings, and win prediction tokens — watch this space.
+                </p>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {pots.map((p) => (
+                  <Link key={p.id} to={`/fantasy/${p.id}`}>
+                    <Card className="p-4 press-scale hover:border-primary/40 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-lg">{p.name}</h3>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/30">
+                          {p.status}
+                        </span>
+                      </div>
+                      {p.tournaments?.name && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {p.tournaments.name}
+                          {p.tournaments.start_date ? ` · ${new Date(p.tournaments.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-4 mt-3 text-sm">
+                        <span className="flex items-center gap-1.5 font-semibold text-primary">
+                          {p.entry_fee_tokens === 0 ? 'FREE' : `${p.entry_fee_tokens.toLocaleString()} tokens`}
+                        </span>
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <Gift className="w-4 h-4" /> {prizeLine(p)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        {p.entry_fee_tokens === 0 ? <PigoskiMark /> : <span />}
+                        <span className="flex items-center text-primary text-sm font-medium">
+                          Build your team <ArrowRight className="w-4 h-4 ml-1" />
+                        </span>
+                      </div>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </TabsContent>
 
-          <details className="mt-4 pt-3 border-t border-border/60">
-            <summary className="cursor-pointer text-sm font-medium text-primary list-none">How the championship works</summary>
-            <div className="mt-2 text-sm text-muted-foreground space-y-2">
-              <p>Every event you enter, you earn championship points by where your team finishes against the other managers:</p>
-              <p className="text-xs text-foreground/80">1st 25 · 2nd 18 · 3rd 15 · 4th 12 · 5th 10 · 6th 8 · 7th 6 · 8th 4 · 9th 2 · 10th 1 — plus +1 just for entering.</p>
-              <p>Your team scores off real results: finishing-position points, +5 top score, +3 made final, podium +5/+3/+1, minus penalties for missed passes and no-shows. Ties split points evenly.</p>
-            </div>
-          </details>
-        </Card>
+          <TabsContent value="season">
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="font-display text-xl uppercase tracking-wide flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-primary" /> Season Championship
+                </h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/30">
+                  {season}
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Earn championship points by your finish at every stop. Most points when the season ends wins the grand prize.
+              </p>
 
-        {isLoading ? (
-          <p className="text-muted-foreground text-sm px-1">Loading leagues…</p>
-        ) : pots.length === 0 ? (
-          <Card className="p-8 text-center">
-            <div className="mx-auto w-14 h-14 rounded-full border border-primary/30 flex items-center justify-center mb-4">
-              <Trophy className="w-7 h-7 text-primary" />
-            </div>
-            <h3 className="font-display text-2xl uppercase tracking-wide">No leagues open yet</h3>
-            <p className="text-sm text-muted-foreground mt-2 max-w-sm mx-auto">
-              The first free league drops for the next pro stop. Build your team, climb the standings, and win prediction tokens — watch this space.
-            </p>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {pots.map((p) => (
-              <Link key={p.id} to={`/fantasy/${p.id}`}>
-                <Card className="p-4 press-scale hover:border-primary/40 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-lg">{p.name}</h3>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/30">
-                      {p.status}
-                    </span>
-                  </div>
-                  {p.tournaments?.name && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {p.tournaments.name}
-                      {p.tournaments.start_date ? ` · ${new Date(p.tournaments.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-4 mt-3 text-sm">
-                    <span className="flex items-center gap-1.5 font-semibold text-primary">
-                      {p.entry_fee_tokens === 0 ? 'FREE' : `${p.entry_fee_tokens.toLocaleString()} tokens`}
-                    </span>
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <Gift className="w-4 h-4" /> {prizeLine(p)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between mt-2">
-                    {p.entry_fee_tokens === 0 ? <PigoskiMark /> : <span />}
-                    <span className="flex items-center text-primary text-sm font-medium">
-                      Build your team <ArrowRight className="w-4 h-4 ml-1" />
-                    </span>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
+              {standingsLoading ? (
+                <p className="text-muted-foreground text-sm mt-4">Loading standings…</p>
+              ) : standings.length === 0 ? (
+                <div className="mt-4 rounded-lg border border-dashed border-border/60 p-5 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Standings open after the first event. Win events to climb the championship.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 divide-y divide-border/50">
+                  {standings.map((row) => (
+                    <div
+                      key={row.user_id}
+                      className={cn(
+                        'flex items-center gap-3 py-2',
+                        row.user_id === user?.id && 'border-l-2 border-primary pl-2'
+                      )}
+                    >
+                      <span className={cn('w-6 text-center font-display text-lg', row.rank <= 3 ? 'text-primary' : 'text-muted-foreground')}>
+                        {row.rank}
+                      </span>
+                      <Avatar className="w-8 h-8">
+                        <AvatarImage src={row.avatar_url ?? undefined} />
+                        <AvatarFallback className="text-xs">{initials(row.username)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">
+                          {row.username}
+                          {row.user_id === user?.id && <span className="text-xs text-muted-foreground"> (you)</span>}
+                        </p>
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                          {row.events} event{row.events === 1 ? '' : 's'}
+                          {row.wins > 0 ? ` · ${row.wins} win${row.wins === 1 ? '' : 's'}` : ''}
+                        </p>
+                      </div>
+                      <span className="font-display text-lg text-primary">
+                        {row.points % 1 === 0 ? row.points : row.points.toFixed(1)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <details className="mt-4 pt-3 border-t border-border/60">
+                <summary className="cursor-pointer text-sm font-medium text-primary list-none">How the championship works</summary>
+                <div className="mt-2 text-sm text-muted-foreground space-y-2">
+                  <p>Every event you enter, you earn championship points by where your team finishes against the other managers:</p>
+                  <p className="text-xs text-foreground/80">1st 25 · 2nd 18 · 3rd 15 · 4th 12 · 5th 10 · 6th 8 · 7th 6 · 8th 4 · 9th 2 · 10th 1 — plus +1 just for entering.</p>
+                  <p>Your team scores off real results: finishing-position points, +5 top score, +3 made final, podium +5/+3/+1, minus penalties for missed passes and no-shows. Ties split points evenly.</p>
+                </div>
+              </details>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
 
       <BottomNav />
