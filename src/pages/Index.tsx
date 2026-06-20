@@ -15,6 +15,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { ShareModal } from '@/components/ShareModal';
 import { useUsername } from '@/hooks/useUsername';
 import { HomeLeaderboardPreview } from '@/components/HomeLeaderboardPreview';
+import { FantasyBanner } from '@/components/FantasyBanner';
 
 interface UserPrediction {
   id: string;
