@@ -448,34 +448,19 @@ export function ParlayBuilder({
         if (podiumSelError) throw podiumSelError;
       }
 
-      // Fetch current wallet state
-      const { data: walletData, error: walletFetchError } = await supabase
-        .from('token_wallets')
-        .select('purchased_tokens, earned_tokens')
-        .eq('user_id', userId)
-        .maybeSingle();
+      // Atomically deduct tokens (prevents race conditions on concurrent place/cancel)
+      const { data: deductResult, error: deductError } = await supabase
+        .rpc('deduct_tokens', {
+          user_id_param: userId,
+          amount_param: stakeAmount,
+        });
 
-      if (walletFetchError) throw walletFetchError;
-      if (!walletData) throw new Error('Wallet not found');
+      if (deductError) throw deductError;
+      if (!deductResult || deductResult.length === 0 || !deductResult[0].success) {
+        throw new Error('Insufficient balance or wallet not found');
+      }
 
-      // Deduct from purchased first, then earned (correct accounting)
-      const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - stakeAmount);
-      const remaining = stakeAmount - walletData.purchased_tokens;
-      const newEarnedTokens = remaining > 0 
-        ? walletData.earned_tokens - remaining 
-        : walletData.earned_tokens;
-
-      const { error: walletUpdateError } = await supabase
-        .from('token_wallets')
-        .update({
-          purchased_tokens: newPurchasedTokens,
-          earned_tokens: Math.max(0, newEarnedTokens)
-        })
-        .eq('user_id', userId);
-
-      if (walletUpdateError) throw walletUpdateError;
-
-      const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
+      const newBalance = deductResult[0].new_balance;
 
       // Log transaction for audit trail
       await supabase.from('token_transactions').insert({
