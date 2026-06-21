@@ -3142,6 +3142,27 @@ export type Database = {
           },
         ]
       }
+      token_wallets_backup_bugfix_20260620: {
+        Row: {
+          backed_up_at: string | null
+          earned_tokens: number | null
+          purchased_tokens: number | null
+          user_id: string | null
+        }
+        Insert: {
+          backed_up_at?: string | null
+          earned_tokens?: number | null
+          purchased_tokens?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          backed_up_at?: string | null
+          earned_tokens?: number | null
+          purchased_tokens?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       tournament_entries: {
         Row: {
           athlete_id: string
