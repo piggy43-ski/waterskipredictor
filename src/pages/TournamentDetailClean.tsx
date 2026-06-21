@@ -679,31 +679,19 @@ const TournamentDetail = () => {
 
       if (podiumError) throw podiumError;
 
-      // Deduct from wallet
-      const { data: walletData, error: walletFetchError } = await supabase
-        .from('token_wallets')
-        .select('purchased_tokens, earned_tokens')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Atomically deduct from wallet (prevents race conditions)
+      const { data: deductResult, error: deductError } = await supabase
+        .rpc('deduct_tokens', {
+          user_id_param: user.id,
+          amount_param: stakeAmount,
+        });
 
-      if (walletFetchError) throw walletFetchError;
-      if (!walletData) return;
+      if (deductError) throw deductError;
+      if (!deductResult || deductResult.length === 0 || !deductResult[0].success) {
+        throw new Error('Insufficient balance or wallet not found');
+      }
 
-      const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - stakeAmount);
-      const remaining = stakeAmount - walletData.purchased_tokens;
-      const newEarnedTokens = remaining > 0 ? walletData.earned_tokens - remaining : walletData.earned_tokens;
-
-      const { error: walletUpdateError } = await supabase
-        .from('token_wallets')
-        .update({
-          purchased_tokens: newPurchasedTokens,
-          earned_tokens: Math.max(0, newEarnedTokens)
-        })
-        .eq('user_id', user.id);
-
-      if (walletUpdateError) throw walletUpdateError;
-
-      const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
+      const newBalance = deductResult[0].new_balance;
 
       // Log transaction
       await supabase.from('token_transactions').insert({
@@ -893,31 +881,19 @@ const TournamentDetail = () => {
 
       if (predictionError) throw predictionError;
 
-      // Deduct from wallet
-      const { data: walletData, error: walletFetchError } = await supabase
-        .from('token_wallets')
-        .select('purchased_tokens, earned_tokens')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Atomically deduct from wallet (prevents race conditions)
+      const { data: deductResult, error: deductError } = await supabase
+        .rpc('deduct_tokens', {
+          user_id_param: user.id,
+          amount_param: stakeAmount,
+        });
 
-      if (walletFetchError) throw walletFetchError;
-      if (!walletData) return;
+      if (deductError) throw deductError;
+      if (!deductResult || deductResult.length === 0 || !deductResult[0].success) {
+        throw new Error('Insufficient balance or wallet not found');
+      }
 
-      const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - stakeAmount);
-      const remaining = stakeAmount - walletData.purchased_tokens;
-      const newEarnedTokens = remaining > 0 ? walletData.earned_tokens - remaining : walletData.earned_tokens;
-
-      const { error: walletUpdateError } = await supabase
-        .from('token_wallets')
-        .update({
-          purchased_tokens: newPurchasedTokens,
-          earned_tokens: Math.max(0, newEarnedTokens)
-        })
-        .eq('user_id', user.id);
-
-      if (walletUpdateError) throw walletUpdateError;
-
-      const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
+      const newBalance = deductResult[0].new_balance;
 
       // Log transaction
       await supabase.from('token_transactions').insert({

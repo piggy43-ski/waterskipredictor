@@ -292,35 +292,20 @@ const FantasyPotDetail = () => {
     setSubmitting(true);
 
     try {
-      // Fetch current wallet state for correct deduction
-      const { data: walletData, error: walletFetchError } = await supabase
-        .from('token_wallets')
-        .select('purchased_tokens, earned_tokens')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (walletFetchError) throw walletFetchError;
-      if (!walletData) throw new Error('Wallet not found');
-
-      // Deduct from purchased first, then earned (correct accounting)
+      // Atomically deduct entry fee (prevents race conditions)
       const entryFee = pot.entry_fee_tokens;
-      const newPurchasedTokens = Math.max(0, walletData.purchased_tokens - entryFee);
-      const remaining = entryFee - walletData.purchased_tokens;
-      const newEarnedTokens = remaining > 0 
-        ? walletData.earned_tokens - remaining 
-        : walletData.earned_tokens;
+      const { data: deductResult, error: deductError } = await supabase
+        .rpc('deduct_tokens', {
+          user_id_param: user.id,
+          amount_param: entryFee,
+        });
 
-      const { error: walletError } = await supabase
-        .from('token_wallets')
-        .update({
-          purchased_tokens: newPurchasedTokens,
-          earned_tokens: Math.max(0, newEarnedTokens)
-        })
-        .eq('user_id', user.id);
+      if (deductError) throw deductError;
+      if (!deductResult || deductResult.length === 0 || !deductResult[0].success) {
+        throw new Error('Insufficient balance or wallet not found');
+      }
 
-      if (walletError) throw walletError;
-
-      const newBalance = newPurchasedTokens + Math.max(0, newEarnedTokens);
+      const newBalance = deductResult[0].new_balance;
 
       // Create entry
       const { data: entryData, error: entryError } = await supabase
