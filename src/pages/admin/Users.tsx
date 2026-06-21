@@ -67,25 +67,22 @@ const AdminUsers = () => {
   // Add tokens mutation
   const addTokensMutation = useMutation({
     mutationFn: async ({ userId, amount, type, description }: { userId: string; amount: number; type: string; description: string }) => {
-      // Get current balance
-      const { data: wallet, error: walletError } = await supabase
+      // Atomically credit earned tokens (prevents race conditions)
+      const { error: updateError } = await supabase
+        .rpc('increment_earned_tokens', {
+          user_id_param: userId,
+          amount,
+        });
+      if (updateError) throw updateError;
+
+      // Re-read post-update balance for the audit row
+      const { data: walletAfter, error: readError } = await supabase
         .from('token_wallets')
         .select('earned_tokens, purchased_tokens')
         .eq('user_id', userId)
         .single();
-      
-      if (walletError) throw walletError;
-
-      const currentBalance = (wallet?.earned_tokens || 0) + (wallet?.purchased_tokens || 0);
-      const newBalance = currentBalance + amount;
-
-      // Update wallet
-      const { error: updateError } = await supabase
-        .from('token_wallets')
-        .update({ earned_tokens: (wallet?.earned_tokens || 0) + amount })
-        .eq('user_id', userId);
-      
-      if (updateError) throw updateError;
+      if (readError) throw readError;
+      const newBalance = (walletAfter?.earned_tokens || 0) + (walletAfter?.purchased_tokens || 0);
 
       // Create transaction record
       const { error: transactionError } = await supabase
@@ -113,46 +110,17 @@ const AdminUsers = () => {
   // Burn tokens mutation
   const burnTokensMutation = useMutation({
     mutationFn: async ({ userId, amount, description }: { userId: string; amount: number; description: string }) => {
-      // Get current balance
-      const { data: wallet, error: walletError } = await supabase
-        .from('token_wallets')
-        .select('earned_tokens, purchased_tokens')
-        .eq('user_id', userId)
-        .single();
-      
-      if (walletError) throw walletError;
-
-      const currentEarned = wallet?.earned_tokens || 0;
-      const currentPurchased = wallet?.purchased_tokens || 0;
-      const currentBalance = currentEarned + currentPurchased;
-
-      if (amount > currentBalance) {
+      // Atomically deduct tokens (prevents race conditions)
+      const { data: deductResult, error: deductError } = await supabase
+        .rpc('deduct_tokens', {
+          user_id_param: userId,
+          amount_param: amount,
+        });
+      if (deductError) throw deductError;
+      if (!deductResult || deductResult.length === 0 || !deductResult[0].success) {
         throw new Error('Insufficient balance to burn');
       }
-
-      const newBalance = currentBalance - amount;
-
-      // Burn from earned tokens first, then purchased
-      let newEarned = currentEarned;
-      let newPurchased = currentPurchased;
-      
-      if (amount <= currentEarned) {
-        newEarned = currentEarned - amount;
-      } else {
-        newEarned = 0;
-        newPurchased = currentPurchased - (amount - currentEarned);
-      }
-
-      // Update wallet
-      const { error: updateError } = await supabase
-        .from('token_wallets')
-        .update({ 
-          earned_tokens: newEarned,
-          purchased_tokens: newPurchased 
-        })
-        .eq('user_id', userId);
-      
-      if (updateError) throw updateError;
+      const newBalance = deductResult[0].new_balance;
 
       // Create transaction record (negative amount for burn)
       const { error: transactionError } = await supabase
