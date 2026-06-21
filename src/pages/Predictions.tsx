@@ -387,20 +387,24 @@ const Predictions = () => {
           .eq('id', editEntry.legs[0].id);
       }
 
-      // 7. Update wallet (add/subtract difference)
-      const { data: wallet } = await supabase
-        .from('token_wallets')
-        .select('earned_tokens')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (wallet) {
-        await supabase
-          .from('token_wallets')
-          .update({ 
-            earned_tokens: wallet.earned_tokens - stakeDiff
-          })
-          .eq('user_id', user.id);
+      // 7. Update wallet (add/subtract difference) via atomic RPCs
+      if (stakeDiff > 0) {
+        const { data: deductResult, error: deductError } = await supabase
+          .rpc('deduct_tokens', {
+            user_id_param: user.id,
+            amount_param: stakeDiff,
+          });
+        if (deductError) throw deductError;
+        if (!deductResult || deductResult.length === 0 || !deductResult[0].success) {
+          throw new Error('Insufficient balance or wallet not found');
+        }
+      } else if (stakeDiff < 0) {
+        const { error: refundError } = await supabase
+          .rpc('increment_earned_tokens', {
+            user_id_param: user.id,
+            amount: Math.abs(stakeDiff),
+          });
+        if (refundError) throw refundError;
       }
 
       toast({
