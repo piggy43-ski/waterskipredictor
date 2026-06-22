@@ -9,7 +9,7 @@ export const PARLAY_CONFIG = {
   MAX_LEGS: 6,
   
   /** Maximum stake amount in tokens for any parlay prediction */
-  MAX_STAKE: 10000,
+  MAX_STAKE: 50000,
   
   /** House edge applied to parlay odds (0 for progressive cap system) */
   HOUSE_EDGE: 0,
