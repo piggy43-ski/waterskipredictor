@@ -70,7 +70,7 @@ export const getDynamicFloors = (
 // ============================================================
 export const RISK_CONFIG = {
   /** Maximum stake per prediction in tokens */
-  MAX_STAKE: 10000,
+  MAX_STAKE: 50000,
   
   /** Maximum payout per prediction in tokens */
   MAX_PAYOUT: 150000,
