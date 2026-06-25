@@ -64,6 +64,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCanceled from "./pages/PaymentCanceled";
 import HelpCenter from "./pages/HelpCenter";
 import HelpArticle from "./pages/HelpArticle";
+import Support from "./pages/Support";
 import AdminHelpArticles from "./pages/admin/HelpArticles";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
@@ -111,6 +112,7 @@ const App = () => (
               <Route path="/fantasy/season/:potId/team/:entryId" element={<ProtectedRoute><FantasySeasonView /></ProtectedRoute>} />
               <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
               <Route path="/help/:id" element={<ProtectedRoute><HelpArticle /></ProtectedRoute>} />
+              <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
               
               {/* Admin routes */}
               <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
