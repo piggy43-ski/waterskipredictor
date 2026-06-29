@@ -406,13 +406,19 @@ const Rewards = () => {
       broadcastWalletRefresh();
       setSelectedReward(null);
     } catch (error: any) {
-      let errorMessage = "Failed to redeem reward. Please try again.";
-      
-      if (error?.message?.includes('Wallet not found')) {
-        errorMessage = "Wallet not found. Please refresh and try again.";
-      } else if (!navigator.onLine) {
-        errorMessage = "Network error. Please check your connection.";
-      }
+      let errorMessage = "Something went wrong. Please try again.";
+          const raw = String(error?.message || "");
+          if (raw.includes("Per-user redemption limit")) errorMessage = "You've already redeemed this. Limits reset quarterly.";
+          else if (raw.includes("sold out")) errorMessage = "This reward just sold out.";
+          else if (raw.includes("not available") || raw.includes("Reward not found")) errorMessage = "This reward isn't available right now.";
+          else if (raw.includes("Insufficient") || raw.includes("balance") || raw.includes("Wallet not found")) errorMessage = "You don't have enough tokens for this yet.";
+          else if (raw.includes("shipping_zip")) errorMessage = "Enter a valid 5-digit ZIP code.";
+          else if (raw.includes("shipping_state")) errorMessage = "Use a 2-letter state code (e.g. FL).";
+          else if (raw.includes("glove_size")) errorMessage = "Pick a valid glove size before redeeming.";
+          else if (raw.includes("gift_card_email")) errorMessage = "Enter a valid email for the gift card.";
+          else if (raw.includes("Authentication")) errorMessage = "Please sign in again, then retry.";
+          else if (!navigator.onLine) errorMessage = "You're offline. Check your connection and retry.";
+          else if (raw) errorMessage = raw;
       
       toast({
         title: "Redemption Failed",
