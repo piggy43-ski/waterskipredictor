@@ -8,8 +8,8 @@ const corsHeaders = {
 
 // Position points for athletes who make the final
 const POSITION_POINTS: Record<number, number> = {
-  1: 25, 2: 20, 3: 16, 4: 13, 5: 11,
-  6: 9, 7: 7, 8: 5, 9: 3, 10: 3, 11: 3, 12: 3
+  1: 25, 2: 18, 3: 15, 4: 12, 5: 10,
+  6: 8, 7: 6, 8: 4, 9: 2, 10: 1
 };
 const DEFAULT_FINALIST_POINTS = 1; // For positions >12
 
