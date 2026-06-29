@@ -356,7 +356,7 @@ const Rewards = () => {
         await supabase.functions.invoke('send-email', {
           body: {
             type: 'admin_redemption_new',
-            to: 'robert@waterskipredictor.com',
+            to: 'waterskipredictor@gmail.com',
             dry_run: isDryRun,
             data: {
               userUsername: (user.user_metadata as any)?.username || user.email?.split('@')[0] || 'user',
