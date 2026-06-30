@@ -59,7 +59,7 @@ const PodiumCard = ({
 }) => (
   <PressRow isCurrent={isCurrent} innerRef={innerRef}>
     <div className="p-4 bg-card border border-border rounded-md flex flex-col items-center text-center gap-2">
-      <div className="font-display text-primary text-2xl">#{row.rank}</div>
+      <div className="font-display text-primary text-2xl flex items-center justify-center gap-1">#{row.rank}{row.rank_delta !== 0 && <span className={`text-[11px] font-bold ${row.rank_delta > 0 ? 'text-primary' : 'text-destructive'}`}>{row.rank_delta > 0 ? '▲'+row.rank_delta : '▼'+Math.abs(row.rank_delta)}</span>}</div>
       <Avatar className="w-14 h-14 border border-border">
         <AvatarImage src={row.avatar_url ?? undefined} />
         <AvatarFallback>{initials(row.username)}</AvatarFallback>
@@ -90,8 +90,9 @@ const DenseRow = ({
 }) => (
   <PressRow isCurrent={isCurrent} innerRef={innerRef}>
     <div className="flex items-center gap-3 py-3 px-1 border-b border-border">
-      <div className="font-display text-muted-foreground text-lg w-10 shrink-0">
+      <div className="font-display text-muted-foreground text-lg w-10 shrink-0 flex flex-col items-center leading-none">
         #{row.rank}
+        {row.rank_delta !== 0 && <span className={`text-[10px] font-bold ${row.rank_delta > 0 ? 'text-primary' : 'text-destructive'}`}>{row.rank_delta > 0 ? '▲'+row.rank_delta : '▼'+Math.abs(row.rank_delta)}</span>}
       </div>
       <Avatar className="w-10 h-10 border border-border shrink-0">
         <AvatarImage src={row.avatar_url ?? undefined} />
