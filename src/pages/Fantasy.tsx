@@ -32,6 +32,7 @@ interface StandingRow {
   points: number;
   events: number;
   wins: number;
+  delta: number;
 }
 
 const initials = (name: string) =>
@@ -69,8 +70,8 @@ const Fantasy = () => {
     queryKey: ['fantasy-season-standings', season],
     queryFn: async (): Promise<StandingRow[]> => {
       const { data: rows, error } = await supabase
-        .from('fantasy_season_standings' as any)
-        .select('user_id, championship_points, events_played, event_wins')
+        .from('v_fantasy_season_leaderboard' as any)
+        .select('user_id, championship_points, events_played, event_wins, rank_delta')
         .eq('season', season)
         .order('championship_points', { ascending: false })
         .limit(25);
@@ -91,6 +92,7 @@ const Fantasy = () => {
         points: Number(r.championship_points) || 0,
         events: r.events_played || 0,
         wins: r.event_wins || 0,
+        delta: Number(r.rank_delta) || 0,
       }));
     },
   });
@@ -225,9 +227,14 @@ const Fantasy = () => {
                         row.user_id === user?.id && 'border-l-2 border-primary pl-2'
                       )}
                     >
-                      <span className={cn('w-6 text-center font-display text-lg', row.rank <= 3 ? 'text-primary' : 'text-muted-foreground')}>
-                        {row.rank}
-                      </span>
+                      <div className="w-6 flex flex-col items-center leading-none">
+                        <span className={cn('font-display text-lg', row.rank <= 3 ? 'text-primary' : 'text-muted-foreground')}>{row.rank}</span>
+                        {row.delta !== 0 && (
+                          <span className={cn('text-[9px] font-bold', row.delta > 0 ? 'text-green-500' : 'text-red-500')}>
+                            {row.delta > 0 ? '▲' + row.delta : '▼' + Math.abs(row.delta)}
+                          </span>
+                        )}
+                      </div>
                       <Avatar className="w-8 h-8">
                         <AvatarImage src={row.avatar_url ?? undefined} />
                         <AvatarFallback className="text-xs">{initials(row.username)}</AvatarFallback>
