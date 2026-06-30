@@ -12,6 +12,7 @@ export interface LeaderboardRow {
   total_predictions: number;
   accuracy_pct: number | null;
   rank: number;
+  rank_delta: number;
 }
 
 export const useLeaderboardTop = (limit = 10) => {
