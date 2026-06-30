@@ -257,6 +257,9 @@ Deno.serve(async (req) => {
     }
 
     const { selections, prediction_overrides, tournament_name: requestTournamentName }: SettlementRequest = await req.json();
+
+    // Snapshot prediction ranks BEFORE settling so leaderboard movement arrows reflect this event.
+    try { await supabaseClient.rpc('capture_leaderboard_snapshot', { p_board: 'predictions' }); } catch (e) { console.error('snapshot capture failed (non-fatal):', e); }
     
     // Build a map of selection contexts for building explanations
     const selectionContextMap = new Map<string, SelectionWithContext>();
