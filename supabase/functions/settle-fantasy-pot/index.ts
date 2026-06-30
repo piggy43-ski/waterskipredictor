@@ -243,6 +243,9 @@ serve(async (req) => {
 
     console.log(`Fantasy pot ${pot_id} settled successfully`);
 
+    // Snapshot season standings BEFORE awarding this event's points (powers leaderboard movement arrows).
+    try { await supabase.rpc('capture_leaderboard_snapshot', { p_board: 'fantasy_season' }); } catch (e) { console.error('snapshot capture failed (non-fatal):', e); }
+
     // Season championship points (F1-style). Awarded once per tournament pot at settlement.
     try {
       const isTournamentPot = !!pot.tournament_id && pot.pot_type !== 'season';
