@@ -29,7 +29,7 @@ const IMPLIED_SUM_FLOOR: Record<string, number> = {
 // Do NOT diverge — update src/utils/multiplierCaps.ts AND this block in lockstep.
 const MULTIPLIER_CAPS = {
   WINNER:        { min: 1.10, max: 25.0 },
-  PODIUM:        { min: 1.25, max: 12.0 },
+  PODIUM:        { min: 1.10, max: 12.0 },
   HIGHEST_SCORE: { min: 1.10, max: 22.0 },
   HEAD_TO_HEAD:  { min: 1.10, max: 5.0 },
 };
@@ -38,9 +38,9 @@ const MULTIPLIER_CAPS = {
 // Top-3 tight; ranks 4–7 mid; ranks 8+ wide tail so large fields can
 // satisfy the implied-sum band without the global cap acting as a floor.
 const RANK_CAPS: Record<string, Record<string | number, number>> = {
-  WINNER:        { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 4.75, 6: 5.50, 7: 6.50, '8+': 20.00 },
-  PODIUM:        { 1: 1.25, 2: 1.75, 3: 2.20, 4: 3.25, 5: 3.75, 6: 4.25, 7: 5.00, '8+': 10.00 },
-  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.40, 4: 4.50, 5: 5.25, 6: 6.00, 7: 7.00, '8+': 18.00 },
+  WINNER:        { 1: 1.25, 2: 1.60, 3: 3.00, 4: 4.00, 5: 4.75, 6: 5.50, 7: 6.50, '8+': 20.00 },
+  PODIUM:        { 1: 1.13, 2: 1.38, 3: 1.60, 4: 3.25, 5: 3.75, 6: 4.25, 7: 5.00, '8+': 10.00 },
+  HIGHEST_SCORE: { 1: 1.40, 2: 2.50, 3: 3.40, 4: 4.50, 5: 5.25, 6: 6.00, 7: 7.00, '8+': 18.00 },
   HEAD_TO_HEAD:  {},
 };
 
