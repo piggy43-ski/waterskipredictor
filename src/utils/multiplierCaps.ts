@@ -6,7 +6,7 @@ export const MULTIPLIER_CAPS = {
   // global cap acting as a floor. Favorite caps (ranks 1–3) stay tight via
   // RANK_CAPS — the global max is only ever hit by deep longshots.
   WINNER:        { min: 1.10, max: 25.0 },
-  PODIUM:        { min: 1.25, max: 12.0 },
+  PODIUM:        { min: 1.10, max: 12.0 },
   HIGHEST_SCORE: { min: 1.10, max: 22.0 },
   HEAD_TO_HEAD:  { min: 1.10, max: 5.0 },
   OVER_UNDER:    { min: 1.10, max: 5.0 },
@@ -17,9 +17,9 @@ export const MULTIPLIER_CAPS = {
 // the implied-sum target without forcing a constant-multiplier tail.
 // Use `getRankCap(market, rank)` to resolve — do NOT read this object directly.
 export const RANK_CAPS: Record<string, Record<string | number, number>> = {
-  WINNER:        { 1: 1.50, 2: 2.25, 3: 3.00, 4: 4.00, 5: 4.75, 6: 5.50, 7: 6.50, '8+': 20.00 },
-  PODIUM:        { 1: 1.25, 2: 1.75, 3: 2.20, 4: 3.25, 5: 3.75, 6: 4.25, 7: 5.00, '8+': 10.00 },
-  HIGHEST_SCORE: { 1: 1.80, 2: 2.50, 3: 3.40, 4: 4.50, 5: 5.25, 6: 6.00, 7: 7.00, '8+': 18.00 },
+  WINNER:        { 1: 1.25, 2: 1.60, 3: 3.00, 4: 4.00, 5: 4.75, 6: 5.50, 7: 6.50, '8+': 20.00 },
+  PODIUM:        { 1: 1.13, 2: 1.38, 3: 1.60, 4: 3.25, 5: 3.75, 6: 4.25, 7: 5.00, '8+': 10.00 },
+  HIGHEST_SCORE: { 1: 1.40, 2: 2.50, 3: 3.40, 4: 4.50, 5: 5.25, 6: 6.00, 7: 7.00, '8+': 18.00 },
   HEAD_TO_HEAD:  {},
 };
 
