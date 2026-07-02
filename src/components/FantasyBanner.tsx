@@ -13,17 +13,18 @@ export function FantasyBanner() {
   useEffect(() => {
     let active = true;
     (async () => {
-      // Banner tracks whichever tournament's fantasy pot is currently open,
-      // so it auto-updates every new event — no hardcoded tournament name.
+      // Show for whichever tournament's fantasy pot is currently open. Read the
+      // pot's own name (no tournaments embed — fantasy_pots has two columns that
+      // reference tournaments, which makes a PostgREST embed ambiguous / 300).
       const { data } = await supabase
         .from('fantasy_pots')
-        .select('id, status, tournaments(name)')
+        .select('id, status, name')
         .eq('status', 'open')
         .order('created_at', { ascending: false })
         .limit(1);
       const pot: any = data && data[0];
-      if (!active || !pot || !pot.tournaments) return;
-      const name = (pot.tournaments.name || '').replace(/\s*ProAm$/i, '').trim();
+      if (!active || !pot || !pot.name) return;
+      const name = String(pot.name).replace(/\s*ProAm$/i, '').trim();
       const key = `wsp_fantasy_banner_dismissed_${pot.id}`;
       if (localStorage.getItem(key) === '1') return;
       setEventName(name);
