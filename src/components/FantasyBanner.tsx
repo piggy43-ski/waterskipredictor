@@ -2,20 +2,39 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-const STORAGE_KEY = 'wsp_fantasy_banner_dismissed';
+import { supabase } from '@/integrations/supabase/client';
 
 export function FantasyBanner() {
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
+  const [eventName, setEventName] = useState('');
+  const [dismissKey, setDismissKey] = useState('wsp_fantasy_banner_dismissed');
 
   useEffect(() => {
-    const dismissed = localStorage.getItem(STORAGE_KEY) === '1';
-    setVisible(!dismissed);
+    let active = true;
+    (async () => {
+      // Banner tracks whichever tournament's fantasy pot is currently open,
+      // so it auto-updates every new event — no hardcoded tournament name.
+      const { data } = await supabase
+        .from('fantasy_pots')
+        .select('id, status, tournaments(name)')
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const pot: any = data && data[0];
+      if (!active || !pot || !pot.tournaments) return;
+      const name = (pot.tournaments.name || '').replace(/\s*ProAm$/i, '').trim();
+      const key = `wsp_fantasy_banner_dismissed_${pot.id}`;
+      if (localStorage.getItem(key) === '1') return;
+      setEventName(name);
+      setDismissKey(key);
+      setVisible(true);
+    })();
+    return () => { active = false; };
   }, []);
 
   const handleDismiss = () => {
-    localStorage.setItem(STORAGE_KEY, '1');
+    localStorage.setItem(dismissKey, '1');
     setVisible(false);
   };
 
@@ -34,7 +53,7 @@ export function FantasyBanner() {
           <div className="min-w-0">
             <p className="text-foreground font-semibold">Fantasy is live</p>
             <p className="text-xs text-muted-foreground truncate">
-              Draft your Botaski team — top 3 win tokens
+              Draft your {eventName} team — top 3 win tokens
             </p>
           </div>
         </div>
