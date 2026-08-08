@@ -40,11 +40,11 @@ export const BidPanel = ({ lot, now, onBidPlaced }: Props) => {
   const ensureProfile = async () => {
     const { data } = await supabase
       .from('vault_bidder_profiles')
-      .select('user_id, bidding_terms_accepted_at, stripe_payment_method_id')
+      .select('user_id, bidding_terms_accepted_at, is_verified, stripe_payment_method_id')
       .eq('user_id', user!.id)
       .maybeSingle();
     if (!data || !data.bidding_terms_accepted_at) return false;
-    if (VAULT_REQUIRE_PAYMENT_METHOD && !data.stripe_payment_method_id) return false;
+    if (VAULT_REQUIRE_PAYMENT_METHOD && !(data.is_verified && data.stripe_payment_method_id)) return false;
     return true;
   };
 
@@ -74,6 +74,14 @@ export const BidPanel = ({ lot, now, onBidPlaced }: Props) => {
     setSubmitting(false);
     setConfirming(false);
     if (error) {
+      if (error.message?.includes('PAYMENT_SETUP_REQUIRED')) {
+        setSetupOpen(true);
+        toast({
+          title: 'Add a card to bid',
+          description: 'Bids are binding, so we need a card on file before your first one.',
+        });
+        return;
+      }
       toast({ title: 'Bid not accepted', description: error.message, variant: 'destructive' });
       return;
     }
