@@ -684,6 +684,42 @@ export type Database = {
         }
         Relationships: []
       }
+      error_logs: {
+        Row: {
+          context: Json | null
+          created_at: string
+          email: string | null
+          error_message: string | null
+          error_stack: string | null
+          id: string
+          page_url: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          context?: Json | null
+          created_at?: string
+          email?: string | null
+          error_message?: string | null
+          error_stack?: string | null
+          id?: string
+          page_url?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          context?: Json | null
+          created_at?: string
+          email?: string | null
+          error_message?: string | null
+          error_stack?: string | null
+          id?: string
+          page_url?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       fantasy_config: {
         Row: {
           description: string | null
@@ -1276,6 +1312,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      leaderboard_snapshots: {
+        Row: {
+          board: string
+          captured_at: string
+          id: string
+          rank: number
+          user_id: string
+        }
+        Insert: {
+          board: string
+          captured_at?: string
+          id?: string
+          rank: number
+          user_id: string
+        }
+        Update: {
+          board?: string
+          captured_at?: string
+          id?: string
+          rank?: number
+          user_id?: string
+        }
+        Relationships: []
       }
       market_entries: {
         Row: {
@@ -2996,6 +3056,63 @@ export type Database = {
         }
         Relationships: []
       }
+      support_tickets: {
+        Row: {
+          admin_response: string | null
+          app_context: Json | null
+          category: string
+          created_at: string
+          email: string | null
+          id: string
+          message: string
+          page_url: string | null
+          priority: string
+          responded_at: string | null
+          responded_by: string | null
+          status: string
+          subject: string | null
+          updated_at: string
+          user_id: string | null
+          username: string | null
+        }
+        Insert: {
+          admin_response?: string | null
+          app_context?: Json | null
+          category?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          message: string
+          page_url?: string | null
+          priority?: string
+          responded_at?: string | null
+          responded_by?: string | null
+          status?: string
+          subject?: string | null
+          updated_at?: string
+          user_id?: string | null
+          username?: string | null
+        }
+        Update: {
+          admin_response?: string | null
+          app_context?: Json | null
+          category?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          message?: string
+          page_url?: string | null
+          priority?: string
+          responded_at?: string | null
+          responded_by?: string | null
+          status?: string
+          subject?: string | null
+          updated_at?: string
+          user_id?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
       system_events: {
         Row: {
           created_at: string
@@ -3406,6 +3523,368 @@ export type Database = {
         }
         Relationships: []
       }
+      vault_bidder_profiles: {
+        Row: {
+          address_line1: string | null
+          address_line2: string | null
+          bidding_terms_accepted_at: string | null
+          city: string | null
+          country: string
+          created_at: string
+          full_name: string | null
+          is_verified: boolean
+          local_pickup: boolean
+          payment_method_brand: string | null
+          payment_method_last4: string | null
+          phone: string | null
+          postal_code: string | null
+          shipping_zone: number | null
+          state: string | null
+          stripe_customer_id: string | null
+          stripe_payment_method_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address_line1?: string | null
+          address_line2?: string | null
+          bidding_terms_accepted_at?: string | null
+          city?: string | null
+          country?: string
+          created_at?: string
+          full_name?: string | null
+          is_verified?: boolean
+          local_pickup?: boolean
+          payment_method_brand?: string | null
+          payment_method_last4?: string | null
+          phone?: string | null
+          postal_code?: string | null
+          shipping_zone?: number | null
+          state?: string | null
+          stripe_customer_id?: string | null
+          stripe_payment_method_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address_line1?: string | null
+          address_line2?: string | null
+          bidding_terms_accepted_at?: string | null
+          city?: string | null
+          country?: string
+          created_at?: string
+          full_name?: string | null
+          is_verified?: boolean
+          local_pickup?: boolean
+          payment_method_brand?: string | null
+          payment_method_last4?: string | null
+          phone?: string | null
+          postal_code?: string | null
+          shipping_zone?: number | null
+          state?: string | null
+          stripe_customer_id?: string | null
+          stripe_payment_method_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vault_bids: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          is_auto: boolean
+          max_bid: number
+          outbid_at: string | null
+          ski_id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          is_auto?: boolean
+          max_bid: number
+          outbid_at?: string | null
+          ski_id: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          is_auto?: boolean
+          max_bid?: number
+          outbid_at?: string | null
+          ski_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_bids_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_skis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_bids_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_skis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vault_drops: {
+        Row: {
+          closes_at: string
+          created_at: string
+          description: string | null
+          drop_number: number
+          id: string
+          name: string
+          opens_at: string
+          status: Database["public"]["Enums"]["vault_drop_status"]
+          updated_at: string
+        }
+        Insert: {
+          closes_at: string
+          created_at?: string
+          description?: string | null
+          drop_number: number
+          id?: string
+          name: string
+          opens_at: string
+          status?: Database["public"]["Enums"]["vault_drop_status"]
+          updated_at?: string
+        }
+        Update: {
+          closes_at?: string
+          created_at?: string
+          description?: string | null
+          drop_number?: number
+          id?: string
+          name?: string
+          opens_at?: string
+          status?: Database["public"]["Enums"]["vault_drop_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vault_orders: {
+        Row: {
+          charge_attempts: number
+          created_at: string
+          hammer_price: number
+          id: string
+          last_error: string | null
+          paid_at: string | null
+          shipped_at: string | null
+          shipping_cost: number
+          ski_id: string
+          status: Database["public"]["Enums"]["vault_order_status"]
+          stripe_payment_intent_id: string | null
+          total: number
+          tracking_number: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          charge_attempts?: number
+          created_at?: string
+          hammer_price: number
+          id?: string
+          last_error?: string | null
+          paid_at?: string | null
+          shipped_at?: string | null
+          shipping_cost?: number
+          ski_id: string
+          status?: Database["public"]["Enums"]["vault_order_status"]
+          stripe_payment_intent_id?: string | null
+          total: number
+          tracking_number?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          charge_attempts?: number
+          created_at?: string
+          hammer_price?: number
+          id?: string
+          last_error?: string | null
+          paid_at?: string | null
+          shipped_at?: string | null
+          shipping_cost?: number
+          ski_id?: string
+          status?: Database["public"]["Enums"]["vault_order_status"]
+          stripe_payment_intent_id?: string | null
+          total?: number
+          tracking_number?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_orders_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_skis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_orders_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_skis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vault_shipping_zones: {
+        Row: {
+          label: string | null
+          price: number
+          states: string[]
+          zone: number
+        }
+        Insert: {
+          label?: string | null
+          price: number
+          states?: string[]
+          zone: number
+        }
+        Update: {
+          label?: string | null
+          price?: number
+          states?: string[]
+          zone?: number
+        }
+        Relationships: []
+      }
+      vault_skis: {
+        Row: {
+          bid_count: number
+          brand: string
+          buy_now_price: number | null
+          closes_at: string | null
+          condition: Database["public"]["Enums"]["vault_condition"]
+          created_at: string
+          current_price: number
+          description: string | null
+          drop_id: string | null
+          highest_bidder_id: string | null
+          id: string
+          image_urls: string[]
+          listing_type: Database["public"]["Enums"]["vault_listing_type"]
+          model: string
+          reserve_price: number | null
+          retail_price: number | null
+          size_cm: string | null
+          sort_order: number
+          start_price: number
+          status: Database["public"]["Enums"]["vault_ski_status"]
+          title: string
+          updated_at: string
+          year: string | null
+        }
+        Insert: {
+          bid_count?: number
+          brand: string
+          buy_now_price?: number | null
+          closes_at?: string | null
+          condition?: Database["public"]["Enums"]["vault_condition"]
+          created_at?: string
+          current_price?: number
+          description?: string | null
+          drop_id?: string | null
+          highest_bidder_id?: string | null
+          id?: string
+          image_urls?: string[]
+          listing_type?: Database["public"]["Enums"]["vault_listing_type"]
+          model: string
+          reserve_price?: number | null
+          retail_price?: number | null
+          size_cm?: string | null
+          sort_order?: number
+          start_price?: number
+          status?: Database["public"]["Enums"]["vault_ski_status"]
+          title: string
+          updated_at?: string
+          year?: string | null
+        }
+        Update: {
+          bid_count?: number
+          brand?: string
+          buy_now_price?: number | null
+          closes_at?: string | null
+          condition?: Database["public"]["Enums"]["vault_condition"]
+          created_at?: string
+          current_price?: number
+          description?: string | null
+          drop_id?: string | null
+          highest_bidder_id?: string | null
+          id?: string
+          image_urls?: string[]
+          listing_type?: Database["public"]["Enums"]["vault_listing_type"]
+          model?: string
+          reserve_price?: number | null
+          retail_price?: number | null
+          size_cm?: string | null
+          sort_order?: number
+          start_price?: number
+          status?: Database["public"]["Enums"]["vault_ski_status"]
+          title?: string
+          updated_at?: string
+          year?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_skis_drop_id_fkey"
+            columns: ["drop_id"]
+            isOneToOne: false
+            referencedRelation: "vault_drops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vault_watchlist: {
+        Row: {
+          created_at: string
+          id: string
+          ski_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ski_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ski_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_watchlist_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_skis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_watchlist_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_skis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       house_bankroll_summary: {
@@ -3522,6 +4001,44 @@ export type Database = {
           },
         ]
       }
+      v_fantasy_season_leaderboard: {
+        Row: {
+          championship_points: number | null
+          event_wins: number | null
+          events_played: number | null
+          previous_rank: number | null
+          rank: number | null
+          rank_delta: number | null
+          season: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      v_prediction_leaderboard: {
+        Row: {
+          accuracy_pct: number | null
+          avatar_url: string | null
+          net_pnl: number | null
+          previous_rank: number | null
+          rank: number | null
+          rank_delta: number | null
+          total_predictions: number | null
+          total_staked: number | null
+          total_won: number | null
+          user_id: string | null
+          username: string | null
+          win_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bet_slips_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_wallet_ledger: {
         Row: {
           affects_wallet: boolean | null
@@ -3603,9 +4120,103 @@ export type Database = {
           },
         ]
       }
+      vault_public_skis: {
+        Row: {
+          bid_count: number | null
+          brand: string | null
+          buy_now_price: number | null
+          closes_at: string | null
+          condition: Database["public"]["Enums"]["vault_condition"] | null
+          created_at: string | null
+          current_price: number | null
+          description: string | null
+          drop_id: string | null
+          highest_bidder_id: string | null
+          id: string | null
+          image_urls: string[] | null
+          listing_type: Database["public"]["Enums"]["vault_listing_type"] | null
+          model: string | null
+          reserve_met: boolean | null
+          retail_price: number | null
+          size_cm: string | null
+          sort_order: number | null
+          start_price: number | null
+          status: Database["public"]["Enums"]["vault_ski_status"] | null
+          title: string | null
+          updated_at: string | null
+          year: string | null
+        }
+        Insert: {
+          bid_count?: number | null
+          brand?: string | null
+          buy_now_price?: number | null
+          closes_at?: string | null
+          condition?: Database["public"]["Enums"]["vault_condition"] | null
+          created_at?: string | null
+          current_price?: number | null
+          description?: string | null
+          drop_id?: string | null
+          highest_bidder_id?: string | null
+          id?: string | null
+          image_urls?: string[] | null
+          listing_type?:
+            | Database["public"]["Enums"]["vault_listing_type"]
+            | null
+          model?: string | null
+          reserve_met?: never
+          retail_price?: number | null
+          size_cm?: string | null
+          sort_order?: number | null
+          start_price?: number | null
+          status?: Database["public"]["Enums"]["vault_ski_status"] | null
+          title?: string | null
+          updated_at?: string | null
+          year?: string | null
+        }
+        Update: {
+          bid_count?: number | null
+          brand?: string | null
+          buy_now_price?: number | null
+          closes_at?: string | null
+          condition?: Database["public"]["Enums"]["vault_condition"] | null
+          created_at?: string | null
+          current_price?: number | null
+          description?: string | null
+          drop_id?: string | null
+          highest_bidder_id?: string | null
+          id?: string | null
+          image_urls?: string[] | null
+          listing_type?:
+            | Database["public"]["Enums"]["vault_listing_type"]
+            | null
+          model?: string | null
+          reserve_met?: never
+          retail_price?: number | null
+          size_cm?: string | null
+          sort_order?: number | null
+          start_price?: number | null
+          status?: Database["public"]["Enums"]["vault_ski_status"] | null
+          title?: string | null
+          updated_at?: string | null
+          year?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_skis_drop_id_fkey"
+            columns: ["drop_id"]
+            isOneToOne: false
+            referencedRelation: "vault_drops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       athlete_cap_pct: { Args: { p_multiplier: number }; Returns: number }
+      capture_leaderboard_snapshot: {
+        Args: { p_board: string }
+        Returns: number
+      }
       check_athlete_capacity: {
         Args: {
           p_added_tokens?: number
@@ -3653,6 +4264,7 @@ export type Database = {
           avatar_url: string
           net_pnl: number
           rank: number
+          rank_delta: number
           total_predictions: number
           total_staked: number
           total_won: number
@@ -3747,9 +4359,43 @@ export type Database = {
         Returns: boolean
       }
       validate_referral_code: { Args: { p_code: string }; Returns: boolean }
+      vault_bid_history: {
+        Args: { p_ski_id: string }
+        Returns: {
+          amount: number
+          created_at: string
+          handle: string
+          id: string
+          is_auto: boolean
+        }[]
+      }
+      vault_bid_increment: { Args: { p_price: number }; Returns: number }
+      vault_place_bid: {
+        Args: { p_max_bid: number; p_ski_id: string }
+        Returns: Json
+      }
+      vault_reserve_met: { Args: { p_ski_id: string }; Returns: boolean }
+      vault_server_time: { Args: never; Returns: string }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      vault_condition: "brand_new" | "barely_ridden" | "ridden"
+      vault_drop_status: "scheduled" | "live" | "closed"
+      vault_listing_type: "auction" | "buy_now"
+      vault_order_status:
+        | "pending_charge"
+        | "paid"
+        | "failed"
+        | "refunded"
+        | "shipped"
+        | "cancelled"
+      vault_ski_status:
+        | "scheduled"
+        | "live"
+        | "ended_met"
+        | "ended_no_reserve_met"
+        | "sold"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3878,6 +4524,25 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      vault_condition: ["brand_new", "barely_ridden", "ridden"],
+      vault_drop_status: ["scheduled", "live", "closed"],
+      vault_listing_type: ["auction", "buy_now"],
+      vault_order_status: [
+        "pending_charge",
+        "paid",
+        "failed",
+        "refunded",
+        "shipped",
+        "cancelled",
+      ],
+      vault_ski_status: [
+        "scheduled",
+        "live",
+        "ended_met",
+        "ended_no_reserve_met",
+        "sold",
+        "cancelled",
+      ],
     },
   },
 } as const

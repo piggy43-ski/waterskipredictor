@@ -68,6 +68,10 @@ import Support from "./pages/Support";
 import AdminHelpArticles from "./pages/admin/HelpArticles";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
+import VaultHome from "./pages/vault/VaultHome";
+import VaultSki from "./pages/vault/VaultSki";
+import VaultAccount from "./pages/vault/VaultAccount";
+import VaultAdmin from "./pages/vault/VaultAdmin";
 
 const queryClient = new QueryClient();
 
@@ -90,6 +94,12 @@ const App = () => (
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/privacy" element={<Privacy />} />
+
+              {/* THE VAULT — public storefront (real money, no auth to browse) */}
+              <Route path="/vault" element={<VaultHome />} />
+              <Route path="/vault/ski/:id" element={<VaultSki />} />
+              <Route path="/vault/account" element={<ProtectedRoute><VaultAccount /></ProtectedRoute>} />
+              <Route path="/vault/admin" element={<ProtectedRoute><VaultAdmin /></ProtectedRoute>} />
               
               {/* Protected routes */}
               <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
