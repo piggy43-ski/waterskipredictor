@@ -3640,6 +3640,166 @@ export type Database = {
           },
         ]
       }
+      vault_consignment_submissions: {
+        Row: {
+          admin_notes: string | null
+          asking_price: number | null
+          brand: string
+          condition: Database["public"]["Enums"]["vault_condition"]
+          consignor_id: string | null
+          contact_email: string
+          contact_name: string
+          contact_phone: string | null
+          created_at: string
+          id: string
+          image_urls: string[]
+          model: string
+          notes: string | null
+          size_cm: string | null
+          status: Database["public"]["Enums"]["vault_submission_status"]
+          updated_at: string
+          user_id: string | null
+          year: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          asking_price?: number | null
+          brand: string
+          condition?: Database["public"]["Enums"]["vault_condition"]
+          consignor_id?: string | null
+          contact_email: string
+          contact_name: string
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          image_urls?: string[]
+          model: string
+          notes?: string | null
+          size_cm?: string | null
+          status?: Database["public"]["Enums"]["vault_submission_status"]
+          updated_at?: string
+          user_id?: string | null
+          year?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          asking_price?: number | null
+          brand?: string
+          condition?: Database["public"]["Enums"]["vault_condition"]
+          consignor_id?: string | null
+          contact_email?: string
+          contact_name?: string
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          image_urls?: string[]
+          model?: string
+          notes?: string | null
+          size_cm?: string | null
+          status?: Database["public"]["Enums"]["vault_submission_status"]
+          updated_at?: string
+          user_id?: string | null
+          year?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_consignment_submissions_consignor_id_fkey"
+            columns: ["consignor_id"]
+            isOneToOne: false
+            referencedRelation: "vault_consignors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vault_consignor_payouts: {
+        Row: {
+          amount: number
+          consignor_id: string
+          created_at: string
+          id: string
+          method: string | null
+          notes: string | null
+          paid_at: string
+          reference: string | null
+        }
+        Insert: {
+          amount: number
+          consignor_id: string
+          created_at?: string
+          id?: string
+          method?: string | null
+          notes?: string | null
+          paid_at?: string
+          reference?: string | null
+        }
+        Update: {
+          amount?: number
+          consignor_id?: string
+          created_at?: string
+          id?: string
+          method?: string | null
+          notes?: string | null
+          paid_at?: string
+          reference?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_consignor_payouts_consignor_id_fkey"
+            columns: ["consignor_id"]
+            isOneToOne: false
+            referencedRelation: "vault_consignors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vault_consignors: {
+        Row: {
+          commission_rate: number
+          created_at: string
+          display_name: string
+          email: string | null
+          id: string
+          is_anonymous: boolean
+          notes: string | null
+          payout_details: string | null
+          payout_method: string | null
+          phone: string | null
+          real_name: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          commission_rate?: number
+          created_at?: string
+          display_name: string
+          email?: string | null
+          id?: string
+          is_anonymous?: boolean
+          notes?: string | null
+          payout_details?: string | null
+          payout_method?: string | null
+          phone?: string | null
+          real_name?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          commission_rate?: number
+          created_at?: string
+          display_name?: string
+          email?: string | null
+          id?: string
+          is_anonymous?: boolean
+          notes?: string | null
+          payout_details?: string | null
+          payout_method?: string | null
+          phone?: string | null
+          real_name?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       vault_drops: {
         Row: {
           closes_at: string
@@ -3679,9 +3839,13 @@ export type Database = {
       vault_orders: {
         Row: {
           charge_attempts: number
+          commission_rate: number | null
+          consignor_id: string | null
+          consignor_payout: number | null
           created_at: string
           hammer_price: number
           hosted_confirm_url: string | null
+          house_cut: number | null
           id: string
           last_error: string | null
           next_retry_at: string | null
@@ -3701,9 +3865,13 @@ export type Database = {
         }
         Insert: {
           charge_attempts?: number
+          commission_rate?: number | null
+          consignor_id?: string | null
+          consignor_payout?: number | null
           created_at?: string
           hammer_price: number
           hosted_confirm_url?: string | null
+          house_cut?: number | null
           id?: string
           last_error?: string | null
           next_retry_at?: string | null
@@ -3723,9 +3891,13 @@ export type Database = {
         }
         Update: {
           charge_attempts?: number
+          commission_rate?: number | null
+          consignor_id?: string | null
+          consignor_payout?: number | null
           created_at?: string
           hammer_price?: number
           hosted_confirm_url?: string | null
+          house_cut?: number | null
           id?: string
           last_error?: string | null
           next_retry_at?: string | null
@@ -3744,6 +3916,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vault_orders_consignor_id_fkey"
+            columns: ["consignor_id"]
+            isOneToOne: false
+            referencedRelation: "vault_consignors"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vault_orders_ski_id_fkey"
             columns: ["ski_id"]
@@ -3819,6 +3998,7 @@ export type Database = {
           size_cm: string | null
           sku: string | null
           sort_order: number
+          specs_confirmed: boolean
           start_price: number
           status: Database["public"]["Enums"]["vault_ski_status"]
           title: string
@@ -3847,6 +4027,7 @@ export type Database = {
           size_cm?: string | null
           sku?: string | null
           sort_order?: number
+          specs_confirmed?: boolean
           start_price?: number
           status?: Database["public"]["Enums"]["vault_ski_status"]
           title: string
@@ -3875,6 +4056,7 @@ export type Database = {
           size_cm?: string | null
           sku?: string | null
           sort_order?: number
+          specs_confirmed?: boolean
           start_price?: number
           status?: Database["public"]["Enums"]["vault_ski_status"]
           title?: string
@@ -3882,6 +4064,13 @@ export type Database = {
           year?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "vault_skis_consignor_id_fkey"
+            columns: ["consignor_id"]
+            isOneToOne: false
+            referencedRelation: "vault_consignors"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vault_skis_drop_id_fkey"
             columns: ["drop_id"]
@@ -4177,12 +4366,15 @@ export type Database = {
           highest_bidder_id: string | null
           id: string | null
           image_urls: string[] | null
+          is_consigned: boolean | null
           listing_type: Database["public"]["Enums"]["vault_listing_type"] | null
           model: string | null
           reserve_met: boolean | null
           retail_price: number | null
           size_cm: string | null
+          sku: string | null
           sort_order: number | null
+          specs_confirmed: boolean | null
           start_price: number | null
           status: Database["public"]["Enums"]["vault_ski_status"] | null
           title: string | null
@@ -4203,6 +4395,7 @@ export type Database = {
           highest_bidder_id?: string | null
           id?: string | null
           image_urls?: string[] | null
+          is_consigned?: never
           listing_type?:
             | Database["public"]["Enums"]["vault_listing_type"]
             | null
@@ -4210,7 +4403,9 @@ export type Database = {
           reserve_met?: never
           retail_price?: number | null
           size_cm?: string | null
+          sku?: string | null
           sort_order?: number | null
+          specs_confirmed?: boolean | null
           start_price?: number | null
           status?: Database["public"]["Enums"]["vault_ski_status"] | null
           title?: string | null
@@ -4231,6 +4426,7 @@ export type Database = {
           highest_bidder_id?: string | null
           id?: string | null
           image_urls?: string[] | null
+          is_consigned?: never
           listing_type?:
             | Database["public"]["Enums"]["vault_listing_type"]
             | null
@@ -4238,7 +4434,9 @@ export type Database = {
           reserve_met?: never
           retail_price?: number | null
           size_cm?: string | null
+          sku?: string | null
           sort_order?: number | null
+          specs_confirmed?: boolean | null
           start_price?: number | null
           status?: Database["public"]["Enums"]["vault_ski_status"] | null
           title?: string | null
@@ -4428,6 +4626,7 @@ export type Database = {
           size_cm: string | null
           sku: string | null
           sort_order: number
+          specs_confirmed: boolean
           start_price: number
           status: Database["public"]["Enums"]["vault_ski_status"]
           title: string
@@ -4456,6 +4655,7 @@ export type Database = {
         Args: { p_shipping: number; p_ski_id: string; p_user_id: string }
         Returns: Json
       }
+      vault_next_sku: { Args: never; Returns: string }
       vault_place_bid: {
         Args: { p_max_bid: number; p_ski_id: string }
         Returns: Json
@@ -4482,6 +4682,7 @@ export type Database = {
         | "ended_no_reserve_met"
         | "sold"
         | "cancelled"
+      vault_submission_status: "new" | "accepted" | "declined" | "received"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4629,6 +4830,7 @@ export const Constants = {
         "sold",
         "cancelled",
       ],
+      vault_submission_status: ["new", "accepted", "declined", "received"],
     },
   },
 } as const
