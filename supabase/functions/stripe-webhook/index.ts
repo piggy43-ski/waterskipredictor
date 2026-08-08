@@ -296,6 +296,42 @@ serve(async (req) => {
       const session = event.data.object as Stripe.Checkout.Session;
       logStep("Processing checkout.session.completed", { sessionId: session.id });
 
+      // === THE VAULT (real-money gear marketplace, no tokens involved) ===
+      if (session.metadata?.source === "vault_buy_now" || session.metadata?.vault_order_id) {
+        const vaultClient = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+          { auth: { persistSession: false } }
+        );
+        const { error: dupErr } = await vaultClient
+          .from("vault_processed_stripe_events")
+          .insert({ event_id: event.id });
+        if (dupErr?.code === "23505") {
+          logStep("Duplicate vault event, no-op", { eventId: event.id });
+          return new Response(JSON.stringify({ received: true, duplicate: true }), {
+            headers: { "Content-Type": "application/json" }, status: 200,
+          });
+        }
+
+        const orderId = session.metadata?.vault_order_id;
+        if (orderId && session.payment_status === "paid") {
+          const { data: order } = await vaultClient
+            .from("vault_orders").select("ski_id, status").eq("id", orderId).maybeSingle();
+          if (order && order.status !== "paid") {
+            await vaultClient.from("vault_orders").update({
+              status: "paid",
+              paid_at: new Date().toISOString(),
+              stripe_payment_intent_id: typeof session.payment_intent === "string" ? session.payment_intent : null,
+            }).eq("id", orderId);
+            await vaultClient.from("vault_skis").update({ status: "sold" }).eq("id", order.ski_id);
+          }
+        }
+        logStep("Vault checkout handled", { orderId });
+        return new Response(JSON.stringify({ received: true, vault: true }), {
+          headers: { "Content-Type": "application/json" }, status: 200,
+        });
+      }
+
       const userId = session.metadata?.user_id;
       const tokenAmount = parseInt(session.metadata?.token_amount || "0", 10);
       const packName = session.metadata?.pack_name || "Token Pack";
