@@ -3678,14 +3678,19 @@ export type Database = {
           charge_attempts: number
           created_at: string
           hammer_price: number
+          hosted_confirm_url: string | null
           id: string
           last_error: string | null
+          next_retry_at: string | null
           paid_at: string | null
+          refunded_at: string | null
+          requires_action: boolean
           shipped_at: string | null
           shipping_cost: number
           ski_id: string
           status: Database["public"]["Enums"]["vault_order_status"]
           stripe_payment_intent_id: string | null
+          stripe_refund_id: string | null
           total: number
           tracking_number: string | null
           updated_at: string
@@ -3695,14 +3700,19 @@ export type Database = {
           charge_attempts?: number
           created_at?: string
           hammer_price: number
+          hosted_confirm_url?: string | null
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           paid_at?: string | null
+          refunded_at?: string | null
+          requires_action?: boolean
           shipped_at?: string | null
           shipping_cost?: number
           ski_id: string
           status?: Database["public"]["Enums"]["vault_order_status"]
           stripe_payment_intent_id?: string | null
+          stripe_refund_id?: string | null
           total: number
           tracking_number?: string | null
           updated_at?: string
@@ -3712,14 +3722,19 @@ export type Database = {
           charge_attempts?: number
           created_at?: string
           hammer_price?: number
+          hosted_confirm_url?: string | null
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           paid_at?: string | null
+          refunded_at?: string | null
+          requires_action?: boolean
           shipped_at?: string | null
           shipping_cost?: number
           ski_id?: string
           status?: Database["public"]["Enums"]["vault_order_status"]
           stripe_payment_intent_id?: string | null
+          stripe_refund_id?: string | null
           total?: number
           tracking_number?: string | null
           updated_at?: string
@@ -3741,6 +3756,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      vault_processed_stripe_events: {
+        Row: {
+          event_id: string
+          processed_at: string
+        }
+        Insert: {
+          event_id: string
+          processed_at?: string
+        }
+        Update: {
+          event_id?: string
+          processed_at?: string
+        }
+        Relationships: []
       }
       vault_shipping_zones: {
         Row: {
@@ -4131,6 +4161,7 @@ export type Database = {
           current_price: number | null
           description: string | null
           drop_id: string | null
+          has_reserve: boolean | null
           highest_bidder_id: string | null
           id: string | null
           image_urls: string[] | null
@@ -4156,6 +4187,7 @@ export type Database = {
           current_price?: number | null
           description?: string | null
           drop_id?: string | null
+          has_reserve?: never
           highest_bidder_id?: string | null
           id?: string | null
           image_urls?: string[] | null
@@ -4183,6 +4215,7 @@ export type Database = {
           current_price?: number | null
           description?: string | null
           drop_id?: string | null
+          has_reserve?: never
           highest_bidder_id?: string | null
           id?: string | null
           image_urls?: string[] | null
@@ -4359,6 +4392,40 @@ export type Database = {
         Returns: boolean
       }
       validate_referral_code: { Args: { p_code: string }; Returns: boolean }
+      vault_admin_skis: {
+        Args: { p_drop_id?: string }
+        Returns: {
+          bid_count: number
+          brand: string
+          buy_now_price: number | null
+          closes_at: string | null
+          condition: Database["public"]["Enums"]["vault_condition"]
+          created_at: string
+          current_price: number
+          description: string | null
+          drop_id: string | null
+          highest_bidder_id: string | null
+          id: string
+          image_urls: string[]
+          listing_type: Database["public"]["Enums"]["vault_listing_type"]
+          model: string
+          reserve_price: number | null
+          retail_price: number | null
+          size_cm: string | null
+          sort_order: number
+          start_price: number
+          status: Database["public"]["Enums"]["vault_ski_status"]
+          title: string
+          updated_at: string
+          year: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "vault_skis"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       vault_bid_history: {
         Args: { p_ski_id: string }
         Returns: {
