@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { VaultLayout } from '@/components/vault/VaultLayout';
@@ -22,6 +22,8 @@ const VaultSki = () => {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [active, setActive] = useState(0);
+  const navigate = useNavigate();
+  const [buying, setBuying] = useState(false);
 
   const { data: lot, isLoading } = useQuery({
     queryKey: ['vault-lot', id],
