@@ -5,8 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
  * Gear marketplace. Real money (USD). Completely separate from prediction tokens.
  */
 
-/** Feature flag: require a saved card before the first bid is accepted. */
-export const VAULT_REQUIRE_PAYMENT_METHOD = false;
+/** Require a verified saved card before the first bid is accepted.
+ *  Enforced in the database by vault_place_bid; mirrored here for the UI. */
+export const VAULT_REQUIRE_PAYMENT_METHOD = true;
 
 export const VAULT_ANTI_SNIPE_MINUTES = 5;
 export const VAULT_PICKUP_LOCATION = 'Winter Garden, FL';
