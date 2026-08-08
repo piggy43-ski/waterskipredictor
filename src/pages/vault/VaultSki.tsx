@@ -194,9 +194,31 @@ const VaultSki = () => {
             <BidPanel lot={lot} now={now} onBidPlaced={() => qc.invalidateQueries({ queryKey: ['vault-lot', id] })} />
           ) : (
             <div className="border border-border bg-card p-4">
-              <Button className="w-full" disabled>
-                Buy now — checkout coming with this drop
+              <Button
+                className="w-full"
+                disabled={buying || lot.status !== 'live'}
+                onClick={async () => {
+                  if (!user) return navigate('/auth');
+                  setBuying(true);
+                  const { data, error } = await supabase.functions.invoke('vault-buy-now', { body: { ski_id: id } });
+                  setBuying(false);
+                  const res = data as { url?: string; error?: string };
+                  if (error || res?.error || !res?.url) {
+                    toast({
+                      title: 'Could not start checkout',
+                      description: res?.error ?? error?.message,
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+                  window.open(res.url, '_blank');
+                }}
+              >
+                {lot.status !== 'live' ? 'Sold' : buying ? 'Opening checkout…' : `Buy it now — ${usd(Number(lot.buy_now_price))}`}
               </Button>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Shipping is added at checkout. One of one — first to pay takes it.
+              </p>
             </div>
           )}
 
