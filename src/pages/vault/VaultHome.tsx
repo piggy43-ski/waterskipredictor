@@ -44,11 +44,14 @@ const VaultHome = () => {
   useEffect(() => {
     const channel = supabase
       .channel('vault-home')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vault_skis' }, () => {
+      // vault_skis is admin-only at the DB level, so we listen to bids instead
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault_bids' }, () => {
         qc.invalidateQueries({ queryKey: ['vault-lots'] });
       })
       .subscribe();
+    const poll = window.setInterval(() => qc.invalidateQueries({ queryKey: ['vault-lots'] }), 20000);
     return () => {
+      window.clearInterval(poll);
       supabase.removeChannel(channel);
     };
   }, [qc]);
