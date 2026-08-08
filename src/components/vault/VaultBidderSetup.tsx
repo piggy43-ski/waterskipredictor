@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { usd, zoneForState, VAULT_PICKUP_LOCATION } from '@/lib/vault';
+import { usd, zoneForState, pickupLabel } from '@/lib/vault';
 
 interface Props {
   open: boolean;
@@ -179,7 +179,7 @@ export const VaultBidderSetup = ({ open, onOpenChange, onSaved }: Props) => {
             <div className="mb-3 border border-border bg-secondary/40 p-3 text-sm">
               <span className="vault-kicker text-[9px] text-muted-foreground">Shipping</span>
               <p className="font-mono">
-                {pickup ? `Local pickup — ${VAULT_PICKUP_LOCATION} (free)` : `Zone ${matched?.zone} — ${usd(matched?.price ?? 0)}`}
+                {pickup ? `${pickupLabel(zones as never)} — free` : `Zone ${matched?.zone} — ${usd(matched?.price ?? 0)}`}
               </p>
             </div>
             <SetupForm
@@ -203,7 +203,7 @@ export const VaultBidderSetup = ({ open, onOpenChange, onSaved }: Props) => {
 
             <label className="flex items-center gap-2 py-1 text-sm">
               <Checkbox checked={pickup} onCheckedChange={(v) => setPickup(!!v)} />
-              Local pickup — {VAULT_PICKUP_LOCATION} (free)
+              {pickupLabel(zones as never)} — free
             </label>
 
             {!pickup && (
