@@ -3803,6 +3803,7 @@ export type Database = {
           buy_now_price: number | null
           closes_at: string | null
           condition: Database["public"]["Enums"]["vault_condition"]
+          consignor_id: string | null
           created_at: string
           current_price: number
           description: string | null
@@ -3812,9 +3813,11 @@ export type Database = {
           image_urls: string[]
           listing_type: Database["public"]["Enums"]["vault_listing_type"]
           model: string
+          photo_key: string | null
           reserve_price: number | null
           retail_price: number | null
           size_cm: string | null
+          sku: string | null
           sort_order: number
           start_price: number
           status: Database["public"]["Enums"]["vault_ski_status"]
@@ -3828,6 +3831,7 @@ export type Database = {
           buy_now_price?: number | null
           closes_at?: string | null
           condition?: Database["public"]["Enums"]["vault_condition"]
+          consignor_id?: string | null
           created_at?: string
           current_price?: number
           description?: string | null
@@ -3837,9 +3841,11 @@ export type Database = {
           image_urls?: string[]
           listing_type?: Database["public"]["Enums"]["vault_listing_type"]
           model: string
+          photo_key?: string | null
           reserve_price?: number | null
           retail_price?: number | null
           size_cm?: string | null
+          sku?: string | null
           sort_order?: number
           start_price?: number
           status?: Database["public"]["Enums"]["vault_ski_status"]
@@ -3853,6 +3859,7 @@ export type Database = {
           buy_now_price?: number | null
           closes_at?: string | null
           condition?: Database["public"]["Enums"]["vault_condition"]
+          consignor_id?: string | null
           created_at?: string
           current_price?: number
           description?: string | null
@@ -3862,9 +3869,11 @@ export type Database = {
           image_urls?: string[]
           listing_type?: Database["public"]["Enums"]["vault_listing_type"]
           model?: string
+          photo_key?: string | null
           reserve_price?: number | null
           retail_price?: number | null
           size_cm?: string | null
+          sku?: string | null
           sort_order?: number
           start_price?: number
           status?: Database["public"]["Enums"]["vault_ski_status"]
@@ -4403,6 +4412,7 @@ export type Database = {
           buy_now_price: number | null
           closes_at: string | null
           condition: Database["public"]["Enums"]["vault_condition"]
+          consignor_id: string | null
           created_at: string
           current_price: number
           description: string | null
@@ -4412,9 +4422,11 @@ export type Database = {
           image_urls: string[]
           listing_type: Database["public"]["Enums"]["vault_listing_type"]
           model: string
+          photo_key: string | null
           reserve_price: number | null
           retail_price: number | null
           size_cm: string | null
+          sku: string | null
           sort_order: number
           start_price: number
           status: Database["public"]["Enums"]["vault_ski_status"]
