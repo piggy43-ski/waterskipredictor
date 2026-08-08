@@ -10,6 +10,7 @@ export interface VaultLot {
   model: string;
   size_cm: string | null;
   year: string | null;
+  description: string | null;
   condition: VaultCondition;
   image_urls: string[];
   listing_type: 'auction' | 'buy_now';
