@@ -147,10 +147,16 @@ const VaultAdmin = () => {
   const createLot = async () => {
     setSaving(true);
     try {
+      if (!lot.sku.trim()) {
+        throw new Error('SKU is required');
+      }
       const image_urls = await uploadPhotos();
       const start = Number(lot.start_price || 0);
       const { error } = await supabase.from('vault_skis').insert({
         drop_id: dropId || null,
+        sku: lot.sku.trim(),
+        specs_confirmed: lot.specs_confirmed,
+        consignor_id: lot.consignor_id || null,
         title: lot.title,
         brand: lot.brand,
         model: lot.model,
@@ -172,9 +178,15 @@ const VaultAdmin = () => {
       setLot({ ...emptyLot });
       setFiles(null);
       qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
+      qc.invalidateQueries({ queryKey: ['vault-next-sku'] });
       toast({ title: 'Lot created' });
     } catch (e) {
-      toast({ title: 'Could not create lot', description: (e as Error).message, variant: 'destructive' });
+      const msg = (e as Error).message;
+      toast({
+        title: 'Could not create lot',
+        description: /vault_skis_sku_key|duplicate key/i.test(msg) ? 'That SKU is already used by another lot.' : msg,
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
@@ -190,6 +202,15 @@ const VaultAdmin = () => {
 
   const f = (k: keyof typeof lot) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setLot((s) => ({ ...s, [k]: e.target.value }));
+
+  const filteredSkis = (skis as Record<string, unknown>[]).filter((s) => {
+    const q = skuSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      String(s.sku ?? '').toLowerCase().includes(q) ||
+      String(s.title ?? '').toLowerCase().includes(q)
+    );
+  });
 
   return (
     <VaultLayout title="Vault Admin" description="Manage Vault drops, lots and orders.">
