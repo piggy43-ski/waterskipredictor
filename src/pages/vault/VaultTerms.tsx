@@ -11,8 +11,8 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
 
 const VaultTerms = () => (
   <VaultLayout
-    title="Vault Terms & Bidding Rules"
-    description="How bidding, payment, shipping and returns work in The Vault — binding bids, hidden reserves, and automatic card charging on win."
+    title="Vault Terms & Bidding Rules — by Waterski Predictor"
+    description="How bidding, payment, shipping and returns work in The Vault by Waterski Predictor — binding bids, hidden reserves, and automatic card charging on win."
   >
     <Link to="/vault" className="vault-kicker mb-4 inline-block text-[10px] text-muted-foreground hover:text-primary">
       ← Back to the drop
@@ -20,8 +20,17 @@ const VaultTerms = () => (
 
     <h1 className="vault-serif mb-2 text-3xl uppercase tracking-[0.14em]">Terms &amp; Bidding Rules</h1>
     <p className="mb-4 text-sm text-muted-foreground">
-      Short version: bid like you mean it, because the bid is a contract and the card gets charged.
+      The Vault is operated by Waterski Predictor, which is the seller of record for every lot. Short version: bid like you
+      mean it, because the bid is a contract and the card gets charged.
     </p>
+
+    <Section title="Seller of record">
+      <p>
+        Every lot in The Vault is sold by Waterski Predictor. Your contract is with Waterski Predictor, your card is
+        charged by Waterski Predictor, and any question, claim or refund is handled by us — contact us through the app and
+        we will answer.
+      </p>
+    </Section>
 
     <Section title="Bids are binding">
       <p>
@@ -50,7 +59,8 @@ const VaultTerms = () => (
     <Section title="Shipping is added at close">
       <p>
         Lots are priced ex-shipping. Your shipping cost is set by the zone your address falls in and is added to the hammer
-        price at close. Local pickup in Winter Garden, FL is free. We ship within the US only.
+        price at close. Lots ship from Central Florida. Local pickup is free — the pickup address is sent to you after
+        payment. We ship within the US only.
       </p>
     </Section>
 
@@ -65,12 +75,12 @@ const VaultTerms = () => (
       </p>
     </Section>
 
-    <Section title="The seller cannot bid">
+    <Section title="Sellers and admins cannot bid">
       <p>
         Shill bidding is bidding on your own lots to push the price up. It is dishonest and, in most US jurisdictions,
         illegal. We do not do it, and we have made it impossible to do by accident: the seller and every admin account is
         blocked from placing a bid <strong className="text-foreground">at the database level</strong>. Any attempt is
-        rejected before it is recorded.
+        rejected before it is recorded, and no admin account appears in a public bid feed.
       </p>
     </Section>
 
@@ -95,8 +105,9 @@ const VaultTerms = () => (
     </Section>
 
     <p className="py-6 text-xs text-muted-foreground">
-      Questions before you bid? Reach out first — we would rather answer than unwind a sale.
+      Questions before you bid? Message The Vault first — we would rather answer than unwind a sale.
     </p>
+    <p className="pb-8 vault-kicker text-[9px] text-muted-foreground">— The Vault, by Waterski Predictor</p>
   </VaultLayout>
 );
 

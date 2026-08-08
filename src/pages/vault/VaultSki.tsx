@@ -8,7 +8,7 @@ import { VaultCountdown } from '@/components/vault/VaultCountdown';
 import { BidPanel } from '@/components/vault/BidPanel';
 import type { VaultLot } from '@/components/vault/LotCard';
 import { useVaultClock } from '@/hooks/useVaultClock';
-import { CONDITION_LABEL, usd, VAULT_PICKUP_LOCATION } from '@/lib/vault';
+import { CONDITION_LABEL, usd, pickupLabel } from '@/lib/vault';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -232,6 +232,9 @@ const VaultSki = () => {
           {lot.description && (
             <div>
               <p className="vault-kicker text-[9px] text-muted-foreground">Condition notes</p>
+              <p className="mt-1 text-[11px] italic text-muted-foreground">
+                Lot notes are in the skier's own words.
+              </p>
               <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">{lot.description}</p>
             </div>
           )}
@@ -239,8 +242,8 @@ const VaultSki = () => {
           <div className="border-t border-border pt-4">
             <p className="vault-kicker text-[9px] text-muted-foreground">Shipping</p>
             <p className="mt-1 text-sm">
-              {Number.isFinite(shipMin) ? `${usd(shipMin)}–${usd(shipMax)} by zone` : 'Calculated at checkout'} · Free local
-              pickup in {VAULT_PICKUP_LOCATION}.
+              {Number.isFinite(shipMin) ? `${usd(shipMin)}–${usd(shipMax)} by zone` : 'Calculated at checkout'} ·{' '}
+              {pickupLabel(zones as never)} — free.
             </p>
           </div>
 

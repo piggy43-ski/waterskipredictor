@@ -10,7 +10,14 @@ import { supabase } from '@/integrations/supabase/client';
 export const VAULT_REQUIRE_PAYMENT_METHOD = true;
 
 export const VAULT_ANTI_SNIPE_MINUTES = 5;
-export const VAULT_PICKUP_LOCATION = 'Winter Garden, FL';
+/** Fallback only — the real label lives in vault_shipping_zones (zone 5). */
+export const VAULT_PICKUP_FALLBACK_LABEL = 'Local pickup — Central Florida (address sent after payment)';
+
+/** Render the local-pickup label from the shipping-zone table, never a hardcoded city. */
+export function pickupLabel(zones: { zone: number; label?: string | null }[] | null | undefined): string {
+  const z = zones?.find((z) => Number(z.zone) === 5);
+  return z?.label || VAULT_PICKUP_FALLBACK_LABEL;
+}
 
 export type VaultCondition = 'brand_new' | 'barely_ridden' | 'ridden';
 

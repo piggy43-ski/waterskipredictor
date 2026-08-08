@@ -76,7 +76,11 @@ Deno.serve(async (req) => {
       success_url: `${origin}/vault/account?purchased=1`,
       cancel_url: `${origin}/vault/ski/${ski_id}?cancelled=1`,
       metadata: { vault_order_id: claimed.order_id, ski_id, user_id: user.id, source: "vault_buy_now" },
-      payment_intent_data: { metadata: { vault_order_id: claimed.order_id, source: "vault_buy_now" } },
+      payment_intent_data: {
+        statement_descriptor: "WSP VAULT",
+        statement_descriptor_suffix: "WSP VAULT",
+        metadata: { vault_order_id: claimed.order_id, source: "vault_buy_now" },
+      },
     }, { idempotencyKey: `vault-buynow-${claimed.order_id}` });
 
     return json({ url: session.url, order_id: claimed.order_id, total: claimed.total });

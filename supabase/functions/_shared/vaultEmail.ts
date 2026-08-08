@@ -20,6 +20,7 @@ const shell = (title: string, body: string) => `
     <p style="letter-spacing:.28em;font-size:10px;text-transform:uppercase;color:#c9a227;margin:0 0 18px">The Vault</p>
     <h1 style="font-size:22px;letter-spacing:.06em;text-transform:uppercase;margin:0 0 16px">${esc(title)}</h1>
     <div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#d8cfc0">${body}</div>
+    <p style="margin-top:22px;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#d8cfc0">— The Vault, by Waterski Predictor</p>
     <p style="margin-top:26px;font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#8b8177">
       The Vault is a gear marketplace settled in US dollars. It is entirely separate from Waterski Predictor tokens —
       no tokens are used in any auction.
@@ -32,8 +33,12 @@ export async function sendVaultEmail(
   opts: { to?: string | null; userId?: string | null; subject: string; title: string; body: string; force?: boolean },
 ): Promise<boolean> {
   const key = Deno.env.get("RESEND_API_KEY");
-  const from = Deno.env.get("FROM_EMAIL") || "The Vault <vault@waterskipredictor.com>";
   if (!key) return false;
+  // Sender is always "The Vault" — never a personal name, whatever FROM_EMAIL holds.
+  const rawFrom = Deno.env.get("VAULT_FROM_EMAIL") || Deno.env.get("FROM_EMAIL") || "vault@waterskipredictor.com";
+  const address = rawFrom.match(/<(.+)>/)?.[1] ?? rawFrom.trim();
+  const from = `The Vault <${address}>`;
+  const replyTo = Deno.env.get("VAULT_REPLY_TO") || "support@waterskipredictor.com";
 
   let to = opts.to ?? null;
   if (opts.userId) {
@@ -51,7 +56,13 @@ export async function sendVaultEmail(
 
   try {
     const resend = new Resend(key);
-    await resend.emails.send({ from, to: [to], subject: opts.subject, html: shell(opts.title, opts.body) });
+    await resend.emails.send({
+      from,
+      to: [to],
+      reply_to: replyTo,
+      subject: opts.subject,
+      html: shell(opts.title, opts.body),
+    });
     return true;
   } catch (e) {
     console.error("[VAULT-EMAIL] send failed", (e as Error).message);
