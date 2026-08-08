@@ -219,7 +219,10 @@ const VaultAdmin = () => {
 
   return (
     <VaultLayout title="Vault Admin" description="Manage Vault drops, lots and orders.">
-      <h1 className="vault-serif mb-4 text-3xl uppercase tracking-[0.14em]">Vault Admin</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="vault-serif text-3xl uppercase tracking-[0.14em]">Vault Admin</h1>
+        <a href="/vault/admin/consignors" className="vault-kicker text-[10px] text-primary">Consignors →</a>
+      </div>
 
       <Tabs defaultValue="lots">
         <TabsList className="grid w-full grid-cols-3">

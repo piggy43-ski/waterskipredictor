@@ -73,6 +73,8 @@ import VaultSki from "./pages/vault/VaultSki";
 import VaultAccount from "./pages/vault/VaultAccount";
 import VaultAdmin from "./pages/vault/VaultAdmin";
 import VaultTerms from "./pages/vault/VaultTerms";
+import VaultConsign from "./pages/vault/VaultConsign";
+import VaultConsignors from "./pages/vault/VaultConsignors";
 
 const queryClient = new QueryClient();
 
@@ -100,8 +102,10 @@ const App = () => (
               <Route path="/vault" element={<VaultHome />} />
               <Route path="/vault/ski/:id" element={<VaultSki />} />
               <Route path="/vault/terms" element={<VaultTerms />} />
+              <Route path="/vault/consign" element={<VaultConsign />} />
               <Route path="/vault/account" element={<ProtectedRoute><VaultAccount /></ProtectedRoute>} />
               <Route path="/vault/admin" element={<ProtectedRoute><VaultAdmin /></ProtectedRoute>} />
+              <Route path="/vault/admin/consignors" element={<ProtectedRoute><VaultConsignors /></ProtectedRoute>} />
               
               {/* Protected routes */}
               <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
