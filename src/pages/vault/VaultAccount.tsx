@@ -48,7 +48,7 @@ const VaultAccount = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vault_orders')
-        .select('*, vault_skis(title)')
+        .select('*, vault_public_skis(title)')
         .eq('user_id', user!.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -62,7 +62,7 @@ const VaultAccount = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vault_watchlist')
-        .select('id, ski_id, vault_skis(title, current_price, status)')
+        .select('id, ski_id, vault_public_skis(title, current_price, status)')
         .eq('user_id', user!.id);
       if (error) throw error;
       return data ?? [];
@@ -124,7 +124,7 @@ const VaultAccount = () => {
               <div key={o.id} className="border border-border p-3">
                 <div className="flex justify-between">
                   <p className="vault-serif text-lg">
-                    {(o as { vault_skis?: { title?: string } }).vault_skis?.title ?? 'Lot'}
+                    {(o as { vault_public_skis?: { title?: string } }).vault_public_skis?.title ?? 'Lot'}
                   </p>
                   <span className="vault-kicker text-[10px] text-primary">{o.status}</span>
                 </div>
@@ -132,6 +132,19 @@ const VaultAccount = () => {
                   {usd(Number(o.hammer_price))} + {usd(Number(o.shipping_cost))} shipping ={' '}
                   <strong>{usd(Number(o.total))}</strong>
                 </p>
+                {o.requires_action && o.hosted_confirm_url && (
+                  <a
+                    href={o.hosted_confirm_url}
+                    className="mt-2 inline-block border border-primary px-3 py-1 vault-kicker text-[10px] text-primary"
+                  >
+                    Confirm your payment
+                  </a>
+                )}
+                {o.status === 'failed' && (
+                  <p className="mt-1 text-xs text-destructive">
+                    Payment didn't go through. Update your card and we'll retry automatically.
+                  </p>
+                )}
                 {o.tracking_number && (
                   <p className="mt-1 text-xs text-muted-foreground">Tracking: {o.tracking_number}</p>
                 )}
@@ -151,10 +164,10 @@ const VaultAccount = () => {
                 className="flex items-center justify-between border border-border p-3 hover:border-primary/60"
               >
                 <p className="vault-serif text-lg">
-                  {(w as { vault_skis?: { title?: string } }).vault_skis?.title ?? 'Lot'}
+                  {(w as { vault_public_skis?: { title?: string } }).vault_public_skis?.title ?? 'Lot'}
                 </p>
                 <span className="font-mono text-sm">
-                  {usd(Number((w as { vault_skis?: { current_price?: number } }).vault_skis?.current_price))}
+                  {usd(Number((w as { vault_public_skis?: { current_price?: number } }).vault_public_skis?.current_price))}
                 </span>
               </Link>
             ))
