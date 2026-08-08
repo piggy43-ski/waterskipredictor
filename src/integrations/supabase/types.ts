@@ -684,6 +684,42 @@ export type Database = {
         }
         Relationships: []
       }
+      error_logs: {
+        Row: {
+          context: Json | null
+          created_at: string
+          email: string | null
+          error_message: string | null
+          error_stack: string | null
+          id: string
+          page_url: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          context?: Json | null
+          created_at?: string
+          email?: string | null
+          error_message?: string | null
+          error_stack?: string | null
+          id?: string
+          page_url?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          context?: Json | null
+          created_at?: string
+          email?: string | null
+          error_message?: string | null
+          error_stack?: string | null
+          id?: string
+          page_url?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       fantasy_config: {
         Row: {
           description: string | null
@@ -1276,6 +1312,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      leaderboard_snapshots: {
+        Row: {
+          board: string
+          captured_at: string
+          id: string
+          rank: number
+          user_id: string
+        }
+        Insert: {
+          board: string
+          captured_at?: string
+          id?: string
+          rank: number
+          user_id: string
+        }
+        Update: {
+          board?: string
+          captured_at?: string
+          id?: string
+          rank?: number
+          user_id?: string
+        }
+        Relationships: []
       }
       market_entries: {
         Row: {
@@ -2996,6 +3056,63 @@ export type Database = {
         }
         Relationships: []
       }
+      support_tickets: {
+        Row: {
+          admin_response: string | null
+          app_context: Json | null
+          category: string
+          created_at: string
+          email: string | null
+          id: string
+          message: string
+          page_url: string | null
+          priority: string
+          responded_at: string | null
+          responded_by: string | null
+          status: string
+          subject: string | null
+          updated_at: string
+          user_id: string | null
+          username: string | null
+        }
+        Insert: {
+          admin_response?: string | null
+          app_context?: Json | null
+          category?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          message: string
+          page_url?: string | null
+          priority?: string
+          responded_at?: string | null
+          responded_by?: string | null
+          status?: string
+          subject?: string | null
+          updated_at?: string
+          user_id?: string | null
+          username?: string | null
+        }
+        Update: {
+          admin_response?: string | null
+          app_context?: Json | null
+          category?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          message?: string
+          page_url?: string | null
+          priority?: string
+          responded_at?: string | null
+          responded_by?: string | null
+          status?: string
+          subject?: string | null
+          updated_at?: string
+          user_id?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
       system_events: {
         Row: {
           created_at: string
@@ -3522,6 +3639,44 @@ export type Database = {
           },
         ]
       }
+      v_fantasy_season_leaderboard: {
+        Row: {
+          championship_points: number | null
+          event_wins: number | null
+          events_played: number | null
+          previous_rank: number | null
+          rank: number | null
+          rank_delta: number | null
+          season: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      v_prediction_leaderboard: {
+        Row: {
+          accuracy_pct: number | null
+          avatar_url: string | null
+          net_pnl: number | null
+          previous_rank: number | null
+          rank: number | null
+          rank_delta: number | null
+          total_predictions: number | null
+          total_staked: number | null
+          total_won: number | null
+          user_id: string | null
+          username: string | null
+          win_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bet_slips_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_wallet_ledger: {
         Row: {
           affects_wallet: boolean | null
@@ -3606,6 +3761,10 @@ export type Database = {
     }
     Functions: {
       athlete_cap_pct: { Args: { p_multiplier: number }; Returns: number }
+      capture_leaderboard_snapshot: {
+        Args: { p_board: string }
+        Returns: number
+      }
       check_athlete_capacity: {
         Args: {
           p_added_tokens?: number
@@ -3653,6 +3812,7 @@ export type Database = {
           avatar_url: string
           net_pnl: number
           rank: number
+          rank_delta: number
           total_predictions: number
           total_staked: number
           total_won: number
