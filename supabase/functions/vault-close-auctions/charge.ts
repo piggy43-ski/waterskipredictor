@@ -53,6 +53,8 @@ export async function chargeOrder(supabase: any, stripe: Stripe, orderId: string
       off_session: true,
       confirm: true,
       description: `The Vault — ${title}`,
+      statement_descriptor: "WSP VAULT",
+      statement_descriptor_suffix: "WSP VAULT",
       metadata: { vault_order_id: order.id, ski_id: order.ski_id, user_id: order.user_id, source: "vault" },
     }, { idempotencyKey: `vault-order-${order.id}-a${attempt}` });
 
