@@ -14,6 +14,7 @@ import { usd } from '@/lib/vault';
 import { VaultImage } from '@/components/vault/VaultImage';
 
 const emptyLot = {
+  sku: '',
   title: '',
   brand: '',
   model: '',
@@ -28,6 +29,8 @@ const emptyLot = {
   retail_price: '',
   closes_at: '',
   sort_order: '0',
+  consignor_id: '',
+  specs_confirmed: false,
 };
 
 const VaultAdmin = () => {
@@ -39,6 +42,27 @@ const VaultAdmin = () => {
   const [files, setFiles] = useState<FileList | null>(null);
   const [saving, setSaving] = useState(false);
   const [newDrop, setNewDrop] = useState({ name: '', drop_number: '', opens_at: '', closes_at: '', description: '' });
+  const [skuSearch, setSkuSearch] = useState('');
+
+  const { data: nextSku } = useQuery({
+    queryKey: ['vault-next-sku'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('vault_next_sku');
+      if (error) throw error;
+      return (data as unknown as string) ?? '';
+    },
+    enabled: !!isAdmin,
+  });
+
+  const { data: consignors = [] } = useQuery({
+    queryKey: ['vault-consignors'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('vault_consignors').select('id, display_name').order('display_name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!isAdmin,
+  });
 
   const { data: drops = [] } = useQuery({
     queryKey: ['vault-admin-drops'],
@@ -102,7 +126,12 @@ const VaultAdmin = () => {
   const setDropStatus = async (id: string, status: 'scheduled' | 'live' | 'closed') => {
     await supabase.from('vault_drops').update({ status }).eq('id', id);
     if (status === 'live') {
-      await supabase.from('vault_skis').update({ status: 'live' }).eq('drop_id', id).eq('status', 'scheduled');
+      await supabase
+        .from('vault_skis')
+        .update({ status: 'live' })
+        .eq('drop_id', id)
+        .eq('status', 'scheduled')
+        .eq('specs_confirmed', true);
     }
     qc.invalidateQueries({ queryKey: ['vault-admin-drops'] });
     qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
@@ -123,10 +152,16 @@ const VaultAdmin = () => {
   const createLot = async () => {
     setSaving(true);
     try {
+      if (!lot.sku.trim()) {
+        throw new Error('SKU is required');
+      }
       const image_urls = await uploadPhotos();
       const start = Number(lot.start_price || 0);
       const { error } = await supabase.from('vault_skis').insert({
         drop_id: dropId || null,
+        sku: lot.sku.trim(),
+        specs_confirmed: lot.specs_confirmed,
+        consignor_id: lot.consignor_id || null,
         title: lot.title,
         brand: lot.brand,
         model: lot.model,
@@ -148,9 +183,15 @@ const VaultAdmin = () => {
       setLot({ ...emptyLot });
       setFiles(null);
       qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
+      qc.invalidateQueries({ queryKey: ['vault-next-sku'] });
       toast({ title: 'Lot created' });
     } catch (e) {
-      toast({ title: 'Could not create lot', description: (e as Error).message, variant: 'destructive' });
+      const msg = (e as Error).message;
+      toast({
+        title: 'Could not create lot',
+        description: /vault_skis_sku_key|duplicate key/i.test(msg) ? 'That SKU is already used by another lot.' : msg,
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
@@ -167,9 +208,21 @@ const VaultAdmin = () => {
   const f = (k: keyof typeof lot) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setLot((s) => ({ ...s, [k]: e.target.value }));
 
+  const filteredSkis = (skis as Record<string, unknown>[]).filter((s) => {
+    const q = skuSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      String(s.sku ?? '').toLowerCase().includes(q) ||
+      String(s.title ?? '').toLowerCase().includes(q)
+    );
+  });
+
   return (
     <VaultLayout title="Vault Admin" description="Manage Vault drops, lots and orders.">
-      <h1 className="vault-serif mb-4 text-3xl uppercase tracking-[0.14em]">Vault Admin</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="vault-serif text-3xl uppercase tracking-[0.14em]">Vault Admin</h1>
+        <a href="/vault/admin/consignors" className="vault-kicker text-[10px] text-primary">Consignors →</a>
+      </div>
 
       <Tabs defaultValue="lots">
         <TabsList className="grid w-full grid-cols-3">
@@ -212,6 +265,37 @@ const VaultAdmin = () => {
           </div>
 
           <div className="grid gap-2 border border-border p-4 sm:grid-cols-2">
+            <div>
+              <Label>SKU (required)</Label>
+              <Input
+                className="font-mono"
+                placeholder={nextSku ?? 'V-022'}
+                value={lot.sku}
+                onChange={f('sku')}
+              />
+              {nextSku && !lot.sku && (
+                <button
+                  type="button"
+                  className="mt-1 vault-kicker text-[9px] text-primary"
+                  onClick={() => setLot((s) => ({ ...s, sku: nextSku }))}
+                >
+                  Use next SKU {nextSku}
+                </button>
+              )}
+            </div>
+            <div>
+              <Label>Consignor</Label>
+              <select
+                className="h-10 w-full border border-border bg-input px-2 text-sm"
+                value={lot.consignor_id}
+                onChange={(e) => setLot({ ...lot, consignor_id: e.target.value })}
+              >
+                <option value="">House stock</option>
+                {consignors.map((c) => (
+                  <option key={c.id} value={c.id}>{c.display_name}</option>
+                ))}
+              </select>
+            </div>
             <div className="sm:col-span-2"><Label>Title</Label><Input value={lot.title} onChange={f('title')} /></div>
             <div><Label>Brand</Label><Input value={lot.brand} onChange={f('brand')} /></div>
             <div><Label>Model</Label><Input value={lot.model} onChange={f('model')} /></div>
@@ -247,6 +331,14 @@ const VaultAdmin = () => {
             <div><Label>Closes at</Label><Input type="datetime-local" value={lot.closes_at} onChange={f('closes_at')} /></div>
             <div><Label>Sort order</Label><Input value={lot.sort_order} onChange={f('sort_order')} /></div>
             <div className="sm:col-span-2"><Label>Description</Label><Textarea value={lot.description} onChange={f('description')} /></div>
+            <label className="sm:col-span-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={lot.specs_confirmed}
+                onChange={(e) => setLot({ ...lot, specs_confirmed: e.target.checked })}
+              />
+              Brand / model specs confirmed (required before a lot can go live)
+            </label>
             <div className="sm:col-span-2">
               <Label>Photos</Label>
               <Input type="file" multiple accept="image/*" onChange={(e) => setFiles(e.target.files)} />
@@ -256,20 +348,63 @@ const VaultAdmin = () => {
             </Button>
           </div>
 
-          {skis.map((s) => (
+          <Input
+            placeholder="Search by SKU or title…"
+            value={skuSearch}
+            onChange={(e) => setSkuSearch(e.target.value)}
+          />
+
+          {filteredSkis.map((s: Record<string, any>) => (
             <div key={s.id} className="flex items-center gap-3 border border-border p-3">
               <VaultImage path={s.image_urls?.[0]} alt="" className="h-14 w-14" />
               <div className="flex-1">
-                <p className="vault-serif text-lg">{s.title}</p>
+                <p className="font-mono text-[10px] text-muted-foreground">{s.sku ?? '—'}</p>
+                <p className="vault-serif text-lg">
+                  {s.title}
+                  {!s.specs_confirmed && (
+                    <span className="ml-2 rounded border border-amber-500/60 bg-amber-500/10 px-1.5 py-0.5 align-middle text-[9px] uppercase tracking-wider text-amber-500">
+                      unconfirmed
+                    </span>
+                  )}
+                </p>
                 <p className="vault-kicker text-[9px] text-muted-foreground">
                   {s.status} · {s.bid_count} bids · {usd(Number(s.current_price))} · reserve {usd(Number(s.reserve_price))}
                 </p>
+                <button
+                  type="button"
+                  className="mt-1 vault-kicker text-[9px] text-primary"
+                  onClick={async () => {
+                    await supabase
+                      .from('vault_skis')
+                      .update({ specs_confirmed: !s.specs_confirmed })
+                      .eq('id', s.id);
+                    qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
+                  }}
+                >
+                  {s.specs_confirmed ? 'Mark specs unconfirmed' : 'Confirm specs'}
+                </button>
               </div>
               <select
                 className="h-9 border border-border bg-input px-2 text-xs"
                 value={s.status}
                 onChange={async (e) => {
-                  await supabase.from('vault_skis').update({ status: e.target.value as 'live' }).eq('id', s.id);
+                  const next = e.target.value;
+                  if (next === 'live' && !s.specs_confirmed) {
+                    toast({
+                      title: 'Specs not confirmed',
+                      description: 'Confirm the brand and model on this lot before setting it live.',
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+                  const { error } = await supabase
+                    .from('vault_skis')
+                    .update({ status: next as 'live' })
+                    .eq('id', s.id);
+                  if (error) {
+                    toast({ title: 'Could not update lot', description: error.message, variant: 'destructive' });
+                    return;
+                  }
                   qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
                 }}
               >

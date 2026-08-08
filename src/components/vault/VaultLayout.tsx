@@ -34,6 +34,12 @@ export const VaultLayout = ({ children, title, description }: Props) => {
             >
               My Bids
             </Link>
+            <Link
+              to="/vault/consign"
+              className={pathname.startsWith('/vault/consign') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}
+            >
+              Consign
+            </Link>
             <Link to="/" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
               <ArrowLeft className="h-3 w-3" /> App
             </Link>

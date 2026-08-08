@@ -8,6 +8,9 @@ export interface VaultLot {
   title: string;
   brand: string;
   model: string;
+  sku?: string | null;
+  specs_confirmed?: boolean | null;
+  is_consigned?: boolean | null;
   size_cm: string | null;
   year: string | null;
   description: string | null;
@@ -36,7 +39,7 @@ export const LotCard = ({ lot, now, index }: { lot: VaultLot; now: number; index
       <div className="relative aspect-[4/5] overflow-hidden">
         <VaultImage
           path={lot.image_urls?.[0]}
-          alt={`${lot.brand} ${lot.model} water ski`}
+          alt={`${lot.title} water ski`}
           className="h-full w-full transition-transform duration-500 group-hover:scale-[1.03]"
         />
         <span className="absolute left-0 top-0 bg-background/85 px-2 py-1 vault-kicker text-[9px] text-primary">
@@ -50,6 +53,9 @@ export const LotCard = ({ lot, now, index }: { lot: VaultLot; now: number; index
       </div>
 
       <div className="space-y-2 p-3">
+        {lot.sku && (
+          <p className="font-mono text-[10px] text-muted-foreground">{lot.sku}</p>
+        )}
         <p className="vault-kicker text-[9px] text-muted-foreground">
           {CONDITION_LABEL[lot.condition]}
           {lot.size_cm ? ` · ${lot.size_cm}` : ''}

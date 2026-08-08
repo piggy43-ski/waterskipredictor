@@ -123,7 +123,7 @@ const VaultSki = () => {
   return (
     <VaultLayout
       title={`${lot.title} — The Vault`}
-      description={`${CONDITION_LABEL[lot.condition]} ${lot.brand} ${lot.model}${lot.size_cm ? ` ${lot.size_cm}` : ''} — bid now in The Vault weekly water ski drop.`}
+      description={`${CONDITION_LABEL[lot.condition]}${lot.specs_confirmed && lot.brand ? ` ${lot.brand} ${lot.model}` : ''}${lot.size_cm ? ` ${lot.size_cm}` : ''} — bid now in The Vault weekly water ski drop.`}
     >
       <Link to="/vault" className="vault-kicker mb-4 inline-block text-[10px] text-muted-foreground hover:text-primary">
         ← Back to drop
@@ -132,7 +132,7 @@ const VaultSki = () => {
       <div className="grid gap-8 md:grid-cols-2">
         <div>
           <div className="aspect-square w-full overflow-hidden border border-border">
-            <VaultImage path={lot.image_urls?.[active]} alt={`${lot.brand} ${lot.model}`} className="h-full w-full" loading="eager" />
+            <VaultImage path={lot.image_urls?.[active]} alt={lot.title} className="h-full w-full" loading="eager" />
           </div>
           {lot.image_urls?.length > 1 && (
             <div className="mt-2 flex gap-2 overflow-x-auto">
@@ -152,12 +152,21 @@ const VaultSki = () => {
 
         <div className="space-y-5">
           <div>
+            {lot.sku && <p className="font-mono text-xs text-muted-foreground">{lot.sku}</p>}
             <p className="vault-kicker text-[9px] text-muted-foreground">
               {CONDITION_LABEL[lot.condition]}
               {lot.size_cm ? ` · ${lot.size_cm}` : ''}
               {lot.year ? ` · ${lot.year}` : ''}
             </p>
             <h1 className="vault-serif mt-1 text-3xl uppercase tracking-[0.1em]">{lot.title}</h1>
+            {lot.specs_confirmed && (lot.brand || lot.model) ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {[lot.brand, lot.model].filter(Boolean).join(' ')}
+              </p>
+            ) : null}
+            {lot.is_consigned ? (
+              <p className="vault-kicker mt-2 text-[9px] text-primary">Consigned from a tour athlete's rack</p>
+            ) : null}
             {lot.retail_price ? (
               <p className="mt-1 text-xs text-muted-foreground">Retail when new: {usd(Number(lot.retail_price))}</p>
             ) : null}
