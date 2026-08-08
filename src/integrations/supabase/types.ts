@@ -3597,6 +3597,7 @@ export type Database = {
           is_auto: boolean
           max_bid: number
           outbid_at: string | null
+          outbid_notified_at: string | null
           ski_id: string
           user_id: string
         }
@@ -3607,6 +3608,7 @@ export type Database = {
           is_auto?: boolean
           max_bid: number
           outbid_at?: string | null
+          outbid_notified_at?: string | null
           ski_id: string
           user_id: string
         }
@@ -3617,6 +3619,7 @@ export type Database = {
           is_auto?: boolean
           max_bid?: number
           outbid_at?: string | null
+          outbid_notified_at?: string | null
           ski_id?: string
           user_id?: string
         }
@@ -4437,6 +4440,10 @@ export type Database = {
         }[]
       }
       vault_bid_increment: { Args: { p_price: number }; Returns: number }
+      vault_claim_buy_now: {
+        Args: { p_shipping: number; p_ski_id: string; p_user_id: string }
+        Returns: Json
+      }
       vault_place_bid: {
         Args: { p_max_bid: number; p_ski_id: string }
         Returns: Json
