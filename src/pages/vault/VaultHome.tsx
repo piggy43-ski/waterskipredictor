@@ -59,11 +59,11 @@ const VaultHome = () => {
   return (
     <VaultLayout
       title="The Vault — Curated Water Ski Gear Auctions"
-      description="Weekly drops of curated new and pre-owned water skis. Timed auctions, hidden reserves, anti-snipe bidding. Presented by Pigoski."
+      description="Gear from touring athletes' personal racks. Timed auctions, hidden reserves, anti-snipe bidding. The Vault, by Waterski Predictor."
     >
       <section className="mb-10 text-center">
         <p className="vault-kicker text-[10px] text-primary">
-          {drop ? `Drop ${String(drop.drop_number).padStart(3, '0')}` : 'The Vault'}
+          {drop ? `Drop ${String(drop.drop_number).padStart(3, '0')}` : 'by Waterski Predictor'}
         </p>
         <h1 className="vault-serif mt-2 text-4xl uppercase tracking-[0.14em] sm:text-6xl">
           {drop?.name ?? 'The Vault'}
@@ -101,6 +101,21 @@ const VaultHome = () => {
           <p className="mt-2 text-sm text-muted-foreground">The next drop is being curated. Check back soon.</p>
         </div>
       )}
+
+      <section className="mt-12 border border-border p-6">
+        <h2 className="vault-serif text-xl uppercase tracking-[0.14em]">What is The Vault?</h2>
+        <div className="vault-rule my-3 w-16" />
+        <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">
+          <p>
+            The Vault is where gear from touring athletes' personal racks gets sold off. Sponsored skiers end up with far
+            more equipment than they can ride — new skis from sponsor allotments, demo skis from brands courting them,
+            one-off prototypes.
+          </p>
+          <p>
+            Rather than let it sit in a garage, it ends up here. Every lot is one of one. When it's gone it's gone.
+          </p>
+        </div>
+      </section>
     </VaultLayout>
   );
 };
