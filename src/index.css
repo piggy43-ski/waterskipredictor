@@ -82,6 +82,44 @@ All colors MUST be HSL.
   -webkit-backdrop-filter: blur(24px) saturate(180%);
 }
 
+/* ── THE VAULT — sibling brand theme (bone / oxblood / brass on black) ── */
+.vault-theme {
+  --background: 0 0% 3%;
+  --foreground: 40 20% 92%;
+  --card: 0 0% 6%;
+  --card-foreground: 40 20% 92%;
+  --popover: 0 0% 7%;
+  --popover-foreground: 40 20% 92%;
+  --primary: 38 62% 55%;             /* brass */
+  --primary-foreground: 0 0% 6%;
+  --primary-glow: 38 70% 66%;
+  --secondary: 0 0% 9%;
+  --secondary-foreground: 40 20% 92%;
+  --muted: 0 0% 9%;
+  --muted-foreground: 40 8% 58%;
+  --accent: 6 58% 34%;               /* oxblood */
+  --accent-foreground: 40 20% 92%;
+  --border: 40 10% 14%;
+  --input: 0 0% 10%;
+  --ring: 38 62% 55%;
+  --radius: 0.25rem;                 /* sharper, gallery-like */
+  --shadow-glow: 0 0 28px hsl(38 62% 55% / 0.28);
+}
+
+.vault-serif {
+  font-family: 'Times New Roman', 'Didot', Georgia, serif;
+}
+
+.vault-kicker {
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+.vault-rule {
+  background: linear-gradient(90deg, transparent, hsl(38 62% 55% / 0.5), transparent);
+  height: 1px;
+}
+
 /* Sports-display utilities */
 .font-display {
   font-family: 'Bebas Neue', 'Inter Tight', system-ui, sans-serif;
