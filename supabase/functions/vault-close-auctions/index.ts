@@ -109,7 +109,40 @@ Deno.serve(async (req) => {
     const charges: unknown[] = [];
     for (const id of toCharge) charges.push(await chargeOrder(supabase, stripe, id));
 
-    return new Response(JSON.stringify({ processed: results.length, results, charges }), {
+    // Outbid notifications
+    const { data: outbids } = await supabase
+      .from('vault_bids')
+      .select('id, ski_id, user_id')
+      .not('outbid_at', 'is', null)
+      .is('outbid_notified_at', null)
+      .eq('is_auto', false)
+      .limit(200);
+
+    const notified = new Set<string>();
+    for (const b of outbids ?? []) {
+      const key = `${b.ski_id}:${b.user_id}`;
+      if (notified.has(key)) continue;
+      notified.add(key);
+      const { data: pub } = await supabase
+        .from('vault_public_skis')
+        .select('title, current_price, status, highest_bidder_id')
+        .eq('id', b.ski_id).maybeSingle();
+      if (!pub || pub.status !== 'live' || pub.highest_bidder_id === b.user_id) continue;
+      await sendVaultEmail(supabase, {
+        userId: b.user_id,
+        subject: `Outbid — ${pub.title}`,
+        title: "You've been outbid",
+        body: `<p><strong>${esc(pub.title)}</strong> is now at ${usd(Number(pub.current_price))}.</p>
+          <p><a href="${Deno.env.get('APP_URL') ?? ''}/vault/ski/${esc(b.ski_id)}" style="color:#c9a227">Raise your maximum</a></p>`,
+      });
+    }
+    if (outbids?.length) {
+      await supabase.from('vault_bids')
+        .update({ outbid_notified_at: new Date().toISOString() })
+        .in('id', outbids.map((b: { id: string }) => b.id));
+    }
+
+    return new Response(JSON.stringify({ processed: results.length, results, charges, outbid_notified: notified.size }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
