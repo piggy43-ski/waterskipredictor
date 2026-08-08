@@ -14,6 +14,7 @@ import { usd } from '@/lib/vault';
 import { VaultImage } from '@/components/vault/VaultImage';
 
 const emptyLot = {
+  sku: '',
   title: '',
   brand: '',
   model: '',
@@ -28,6 +29,8 @@ const emptyLot = {
   retail_price: '',
   closes_at: '',
   sort_order: '0',
+  consignor_id: '',
+  specs_confirmed: false,
 };
 
 const VaultAdmin = () => {
@@ -39,6 +42,27 @@ const VaultAdmin = () => {
   const [files, setFiles] = useState<FileList | null>(null);
   const [saving, setSaving] = useState(false);
   const [newDrop, setNewDrop] = useState({ name: '', drop_number: '', opens_at: '', closes_at: '', description: '' });
+  const [skuSearch, setSkuSearch] = useState('');
+
+  const { data: nextSku } = useQuery({
+    queryKey: ['vault-next-sku'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('vault_next_sku');
+      if (error) throw error;
+      return (data as unknown as string) ?? '';
+    },
+    enabled: !!isAdmin,
+  });
+
+  const { data: consignors = [] } = useQuery({
+    queryKey: ['vault-consignors'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('vault_consignors').select('id, display_name').order('display_name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!isAdmin,
+  });
 
   const { data: drops = [] } = useQuery({
     queryKey: ['vault-admin-drops'],
