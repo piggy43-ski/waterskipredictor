@@ -72,6 +72,7 @@ import VaultHome from "./pages/vault/VaultHome";
 import VaultSki from "./pages/vault/VaultSki";
 import VaultAccount from "./pages/vault/VaultAccount";
 import VaultAdmin from "./pages/vault/VaultAdmin";
+import VaultTerms from "./pages/vault/VaultTerms";
 
 const queryClient = new QueryClient();
 
@@ -98,6 +99,7 @@ const App = () => (
               {/* THE VAULT — public storefront (real money, no auth to browse) */}
               <Route path="/vault" element={<VaultHome />} />
               <Route path="/vault/ski/:id" element={<VaultSki />} />
+              <Route path="/vault/terms" element={<VaultTerms />} />
               <Route path="/vault/account" element={<ProtectedRoute><VaultAccount /></ProtectedRoute>} />
               <Route path="/vault/admin" element={<ProtectedRoute><VaultAdmin /></ProtectedRoute>} />
               

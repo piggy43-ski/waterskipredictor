@@ -53,9 +53,9 @@ const VaultAdmin = () => {
   const { data: skis = [] } = useQuery({
     queryKey: ['vault-admin-skis', dropId],
     queryFn: async () => {
-      let q = supabase.from('vault_skis').select('*').order('sort_order');
-      if (dropId) q = q.eq('drop_id', dropId);
-      const { data, error } = await q;
+      // vault_skis is not readable from the client (reserve_price is hidden);
+      // admins read the full rows through this admin-gated function instead.
+      const { data, error } = await supabase.rpc('vault_admin_skis', { p_drop_id: dropId || null });
       if (error) throw error;
       return data ?? [];
     },
@@ -67,7 +67,7 @@ const VaultAdmin = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vault_orders')
-        .select('*, vault_skis(title)')
+        .select('*, vault_public_skis(title)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -289,7 +289,7 @@ const VaultAdmin = () => {
             <div key={o.id} className="border border-border p-3">
               <div className="flex justify-between">
                 <p className="vault-serif text-lg">
-                  {(o as { vault_skis?: { title?: string } }).vault_skis?.title ?? 'Lot'}
+                  {(o as { vault_public_skis?: { title?: string } }).vault_public_skis?.title ?? 'Lot'}
                 </p>
                 <span className="vault-kicker text-[10px] text-primary">{o.status}</span>
               </div>
@@ -299,14 +299,41 @@ const VaultAdmin = () => {
                   placeholder="Tracking number"
                   defaultValue={o.tracking_number ?? ''}
                   onBlur={async (e) => {
-                    await supabase
-                      .from('vault_orders')
-                      .update({ tracking_number: e.target.value, status: 'shipped', shipped_at: new Date().toISOString() })
-                      .eq('id', o.id);
+                    if (!e.target.value || e.target.value === o.tracking_number) return;
+                    const { error } = await supabase.functions.invoke('vault-ship-order', {
+                      body: { order_id: o.id, tracking_number: e.target.value },
+                    });
+                    if (error) {
+                      toast({ title: 'Could not mark shipped', description: error.message, variant: 'destructive' });
+                      return;
+                    }
+                    toast({ title: 'Marked shipped', description: 'Tracking emailed to the buyer.' });
                     qc.invalidateQueries({ queryKey: ['vault-admin-orders'] });
                   }}
                 />
+                {(o.status === 'paid' || o.status === 'shipped') && (
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (!confirm(`Refund ${usd(Number(o.total))} and relist this lot?`)) return;
+                      const { data, error } = await supabase.functions.invoke('vault-refund-order', {
+                        body: { order_id: o.id, relist: true },
+                      });
+                      const err = error?.message ?? (data as { error?: string })?.error;
+                      if (err) {
+                        toast({ title: 'Refund failed', description: err, variant: 'destructive' });
+                        return;
+                      }
+                      toast({ title: 'Refunded', description: 'Order refunded and lot relisted.' });
+                      qc.invalidateQueries({ queryKey: ['vault-admin-orders'] });
+                      qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
+                    }}
+                  >
+                    Refund
+                  </Button>
+                )}
               </div>
+              {o.last_error && <p className="mt-1 text-xs text-destructive">{o.last_error}</p>}
             </div>
           ))}
         </TabsContent>

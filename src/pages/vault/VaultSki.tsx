@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { VaultLayout } from '@/components/vault/VaultLayout';
@@ -22,6 +22,8 @@ const VaultSki = () => {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [active, setActive] = useState(0);
+  const navigate = useNavigate();
+  const [buying, setBuying] = useState(false);
 
   const { data: lot, isLoading } = useQuery({
     queryKey: ['vault-lot', id],
@@ -70,15 +72,14 @@ const VaultSki = () => {
     if (!id) return;
     const channel = supabase
       .channel(`vault-lot-${id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vault_skis', filter: `id=eq.${id}` }, () => {
-        qc.invalidateQueries({ queryKey: ['vault-lot', id] });
-      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault_bids', filter: `ski_id=eq.${id}` }, () => {
         qc.invalidateQueries({ queryKey: ['vault-bid-history', id] });
         qc.invalidateQueries({ queryKey: ['vault-lot', id] });
       })
       .subscribe();
+    const poll = window.setInterval(() => qc.invalidateQueries({ queryKey: ['vault-lot', id] }), 15000);
     return () => {
+      window.clearInterval(poll);
       supabase.removeChannel(channel);
     };
   }, [id, qc]);
@@ -195,9 +196,31 @@ const VaultSki = () => {
             <BidPanel lot={lot} now={now} onBidPlaced={() => qc.invalidateQueries({ queryKey: ['vault-lot', id] })} />
           ) : (
             <div className="border border-border bg-card p-4">
-              <Button className="w-full" disabled>
-                Buy now — checkout coming with this drop
+              <Button
+                className="w-full"
+                disabled={buying || lot.status !== 'live'}
+                onClick={async () => {
+                  if (!user) return navigate('/auth');
+                  setBuying(true);
+                  const { data, error } = await supabase.functions.invoke('vault-buy-now', { body: { ski_id: id } });
+                  setBuying(false);
+                  const res = data as { url?: string; error?: string };
+                  if (error || res?.error || !res?.url) {
+                    toast({
+                      title: 'Could not start checkout',
+                      description: res?.error ?? error?.message,
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+                  window.open(res.url, '_blank');
+                }}
+              >
+                {lot.status !== 'live' ? 'Sold' : buying ? 'Opening checkout…' : `Buy it now — ${usd(Number(lot.buy_now_price))}`}
               </Button>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Shipping is added at checkout. One of one — first to pay takes it.
+              </p>
             </div>
           )}
 
