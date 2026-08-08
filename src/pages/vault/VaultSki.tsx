@@ -70,15 +70,14 @@ const VaultSki = () => {
     if (!id) return;
     const channel = supabase
       .channel(`vault-lot-${id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vault_skis', filter: `id=eq.${id}` }, () => {
-        qc.invalidateQueries({ queryKey: ['vault-lot', id] });
-      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault_bids', filter: `ski_id=eq.${id}` }, () => {
         qc.invalidateQueries({ queryKey: ['vault-bid-history', id] });
         qc.invalidateQueries({ queryKey: ['vault-lot', id] });
       })
       .subscribe();
+    const poll = window.setInterval(() => qc.invalidateQueries({ queryKey: ['vault-lot', id] }), 15000);
     return () => {
+      window.clearInterval(poll);
       supabase.removeChannel(channel);
     };
   }, [id, qc]);
