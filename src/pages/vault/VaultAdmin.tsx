@@ -334,9 +334,22 @@ const VaultAdmin = () => {
             <div><Label>Reserve (hidden)</Label><Input value={lot.reserve_price} onChange={f('reserve_price')} /></div>
             <div><Label>Buy now price</Label><Input value={lot.buy_now_price} onChange={f('buy_now_price')} /></div>
             <div><Label>Retail price</Label><Input value={lot.retail_price} onChange={f('retail_price')} /></div>
+            <div><Label>Comparable used-market price</Label><Input value={lot.market_price} onChange={f('market_price')} /></div>
+            <div className="sm:col-span-2">
+              <Label>Market comp source</Label>
+              <Input placeholder="e.g. Ski-It-Again, sold Mar 2026" value={lot.market_source} onChange={f('market_source')} />
+            </div>
             <div><Label>Closes at</Label><Input type="datetime-local" value={lot.closes_at} onChange={f('closes_at')} /></div>
             <div><Label>Sort order</Label><Input value={lot.sort_order} onChange={f('sort_order')} /></div>
             <div className="sm:col-span-2"><Label>Description</Label><Textarea value={lot.description} onChange={f('description')} /></div>
+            <div className="sm:col-span-2">
+              <Label>Provenance — the story</Label>
+              <Textarea rows={8} value={lot.provenance} onChange={f('provenance')} />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Whose ski was this and what did it do? Events, results, conditions, why they stopped riding it. This is the
+                single biggest driver of final price — write more here than anywhere else.
+              </p>
+            </div>
             <label className="sm:col-span-2 flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
