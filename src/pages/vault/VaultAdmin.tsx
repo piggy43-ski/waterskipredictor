@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { usd } from '@/lib/vault';
 import { VaultImage } from '@/components/vault/VaultImage';
+import { VaultSchedule } from '@/components/vault/admin/VaultSchedule';
 
 const emptyLot = {
   sku: '',
@@ -301,11 +302,16 @@ const VaultAdmin = () => {
       </div>
 
       <Tabs defaultValue="lots">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="drops">Drops</TabsTrigger>
+          <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="lots">Lots</TabsTrigger>
           <TabsTrigger value="orders">Orders</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="schedule" className="mt-4">
+          <VaultSchedule />
+        </TabsContent>
 
         <TabsContent value="drops" className="mt-4 space-y-4">
           <div className="grid gap-2 border border-border p-4 sm:grid-cols-2">
