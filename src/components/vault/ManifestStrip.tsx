@@ -51,7 +51,7 @@ export const ManifestStrip = () => {
         {data.total_in_vault} skis went into the vault. {data.released} have come out.
       </p>
       <div className="mt-5 flex flex-wrap gap-2">
-        {data.lots.map((l) => (
+        {data.lots.filter((l) => l.lot_number).map((l) => (
           <div
             key={l.lot_number ?? Math.random()}
             className={cn(
