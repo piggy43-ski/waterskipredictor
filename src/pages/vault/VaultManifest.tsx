@@ -45,7 +45,7 @@ const VaultManifest = () => {
           ) : null}
 
           <section className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {data.lots.map((l) => {
+            {data.lots.filter((l) => l.lot_number).map((l) => {
               const key = l.lot_number ?? l.id ?? Math.random();
               if (!l.revealed) {
                 return (
