@@ -7,6 +7,7 @@ import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "./contexts/AuthContext";
 import { TutorialProvider, TutorialOverlay, TutorialBubble } from "./components/tutorial";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import OAuthConsent from "./pages/OAuthConsent";
 import Index from "./pages/Index";
 import Tournaments from "./pages/Tournaments";
 import TournamentDetail from "./pages/TournamentDetailClean";
