@@ -89,3 +89,6 @@ verify_jwt = false
 
 [functions.manage-probability-overrides]
 verify_jwt = false
+
+[functions.vault-notify]
+verify_jwt = false
