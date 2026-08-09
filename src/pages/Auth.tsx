@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { SEO } from '@/components/SEO';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,10 @@ type AuthView = 'landing' | 'signin' | 'signup';
 
 const Auth = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rawNext = searchParams.get('next');
+  // Only allow same-origin relative paths.
+  const nextPath = rawNext && /^\/(?!\/)/.test(rawNext) ? rawNext : null;
   const {
     user,
     loading: authLoading,
@@ -44,9 +48,13 @@ const Auth = () => {
   
   useEffect(() => {
     if (user) {
-      navigate('/');
+      if (nextPath) {
+        window.location.href = nextPath;
+      } else {
+        navigate('/');
+      }
     }
-  }, [user, navigate]);
+  }, [user, navigate, nextPath]);
 
   // Loading skeleton while checking auth status
   if (authLoading) {
