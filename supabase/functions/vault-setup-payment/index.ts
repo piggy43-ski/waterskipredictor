@@ -80,6 +80,7 @@ Deno.serve(async (req) => {
       const { error } = await admin.from("vault_bidder_profiles").upsert({
         user_id: user.id,
         stripe_customer_id: customerId,
+        ...(body.source ? { source: String(body.source).slice(0, 64) } : {}),
         stripe_payment_method_id: pmId,
         payment_method_last4: pm.card?.last4 ?? null,
         payment_method_brand: pm.card?.brand ?? null,
