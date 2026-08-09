@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { usd } from '@/lib/vault';
+import { VaultImage } from '@/components/vault/VaultImage';
 
 type Consignor = {
   id: string;
@@ -116,7 +117,7 @@ const VaultConsignors = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vault_skis')
-        .select('id, sku, title, status, current_price, consignor_id')
+        .select('id, sku, title, status, current_price, consignor_id, image_urls, provenance')
         .not('consignor_id', 'is', null);
       if (error) throw error;
       return data ?? [];
@@ -172,6 +173,22 @@ const VaultConsignors = () => {
       return { earned, paid, owed: earned - paid };
     },
     [orders, payouts]
+  );
+
+  const refStatsFor = useMemo(
+    () => (slug: string | null) => {
+      if (!slug) return { bids: 0, bidders: 0, hammer: 0 };
+      const refBids = bids.filter((b) => b.source === slug);
+      const referredUsers = new Set<string>([
+        ...refBids.map((b) => b.user_id),
+        ...bidderProfiles.filter((p) => p.source === slug).map((p) => p.user_id),
+      ]);
+      const hammer = referredOrders
+        .filter((o) => referredUsers.has(o.user_id))
+        .reduce((s, o) => s + Number(o.hammer_price ?? 0), 0);
+      return { bids: refBids.length, bidders: referredUsers.size, hammer };
+    },
+    [bids, bidderProfiles, referredOrders]
   );
 
   if (isLoading || !isAdmin) {
