@@ -3865,6 +3865,51 @@ export type Database = {
         }
         Relationships: []
       }
+      vault_lot_reminders: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          notify_closing: boolean
+          notify_open: boolean
+          ski_id: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          notify_closing?: boolean
+          notify_open?: boolean
+          ski_id: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          notify_closing?: boolean
+          notify_open?: boolean
+          ski_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_lot_reminders_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_skis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_lot_reminders_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_skis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vault_orders: {
         Row: {
           charge_attempts: number
@@ -4447,25 +4492,32 @@ export type Database = {
           created_at: string | null
           current_price: number | null
           description: string | null
+          drop_closes_at: string | null
           drop_id: string | null
+          drop_opens_at: string | null
           has_reserve: boolean | null
           highest_bidder_id: string | null
           id: string | null
           image_urls: string[] | null
           is_consigned: boolean | null
           listing_type: Database["public"]["Enums"]["vault_listing_type"] | null
+          lot_number: number | null
           market_price: number | null
           market_source: string | null
           model: string | null
           provenance: string | null
           reserve_met: boolean | null
           retail_price: number | null
+          reveal_state: string | null
           size_cm: string | null
           sku: string | null
           sort_order: number | null
           specs_confirmed: boolean | null
           start_price: number | null
           status: Database["public"]["Enums"]["vault_ski_status"] | null
+          teaser_at: string | null
+          teaser_clues: string[] | null
+          teaser_headline: string | null
           title: string | null
           updated_at: string | null
           year: string | null
@@ -4688,11 +4740,13 @@ export type Database = {
         Args: { p_shipping: number; p_ski_id: string; p_user_id: string }
         Returns: Json
       }
+      vault_manifest: { Args: never; Returns: Json }
       vault_next_sku: { Args: never; Returns: string }
       vault_place_bid: {
         Args: { p_max_bid: number; p_ski_id: string }
         Returns: Json
       }
+      vault_reminder_count: { Args: { p_ski_id: string }; Returns: number }
       vault_reserve_met: { Args: { p_ski_id: string }; Returns: boolean }
       vault_server_time: { Args: never; Returns: string }
     }
