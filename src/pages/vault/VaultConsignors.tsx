@@ -188,6 +188,8 @@ const VaultConsignors = () => {
     }
     const payload = {
       display_name: form.display_name.trim(),
+      slug: form.slug.trim() || form.display_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      bio: form.bio || null,
       real_name: form.real_name || null,
       email: form.email || null,
       phone: form.phone || null,
@@ -355,6 +357,8 @@ const VaultConsignors = () => {
                         setEditingId(c.id);
                         setForm({
                           display_name: c.display_name,
+                          slug: c.slug ?? '',
+                          bio: c.bio ?? '',
                           real_name: c.real_name ?? '',
                           email: c.email ?? '',
                           phone: c.phone ?? '',
