@@ -1,118 +1,96 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { VaultLayout } from '@/components/vault/VaultLayout';
-import { LotCard, type VaultLot } from '@/components/vault/LotCard';
-import { VaultCountdown } from '@/components/vault/VaultCountdown';
+import type { VaultLot } from '@/components/vault/LotCard';
+import { LotTeaser } from '@/components/vault/LotTeaser';
+import { LotLive } from '@/components/vault/LotLive';
+import { LotSold } from '@/components/vault/LotSold';
+import { ManifestStrip } from '@/components/vault/ManifestStrip';
+import { BigCountdown } from '@/components/vault/BigCountdown';
 import { useVaultClock } from '@/hooks/useVaultClock';
+import { lotStage, lotLabel } from '@/lib/vault';
 import { Skeleton } from '@/components/ui/skeleton';
 
+/**
+ * /vault — one ski at a time, one per weekend.
+ * Teaser (Wed) → Live (Fri) → Closing (last 15 min) → Sold (Sun night → Wed).
+ */
 const VaultHome = () => {
   const { now } = useVaultClock();
   const qc = useQueryClient();
 
-  const { data: drop } = useQuery({
-    queryKey: ['vault-current-drop'],
+  const { data: lots, isLoading } = useQuery({
+    queryKey: ['vault-current-lot'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('vault_drops')
-        .select('*')
-        .in('status', ['live', 'scheduled'])
-        .order('opens_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: lots, isLoading } = useQuery({
-    queryKey: ['vault-lots', drop?.id ?? 'all'],
-    queryFn: async () => {
-      let q = supabase
         .from('vault_public_skis')
         .select('*')
-        .neq('status', 'cancelled')
-        .order('sort_order', { ascending: true });
-      if (drop?.id) q = q.eq('drop_id', drop.id);
-      const { data, error } = await q;
+        .order('lot_number', { ascending: true });
       if (error) throw error;
       return (data ?? []) as unknown as VaultLot[];
     },
   });
 
+  const { current, next } = useMemo(() => {
+    const all = lots ?? [];
+    const live = all.find((l) => ['live', 'closing'].includes(lotStage(l, now)));
+    const teaser = all.find((l) => lotStage(l, now) === 'teaser');
+    const closed = [...all].reverse().find((l) => lotStage(l, now) === 'sold');
+    const cur = live ?? teaser ?? closed ?? null;
+    const nxt = cur
+      ? all.find((l) => (l.lot_number ?? 0) > (cur.lot_number ?? 0)) ?? null
+      : all[0] ?? null;
+    return { current: cur, next: nxt };
+  }, [lots, now]);
+
   useEffect(() => {
-    const channel = supabase
-      .channel('vault-home')
-      // vault_skis is admin-only at the DB level, so we listen to bids instead
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault_bids' }, () => {
-        qc.invalidateQueries({ queryKey: ['vault-lots'] });
-      })
-      .subscribe();
-    const poll = window.setInterval(() => qc.invalidateQueries({ queryKey: ['vault-lots'] }), 20000);
-    return () => {
-      window.clearInterval(poll);
-      supabase.removeChannel(channel);
-    };
+    const poll = window.setInterval(() => qc.invalidateQueries({ queryKey: ['vault-current-lot'] }), 15000);
+    return () => window.clearInterval(poll);
   }, [qc]);
+
+  const stage = lotStage(current, now);
 
   return (
     <VaultLayout
-      title="The Vault — Curated Water Ski Gear Auctions"
-      description="Gear from touring athletes' personal racks. Timed auctions, hidden reserves, anti-snipe bidding. The Vault, by Waterski Predictor."
+      title="The Vault — One Water Ski, Every Weekend"
+      description="One ski at a time. Teased Wednesday, live Friday, sold Sunday. Gear from touring athletes' personal racks, with the story behind every lot."
     >
-      <section className="mb-10 text-center">
-        <p className="vault-kicker text-[10px] text-primary">
-          {drop ? `Drop ${String(drop.drop_number).padStart(3, '0')}` : 'by Waterski Predictor'}
-        </p>
-        <h1 className="vault-serif mt-2 text-4xl uppercase tracking-[0.14em] sm:text-6xl">
-          {drop?.name ?? 'The Vault'}
-        </h1>
-        <div className="vault-rule mx-auto my-4 w-32" />
-        <p className="mx-auto max-w-lg text-sm text-muted-foreground">
-          {drop?.description ??
-            'A short, curated release of skis worth owning. When the clock hits zero, the vault shuts.'}
-        </p>
-        {drop?.closes_at && (
-          <div className="mt-5 inline-flex flex-col items-center border border-border px-6 py-3">
-            <span className="vault-kicker text-[9px] text-muted-foreground">
-              {drop.status === 'live' ? 'Drop closes in' : 'Drop opens'}
-            </span>
-            <VaultCountdown closesAt={drop.status === 'live' ? drop.closes_at : drop.opens_at} now={now} />
-          </div>
-        )}
-      </section>
-
       {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="aspect-[4/6] w-full" />
-          ))}
+        <div className="space-y-4">
+          <Skeleton className="mx-auto h-16 w-64" />
+          <Skeleton className="mx-auto aspect-[16/9] w-full max-w-3xl" />
         </div>
-      ) : lots?.length ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {lots.map((lot, i) => (
-            <LotCard key={lot.id} lot={lot} now={now} index={i} />
-          ))}
-        </div>
+      ) : !current ? (
+        <section className="border border-border p-12 text-center">
+          <p className="vault-serif text-3xl uppercase tracking-[0.15em]">Vault sealed</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {next ? `${lotLabel(next.lot_number)} drops Wednesday.` : 'The next lot is being curated.'}
+          </p>
+          {next?.teaser_at ? <BigCountdown target={next.teaser_at} now={now} className="mt-6" /> : null}
+        </section>
+      ) : stage === 'teaser' ? (
+        <LotTeaser lot={current} now={now} />
+      ) : stage === 'sold' ? (
+        <LotSold lot={current} next={next} now={now} />
       ) : (
-        <div className="border border-border p-12 text-center">
-          <p className="vault-serif text-2xl uppercase tracking-[0.15em]">Vault sealed</p>
-          <p className="mt-2 text-sm text-muted-foreground">The next drop is being curated. Check back soon.</p>
-        </div>
+        <LotLive lot={current} now={now} closing={stage === 'closing'} />
       )}
+
+      <ManifestStrip />
 
       <section className="mt-12 border border-border p-6">
         <h2 className="vault-serif text-xl uppercase tracking-[0.14em]">What is The Vault?</h2>
         <div className="vault-rule my-3 w-16" />
         <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">
           <p>
+            One ski. One weekend. Teased Wednesday at noon, bidding opens Friday at 7pm, the hammer falls Sunday at
+            8pm. Eleven lots, and when one is gone it is gone.
+          </p>
+          <p>
             The Vault is where gear from touring athletes' personal racks gets sold off. Sponsored skiers end up with far
             more equipment than they can ride — new skis from sponsor allotments, demo skis from brands courting them,
             one-off prototypes.
-          </p>
-          <p>
-            Rather than let it sit in a garage, it ends up here. Every lot is one of one. When it's gone it's gone.
           </p>
         </div>
       </section>
