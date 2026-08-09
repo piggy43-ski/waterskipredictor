@@ -3910,6 +3910,27 @@ export type Database = {
           },
         ]
       }
+      vault_notify_log: {
+        Row: {
+          id: string
+          kind: string
+          sent_at: string
+          ski_id: string
+        }
+        Insert: {
+          id?: string
+          kind: string
+          sent_at?: string
+          ski_id: string
+        }
+        Update: {
+          id?: string
+          kind?: string
+          sent_at?: string
+          ski_id?: string
+        }
+        Relationships: []
+      }
       vault_orders: {
         Row: {
           charge_attempts: number
