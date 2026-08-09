@@ -54,6 +54,19 @@ const VaultSki = () => {
     },
   });
 
+  const { data: consignor } = useQuery({
+    queryKey: ['vault-public-consignor', lot?.consignor_slug],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vault_public_consignors')
+        .select('slug, display_name, is_anonymous')
+        .eq('slug', lot!.consignor_slug!)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!lot?.consignor_slug,
+  });
+
   const { data: watching } = useQuery({
     queryKey: ['vault-watch', id, user?.id],
     queryFn: async () => {
