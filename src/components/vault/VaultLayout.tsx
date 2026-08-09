@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { SEO } from '@/components/SEO';
+import { captureVaultRef } from '@/lib/vault';
 
 interface Props {
   children: React.ReactNode;
@@ -9,7 +11,11 @@ interface Props {
 }
 
 export const VaultLayout = ({ children, title, description }: Props) => {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+
+  useEffect(() => {
+    captureVaultRef(search);
+  }, [search]);
 
   return (
     <div className="vault-theme min-h-screen bg-background text-foreground">

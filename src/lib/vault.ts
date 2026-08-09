@@ -21,6 +21,26 @@ export function pickupLabel(zones: { zone: number; label?: string | null }[] | n
 
 export type VaultCondition = 'brand_new' | 'barely_ridden' | 'ridden';
 
+/** Referral attribution: ?ref=<consignor-slug> persists across the signup flow. */
+const REF_KEY = 'vault_ref';
+
+export function captureVaultRef(search: string): void {
+  try {
+    const ref = new URLSearchParams(search).get('ref');
+    if (ref) sessionStorage.setItem(REF_KEY, ref.slice(0, 64));
+  } catch {
+    /* sessionStorage unavailable */
+  }
+}
+
+export function getVaultRef(): string | null {
+  try {
+    return sessionStorage.getItem(REF_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export const CONDITION_LABEL: Record<VaultCondition, string> = {
   brand_new: 'Brand New',
   barely_ridden: 'Barely Ridden',
