@@ -94,6 +94,10 @@ const VaultTerms = () => (
         Lots marked <strong className="text-foreground">NO RESERVE</strong> sell to the high bidder at whatever the price
         lands, no floor. If a reserve is not met, the lot goes unsold and nobody is charged.
       </p>
+      <p>
+        Reserves are set at half of comparable used-market value. Most lots will sell well below what the same ski costs
+        elsewhere — that's the point.
+      </p>
     </Section>
 
     <Section title="The Vault is separate from Waterski Predictor tokens">
