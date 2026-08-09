@@ -3991,8 +3991,11 @@ export type Database = {
           id: string
           image_urls: string[]
           listing_type: Database["public"]["Enums"]["vault_listing_type"]
+          market_price: number | null
+          market_source: string | null
           model: string
           photo_key: string | null
+          provenance: string | null
           reserve_price: number | null
           retail_price: number | null
           size_cm: string | null
@@ -4020,8 +4023,11 @@ export type Database = {
           id?: string
           image_urls?: string[]
           listing_type?: Database["public"]["Enums"]["vault_listing_type"]
+          market_price?: number | null
+          market_source?: string | null
           model: string
           photo_key?: string | null
+          provenance?: string | null
           reserve_price?: number | null
           retail_price?: number | null
           size_cm?: string | null
@@ -4049,8 +4055,11 @@ export type Database = {
           id?: string
           image_urls?: string[]
           listing_type?: Database["public"]["Enums"]["vault_listing_type"]
+          market_price?: number | null
+          market_source?: string | null
           model?: string
           photo_key?: string | null
+          provenance?: string | null
           reserve_price?: number | null
           retail_price?: number | null
           size_cm?: string | null
@@ -4619,8 +4628,11 @@ export type Database = {
           id: string
           image_urls: string[]
           listing_type: Database["public"]["Enums"]["vault_listing_type"]
+          market_price: number | null
+          market_source: string | null
           model: string
           photo_key: string | null
+          provenance: string | null
           reserve_price: number | null
           retail_price: number | null
           size_cm: string | null
