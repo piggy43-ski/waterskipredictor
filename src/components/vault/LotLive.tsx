@@ -44,6 +44,20 @@ export const LotLive = ({ lot, now, closing }: Props) => {
     refetchInterval: closing ? 5000 : 20000,
   });
 
+  const { data: myBidCount = 0 } = useQuery({
+    queryKey: ['vault-my-bids', lot.id, user?.id],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('vault_bids')
+        .select('id', { count: 'exact', head: true })
+        .eq('ski_id', lot.id)
+        .eq('user_id', user!.id);
+      return count ?? 0;
+    },
+    enabled: !!user,
+    refetchInterval: closing ? 5000 : 20000,
+  });
+
   /* Realtime: new bids refresh price + feed instantly. */
   useEffect(() => {
     const channel = supabase
@@ -93,8 +107,7 @@ export const LotLive = ({ lot, now, closing }: Props) => {
   const price = Number(lot.bid_count ? lot.current_price : lot.start_price);
   const nextBid = minNextBid(Number(lot.current_price), lot.bid_count, Number(lot.start_price));
   const winning = !!user && lot.highest_bidder_id === user.id;
-  const outbid = !!user && !!lot.highest_bidder_id && !winning && bids.length > 0 && lot.bid_count > 0 &&
-    bids.some(() => true) && !winning && !!user && hasBid(bids, user.id);
+  const outbid = !!user && !winning && myBidCount > 0;
   const comp = lot.market_price ? Number(lot.market_price) : null;
   const bidderCount = new Set(bids.map((b) => b.handle)).size;
 
@@ -271,8 +284,3 @@ export const LotLive = ({ lot, now, closing }: Props) => {
     </section>
   );
 };
-
-/** Bid handles are masked, so "did I bid" is answered by the winning flag plus own-bid lookup. */
-function hasBid(bids: FeedBid[], _userId: string): boolean {
-  return bids.length > 0;
-}
