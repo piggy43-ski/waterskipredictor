@@ -419,6 +419,67 @@ const VaultConsignors = () => {
                       ))}
                   </ul>
                 )}
+
+                {c.slug && (() => {
+                  const stats = refStatsFor(c.slug);
+                  const link = `${window.location.origin}/vault/skier/${c.slug}?ref=${c.slug}`;
+                  const caption = `My skis are up in The Vault. Real gear off my rack, each one with the story of what it did. Bidding is open — link in bio.\n\n${link}`;
+                  return (
+                    <div className="mt-4 border-t border-border pt-3">
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="border border-border p-3">
+                          <p className="font-mono text-2xl tabular-nums">{stats.bidders}</p>
+                          <p className="vault-kicker text-[9px] text-muted-foreground">bidders referred</p>
+                        </div>
+                        <div className="border border-border p-3">
+                          <p className="font-mono text-2xl tabular-nums">{stats.bids}</p>
+                          <p className="vault-kicker text-[9px] text-muted-foreground">bids from their link</p>
+                        </div>
+                        <div className="border border-primary p-3">
+                          <p className="font-mono text-2xl tabular-nums text-primary">{usd(stats.hammer)}</p>
+                          <p className="vault-kicker text-[9px] text-muted-foreground">hammer value driven</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Input readOnly className="h-9 font-mono text-xs" value={link} />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              navigator.clipboard.writeText(link);
+                              toast({ title: 'Link copied' });
+                            }}
+                          >
+                            Copy link
+                          </Button>
+                        </div>
+                        <Textarea readOnly rows={4} className="text-xs" value={caption} />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            navigator.clipboard.writeText(caption);
+                            toast({ title: 'Caption copied' });
+                          }}
+                        >
+                          Copy caption
+                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          {skis
+                            .filter((s) => s.consignor_id === c.id)
+                            .map((s) => (
+                              <div key={s.id} className="w-20">
+                                <VaultImage path={(s.image_urls as string[] | null)?.[0]} alt="" className="h-20 w-20" />
+                                <p className="mt-1 font-mono text-[9px] text-muted-foreground">{s.sku ?? '—'}</p>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
