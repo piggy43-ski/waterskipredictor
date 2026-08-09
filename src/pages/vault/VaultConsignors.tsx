@@ -309,6 +309,14 @@ const VaultConsignors = () => {
         <TabsContent value="consignors" className="mt-4 space-y-4">
           <div className="grid gap-2 border border-border p-4 sm:grid-cols-2">
             <div><Label>Public display name</Label><Input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} /></div>
+            <div>
+              <Label>Share link slug</Label>
+              <Input placeholder="auto from display name" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Public bio (shown on their share page)</Label>
+              <Textarea value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
+            </div>
             <div><Label>Real name (private)</Label><Input value={form.real_name} onChange={(e) => setForm({ ...form, real_name: e.target.value })} /></div>
             <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
