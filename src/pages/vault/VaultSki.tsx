@@ -222,6 +222,19 @@ const VaultSki = () => {
                     )}
                   </p>
                 )}
+                {lot.market_price ? (
+                  <div className="mt-3 border-t border-border pt-2">
+                    <p
+                      className="text-sm text-muted-foreground"
+                      title={lot.market_source ?? undefined}
+                    >
+                      Comparable used market: {usd(Number(lot.market_price))}
+                    </p>
+                    {lot.market_source ? (
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">{lot.market_source}</p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               {isAuction && lot.status === 'live' && (
                 <div className="text-right">
