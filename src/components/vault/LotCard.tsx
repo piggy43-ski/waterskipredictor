@@ -8,6 +8,14 @@ export interface VaultLot {
   title: string;
   brand: string;
   model: string;
+  lot_number?: number | null;
+  reveal_state?: 'hidden' | 'teaser' | 'revealed' | null;
+  teaser_headline?: string | null;
+  teaser_clues?: string[] | null;
+  teaser_at?: string | null;
+  drop_opens_at?: string | null;
+  drop_closes_at?: string | null;
+  highest_bidder_id?: string | null;
   sku?: string | null;
   specs_confirmed?: boolean | null;
   is_consigned?: boolean | null;
