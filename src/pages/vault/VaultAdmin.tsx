@@ -443,69 +443,17 @@ const VaultAdmin = () => {
             onChange={(e) => setSkuSearch(e.target.value)}
           />
 
-          {filteredSkis.map((s: Record<string, any>) => (
-            <div key={s.id} className="flex items-center gap-3 border border-border p-3">
-              <VaultImage path={s.image_urls?.[0]} alt="" className="h-14 w-14" />
-              <div className="flex-1">
-                <p className="font-mono text-[10px] text-muted-foreground">{s.sku ?? '—'}</p>
-                <p className="vault-serif text-lg">
-                  {s.title}
-                  {!s.specs_confirmed && (
-                    <span className="ml-2 rounded border border-amber-500/60 bg-amber-500/10 px-1.5 py-0.5 align-middle text-[9px] uppercase tracking-wider text-amber-500">
-                      unconfirmed
-                    </span>
-                  )}
-                </p>
-                <p className="vault-kicker text-[9px] text-muted-foreground">
-                  {s.status} · {s.bid_count} bids · {usd(Number(s.current_price))} · reserve {usd(Number(s.reserve_price))}
-                </p>
-                <button
-                  type="button"
-                  className="mt-1 vault-kicker text-[9px] text-primary"
-                  onClick={async () => {
-                    await supabase
-                      .from('vault_skis')
-                      .update({ specs_confirmed: !s.specs_confirmed })
-                      .eq('id', s.id);
-                    qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
-                  }}
-                >
-                  {s.specs_confirmed ? 'Mark specs unconfirmed' : 'Confirm specs'}
-                </button>
-              </div>
-              <select
-                className="h-9 border border-border bg-input px-2 text-xs"
-                value={s.status}
-                onChange={async (e) => {
-                  const next = e.target.value;
-                  if (next === 'live' && !s.specs_confirmed) {
-                    toast({
-                      title: 'Specs not confirmed',
-                      description: 'Confirm the brand and model on this lot before setting it live.',
-                      variant: 'destructive',
-                    });
-                    return;
-                  }
-                  const { error } = await supabase
-                    .from('vault_skis')
-                    .update({ status: next as 'live' })
-                    .eq('id', s.id);
-                  if (error) {
-                    toast({ title: 'Could not update lot', description: error.message, variant: 'destructive' });
-                    return;
-                  }
-                  qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
-                }}
-              >
-                <option value="scheduled">scheduled</option>
-                <option value="live">live</option>
-                <option value="ended_met">ended_met</option>
-                <option value="ended_no_reserve_met">ended_no_reserve_met</option>
-                <option value="sold">sold</option>
-                <option value="cancelled">cancelled</option>
-              </select>
+          {activeSkis.map(renderLot)}
+
+          {heldSkis.length > 0 && (
+            <div className="mt-8 space-y-2">
+              <h2 className="vault-serif text-xl uppercase tracking-[0.14em]">Held back</h2>
+              <p className="vault-kicker text-[9px] text-muted-foreground">
+                Intentionally not for sale — never shown on any public page.
+              </p>
+              {heldSkis.map(renderLot)}
             </div>
-          ))}
+          )}
         </TabsContent>
 
         <TabsContent value="orders" className="mt-4 space-y-2">
