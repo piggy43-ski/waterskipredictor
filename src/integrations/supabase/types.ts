@@ -3836,6 +3836,7 @@ export type Database = {
           name: string
           opens_at: string
           status: Database["public"]["Enums"]["vault_drop_status"]
+          teaser_at: string | null
           updated_at: string
         }
         Insert: {
@@ -3847,6 +3848,7 @@ export type Database = {
           name: string
           opens_at: string
           status?: Database["public"]["Enums"]["vault_drop_status"]
+          teaser_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -3858,6 +3860,7 @@ export type Database = {
           name?: string
           opens_at?: string
           status?: Database["public"]["Enums"]["vault_drop_status"]
+          teaser_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -4024,6 +4027,7 @@ export type Database = {
           id: string
           image_urls: string[]
           listing_type: Database["public"]["Enums"]["vault_listing_type"]
+          lot_number: number | null
           market_price: number | null
           market_source: string | null
           model: string
@@ -4037,6 +4041,8 @@ export type Database = {
           specs_confirmed: boolean
           start_price: number
           status: Database["public"]["Enums"]["vault_ski_status"]
+          teaser_clues: string[] | null
+          teaser_headline: string | null
           title: string
           updated_at: string
           year: string | null
@@ -4056,6 +4062,7 @@ export type Database = {
           id?: string
           image_urls?: string[]
           listing_type?: Database["public"]["Enums"]["vault_listing_type"]
+          lot_number?: number | null
           market_price?: number | null
           market_source?: string | null
           model: string
@@ -4069,6 +4076,8 @@ export type Database = {
           specs_confirmed?: boolean
           start_price?: number
           status?: Database["public"]["Enums"]["vault_ski_status"]
+          teaser_clues?: string[] | null
+          teaser_headline?: string | null
           title: string
           updated_at?: string
           year?: string | null
@@ -4088,6 +4097,7 @@ export type Database = {
           id?: string
           image_urls?: string[]
           listing_type?: Database["public"]["Enums"]["vault_listing_type"]
+          lot_number?: number | null
           market_price?: number | null
           market_source?: string | null
           model?: string
@@ -4101,6 +4111,8 @@ export type Database = {
           specs_confirmed?: boolean
           start_price?: number
           status?: Database["public"]["Enums"]["vault_ski_status"]
+          teaser_clues?: string[] | null
+          teaser_headline?: string | null
           title?: string
           updated_at?: string
           year?: string | null
@@ -4634,6 +4646,7 @@ export type Database = {
           id: string
           image_urls: string[]
           listing_type: Database["public"]["Enums"]["vault_listing_type"]
+          lot_number: number | null
           market_price: number | null
           market_source: string | null
           model: string
@@ -4647,6 +4660,8 @@ export type Database = {
           specs_confirmed: boolean
           start_price: number
           status: Database["public"]["Enums"]["vault_ski_status"]
+          teaser_clues: string[] | null
+          teaser_headline: string | null
           title: string
           updated_at: string
           year: string | null
