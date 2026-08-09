@@ -15,6 +15,8 @@ import { usd } from '@/lib/vault';
 type Consignor = {
   id: string;
   display_name: string;
+  slug: string | null;
+  bio: string | null;
   real_name: string | null;
   email: string | null;
   phone: string | null;
@@ -27,6 +29,8 @@ type Consignor = {
 
 const emptyConsignor = {
   display_name: '',
+  slug: '',
+  bio: '',
   real_name: '',
   email: '',
   phone: '',
@@ -57,6 +61,45 @@ const VaultConsignors = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [payout, setPayout] = useState({ amount: '', method: '', reference: '' });
+
+  const { data: bids = [] } = useQuery({
+    queryKey: ['vault-referred-bids'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vault_bids')
+        .select('id, user_id, source, ski_id')
+        .not('source', 'is', null);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!isAdmin,
+  });
+
+  const { data: referredOrders = [] } = useQuery({
+    queryKey: ['vault-referred-orders'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vault_orders')
+        .select('id, user_id, hammer_price, status')
+        .in('status', ['paid', 'shipped']);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!isAdmin,
+  });
+
+  const { data: bidderProfiles = [] } = useQuery({
+    queryKey: ['vault-bidder-sources'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vault_bidder_profiles')
+        .select('user_id, source')
+        .not('source', 'is', null);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!isAdmin,
+  });
 
   const { data: consignors = [] } = useQuery({
     queryKey: ['vault-consignors-admin'],
