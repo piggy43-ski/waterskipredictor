@@ -3539,6 +3539,7 @@ export type Database = {
           phone: string | null
           postal_code: string | null
           shipping_zone: number | null
+          source: string | null
           state: string | null
           stripe_customer_id: string | null
           stripe_payment_method_id: string | null
@@ -3560,6 +3561,7 @@ export type Database = {
           phone?: string | null
           postal_code?: string | null
           shipping_zone?: number | null
+          source?: string | null
           state?: string | null
           stripe_customer_id?: string | null
           stripe_payment_method_id?: string | null
@@ -3581,6 +3583,7 @@ export type Database = {
           phone?: string | null
           postal_code?: string | null
           shipping_zone?: number | null
+          source?: string | null
           state?: string | null
           stripe_customer_id?: string | null
           stripe_payment_method_id?: string | null
@@ -3599,6 +3602,7 @@ export type Database = {
           outbid_at: string | null
           outbid_notified_at: string | null
           ski_id: string
+          source: string | null
           user_id: string
         }
         Insert: {
@@ -3610,6 +3614,7 @@ export type Database = {
           outbid_at?: string | null
           outbid_notified_at?: string | null
           ski_id: string
+          source?: string | null
           user_id: string
         }
         Update: {
@@ -3621,6 +3626,7 @@ export type Database = {
           outbid_at?: string | null
           outbid_notified_at?: string | null
           ski_id?: string
+          source?: string | null
           user_id?: string
         }
         Relationships: [
@@ -3709,6 +3715,13 @@ export type Database = {
             referencedRelation: "vault_consignors"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "vault_consignment_submissions_consignor_id_fkey"
+            columns: ["consignor_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_consignors"
+            referencedColumns: ["id"]
+          },
         ]
       }
       vault_consignor_payouts: {
@@ -3750,10 +3763,18 @@ export type Database = {
             referencedRelation: "vault_consignors"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "vault_consignor_payouts_consignor_id_fkey"
+            columns: ["consignor_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_consignors"
+            referencedColumns: ["id"]
+          },
         ]
       }
       vault_consignors: {
         Row: {
+          bio: string | null
           commission_rate: number
           created_at: string
           display_name: string
@@ -3765,10 +3786,12 @@ export type Database = {
           payout_method: string | null
           phone: string | null
           real_name: string | null
+          slug: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
+          bio?: string | null
           commission_rate?: number
           created_at?: string
           display_name: string
@@ -3780,10 +3803,12 @@ export type Database = {
           payout_method?: string | null
           phone?: string | null
           real_name?: string | null
+          slug?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
+          bio?: string | null
           commission_rate?: number
           created_at?: string
           display_name?: string
@@ -3795,6 +3820,7 @@ export type Database = {
           payout_method?: string | null
           phone?: string | null
           real_name?: string | null
+          slug?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -3924,6 +3950,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "vault_orders_consignor_id_fkey"
+            columns: ["consignor_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_consignors"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "vault_orders_ski_id_fkey"
             columns: ["ski_id"]
             isOneToOne: false
@@ -3991,8 +4024,11 @@ export type Database = {
           id: string
           image_urls: string[]
           listing_type: Database["public"]["Enums"]["vault_listing_type"]
+          market_price: number | null
+          market_source: string | null
           model: string
           photo_key: string | null
+          provenance: string | null
           reserve_price: number | null
           retail_price: number | null
           size_cm: string | null
@@ -4020,8 +4056,11 @@ export type Database = {
           id?: string
           image_urls?: string[]
           listing_type?: Database["public"]["Enums"]["vault_listing_type"]
+          market_price?: number | null
+          market_source?: string | null
           model: string
           photo_key?: string | null
+          provenance?: string | null
           reserve_price?: number | null
           retail_price?: number | null
           size_cm?: string | null
@@ -4049,8 +4088,11 @@ export type Database = {
           id?: string
           image_urls?: string[]
           listing_type?: Database["public"]["Enums"]["vault_listing_type"]
+          market_price?: number | null
+          market_source?: string | null
           model?: string
           photo_key?: string | null
+          provenance?: string | null
           reserve_price?: number | null
           retail_price?: number | null
           size_cm?: string | null
@@ -4069,6 +4111,13 @@ export type Database = {
             columns: ["consignor_id"]
             isOneToOne: false
             referencedRelation: "vault_consignors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_skis_consignor_id_fkey"
+            columns: ["consignor_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_consignors"
             referencedColumns: ["id"]
           },
           {
@@ -4351,6 +4400,30 @@ export type Database = {
           },
         ]
       }
+      vault_public_consignors: {
+        Row: {
+          bio: string | null
+          display_name: string | null
+          id: string | null
+          is_anonymous: boolean | null
+          slug: string | null
+        }
+        Insert: {
+          bio?: string | null
+          display_name?: string | null
+          id?: string | null
+          is_anonymous?: boolean | null
+          slug?: string | null
+        }
+        Update: {
+          bio?: string | null
+          display_name?: string | null
+          id?: string | null
+          is_anonymous?: boolean | null
+          slug?: string | null
+        }
+        Relationships: []
+      }
       vault_public_skis: {
         Row: {
           bid_count: number | null
@@ -4358,6 +4431,7 @@ export type Database = {
           buy_now_price: number | null
           closes_at: string | null
           condition: Database["public"]["Enums"]["vault_condition"] | null
+          consignor_slug: string | null
           created_at: string | null
           current_price: number | null
           description: string | null
@@ -4368,7 +4442,10 @@ export type Database = {
           image_urls: string[] | null
           is_consigned: boolean | null
           listing_type: Database["public"]["Enums"]["vault_listing_type"] | null
+          market_price: number | null
+          market_source: string | null
           model: string | null
+          provenance: string | null
           reserve_met: boolean | null
           retail_price: number | null
           size_cm: string | null
@@ -4380,68 +4457,6 @@ export type Database = {
           title: string | null
           updated_at: string | null
           year: string | null
-        }
-        Insert: {
-          bid_count?: number | null
-          brand?: string | null
-          buy_now_price?: number | null
-          closes_at?: string | null
-          condition?: Database["public"]["Enums"]["vault_condition"] | null
-          created_at?: string | null
-          current_price?: number | null
-          description?: string | null
-          drop_id?: string | null
-          has_reserve?: never
-          highest_bidder_id?: string | null
-          id?: string | null
-          image_urls?: string[] | null
-          is_consigned?: never
-          listing_type?:
-            | Database["public"]["Enums"]["vault_listing_type"]
-            | null
-          model?: string | null
-          reserve_met?: never
-          retail_price?: number | null
-          size_cm?: string | null
-          sku?: string | null
-          sort_order?: number | null
-          specs_confirmed?: boolean | null
-          start_price?: number | null
-          status?: Database["public"]["Enums"]["vault_ski_status"] | null
-          title?: string | null
-          updated_at?: string | null
-          year?: string | null
-        }
-        Update: {
-          bid_count?: number | null
-          brand?: string | null
-          buy_now_price?: number | null
-          closes_at?: string | null
-          condition?: Database["public"]["Enums"]["vault_condition"] | null
-          created_at?: string | null
-          current_price?: number | null
-          description?: string | null
-          drop_id?: string | null
-          has_reserve?: never
-          highest_bidder_id?: string | null
-          id?: string | null
-          image_urls?: string[] | null
-          is_consigned?: never
-          listing_type?:
-            | Database["public"]["Enums"]["vault_listing_type"]
-            | null
-          model?: string | null
-          reserve_met?: never
-          retail_price?: number | null
-          size_cm?: string | null
-          sku?: string | null
-          sort_order?: number | null
-          specs_confirmed?: boolean | null
-          start_price?: number | null
-          status?: Database["public"]["Enums"]["vault_ski_status"] | null
-          title?: string | null
-          updated_at?: string | null
-          year?: string | null
         }
         Relationships: [
           {
@@ -4619,8 +4634,11 @@ export type Database = {
           id: string
           image_urls: string[]
           listing_type: Database["public"]["Enums"]["vault_listing_type"]
+          market_price: number | null
+          market_source: string | null
           model: string
           photo_key: string | null
+          provenance: string | null
           reserve_price: number | null
           retail_price: number | null
           size_cm: string | null

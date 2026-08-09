@@ -11,10 +11,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { usd } from '@/lib/vault';
+import { VaultImage } from '@/components/vault/VaultImage';
 
 type Consignor = {
   id: string;
   display_name: string;
+  slug: string | null;
+  bio: string | null;
   real_name: string | null;
   email: string | null;
   phone: string | null;
@@ -27,6 +30,8 @@ type Consignor = {
 
 const emptyConsignor = {
   display_name: '',
+  slug: '',
+  bio: '',
   real_name: '',
   email: '',
   phone: '',
@@ -58,6 +63,45 @@ const VaultConsignors = () => {
   const [selected, setSelected] = useState<string | null>(null);
   const [payout, setPayout] = useState({ amount: '', method: '', reference: '' });
 
+  const { data: bids = [] } = useQuery({
+    queryKey: ['vault-referred-bids'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vault_bids')
+        .select('id, user_id, source, ski_id')
+        .not('source', 'is', null);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!isAdmin,
+  });
+
+  const { data: referredOrders = [] } = useQuery({
+    queryKey: ['vault-referred-orders'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vault_orders')
+        .select('id, user_id, hammer_price, status')
+        .in('status', ['paid', 'shipped']);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!isAdmin,
+  });
+
+  const { data: bidderProfiles = [] } = useQuery({
+    queryKey: ['vault-bidder-sources'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vault_bidder_profiles')
+        .select('user_id, source')
+        .not('source', 'is', null);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!isAdmin,
+  });
+
   const { data: consignors = [] } = useQuery({
     queryKey: ['vault-consignors-admin'],
     queryFn: async () => {
@@ -73,7 +117,7 @@ const VaultConsignors = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vault_skis')
-        .select('id, sku, title, status, current_price, consignor_id')
+        .select('id, sku, title, status, current_price, consignor_id, image_urls, provenance')
         .not('consignor_id', 'is', null);
       if (error) throw error;
       return data ?? [];
@@ -131,6 +175,22 @@ const VaultConsignors = () => {
     [orders, payouts]
   );
 
+  const refStatsFor = useMemo(
+    () => (slug: string | null) => {
+      if (!slug) return { bids: 0, bidders: 0, hammer: 0 };
+      const refBids = bids.filter((b) => b.source === slug);
+      const referredUsers = new Set<string>([
+        ...refBids.map((b) => b.user_id),
+        ...bidderProfiles.filter((p) => p.source === slug).map((p) => p.user_id),
+      ]);
+      const hammer = referredOrders
+        .filter((o) => referredUsers.has(o.user_id))
+        .reduce((s, o) => s + Number(o.hammer_price ?? 0), 0);
+      return { bids: refBids.length, bidders: referredUsers.size, hammer };
+    },
+    [bids, bidderProfiles, referredOrders]
+  );
+
   if (isLoading || !isAdmin) {
     return (
       <VaultLayout title="Vault Consignors" description="Vault consignor administration.">
@@ -145,6 +205,8 @@ const VaultConsignors = () => {
     }
     const payload = {
       display_name: form.display_name.trim(),
+      slug: form.slug.trim() || form.display_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      bio: form.bio || null,
       real_name: form.real_name || null,
       email: form.email || null,
       phone: form.phone || null,
@@ -264,6 +326,14 @@ const VaultConsignors = () => {
         <TabsContent value="consignors" className="mt-4 space-y-4">
           <div className="grid gap-2 border border-border p-4 sm:grid-cols-2">
             <div><Label>Public display name</Label><Input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} /></div>
+            <div>
+              <Label>Share link slug</Label>
+              <Input placeholder="auto from display name" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Public bio (shown on their share page)</Label>
+              <Textarea value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
+            </div>
             <div><Label>Real name (private)</Label><Input value={form.real_name} onChange={(e) => setForm({ ...form, real_name: e.target.value })} /></div>
             <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
@@ -312,6 +382,8 @@ const VaultConsignors = () => {
                         setEditingId(c.id);
                         setForm({
                           display_name: c.display_name,
+                          slug: c.slug ?? '',
+                          bio: c.bio ?? '',
                           real_name: c.real_name ?? '',
                           email: c.email ?? '',
                           phone: c.phone ?? '',
@@ -347,6 +419,67 @@ const VaultConsignors = () => {
                       ))}
                   </ul>
                 )}
+
+                {c.slug && (() => {
+                  const stats = refStatsFor(c.slug);
+                  const link = `${window.location.origin}/vault/skier/${c.slug}?ref=${c.slug}`;
+                  const caption = `My skis are up in The Vault. Real gear off my rack, each one with the story of what it did. Bidding is open — link in bio.\n\n${link}`;
+                  return (
+                    <div className="mt-4 border-t border-border pt-3">
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="border border-border p-3">
+                          <p className="font-mono text-2xl tabular-nums">{stats.bidders}</p>
+                          <p className="vault-kicker text-[9px] text-muted-foreground">bidders referred</p>
+                        </div>
+                        <div className="border border-border p-3">
+                          <p className="font-mono text-2xl tabular-nums">{stats.bids}</p>
+                          <p className="vault-kicker text-[9px] text-muted-foreground">bids from their link</p>
+                        </div>
+                        <div className="border border-primary p-3">
+                          <p className="font-mono text-2xl tabular-nums text-primary">{usd(stats.hammer)}</p>
+                          <p className="vault-kicker text-[9px] text-muted-foreground">hammer value driven</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Input readOnly className="h-9 font-mono text-xs" value={link} />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              navigator.clipboard.writeText(link);
+                              toast({ title: 'Link copied' });
+                            }}
+                          >
+                            Copy link
+                          </Button>
+                        </div>
+                        <Textarea readOnly rows={4} className="text-xs" value={caption} />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            navigator.clipboard.writeText(caption);
+                            toast({ title: 'Caption copied' });
+                          }}
+                        >
+                          Copy caption
+                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          {skis
+                            .filter((s) => s.consignor_id === c.id)
+                            .map((s) => (
+                              <div key={s.id} className="w-20">
+                                <VaultImage path={(s.image_urls as string[] | null)?.[0]} alt="" className="h-20 w-20" />
+                                <p className="mt-1 font-mono text-[9px] text-muted-foreground">{s.sku ?? '—'}</p>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}

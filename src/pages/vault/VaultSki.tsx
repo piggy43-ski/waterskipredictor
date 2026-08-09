@@ -54,6 +54,19 @@ const VaultSki = () => {
     },
   });
 
+  const { data: consignor } = useQuery({
+    queryKey: ['vault-public-consignor', lot?.consignor_slug],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vault_public_consignors')
+        .select('slug, display_name, is_anonymous')
+        .eq('slug', lot!.consignor_slug!)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!lot?.consignor_slug,
+  });
+
   const { data: watching } = useQuery({
     queryKey: ['vault-watch', id, user?.id],
     queryFn: async () => {
@@ -148,6 +161,16 @@ const VaultSki = () => {
               ))}
             </div>
           )}
+
+          {lot.provenance ? (
+            <section className="mt-6 border-l-4 border-primary bg-card/70 px-5 py-5">
+              <p className="vault-kicker text-[10px] tracking-[0.3em] text-primary">The Story</p>
+              <div className="vault-rule my-3 w-12" />
+              <p className="vault-serif whitespace-pre-line text-xl italic leading-relaxed sm:text-2xl">
+                {lot.provenance}
+              </p>
+            </section>
+          ) : null}
         </div>
 
         <div className="space-y-5">
@@ -166,6 +189,14 @@ const VaultSki = () => {
             ) : null}
             {lot.is_consigned ? (
               <p className="vault-kicker mt-2 text-[9px] text-primary">Consigned from a tour athlete's rack</p>
+            ) : null}
+            {consignor && !consignor.is_anonymous ? (
+              <Link
+                to={`/vault/skier/${consignor.slug}`}
+                className="vault-kicker mt-1 inline-block text-[9px] text-primary hover:underline"
+              >
+                See every lot from {consignor.display_name} →
+              </Link>
             ) : null}
             {lot.retail_price ? (
               <p className="mt-1 text-xs text-muted-foreground">Retail when new: {usd(Number(lot.retail_price))}</p>
@@ -191,6 +222,19 @@ const VaultSki = () => {
                     )}
                   </p>
                 )}
+                {lot.market_price ? (
+                  <div className="mt-3 border-t border-border pt-2">
+                    <p
+                      className="text-sm text-muted-foreground"
+                      title={lot.market_source ?? undefined}
+                    >
+                      Comparable used market: {usd(Number(lot.market_price))}
+                    </p>
+                    {lot.market_source ? (
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">{lot.market_source}</p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               {isAuction && lot.status === 'live' && (
                 <div className="text-right">

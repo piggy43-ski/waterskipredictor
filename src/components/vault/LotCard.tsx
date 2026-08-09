@@ -14,6 +14,10 @@ export interface VaultLot {
   size_cm: string | null;
   year: string | null;
   description: string | null;
+  provenance?: string | null;
+  market_price?: number | null;
+  market_source?: string | null;
+  consignor_slug?: string | null;
   condition: VaultCondition;
   image_urls: string[];
   listing_type: 'auction' | 'buy_now';

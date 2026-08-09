@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { usd, zoneForState, pickupLabel } from '@/lib/vault';
+import { usd, zoneForState, pickupLabel, getVaultRef } from '@/lib/vault';
 
 interface Props {
   open: boolean;
@@ -60,6 +60,7 @@ const SetupForm = ({
         action: 'confirm',
         payment_method_id: String(setupIntent.payment_method),
         shipping,
+        source: getVaultRef(),
       },
     });
     setSaving(false);

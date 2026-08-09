@@ -22,6 +22,9 @@ const emptyLot = {
   year: '',
   condition: 'ridden',
   description: '',
+  provenance: '',
+  market_price: '',
+  market_source: '',
   listing_type: 'auction',
   start_price: '',
   reserve_price: '',
@@ -169,6 +172,9 @@ const VaultAdmin = () => {
         year: lot.year || null,
         condition: lot.condition as 'brand_new' | 'barely_ridden' | 'ridden',
         description: lot.description || null,
+        provenance: lot.provenance || null,
+        market_price: num(lot.market_price),
+        market_source: lot.market_source || null,
         image_urls,
         listing_type: lot.listing_type as 'auction' | 'buy_now',
         start_price: start,
@@ -216,6 +222,76 @@ const VaultAdmin = () => {
       String(s.title ?? '').toLowerCase().includes(q)
     );
   });
+
+  const activeSkis = filteredSkis.filter((s) => s.status !== 'cancelled');
+  const heldSkis = filteredSkis.filter((s) => s.status === 'cancelled');
+
+  const renderLot = (s: Record<string, any>) => (
+    <div key={s.id} className="flex items-center gap-3 border border-border p-3">
+      <VaultImage path={s.image_urls?.[0]} alt="" className="h-14 w-14" />
+      <div className="flex-1">
+        <p className="font-mono text-[10px] text-muted-foreground">{s.sku ?? '—'}</p>
+        <p className="vault-serif text-lg">
+          {s.title}
+          {!s.specs_confirmed && (
+            <span className="ml-2 rounded border border-amber-500/60 bg-amber-500/10 px-1.5 py-0.5 align-middle text-[9px] uppercase tracking-wider text-amber-500">
+              unconfirmed
+            </span>
+          )}
+          {!s.provenance && (
+            <span className="ml-2 rounded border border-border px-1.5 py-0.5 align-middle text-[9px] uppercase tracking-wider text-muted-foreground">
+              no story
+            </span>
+          )}
+        </p>
+        <p className="vault-kicker text-[9px] text-muted-foreground">
+          {s.status} · {s.bid_count} bids · {usd(Number(s.current_price))} · reserve {usd(Number(s.reserve_price))}
+          {s.market_price ? ` · comp ${usd(Number(s.market_price))}` : ''}
+        </p>
+        <button
+          type="button"
+          className="mt-1 vault-kicker text-[9px] text-primary"
+          onClick={async () => {
+            await supabase.from('vault_skis').update({ specs_confirmed: !s.specs_confirmed }).eq('id', s.id);
+            qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
+          }}
+        >
+          {s.specs_confirmed ? 'Mark specs unconfirmed' : 'Confirm specs'}
+        </button>
+      </div>
+      <select
+        className="h-9 border border-border bg-input px-2 text-xs"
+        value={s.status}
+        onChange={async (e) => {
+          const next = e.target.value;
+          if (next === 'live' && !s.specs_confirmed) {
+            toast({
+              title: 'Specs not confirmed',
+              description: 'Confirm the brand and model on this lot before setting it live.',
+              variant: 'destructive',
+            });
+            return;
+          }
+          const { error } = await supabase
+            .from('vault_skis')
+            .update({ status: next as 'live' })
+            .eq('id', s.id);
+          if (error) {
+            toast({ title: 'Could not update lot', description: error.message, variant: 'destructive' });
+            return;
+          }
+          qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
+        }}
+      >
+        <option value="scheduled">scheduled</option>
+        <option value="live">live</option>
+        <option value="ended_met">ended_met</option>
+        <option value="ended_no_reserve_met">ended_no_reserve_met</option>
+        <option value="sold">sold</option>
+        <option value="cancelled">cancelled</option>
+      </select>
+    </div>
+  );
 
   return (
     <VaultLayout title="Vault Admin" description="Manage Vault drops, lots and orders.">
@@ -328,9 +404,22 @@ const VaultAdmin = () => {
             <div><Label>Reserve (hidden)</Label><Input value={lot.reserve_price} onChange={f('reserve_price')} /></div>
             <div><Label>Buy now price</Label><Input value={lot.buy_now_price} onChange={f('buy_now_price')} /></div>
             <div><Label>Retail price</Label><Input value={lot.retail_price} onChange={f('retail_price')} /></div>
+            <div><Label>Comparable used-market price</Label><Input value={lot.market_price} onChange={f('market_price')} /></div>
+            <div className="sm:col-span-2">
+              <Label>Market comp source</Label>
+              <Input placeholder="e.g. Ski-It-Again, sold Mar 2026" value={lot.market_source} onChange={f('market_source')} />
+            </div>
             <div><Label>Closes at</Label><Input type="datetime-local" value={lot.closes_at} onChange={f('closes_at')} /></div>
             <div><Label>Sort order</Label><Input value={lot.sort_order} onChange={f('sort_order')} /></div>
             <div className="sm:col-span-2"><Label>Description</Label><Textarea value={lot.description} onChange={f('description')} /></div>
+            <div className="sm:col-span-2">
+              <Label>Provenance — the story</Label>
+              <Textarea rows={8} value={lot.provenance} onChange={f('provenance')} />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Whose ski was this and what did it do? Events, results, conditions, why they stopped riding it. This is the
+                single biggest driver of final price — write more here than anywhere else.
+              </p>
+            </div>
             <label className="sm:col-span-2 flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -354,69 +443,17 @@ const VaultAdmin = () => {
             onChange={(e) => setSkuSearch(e.target.value)}
           />
 
-          {filteredSkis.map((s: Record<string, any>) => (
-            <div key={s.id} className="flex items-center gap-3 border border-border p-3">
-              <VaultImage path={s.image_urls?.[0]} alt="" className="h-14 w-14" />
-              <div className="flex-1">
-                <p className="font-mono text-[10px] text-muted-foreground">{s.sku ?? '—'}</p>
-                <p className="vault-serif text-lg">
-                  {s.title}
-                  {!s.specs_confirmed && (
-                    <span className="ml-2 rounded border border-amber-500/60 bg-amber-500/10 px-1.5 py-0.5 align-middle text-[9px] uppercase tracking-wider text-amber-500">
-                      unconfirmed
-                    </span>
-                  )}
-                </p>
-                <p className="vault-kicker text-[9px] text-muted-foreground">
-                  {s.status} · {s.bid_count} bids · {usd(Number(s.current_price))} · reserve {usd(Number(s.reserve_price))}
-                </p>
-                <button
-                  type="button"
-                  className="mt-1 vault-kicker text-[9px] text-primary"
-                  onClick={async () => {
-                    await supabase
-                      .from('vault_skis')
-                      .update({ specs_confirmed: !s.specs_confirmed })
-                      .eq('id', s.id);
-                    qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
-                  }}
-                >
-                  {s.specs_confirmed ? 'Mark specs unconfirmed' : 'Confirm specs'}
-                </button>
-              </div>
-              <select
-                className="h-9 border border-border bg-input px-2 text-xs"
-                value={s.status}
-                onChange={async (e) => {
-                  const next = e.target.value;
-                  if (next === 'live' && !s.specs_confirmed) {
-                    toast({
-                      title: 'Specs not confirmed',
-                      description: 'Confirm the brand and model on this lot before setting it live.',
-                      variant: 'destructive',
-                    });
-                    return;
-                  }
-                  const { error } = await supabase
-                    .from('vault_skis')
-                    .update({ status: next as 'live' })
-                    .eq('id', s.id);
-                  if (error) {
-                    toast({ title: 'Could not update lot', description: error.message, variant: 'destructive' });
-                    return;
-                  }
-                  qc.invalidateQueries({ queryKey: ['vault-admin-skis'] });
-                }}
-              >
-                <option value="scheduled">scheduled</option>
-                <option value="live">live</option>
-                <option value="ended_met">ended_met</option>
-                <option value="ended_no_reserve_met">ended_no_reserve_met</option>
-                <option value="sold">sold</option>
-                <option value="cancelled">cancelled</option>
-              </select>
+          {activeSkis.map(renderLot)}
+
+          {heldSkis.length > 0 && (
+            <div className="mt-8 space-y-2">
+              <h2 className="vault-serif text-xl uppercase tracking-[0.14em]">Held back</h2>
+              <p className="vault-kicker text-[9px] text-muted-foreground">
+                Intentionally not for sale — never shown on any public page.
+              </p>
+              {heldSkis.map(renderLot)}
             </div>
-          ))}
+          )}
         </TabsContent>
 
         <TabsContent value="orders" className="mt-4 space-y-2">
