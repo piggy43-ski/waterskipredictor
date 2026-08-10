@@ -105,7 +105,7 @@ const generateCustomHtml = (username: string, appUrl: string, emoji: string, car
         </td></tr>
         <tr><td style="padding-top:32px;text-align:center;">
           <p style="color:#666;font-size:14px;margin:0;">WaterSki Predictor — Where Every Pass Matters</p>
-          <p style="color:#444;font-size:12px;margin:8px 0 0 0;">You're receiving this because you opted in to marketing emails.<br>To unsubscribe, update your email preferences in your profile settings.</p>
+          <p style="color:#444;font-size:12px;margin:8px 0 0 0;">You're receiving this because you have a Waterski Predictor account.<br>To unsubscribe, update your email preferences in your profile settings.</p>
         </td></tr>
       </table>
     </td></tr>
