@@ -114,12 +114,13 @@ export function timeLeftParts(target: string | null, nowMs: number) {
  * Weekly single-lot format: teaser (Wed) → live (Fri) → close (Sun)
  * ------------------------------------------------------------- */
 
-export type LotStage = 'hidden' | 'teaser' | 'live' | 'closing' | 'sold';
+export type LotStage = 'before' | 'live' | 'closing' | 'sold';
 
 /** Final 15 minutes of an auction get the escalated "closing" treatment. */
 export const VAULT_CLOSING_WINDOW_MS = 15 * 60 * 1000;
-/** Teaser clues unlock one every 12 hours. */
-export const VAULT_CLUE_INTERVAL_MS = 12 * 60 * 60 * 1000;
+/** Milestone thresholds are stored in vault_milestones; this is only the local fallback order. */
+export const VAULT_MILESTONE_SORT = (a: { threshold: number }, b: { threshold: number }) =>
+  a.threshold - b.threshold;
 
 export interface LotTiming {
   reveal_state?: string | null;
@@ -130,37 +131,24 @@ export interface LotTiming {
   closes_at?: string | null;
 }
 
+/**
+ * Single-lot format. Four states, all driven off server time:
+ * before → live → closing (final 15 min) → sold.
+ */
 export function lotStage(lot: LotTiming | null | undefined, nowMs: number): LotStage {
-  if (!lot) return 'hidden';
-  if (lot.reveal_state === 'hidden') return 'hidden';
-  if (lot.reveal_state === 'teaser') return 'teaser';
+  if (!lot) return 'before';
   if (lot.status && ['sold', 'ended_met', 'ended_no_reserve_met'].includes(lot.status)) return 'sold';
   const end = lot.closes_at ?? lot.drop_closes_at;
-  if (end) {
-    const diff = new Date(end).getTime() - nowMs;
-    if (diff <= 0) return 'sold';
-    if (diff <= VAULT_CLOSING_WINDOW_MS) return 'closing';
-  }
+  if (end && new Date(end).getTime() <= nowMs) return 'sold';
+  const open = lot.drop_opens_at;
+  if (open && nowMs < new Date(open).getTime()) return 'before';
+  if (!open && lot.status !== 'live') return 'before';
+  if (end && new Date(end).getTime() - nowMs <= VAULT_CLOSING_WINDOW_MS) return 'closing';
   return 'live';
 }
 
 export function lotLabel(n: number | null | undefined): string {
   return `LOT ${String(n ?? 0).padStart(2, '0')}`;
-}
-
-/** How many teaser clues are unlocked right now, and when the next one lands. */
-export function clueSchedule(
-  teaserAt: string | null | undefined,
-  clues: string[] | null | undefined,
-  nowMs: number
-): { visible: string[]; nextAt: string | null } {
-  const all = clues ?? [];
-  if (!teaserAt || !all.length) return { visible: all, nextAt: null };
-  const start = new Date(teaserAt).getTime();
-  const unlocked = Math.min(all.length, Math.max(1, Math.floor((nowMs - start) / VAULT_CLUE_INTERVAL_MS) + 1));
-  const nextAt =
-    unlocked < all.length ? new Date(start + unlocked * VAULT_CLUE_INTERVAL_MS).toISOString() : null;
-  return { visible: all.slice(0, unlocked), nextAt };
 }
 
 export function relativeTime(iso: string, nowMs: number): string {
