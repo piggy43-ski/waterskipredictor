@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { usd, lotStage, lotLabel } from '@/lib/vault';
 import type { VaultLot } from '@/components/vault/LotCard';
-import { LotTeaser } from '@/components/vault/LotTeaser';
+import { LotBefore } from '@/components/vault/LotBefore';
 import { LotLive } from '@/components/vault/LotLive';
 import { LotSold } from '@/components/vault/LotSold';
 import { GripVertical } from 'lucide-react';
@@ -77,8 +77,8 @@ export const VaultSchedule = () => {
             Exit preview
           </Button>
         </div>
-        {stage === 'teaser' || stage === 'hidden' ? (
-          <LotTeaser lot={preview.lot} now={preview.at} />
+        {stage === 'before' ? (
+          <LotBefore lot={preview.lot} now={preview.at} />
         ) : stage === 'sold' ? (
           <LotSold lot={preview.lot} next={null} now={preview.at} />
         ) : (

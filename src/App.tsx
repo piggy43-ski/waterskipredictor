@@ -77,7 +77,6 @@ import VaultTerms from "./pages/vault/VaultTerms";
 import VaultConsign from "./pages/vault/VaultConsign";
 import VaultConsignors from "./pages/vault/VaultConsignors";
 import VaultSkier from "./pages/vault/VaultSkier";
-import VaultManifest from "./pages/vault/VaultManifest";
 
 const queryClient = new QueryClient();
 
@@ -105,7 +104,6 @@ const App = () => (
               {/* THE VAULT — public storefront (real money, no auth to browse) */}
               <Route path="/vault" element={<VaultHome />} />
               <Route path="/vault/ski/:id" element={<VaultSki />} />
-              <Route path="/vault/manifest" element={<VaultManifest />} />
               <Route path="/vault/terms" element={<VaultTerms />} />
               <Route path="/vault/consign" element={<VaultConsign />} />
               <Route path="/vault/skier/:slug" element={<VaultSkier />} />
