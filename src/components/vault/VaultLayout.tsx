@@ -35,12 +35,6 @@ export const VaultLayout = ({ children, title, description }: Props) => {
               Drop
             </Link>
             <Link
-              to="/vault/manifest"
-              className={pathname.startsWith('/vault/manifest') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}
-            >
-              Manifest
-            </Link>
-            <Link
               to="/vault/account"
               className={pathname.startsWith('/vault/account') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}
             >

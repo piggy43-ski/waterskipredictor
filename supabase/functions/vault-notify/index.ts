@@ -77,19 +77,25 @@ Deno.serve(async (req) => {
     const nowIso = new Date().toISOString();
     const inHour = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
-    const { data: lots } = await supabase
-      .from('vault_skis')
+    const { data: lotRows } = await supabase
+      .from('vault_public_skis')
       .select(
-        'id, title, lot_number, status, teaser_at, opens_at, closes_at, current_price, bid_count, teaser_headline, teaser_clues, reserve_price, highest_bidder_id'
+        'id, title, lot_number, status, teaser_at, drop_opens_at, drop_closes_at, closes_at, current_price, bid_count, teaser_headline, teaser_clues, highest_bidder_id'
       )
-      .neq('status', 'cancelled')
+      .not('drop_id', 'is', null)
       .order('lot_number');
+
+    const lots = (lotRows ?? []).map((l) => ({
+      ...l,
+      opens_at: l.drop_opens_at as string | null,
+      closes_at: (l.closes_at ?? l.drop_closes_at) as string | null,
+    }));
 
     const reminders = async (skiId: string, col: 'notify_open' | 'notify_closing') => {
       const { data } = await supabase
         .from('vault_lot_reminders')
         .select('user_id, email')
-        .eq('lot_id', skiId)
+        .eq('ski_id', skiId)
         .eq(col, true);
       return data ?? [];
     };
@@ -117,7 +123,7 @@ Deno.serve(async (req) => {
       }
 
       // Friday open
-      if (lot.status === 'live' && lot.opens_at && lot.opens_at <= nowIso) {
+      if (lot.opens_at && lot.opens_at <= nowIso && lot.closes_at && lot.closes_at > nowIso) {
         if (!(await already('live', lot.id))) {
           for (const r of await reminders(lot.id, 'notify_open')) {
             await sendVaultEmail(supabase, {
@@ -134,7 +140,7 @@ Deno.serve(async (req) => {
       }
 
       // One hour to close → every bidder who is not currently winning
-      if (lot.status === 'live' && lot.closes_at && lot.closes_at <= inHour && lot.closes_at > nowIso) {
+      if (lot.closes_at && lot.closes_at <= inHour && lot.closes_at > nowIso) {
         if (!(await already('closing', lot.id))) {
           const { data: bidders } = await supabase.from('vault_bids').select('user_id').eq('ski_id', lot.id);
           const ids = [...new Set((bidders ?? []).map((b: { user_id: string }) => b.user_id))].filter(
@@ -158,12 +164,21 @@ Deno.serve(async (req) => {
       // Sunday result → everyone who bid or asked to be told
       if (['sold', 'ended_met', 'ended_no_reserve_met'].includes(lot.status)) {
         if (!(await already('sold', lot.id))) {
+          // badges are awarded once, at close
+          await supabase.rpc('vault_award_badges', { p_ski_id: lot.id });
+          const { data: guessRes } = await supabase.rpc('vault_guess_results', { p_ski_id: lot.id });
+          const guess = guessRes as { winner?: { handle: string; guess: number } | null; total?: number } | null;
+          const { data: guessers } = await supabase
+            .from('vault_price_guesses')
+            .select('user_id')
+            .eq('ski_id', lot.id);
           const { data: bidders } = await supabase.from('vault_bids').select('user_id').eq('ski_id', lot.id);
           const watchers = await reminders(lot.id, 'notify_open');
           const recipients = new Map<string, { user_id?: string; email?: string }>();
           for (const b of bidders ?? []) recipients.set(b.user_id, { user_id: b.user_id });
+          for (const g of guessers ?? []) recipients.set(g.user_id, { user_id: g.user_id });
           for (const w of watchers) recipients.set(w.user_id ?? w.email, { user_id: w.user_id ?? undefined, email: w.email ?? undefined });
-          const nextLot = (lots ?? []).find((l) => (l.lot_number ?? 0) > (lot.lot_number ?? 0));
+          const nextLot = lots.find((l) => (l.lot_number ?? 0) > (lot.lot_number ?? 0));
           const soldOk = lot.status !== 'ended_no_reserve_met';
           for (const r of recipients.values()) {
             await sendVaultEmail(supabase, {
@@ -174,6 +189,13 @@ Deno.serve(async (req) => {
                 : `${lotNo(lot.lot_number)} closed without a sale`,
               title: soldOk ? `Hammered at ${usd(Number(lot.current_price))}` : 'Closed — no sale',
               body: `<p><strong>${esc(lot.title)}</strong> — ${lot.bid_count} bids.</p>
+                     ${
+                       guess?.winner
+                         ? `<p>Guess the hammer price: <strong>${esc(guess.winner.handle)}</strong> guessed ${usd(
+                             Number(guess.winner.guess)
+                           )} out of ${guess.total ?? 0} guesses — closest, and the WSP tokens are theirs.</p>`
+                         : ''
+                     }
                      ${nextLot ? `<p>${lotNo(nextLot.lot_number)} drops Wednesday at noon ET.</p>` : ''}
                      <p><a href="${SITE}">Back to the vault →</a></p>`,
             });

@@ -1,24 +1,23 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { VaultLayout } from '@/components/vault/VaultLayout';
 import type { VaultLot } from '@/components/vault/LotCard';
-import { LotTeaser } from '@/components/vault/LotTeaser';
+import { LotBefore } from '@/components/vault/LotBefore';
 import { LotLive } from '@/components/vault/LotLive';
 import { LotSold } from '@/components/vault/LotSold';
-import { ManifestStrip } from '@/components/vault/ManifestStrip';
-import { BigCountdown } from '@/components/vault/BigCountdown';
 import { useVaultClock } from '@/hooks/useVaultClock';
-import { lotStage, lotLabel } from '@/lib/vault';
+import { lotStage } from '@/lib/vault';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /**
- * /vault — one ski at a time, one per weekend.
- * Teaser (Wed) → Live (Fri) → Closing (last 15 min) → Sold (Sun night → Wed).
+ * /vault — one ski. Four states off server time:
+ * before → live → closing (final 15 min) → sold.
  */
 const VaultHome = () => {
   const { now } = useVaultClock();
   const qc = useQueryClient();
+  const [peak, setPeak] = useState(0);
 
   const { data: lots, isLoading } = useQuery({
     queryKey: ['vault-current-lot'],
@@ -26,6 +25,7 @@ const VaultHome = () => {
       const { data, error } = await supabase
         .from('vault_public_skis')
         .select('*')
+        .not('drop_id', 'is', null)
         .order('lot_number', { ascending: true });
       if (error) throw error;
       return (data ?? []) as unknown as VaultLot[];
@@ -34,13 +34,11 @@ const VaultHome = () => {
 
   const { current, next } = useMemo(() => {
     const all = lots ?? [];
-    const live = all.find((l) => ['live', 'closing'].includes(lotStage(l, now)));
-    const teaser = all.find((l) => lotStage(l, now) === 'teaser');
+    const open = all.find((l) => ['live', 'closing'].includes(lotStage(l, now)));
+    const upcoming = all.find((l) => lotStage(l, now) === 'before');
     const closed = [...all].reverse().find((l) => lotStage(l, now) === 'sold');
-    const cur = live ?? teaser ?? closed ?? null;
-    const nxt = cur
-      ? all.find((l) => (l.lot_number ?? 0) > (cur.lot_number ?? 0)) ?? null
-      : all[0] ?? null;
+    const cur = open ?? upcoming ?? closed ?? null;
+    const nxt = cur ? all.find((l) => (l.lot_number ?? 0) > (cur.lot_number ?? 0)) ?? null : all[0] ?? null;
     return { current: cur, next: nxt };
   }, [lots, now]);
 
@@ -53,8 +51,8 @@ const VaultHome = () => {
 
   return (
     <VaultLayout
-      title="The Vault — One Water Ski, Every Weekend"
-      description="One ski at a time. Teased Wednesday, live Friday, sold Sunday. Gear from touring athletes' personal racks, with the story behind every lot."
+      title="The Vault — One Water Ski, One Live Auction"
+      description="One ski, one live auction. Real-time bidding, milestone unlocks and a free guess-the-hammer game — gear from touring athletes' personal racks."
     >
       {isLoading ? (
         <div className="space-y-4">
@@ -64,33 +62,37 @@ const VaultHome = () => {
       ) : !current ? (
         <section className="border border-border p-12 text-center">
           <p className="vault-serif text-3xl uppercase tracking-[0.15em]">Vault sealed</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {next ? `${lotLabel(next.lot_number)} drops Wednesday.` : 'The next lot is being curated.'}
-          </p>
-          {next?.teaser_at ? <BigCountdown target={next.teaser_at} now={now} className="mt-6" /> : null}
+          <p className="mt-2 text-sm text-muted-foreground">The next ski is being curated.</p>
         </section>
-      ) : stage === 'teaser' ? (
-        <LotTeaser lot={current} now={now} />
+      ) : stage === 'before' ? (
+        <LotBefore lot={current} now={now} />
       ) : stage === 'sold' ? (
-        <LotSold lot={current} next={next} now={now} />
+        <LotSold lot={current} next={next} now={now} peakWatchers={peak} />
       ) : (
-        <LotLive lot={current} now={now} closing={stage === 'closing'} />
+        <LotLive
+          lot={current}
+          now={now}
+          closing={stage === 'closing'}
+          onWatchers={(n) => setPeak((p) => Math.max(p, n))}
+        />
       )}
-
-      <ManifestStrip />
 
       <section className="mt-12 border border-border p-6">
         <h2 className="vault-serif text-xl uppercase tracking-[0.14em]">What is The Vault?</h2>
         <div className="vault-rule my-3 w-16" />
         <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">
           <p>
-            One ski. One weekend. Teased Wednesday at noon, bidding opens Friday at 7pm, the hammer falls Sunday at
-            8pm. Eleven lots, and when one is gone it is gone.
+            One ski, one live auction. Bidding is proxy-based — you set your maximum and we bid for you only as
+            high as needed. Any bid in the final minutes extends the clock, so nothing is won by a stopwatch.
           </p>
           <p>
-            The Vault is where gear from touring athletes' personal racks gets sold off. Sponsored skiers end up with far
-            more equipment than they can ride — new skis from sponsor allotments, demo skis from brands courting them,
-            one-off prototypes.
+            The Vault is where gear from touring athletes&apos; personal racks gets sold off. Sponsored skiers end
+            up with far more equipment than they can ride — new skis from sponsor allotments, demo skis from
+            brands courting them, one-off prototypes.
+          </p>
+          <p>
+            Guessing the hammer price is free and open to everyone. Prizes pay in WSP tokens, the free-to-play
+            currency. Tokens are never spendable on a ski and no auction money ever becomes tokens.
           </p>
         </div>
       </section>
