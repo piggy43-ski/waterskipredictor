@@ -3523,6 +3523,45 @@ export type Database = {
         }
         Relationships: []
       }
+      vault_badges: {
+        Row: {
+          badge: string
+          created_at: string
+          id: string
+          ski_id: string | null
+          user_id: string
+        }
+        Insert: {
+          badge: string
+          created_at?: string
+          id?: string
+          ski_id?: string | null
+          user_id: string
+        }
+        Update: {
+          badge?: string
+          created_at?: string
+          id?: string
+          ski_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_badges_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_skis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_badges_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_skis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vault_bidder_profiles: {
         Row: {
           address_line1: string | null
@@ -3910,6 +3949,48 @@ export type Database = {
           },
         ]
       }
+      vault_milestones: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          ski_id: string
+          threshold: number
+          unlocked_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          ski_id: string
+          threshold: number
+          unlocked_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          ski_id?: string
+          threshold?: number
+          unlocked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_milestones_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_skis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_milestones_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_skis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vault_notify_log: {
         Row: {
           id: string
@@ -4034,6 +4115,45 @@ export type Database = {
           },
           {
             foreignKeyName: "vault_orders_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_skis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vault_price_guesses: {
+        Row: {
+          created_at: string
+          guess: number
+          id: string
+          ski_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          guess: number
+          id?: string
+          ski_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          guess?: number
+          id?: string
+          ski_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_price_guesses_ski_id_fkey"
+            columns: ["ski_id"]
+            isOneToOne: false
+            referencedRelation: "vault_public_skis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vault_price_guesses_ski_id_fkey"
             columns: ["ski_id"]
             isOneToOne: false
             referencedRelation: "vault_skis"
@@ -4746,6 +4866,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      vault_award_badges: { Args: { p_ski_id: string }; Returns: number }
       vault_bid_history: {
         Args: { p_ski_id: string }
         Returns: {
@@ -4760,6 +4881,15 @@ export type Database = {
       vault_claim_buy_now: {
         Args: { p_shipping: number; p_ski_id: string; p_user_id: string }
         Returns: Json
+      }
+      vault_guess_count: { Args: { p_ski_id: string }; Returns: number }
+      vault_guess_results: { Args: { p_ski_id: string }; Returns: Json }
+      vault_lot_badges: {
+        Args: { p_ski_id: string }
+        Returns: {
+          badge: string
+          handle: string
+        }[]
       }
       vault_manifest: { Args: never; Returns: Json }
       vault_next_sku: { Args: never; Returns: string }
