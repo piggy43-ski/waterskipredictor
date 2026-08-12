@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usd } from '@/lib/vault';
 import { cn } from '@/lib/utils';
-import { Lock, Unlock } from 'lucide-react';
+
 
 export interface Milestone {
   id: string;
