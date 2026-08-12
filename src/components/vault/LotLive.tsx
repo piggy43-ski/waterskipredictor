@@ -14,7 +14,7 @@ import { GuessGame } from './GuessGame';
 import { VaultBidderSetup } from './VaultBidderSetup';
 import { useVaultSound } from '@/hooks/useVaultSound';
 import type { VaultLot } from './LotCard';
-import { CONDITION_LABEL, minNextBid, timeLeftParts, usd, VAULT_ANTI_SNIPE_MINUTES } from '@/lib/vault';
+import { minNextBid, timeLeftParts, usd, VAULT_ANTI_SNIPE_MINUTES } from '@/lib/vault';
 import { cn } from '@/lib/utils';
 
 interface Props {

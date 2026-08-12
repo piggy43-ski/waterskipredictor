@@ -7,7 +7,9 @@ import { LotBefore } from '@/components/vault/LotBefore';
 import { LotLive } from '@/components/vault/LotLive';
 import { LotSold } from '@/components/vault/LotSold';
 import { useVaultClock } from '@/hooks/useVaultClock';
-import { lotStage } from '@/lib/vault';
+import { lotLabel, lotStage } from '@/lib/vault';
+import { useVaultSound } from '@/hooks/useVaultSound';
+import { SoundToggle } from '@/components/vault/SoundToggle';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /**
@@ -18,6 +20,8 @@ const VaultHome = () => {
   const { now } = useVaultClock();
   const qc = useQueryClient();
   const [peak, setPeak] = useState(0);
+  const [watchers, setWatchers] = useState(1);
+  const sound = useVaultSound();
 
   const { data: lots, isLoading } = useQuery({
     queryKey: ['vault-current-lot'],
@@ -48,11 +52,24 @@ const VaultHome = () => {
   }, [qc]);
 
   const stage = lotStage(current, now);
+  const isLive = stage === 'live' || stage === 'closing';
 
   return (
     <VaultLayout
       title="The Vault — One Water Ski, One Live Auction"
       description="One ski, one live auction. Real-time bidding, milestone unlocks and a free guess-the-hammer game — gear from touring athletes' personal racks."
+      lotLabel={current ? lotLabel(current.lot_number) : undefined}
+      headerRight={
+        <div className="flex items-center gap-4">
+          {isLive ? (
+            <span className="vault-label inline-flex items-center gap-2">
+              <span className="live-dot inline-block h-2 w-2 bg-destructive" />
+              {watchers} watching
+            </span>
+          ) : null}
+          <SoundToggle on={sound.on} onToggle={sound.toggle} />
+        </div>
+      }
     >
       {isLoading ? (
         <div className="space-y-4">
@@ -73,7 +90,11 @@ const VaultHome = () => {
           lot={current}
           now={now}
           closing={stage === 'closing'}
-          onWatchers={(n) => setPeak((p) => Math.max(p, n))}
+          sound={sound}
+          onWatchers={(n) => {
+            setWatchers(n);
+            setPeak((p) => Math.max(p, n));
+          }}
         />
       )}
 
