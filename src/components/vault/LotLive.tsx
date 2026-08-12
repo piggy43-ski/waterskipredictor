@@ -3,43 +3,59 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { VaultImage } from './VaultImage';
-import { VaultCountdown } from './VaultCountdown';
 import { BidPanel } from './BidPanel';
 import { AnimatedPrice } from './AnimatedPrice';
 import { BidFeed, type FeedBid, type FeedEvent } from './BidFeed';
 import { PriceSparkline } from './PriceSparkline';
 import { MilestoneLadder, useMilestones, type Milestone } from './MilestoneLadder';
 import { GuessGame } from './GuessGame';
-import { SoundToggle } from './SoundToggle';
+import { VaultBidderSetup } from './VaultBidderSetup';
 import { useVaultSound } from '@/hooks/useVaultSound';
 import type { VaultLot } from './LotCard';
-import { CONDITION_LABEL, lotLabel, minNextBid, usd, VAULT_ANTI_SNIPE_MINUTES } from '@/lib/vault';
+import { CONDITION_LABEL, minNextBid, timeLeftParts, usd, VAULT_ANTI_SNIPE_MINUTES } from '@/lib/vault';
 import { cn } from '@/lib/utils';
-import { Eye } from 'lucide-react';
 
 interface Props {
   lot: VaultLot;
   now: number;
   closing: boolean;
   onWatchers?: (n: number) => void;
+  sound?: ReturnType<typeof useVaultSound>;
+}
+
+const THUMB_LABELS = ['Base', 'Tail wear', 'Fin block', 'Serial'];
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+function closesLabel(iso: string | null): string {
+  if (!iso) return 'Closing time to be confirmed';
+  const d = new Date(iso);
+  const s = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'America/New_York',
+    timeZoneName: 'short',
+  }).format(d);
+  return `Closes ${s.replace('EDT', 'ET').replace('EST', 'ET')}`;
 }
 
 /** STATES 2 & 3 — the live screen. Everything here exists to drive the next bid. */
-export const LotLive = ({ lot, now, closing, onWatchers }: Props) => {
+export const LotLive = ({ lot, now, closing, onWatchers, sound: soundProp }: Props) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const sound = useVaultSound();
+  const ownSound = useVaultSound();
+  const sound = soundProp ?? ownSound;
   const [active, setActive] = useState(0);
   const [lightbox, setLightbox] = useState(false);
-  const [watchers, setWatchers] = useState(1);
   const [snipe, setSnipe] = useState(false);
   const [flashUnlock, setFlashUnlock] = useState(false);
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [raising, setRaising] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const lastClose = useRef(lot.closes_at);
   const lastCount = useRef(lot.bid_count);
   const wasWinning = useRef<boolean | null>(null);
@@ -91,7 +107,7 @@ export const LotLive = ({ lot, now, closing, onWatchers }: Props) => {
   const onUnlock = useCallback(
     (m: Milestone) => {
       setEvents((e) => [
-        { id: `ms-${m.id}`, label: `🔓 ${usd(m.threshold)} — ${m.label} unlocked`, created_at: new Date().toISOString() },
+        { id: `ms-${m.id}`, label: `${usd(m.threshold)} — ${m.label}`, created_at: new Date().toISOString() },
         ...e,
       ]);
       setFlashUnlock(true);
@@ -129,7 +145,6 @@ export const LotLive = ({ lot, now, closing, onWatchers }: Props) => {
     channel
       .on('presence', { event: 'sync' }, () => {
         const n = Math.max(1, Object.keys(channel.presenceState()).length);
-        setWatchers(n);
         onWatchers?.(n);
       })
       .subscribe(async (status) => {
@@ -163,7 +178,6 @@ export const LotLive = ({ lot, now, closing, onWatchers }: Props) => {
   const winning = !!user && lot.highest_bidder_id === user.id;
   const outbid = !!user && !winning && myBid !== null && myBid !== undefined;
 
-  /* Sound cues: tick on any new bid, alarm the moment you lose the lead. */
   useEffect(() => {
     if (lot.bid_count > lastCount.current) sound.tick();
     lastCount.current = lot.bid_count;
@@ -189,202 +203,279 @@ export const LotLive = ({ lot, now, closing, onWatchers }: Props) => {
 
   const nextBid = minNextBid(Number(lot.current_price), lot.bid_count, Number(lot.start_price));
   const comp = lot.market_price ? Number(lot.market_price) : null;
-  const bidderCount = new Set(bids.map((b) => b.handle)).size;
+  const closesAt = lot.closes_at ?? lot.drop_closes_at ?? null;
+  const t = timeLeftParts(closesAt, now);
+  const highHandle = bids[0]?.handle ?? null;
+  const photos = lot.image_urls ?? [];
 
-  const raiseMax = async () => {
+  const raiseTo = async (value: number) => {
+    if (!user) {
+      window.location.href = '/auth';
+      return;
+    }
     setRaising(true);
-    const { data, error } = await supabase.rpc('vault_place_bid', { p_ski_id: lot.id, p_max_bid: nextBid });
+    const { data, error } = await supabase.rpc('vault_place_bid', { p_ski_id: lot.id, p_max_bid: value });
     setRaising(false);
     const res = data as { error?: string } | null;
     if (error || res?.error) {
-      toast({ title: 'Bid not accepted', description: res?.error ?? error?.message, variant: 'destructive' });
+      const msg = res?.error ?? error?.message ?? '';
+      if (msg.includes('PAYMENT_SETUP_REQUIRED')) {
+        setSetupOpen(true);
+        return;
+      }
+      toast({ title: 'Bid not accepted', description: msg, variant: 'destructive' });
       return;
     }
-    toast({ title: `Your max is now ${usd(nextBid)}` });
+    toast({ title: `Your max is now ${usd(value)}` });
+    qc.invalidateQueries({ queryKey: ['vault-current-lot'] });
+    qc.invalidateQueries({ queryKey: ['vault-bid-history', lot.id] });
+    qc.invalidateQueries({ queryKey: ['vault-my-bids', lot.id, user?.id] });
+  };
+
+  const refresh = () => {
     qc.invalidateQueries({ queryKey: ['vault-current-lot'] });
     qc.invalidateQueries({ queryKey: ['vault-bid-history', lot.id] });
     qc.invalidateQueries({ queryKey: ['vault-my-bids', lot.id, user?.id] });
   };
 
   return (
-    <section
-      className={cn(
-        closing && 'animate-[pulse_2.6s_cubic-bezier(0.4,0,0.6,1)_infinite]',
-        flashUnlock && 'ring-2 ring-primary'
-      )}
-    >
+    <section className={cn(closing && 'animate-[pulse_2.6s_cubic-bezier(0.4,0,0.6,1)_infinite]')}>
       {snipe && (
-        <div className="mb-4 animate-scale-in border-2 border-destructive bg-destructive/20 px-4 py-4 text-center">
-          <p className="vault-serif text-2xl uppercase tracking-[0.12em] text-destructive sm:text-3xl">
+        <div className="mb-6 animate-scale-in border border-destructive bg-destructive/20 px-5 py-5 text-center">
+          <p className="vault-mono text-2xl uppercase tracking-[0.12em] text-destructive sm:text-3xl">
             +{VAULT_ANTI_SNIPE_MINUTES}:00 — someone just bid
           </p>
         </div>
       )}
 
-      {/* Status banner — full width, unmissable. */}
       {user && (winning || outbid) && (
         <div
           className={cn(
-            'sticky top-14 z-30 mb-4 flex flex-col items-center gap-3 border-2 px-4 py-4 sm:flex-row sm:justify-between',
-            winning ? 'border-primary bg-primary/15' : 'border-destructive bg-destructive/20'
+            'sticky top-[72px] z-30 mb-6 flex flex-col items-center gap-3 border px-5 py-4 sm:top-[96px] sm:flex-row sm:justify-between',
+            winning ? 'border-primary bg-primary/10' : 'border-destructive bg-destructive/20'
           )}
         >
-          <div className="text-center sm:text-left">
-            <p
-              className={cn(
-                'vault-serif text-2xl uppercase tracking-[0.12em]',
-                winning ? 'text-primary' : 'text-destructive'
-              )}
-            >
-              {winning ? "You're winning" : 'You have been outbid'}
-            </p>
-            <p className="mt-1 font-mono text-sm tabular-nums text-muted-foreground">
-              {winning
-                ? `at ${usd(price)} · your max is ${usd(Number(myBid ?? price))}`
-                : `your max was ${usd(Number(myBid ?? 0))}`}
-            </p>
-          </div>
+          <p className={cn('vault-mono text-base', winning ? 'text-primary-glow' : 'text-destructive')}>
+            {winning
+              ? `You're winning at ${usd(price)} · your max is ${usd(Number(myBid ?? price))}`
+              : `You have been outbid · your max was ${usd(Number(myBid ?? 0))}`}
+          </p>
           {!winning && (
-            <Button size="lg" variant="destructive" disabled={raising} onClick={raiseMax} className="w-full sm:w-auto">
+            <button
+              type="button"
+              disabled={raising}
+              onClick={() => void raiseTo(nextBid)}
+              className="vault-display w-full bg-primary px-6 py-3 text-lg text-primary-foreground disabled:opacity-60 sm:w-auto"
+            >
               {raising ? 'Raising…' : `Raise to ${usd(nextBid)}`}
-            </Button>
+            </button>
           )}
         </div>
       )}
 
-      {/* Price, centre stage. */}
-      <div className={cn('border bg-card p-6 text-center', closing ? 'border-destructive' : 'border-border')}>
-        <div className="flex items-center justify-center gap-3">
-          <p className="vault-kicker text-[9px] text-muted-foreground">
-            {lot.bid_count ? 'Current bid' : 'Opening bid'}
-          </p>
-          <SoundToggle on={sound.on} onToggle={sound.toggle} />
-        </div>
-        <AnimatedPrice value={price} className="mt-2 block text-6xl leading-none sm:text-8xl" />
-        <p className="vault-kicker mt-3 text-[9px]">
-          {lot.bid_count} bid{lot.bid_count === 1 ? '' : 's'} · {bidderCount} bidder{bidderCount === 1 ? '' : 's'} ·{' '}
-          {lot.reserve_met ? (
-            <span className="text-primary">Reserve met</span>
-          ) : (
-            <span className="text-muted-foreground">Reserve not yet met</span>
-          )}
-        </p>
+      <div className="grid gap-12 lg:grid-cols-[48fr_52fr]">
+        {/* ── LEFT COLUMN ── */}
+        <div className="order-2 space-y-8 lg:order-1">
+          <button
+            type="button"
+            onClick={() => photos.length && setLightbox(true)}
+            className="relative block aspect-square w-full border border-border bg-background"
+            aria-label="Open photo"
+          >
+            {photos[active] ? (
+              <VaultImage path={photos[active]} alt={lot.title} className="h-full w-full" loading="eager" />
+            ) : (
+              <span className="vault-mono absolute inset-0 flex flex-col items-center justify-center gap-1 text-[#4A4A4A]">
+                <span className="uppercase tracking-[0.18em] text-xs">Photo 01 — full ski, topsheet</span>
+                <span className="text-xs">unedited, natural light</span>
+              </span>
+            )}
+            <span className="vault-mono absolute bottom-px left-px border border-border bg-background px-3 py-2 text-[11px] uppercase tracking-[0.14em] text-foreground">
+              {[lot.title, lot.size_cm, lot.year].filter(Boolean).join(' · ')}
+            </span>
+          </button>
 
-        <div className="mt-5 flex flex-col items-center gap-2">
-          <p className="vault-kicker text-[9px] text-muted-foreground">Closes in</p>
-          <VaultCountdown
-            closesAt={lot.closes_at ?? lot.drop_closes_at ?? null}
-            now={now}
-            className={closing ? 'text-4xl text-destructive sm:text-6xl' : 'text-2xl sm:text-3xl'}
-          />
-          <p className="inline-flex items-center gap-1 vault-kicker text-[9px] text-muted-foreground">
-            <Eye className="h-3 w-3" /> {watchers} watching
-          </p>
-        </div>
-
-        {comp ? (
-          <div className="mt-5 border-t border-border pt-3">
-            <p className="text-sm text-muted-foreground">Comparable used market: {usd(comp)}</p>
-            {lot.market_source ? (
-              <p className="mt-0.5 text-[10px] text-muted-foreground">{lot.market_source}</p>
-            ) : null}
-            {price < comp ? (
-              <p className="mt-1 text-sm text-primary">Currently {usd(comp - price)} below comparable market.</p>
-            ) : null}
+          <div className="grid grid-cols-4 gap-3">
+            {THUMB_LABELS.map((label, i) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => photos[i + 1] && setActive(i + 1)}
+                className={cn(
+                  'relative aspect-square border',
+                  active === i + 1 ? 'border-primary' : 'border-border'
+                )}
+                aria-label={`View ${label} photo`}
+              >
+                {photos[i + 1] ? (
+                  <VaultImage path={photos[i + 1]} alt={label} className="h-full w-full" />
+                ) : (
+                  <span className="vault-mono absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-[0.18em] text-[#4A4A4A]">
+                    {label}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-        ) : null}
 
-        {bids.length > 1 ? (
-          <div className="mt-5 border-t border-border pt-3">
-            <PriceSparkline bids={bids} />
+          {lot.description ? (
+            <p className="vault-body-copy whitespace-pre-line text-[22px] leading-relaxed">{lot.description}</p>
+          ) : null}
+
+          <div className="space-y-3">
+            <p className="vault-label inline-block border border-border px-4 py-3">
+              Seller of record: Waterski Predictor
+            </p>
+            <p className="vault-label block w-fit border border-border px-4 py-3">Admins blocked from bidding</p>
           </div>
-        ) : null}
-      </div>
-
-      <div className="mt-6 grid gap-8 md:grid-cols-2">
-        <div className="space-y-5">
-          <BidPanel
-            lot={lot}
-            now={now}
-            onBidPlaced={() => {
-              qc.invalidateQueries({ queryKey: ['vault-current-lot'] });
-              qc.invalidateQueries({ queryKey: ['vault-bid-history', lot.id] });
-              qc.invalidateQueries({ queryKey: ['vault-my-bids', lot.id, user?.id] });
-            }}
-          />
 
           <MilestoneLadder milestones={milestones} price={price} onUnlock={onUnlock} />
 
-          <div className="border-t border-border pt-4">
-            <p className="vault-kicker text-[9px] text-muted-foreground">Live bid feed</p>
-            <BidFeed bids={bids} now={now} badges={badges} events={events} />
-          </div>
+          {bids.length > 1 ? (
+            <div className="vault-panel">
+              <div className="flex items-center justify-between border-b border-border px-5 py-4">
+                <p className="vault-label">Price over time</p>
+                <p className="vault-mono text-sm text-foreground">
+                  {usd(Number(lot.start_price))} → {usd(price)}
+                </p>
+              </div>
+              <div className="px-2 py-4">
+                <PriceSparkline bids={bids} />
+              </div>
+            </div>
+          ) : null}
+
+          <GuessGame skiId={lot.id} closesAt={closesAt} now={now} />
         </div>
 
-        <div className="space-y-5">
-          <div>
-            <p className="vault-kicker text-[10px] text-primary">{lotLabel(lot.lot_number)}</p>
-            <h1 className="vault-serif mt-1 text-3xl uppercase leading-none tracking-[0.1em] sm:text-4xl">
-              {lot.title}
-            </h1>
-            <p className="vault-kicker mt-2 text-[9px] text-muted-foreground">
-              {lot.condition ? CONDITION_LABEL[lot.condition] : ''}
-              {lot.size_cm ? ` · ${lot.size_cm}` : ''}
-              {lot.year ? ` · ${lot.year}` : ''}
-              {lot.sku ? ` · ${lot.sku}` : ''}
-            </p>
+        {/* ── RIGHT COLUMN ── */}
+        <div className="order-1 space-y-6 lg:order-2">
+          <div className={cn('vault-panel px-5 py-6', closing && 'border-destructive')}>
+            <div className="flex items-baseline justify-between">
+              <p className="vault-label">{lot.bid_count ? 'Current bid' : 'Opening bid'}</p>
+              <p className="vault-label">
+                {lot.bid_count} bid{lot.bid_count === 1 ? '' : 's'}
+              </p>
+            </div>
+            <AnimatedPrice
+              value={price}
+              className={cn(
+                'vault-display mt-4 block leading-[0.85] text-foreground',
+                flashUnlock && 'text-primary-glow',
+                'text-[72px] sm:text-[110px] xl:text-[140px]'
+              )}
+            />
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <span className="vault-label border border-border px-3 py-2">
+                {lot.reserve_met ? 'Reserve met' : 'Reserve not yet met'}
+              </span>
+              {highHandle ? (
+                <span className="vault-label">
+                  High bidder <span className="text-foreground">{highHandle}</span>
+                </span>
+              ) : null}
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setLightbox(true)}
-            className="block aspect-[4/3] w-full overflow-hidden border border-border"
-            aria-label="Open photo"
-          >
-            <VaultImage path={lot.image_urls?.[active]} alt={lot.title} className="h-full w-full" loading="eager" />
-          </button>
-          {lot.image_urls?.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto">
-              {lot.image_urls.map((p, i) => (
-                <button
-                  key={p + i}
-                  onClick={() => setActive(i)}
-                  className={cn('h-16 w-16 shrink-0 border', i === active ? 'border-primary' : 'border-border')}
-                  aria-label={`View photo ${i + 1}`}
+          <div className="vault-panel flex flex-wrap items-center justify-between gap-4 px-5 py-5">
+            <p className="vault-label">{closesLabel(closesAt)}</p>
+            {t && !t.ended ? (
+              <div className="text-right">
+                <p className="vault-mono text-sm text-muted-foreground">{t.d}d</p>
+                <p
+                  className={cn(
+                    'vault-mono whitespace-nowrap text-[44px] leading-none',
+                    closing ? 'text-destructive' : 'text-foreground'
+                  )}
                 >
-                  <VaultImage path={p} alt="" className="h-full w-full" />
-                </button>
-              ))}
+                  {pad(t.h)}:{pad(t.m)}:{pad(t.s)}
+                </p>
+              </div>
+            ) : (
+              <p className="vault-label">Closed</p>
+            )}
+          </div>
+
+          <BidPanel lot={lot} now={now} onBidPlaced={refresh} />
+
+          {comp ? (
+            <div className="vault-panel px-5 py-5">
+              <div className="flex items-baseline justify-between gap-4">
+                <p className="vault-label">Comparable used market</p>
+                <p className="vault-display text-[34px] leading-none text-foreground">{usd(comp)}</p>
+              </div>
+              {price < comp ? (
+                <p className="vault-mono mt-3 text-sm text-primary-glow">
+                  Currently {usd(comp - price)} below comparable market
+                </p>
+              ) : null}
+              {lot.market_source ? (
+                <p className="mt-2 text-[13px] text-muted-foreground">{lot.market_source}</p>
+              ) : null}
             </div>
-          )}
-
-          <GuessGame skiId={lot.id} closesAt={lot.closes_at ?? lot.drop_closes_at ?? null} now={now} />
-
-          {lot.provenance ? (
-            <section className="border-l-4 border-primary bg-card/70 px-5 py-5">
-              <p className="vault-kicker text-[10px] tracking-[0.3em] text-primary">The Story</p>
-              <div className="vault-rule my-3 w-12" />
-              <p className="vault-serif whitespace-pre-line text-xl italic leading-relaxed sm:text-2xl">
-                {lot.provenance}
-              </p>
-            </section>
           ) : null}
 
-          {lot.description ? (
-            <div>
-              <p className="vault-kicker text-[9px] text-muted-foreground">Condition notes</p>
-              <p className="mt-1 text-[11px] italic text-muted-foreground">
-                Lot notes are in the skier&apos;s own words.
-              </p>
-              <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">{lot.description}</p>
-            </div>
-          ) : null}
+          <BidFeed
+            bids={bids}
+            now={now}
+            badges={badges}
+            events={events}
+            startPrice={Number(lot.start_price)}
+          />
         </div>
       </div>
 
+      {/* ── FAQ ── */}
+      <div className="mt-16 grid gap-10 border-t border-border pt-10 md:grid-cols-2">
+        <div className="space-y-10">
+          <div>
+            <p className="vault-label">How payment works</p>
+            <p className="vault-body-copy mt-4 text-[21px] leading-relaxed">
+              Your card is saved when you place your first bid — nothing is charged then. The winner is charged
+              automatically at close: hammer price plus flat-zone shipping ($55 Southeast, $65 mid-Atlantic, $79
+              central/northeast, $95 west, $0 local pickup). Shipping is free above the $300 milestone.
+            </p>
+          </div>
+          <div>
+            <p className="vault-label">Tokens</p>
+            <p className="vault-body-copy mt-4 text-[21px] leading-relaxed">
+              WSP tokens are free-to-play only. They cannot buy skis, and no auction money ever converts into them.
+              Separate ledgers, no conversion in either direction.
+            </p>
+          </div>
+        </div>
+        <div>
+          <p className="vault-label">Who can bid</p>
+          <p className="vault-body-copy mt-4 text-[21px] leading-relaxed">
+            Any signed-in Waterski Predictor account. Sellers and admins are blocked at the database level, not by
+            policy. The reserve is held server-side and never sent to your browser.
+          </p>
+        </div>
+      </div>
+
+      {/* ── STICKY BOTTOM BAR ── */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background">
+        <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-4 px-5 py-3 sm:px-10">
+          <div>
+            <p className="vault-label">Current bid</p>
+            <p className="vault-display text-[28px] leading-none text-foreground sm:text-[44px]">{usd(price)}</p>
+          </div>
+          <button
+            type="button"
+            disabled={raising}
+            onClick={() => void raiseTo(nextBid)}
+            className="vault-display min-h-[56px] bg-primary px-6 text-lg text-primary-foreground disabled:opacity-60 sm:px-10 sm:text-xl"
+          >
+            {raising ? 'Raising…' : `Raise to ${usd(nextBid)}`}
+          </button>
+        </div>
+      </div>
+
+      <VaultBidderSetup open={setupOpen} onOpenChange={setSetupOpen} onSaved={refresh} />
+
       <Dialog open={lightbox} onOpenChange={setLightbox}>
         <DialogContent className="max-w-4xl border-border bg-background p-2">
-          <VaultImage path={lot.image_urls?.[active]} alt={lot.title} className="h-full w-full" loading="eager" />
+          <VaultImage path={photos[active]} alt={lot.title} className="h-full w-full" loading="eager" />
         </DialogContent>
       </Dialog>
     </section>
