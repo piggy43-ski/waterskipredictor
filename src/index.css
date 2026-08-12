@@ -82,41 +82,93 @@ All colors MUST be HSL.
   -webkit-backdrop-filter: blur(24px) saturate(180%);
 }
 
-/* ── THE VAULT — sibling brand theme (bone / oxblood / brass on black) ── */
+/* ── THE VAULT — single-lot auction skin (black / blue, sharp corners) ── */
 .vault-theme {
-  --background: 0 0% 3%;
-  --foreground: 40 20% 92%;
-  --card: 0 0% 6%;
-  --card-foreground: 40 20% 92%;
-  --popover: 0 0% 7%;
-  --popover-foreground: 40 20% 92%;
-  --primary: 38 62% 55%;             /* brass */
-  --primary-foreground: 0 0% 6%;
-  --primary-glow: 38 70% 66%;
-  --secondary: 0 0% 9%;
-  --secondary-foreground: 40 20% 92%;
-  --muted: 0 0% 9%;
-  --muted-foreground: 40 8% 58%;
-  --accent: 6 58% 34%;               /* oxblood */
-  --accent-foreground: 40 20% 92%;
-  --border: 40 10% 14%;
-  --input: 0 0% 10%;
-  --ring: 38 62% 55%;
-  --radius: 0.25rem;                 /* sharper, gallery-like */
-  --shadow-glow: 0 0 28px hsl(38 62% 55% / 0.28);
+  --background: 0 0% 0%;             /* #000000 */
+  --foreground: 0 0% 100%;           /* #FFFFFF */
+  --card: 0 0% 4.3%;                 /* #0B0B0B */
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 4.3%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 240 100% 59%;           /* #2C2CFF */
+  --primary-foreground: 0 0% 100%;
+  --primary-glow: 240 100% 68%;      /* #5A5AFF */
+  --secondary: 0 0% 4.3%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 6%;
+  --muted-foreground: 0 0% 42%;      /* #6B6B6B */
+  --accent: 240 100% 68%;            /* #5A5AFF */
+  --accent-foreground: 0 0% 100%;
+  --destructive: 5 63% 47%;          /* #C4382C */
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 14%;                /* #242424 */
+  --input: 0 0% 14%;
+  --ring: 240 100% 59%;
+  --radius: 0rem;
+  --shadow-glow: none;
+
+  --vault-body: 0 0% 81%;            /* #CFCFCF */
+  --vault-hairline: 0 0% 10%;        /* #1A1A1A */
+  --vault-highlight: 240 53% 13%;    /* #101033 */
+  --vault-chart: 240 84% 62%;        /* #4A4AF0 */
+
+  font-family: 'Space Grotesk', Inter, system-ui, sans-serif;
+  background: hsl(var(--background));
 }
 
-.vault-serif {
-  font-family: 'Times New Roman', 'Didot', Georgia, serif;
+/* Sharp corners are the whole look — nothing inside the Vault is rounded. */
+.vault-theme *,
+.vault-theme *::before,
+.vault-theme *::after {
+  border-radius: 0 !important;
+}
+
+.vault-serif,
+.vault-display {
+  font-family: 'Space Grotesk', Inter, system-ui, sans-serif;
+  font-weight: 700;
+}
+
+.vault-mono,
+.vault-theme .font-mono {
+  font-family: 'Space Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace;
+}
+
+/* Every small label: mono, uppercase, wide tracking, #6B6B6B */
+.vault-label {
+  font-family: 'Space Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 12px;
+  line-height: 1.3;
+  color: hsl(var(--muted-foreground));
+}
+
+.vault-body-copy {
+  color: hsl(var(--vault-body));
+}
+
+.vault-panel {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+}
+
+.vault-hairline {
+  border-color: hsl(var(--vault-hairline));
+}
+
+.vault-feed-highlight {
+  background: hsl(var(--vault-highlight));
 }
 
 .vault-kicker {
-  letter-spacing: 0.32em;
+  font-family: 'Space Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
 .vault-rule {
-  background: linear-gradient(90deg, transparent, hsl(38 62% 55% / 0.5), transparent);
+  background: hsl(var(--border));
   height: 1px;
 }
 

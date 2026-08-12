@@ -2,15 +2,13 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { VaultBidderSetup } from './VaultBidderSetup';
-import { minNextBid, usd, VAULT_ANTI_SNIPE_MINUTES, VAULT_REQUIRE_PAYMENT_METHOD } from '@/lib/vault';
+import { bidIncrement, minNextBid, usd, VAULT_ANTI_SNIPE_MINUTES, VAULT_REQUIRE_PAYMENT_METHOD } from '@/lib/vault';
 import type { VaultLot } from './LotCard';
 
 interface Props {
@@ -19,23 +17,25 @@ interface Props {
   onBidPlaced: () => void;
 }
 
+/** Two panels: the one-tap minimum bid, and the proxy maximum. */
 export const BidPanel = ({ lot, now, onBidPlaced }: Props) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [amount, setAmount] = useState('');
-  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState<number | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const price = Number(lot.bid_count ? lot.current_price : lot.start_price);
   const min = useMemo(
     () => minNextBid(Number(lot.current_price), lot.bid_count, Number(lot.start_price)),
     [lot.current_price, lot.bid_count, lot.start_price]
   );
+  const increment = bidIncrement(price);
+  const suggestedMax = min + increment * 3;
 
   const ended = lot.status !== 'live' || (lot.closes_at ? new Date(lot.closes_at).getTime() <= now : false);
-
-  const quick = [min, min + 25, min + 50];
 
   const ensureProfile = async () => {
     const { data } = await supabase
@@ -48,31 +48,29 @@ export const BidPanel = ({ lot, now, onBidPlaced }: Props) => {
     return true;
   };
 
-  const startBid = async () => {
+  const startBid = async (value: number) => {
     if (!user) {
       navigate('/auth');
       return;
     }
-    const value = Number(amount);
     if (!value || value < min) {
       toast({ title: `Minimum bid is ${usd(min)}`, variant: 'destructive' });
       return;
     }
     if (!(await ensureProfile())) {
+      setPending(value);
       setSetupOpen(true);
       return;
     }
-    setConfirming(true);
+    setPending(value);
   };
 
   const submit = async () => {
+    if (pending === null) return;
     setSubmitting(true);
-    const { data, error } = await supabase.rpc('vault_place_bid', {
-      p_ski_id: lot.id,
-      p_max_bid: Number(amount),
-    });
+    const { data, error } = await supabase.rpc('vault_place_bid', { p_ski_id: lot.id, p_max_bid: pending });
     setSubmitting(false);
-    setConfirming(false);
+    setPending(null);
     if (error) {
       if (error.message?.includes('PAYMENT_SETUP_REQUIRED')) {
         setSetupOpen(true);
@@ -98,55 +96,65 @@ export const BidPanel = ({ lot, now, onBidPlaced }: Props) => {
 
   if (lot.listing_type === 'buy_now') return null;
 
+  if (ended) {
+    return (
+      <div className="vault-panel px-5 py-6">
+        <p className="vault-label text-center">Bidding closed</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="border border-border bg-card p-4">
-      {ended ? (
-        <p className="vault-kicker text-center text-[11px] text-muted-foreground">Bidding closed</p>
-      ) : (
-        <>
-          <p className="vault-kicker text-[9px] text-muted-foreground">Your maximum bid</p>
-          <p className="mb-3 text-xs text-muted-foreground">
-            We bid for you in {usd(min - Number(lot.bid_count ? lot.current_price : lot.start_price)) } steps, only as high as needed.
-          </p>
-          <div className="flex gap-2">
-            <Input
-              inputMode="decimal"
-              placeholder={String(min)}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-              className="font-mono"
-              aria-label="Maximum bid in dollars"
-            />
-            <Button onClick={startBid} disabled={submitting}>
-              Place bid
-            </Button>
-          </div>
-          <div className="mt-2 flex gap-2">
-            {quick.map((q) => (
-              <button
-                key={q}
-                onClick={() => setAmount(String(q))}
-                className="flex-1 border border-border py-1 font-mono text-xs hover:border-primary"
-              >
-                {usd(q)}
-              </button>
-            ))}
-          </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Bids are binding. Any bid in the final {VAULT_ANTI_SNIPE_MINUTES} minutes extends the lot by{' '}
-            {VAULT_ANTI_SNIPE_MINUTES} minutes.
-          </p>
-        </>
-      )}
+    <>
+      {/* One-tap minimum bid */}
+      <div className="vault-panel px-5 py-5">
+        <p className="vault-label">Minimum bid {usd(min)}</p>
+        <button
+          type="button"
+          onClick={() => void startBid(min)}
+          disabled={submitting}
+          className="vault-display mt-4 w-full bg-primary px-4 py-5 text-[26px] leading-none text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+        >
+          Bid {usd(min)}
+        </button>
+      </div>
 
-      <VaultBidderSetup open={setupOpen} onOpenChange={setSetupOpen} onSaved={() => setConfirming(true)} />
+      {/* Proxy maximum */}
+      <div className="vault-panel px-5 py-5">
+        <p className="vault-label">Set a maximum</p>
+        <div className="mt-4 flex gap-3">
+          <input
+            inputMode="decimal"
+            placeholder={String(suggestedMax)}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+            aria-label="Maximum bid in dollars"
+            className="vault-mono min-w-0 flex-1 border border-border bg-transparent px-4 py-3 text-lg text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={() => void startBid(Number(amount || suggestedMax))}
+            disabled={submitting}
+            className="shrink-0 border border-primary px-6 py-3 text-base text-primary-glow transition-colors hover:bg-primary/10 disabled:opacity-60"
+          >
+            Set max
+          </button>
+        </div>
+        <p className="vault-body-copy mt-4 text-[15px] leading-relaxed">
+          We bid for you only as high as needed, one increment at a time, up to your maximum. Nobody sees it.
+          Any bid in the final {VAULT_ANTI_SNIPE_MINUTES} minutes extends the lot by {VAULT_ANTI_SNIPE_MINUTES}{' '}
+          minutes. <span className="vault-mono text-primary-glow">Current increment: {usd(increment)}.</span>
+        </p>
+      </div>
 
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+      <VaultBidderSetup open={setupOpen} onOpenChange={setSetupOpen} onSaved={() => setPending((p) => p)} />
+
+      <AlertDialog open={pending !== null && !setupOpen} onOpenChange={(o) => !o && setPending(null)}>
         <AlertDialogContent className="vault-theme bg-background text-foreground">
           <AlertDialogHeader>
-            <AlertDialogTitle className="vault-serif uppercase tracking-[0.15em]">Confirm your bid</AlertDialogTitle>
+            <AlertDialogTitle className="vault-display uppercase tracking-[0.12em]">Confirm your bid</AlertDialogTitle>
             <AlertDialogDescription>
-              You are committing up to <strong className="text-foreground">{usd(Number(amount))}</strong> for{' '}
+              You are committing up to <strong className="text-foreground">{usd(Number(pending ?? 0))}</strong> for{' '}
               {lot.title}. This is a binding bid and cannot be retracted. Shipping is added at checkout.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -158,6 +166,6 @@ export const BidPanel = ({ lot, now, onBidPlaced }: Props) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 };
