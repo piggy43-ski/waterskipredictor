@@ -98,10 +98,11 @@ const VaultHome = () => {
         />
       )}
 
+      {isLive ? null : (
       <section className="mt-12 border border-border p-6">
-        <h2 className="vault-serif text-xl uppercase tracking-[0.14em]">What is The Vault?</h2>
+        <h2 className="vault-display text-xl uppercase tracking-[0.12em]">What is The Vault?</h2>
         <div className="vault-rule my-3 w-16" />
-        <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">
+        <div className="vault-body-copy space-y-2 text-base leading-relaxed">
           <p>
             One ski, one live auction. Bidding is proxy-based — you set your maximum and we bid for you only as
             high as needed. Any bid in the final minutes extends the clock, so nothing is won by a stopwatch.
@@ -117,6 +118,7 @@ const VaultHome = () => {
           </p>
         </div>
       </section>
+      )}
     </VaultLayout>
   );
 };
