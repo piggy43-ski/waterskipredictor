@@ -52,7 +52,7 @@ const VaultHome = () => {
   }, [qc]);
 
   const stage = lotStage(current, now);
-  const isLive = stage === 'live' || stage === 'closing';
+  const isLive = true;
 
   return (
     <VaultLayout
@@ -81,7 +81,7 @@ const VaultHome = () => {
           <p className="vault-serif text-3xl uppercase tracking-[0.15em]">Vault sealed</p>
           <p className="mt-2 text-sm text-muted-foreground">The next ski is being curated.</p>
         </section>
-      ) : stage === 'before' ? (
+      ) : false ? (
         <LotBefore lot={current} now={now} />
       ) : stage === 'sold' ? (
         <LotSold lot={current} next={next} now={now} peakWatchers={peak} />
