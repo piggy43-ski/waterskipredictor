@@ -56,42 +56,21 @@ export const MilestoneLadder = ({ milestones, price, onUnlock }: Props) => {
 
   if (!milestones.length) return null;
 
-  const next = milestones.find((m) => !(m.unlocked_at || price >= m.threshold));
-
   return (
-    <div className="border border-border bg-card p-4">
-      <div className="flex items-baseline justify-between">
-        <p className="vault-kicker text-[9px] text-primary">Unlocks</p>
-        {next ? (
-          <p className="vault-kicker text-[9px] text-muted-foreground">
-            {usd(Math.max(0, next.threshold - price))} to the next one
-          </p>
-        ) : (
-          <p className="vault-kicker text-[9px] text-primary">All unlocked</p>
-        )}
-      </div>
-      <ul className="mt-3 space-y-2">
+    <div className="vault-panel">
+      <p className="vault-label border-b border-border px-5 py-4">Unlocked by the room</p>
+      <ul>
         {milestones.map((m) => {
           const open = !!m.unlocked_at || price >= m.threshold;
           return (
-            <li
-              key={m.id}
-              className={cn(
-                'flex items-start gap-3 border-l-2 px-3 py-2 transition-colors',
-                open ? 'border-primary bg-primary/10' : 'border-border'
-              )}
-            >
-              {open ? (
-                <Unlock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              ) : (
-                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              )}
-              <div className="min-w-0">
-                <p className={cn('font-mono text-sm tabular-nums', open ? 'text-primary' : 'text-foreground')}>
-                  {usd(m.threshold)}
-                </p>
-                <p className={cn('text-xs', open ? 'text-foreground' : 'text-muted-foreground')}>{m.label}</p>
-              </div>
+            <li key={m.id} className="flex items-center gap-4 border-b px-5 py-4 vault-hairline last:border-b-0">
+              <span
+                className={cn('vault-mono shrink-0 text-[34px] leading-none', open ? 'text-primary-glow' : 'text-[#3A3A3A]')}
+              >
+                {usd(m.threshold)}
+              </span>
+              <span className={cn('min-w-0 text-base', open ? 'text-primary-glow' : 'text-[#555555]')}>{m.label}</span>
+              <span className="vault-label ml-auto shrink-0">{open ? 'Unlocked' : 'Locked'}</span>
             </li>
           );
         })}
