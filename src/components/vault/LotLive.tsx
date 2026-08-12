@@ -291,7 +291,7 @@ export const LotLive = ({ lot, now, closing, onWatchers, sound: soundProp }: Pro
               </span>
             )}
             <span className="vault-mono absolute bottom-px left-px border border-border bg-background px-3 py-2 text-[11px] uppercase tracking-[0.14em] text-foreground">
-              {[lot.title, lot.size_cm, lot.year].filter(Boolean).join(' · ')}
+              {[[lot.brand, lot.model].filter(Boolean).join(' ') || lot.title, lot.size_cm ? `${lot.size_cm} cm` : null, lot.year].filter(Boolean).join(' · ')}
             </span>
           </button>
 
