@@ -235,7 +235,7 @@ const FantasyPotDetail = () => {
     if (existingInDisciplineGender.length >= limit) {
       toast({
         title: 'Roster Full',
-        description: `Maximum ${limit} ${gender} athletes for ${discipline}`,
+        description: `${discipline.charAt(0).toUpperCase() + discipline.slice(1)} (${gender}) is full — ${limit} of ${limit} picked`,
         variant: 'destructive'
       });
       return;
@@ -255,7 +255,7 @@ const FantasyPotDetail = () => {
     if (price > remainingBudget) {
       toast({
         title: 'Over Budget',
-        description: 'Not enough budget remaining',
+        description: `Not enough budget remaining — ${remainingBudget.toLocaleString()} of ${budget.toLocaleString()} tokens left`,
         variant: 'destructive'
       });
       return;
@@ -367,7 +367,7 @@ const FantasyPotDetail = () => {
       console.error('Error submitting entry:', error);
       toast({
         title: 'Error',
-        description: 'Failed to submit entry. Please try again.',
+        description: (error as any)?.message || 'Failed to submit entry. Please try again.',
         variant: 'destructive'
       });
     } finally {

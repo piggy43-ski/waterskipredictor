@@ -4720,6 +4720,7 @@ export type Database = {
         Args: { p_event_type: string; p_payload?: Json; p_user_id: string }
         Returns: string
       }
+      fantasy_roster_limit: { Args: { p_discipline: string }; Returns: number }
       get_leaderboard_top: {
         Args: { p_limit?: number }
         Returns: {
