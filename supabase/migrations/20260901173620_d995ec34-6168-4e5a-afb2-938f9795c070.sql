@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.enforce_fantasy_roster_limits() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.enforce_settlement_completeness() FROM PUBLIC, anon, authenticated;
