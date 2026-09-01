@@ -382,7 +382,7 @@ export function ParlayBuilder({
             market_type: 'PODIUM',
             staked_tokens: perUnitStake,
             decimal_odds: leg.podiumMultiplier ?? 1,
-            potential_payout: 0,
+            potential_payout: Math.floor(perUnitStake * (leg.podiumMultiplier ?? 1)),
             parlay_leg_count: completeLegs.length,
             status: 'PENDING',
             settlement_metadata: {
