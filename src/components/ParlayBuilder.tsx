@@ -354,7 +354,9 @@ export function ParlayBuilder({
             market_type: 'WINNER',
             staked_tokens: perUnitStake,
             decimal_odds: leg.winner.decimal_odds,
-            potential_payout: 0,
+            // Indicative per-leg projected reward. Actual settlement pays out
+            // from the parent bet_slip's potential_payout_tokens.
+            potential_payout: Math.floor(perUnitStake * (leg.winner.decimal_odds ?? 1)),
             parlay_leg_count: completeLegs.length,
             status: 'PENDING',
           });
@@ -380,7 +382,7 @@ export function ParlayBuilder({
             market_type: 'PODIUM',
             staked_tokens: perUnitStake,
             decimal_odds: leg.podiumMultiplier ?? 1,
-            potential_payout: 0,
+            potential_payout: Math.floor(perUnitStake * (leg.podiumMultiplier ?? 1)),
             parlay_leg_count: completeLegs.length,
             status: 'PENDING',
             settlement_metadata: {
@@ -406,7 +408,7 @@ export function ParlayBuilder({
             market_type: 'HIGHEST_SCORE',
             staked_tokens: perUnitStake,
             decimal_odds: leg.highestScore.decimal_odds,
-            potential_payout: 0,
+            potential_payout: Math.floor(perUnitStake * (leg.highestScore.decimal_odds ?? 1)),
             parlay_leg_count: completeLegs.length,
             status: 'PENDING',
           });
