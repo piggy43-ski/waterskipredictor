@@ -178,7 +178,6 @@ export function TransferWindow({
       const { error: updateError } = await supabase
         .from('fantasy_entries')
         .update({
-          remaining_budget: remainingBudget - price,
           transfers_made: transfersMade + 1
         })
         .eq('id', entryId);
@@ -233,7 +232,6 @@ export function TransferWindow({
       const { error: updateError } = await supabase
         .from('fantasy_entries')
         .update({
-          remaining_budget: remainingBudget + netProceeds,
           transfers_made: transfersMade + 1
         })
         .eq('id', entryId);

@@ -164,12 +164,12 @@ const FantasyTeamEdit = () => {
     const limit = FANTASY_ROSTER_LIMITS_BY_GENDER[discipline][gender];
     
     if (existingInDisciplineGender.length >= limit) {
-      toast({ title: 'Roster Full', description: `Max ${limit} ${gender} for ${discipline}`, variant: 'destructive' });
+      toast({ title: 'Roster Full', description: `${discipline.charAt(0).toUpperCase() + discipline.slice(1)} (${gender}) is full — ${limit} of ${limit} picked`, variant: 'destructive' });
       return;
     }
     if (roster.some(r => r.athlete.id === athlete.id && r.discipline === discipline)) return;
     if (price > remainingBudget) {
-      toast({ title: 'Over Budget', description: 'Not enough budget', variant: 'destructive' });
+      toast({ title: 'Over Budget', description: `Not enough budget — ${remainingBudget.toLocaleString()} of ${budget.toLocaleString()} tokens left`, variant: 'destructive' });
       return;
     }
     setRoster([...roster, { athlete, discipline, price }]);
@@ -194,16 +194,21 @@ const FantasyTeamEdit = () => {
         price_at_selection: r.price,
         points_earned: 0
       }));
-      await supabase.from('fantasy_entry_athletes').insert(rosterInserts);
-      
-      // Update entry
-      await supabase.from('fantasy_entries').update({ team_name: teamName || 'My Team', total_team_value: usedBudget }).eq('id', entry.id);
+      const { error: insertError } = await supabase.from('fantasy_entry_athletes').insert(rosterInserts);
+      if (insertError) throw insertError;
+
+      // Update entry (remaining_budget is recalculated server-side)
+      const { error: updateError } = await supabase
+        .from('fantasy_entries')
+        .update({ team_name: teamName || 'My Team', total_team_value: usedBudget })
+        .eq('id', entry.id);
+      if (updateError) throw updateError;
 
       toast({ title: 'Saved!', description: 'Your team has been updated' });
       navigate(`/fantasy/${potId}/team/${entryId}`);
     } catch (error) {
       console.error('Error:', error);
-      toast({ title: 'Error', description: 'Failed to save changes', variant: 'destructive' });
+      toast({ title: 'Error', description: (error as any)?.message || 'Failed to save changes', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
