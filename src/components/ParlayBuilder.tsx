@@ -408,7 +408,7 @@ export function ParlayBuilder({
             market_type: 'HIGHEST_SCORE',
             staked_tokens: perUnitStake,
             decimal_odds: leg.highestScore.decimal_odds,
-            potential_payout: 0,
+            potential_payout: Math.floor(perUnitStake * (leg.highestScore.decimal_odds ?? 1)),
             parlay_leg_count: completeLegs.length,
             status: 'PENDING',
           });
