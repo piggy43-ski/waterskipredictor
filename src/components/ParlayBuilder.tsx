@@ -354,7 +354,9 @@ export function ParlayBuilder({
             market_type: 'WINNER',
             staked_tokens: perUnitStake,
             decimal_odds: leg.winner.decimal_odds,
-            potential_payout: 0,
+            // Indicative per-leg projected reward. Actual settlement pays out
+            // from the parent bet_slip's potential_payout_tokens.
+            potential_payout: Math.floor(perUnitStake * (leg.winner.decimal_odds ?? 1)),
             parlay_leg_count: completeLegs.length,
             status: 'PENDING',
           });
